@@ -63,7 +63,7 @@ async function lancer(def, args = process.argv.slice(2)) {
         const plafondTotal = Number(val('plafond') ?? 0);
         const lirePlan = () => { const p = RC.lireJson(F.plan, null); if (!p?.unites) throw new Error(`${F.plan} absent : lancer --plan d'abord`); return p; };
         // T4 : un fournisseur peut élargir ce qui se TÉLÉCHARGE (`def.aTelecharger` : les visuels qu'on lit sans pouvoir les écrire) ; l'écriture, elle, refuse ce que RC.ecrire écarte (`ecrivable: false`)
-        const aFaireDe = plan => (def.aTelecharger ? def.aTelecharger(plan) : plan.unites.filter(u => u.decision?.action === 'ajouter'));
+        const aFaireDe = plan => (def.aTelecharger ? def.aTelecharger(plan, { indexImages: RC.lireJson(F.images, {}) }) : plan.unites.filter(u => u.decision?.action === 'ajouter'));
 
         if (mode === '--releve') {
             const rel = RC.lireJson(F.releves, {});

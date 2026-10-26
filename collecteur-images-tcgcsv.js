@@ -117,7 +117,7 @@ async function releve({ cli, fichier, synchro = null, now = () => new Date() }) 
             if (r.status !== 200) { rel[q.groupId] = { nom: g.name, categoryId: q.categoryId, modifiedOn: g.modifiedOn, absente: true, le: r.le }; continue; }
             const j = JSON.parse(TC.reduireProduits(r.texte));          // le cache peut porter la liste entière (une sonde) ou réduite : la même forme dans les deux cas
             if (!j.results.every(p => p.groupId === q.groupId)) throw new Error(`le groupe ${q.groupId} rend des produits d'un autre groupe — on ne lit pas`);
-            rel[q.groupId] = { nom: g.name, categoryId: q.categoryId, modifiedOn: g.modifiedOn, le: r.le, produits: j.results };
+            rel[q.groupId] = { nom: g.name, categoryId: q.categoryId, modifiedOn: g.modifiedOn, le: r.le, v: TC.REDUCTION_VERSION, produits: j.results };
             if (++ecritsDepuis % 25 === 0) RC.ecrireJson(fichier, rel);          // le cache garde tout : une coupure ne coûte aucune requête
         }
     } catch (e) { etat = arretDe(e); motif = e.message; }
@@ -220,7 +220,9 @@ async function synchroniser({ dossier = DOSSIER, plafond = 2000, journal = m => 
 const def = { CODE, SRC, DOSSIER, hoteImages: TC.HOTE_IMAGES, hotesLibelle: `hôtes ${TC.HOTE_DONNEES} (données) et ${TC.HOTE_IMAGES} (images)`, clientDe: client,
     // les unités à télécharger : celles à ajouter ET les visuels non écrivables (japonais) dont la lecture sert de preuve ; jamais les autres
     avecProduction: true, manifeste, synchronise: () => synchroniser(),
-    aTelecharger: plan => plan.unites.filter(u => u.decision?.action === 'ajouter' || u.ecrivable === false),
+    // GARDE ÉCRITE PAR CE QU'ELLE AUTORISE : une adresse n'est demandée que si le marché dit avoir un fichier (imageCount >= 1) ou si l'image est déjà au cache. Un imageCount INCONNU (relevé d'avant la version 2) n'autorise rien :
+    // une adresse sans fichier répond 403, et un 403 sur une image arrête l'hôte pour tous (§17).
+    aTelecharger: (plan, { indexImages = {} } = {}) => plan.unites.filter(u => (u.decision?.action === 'ajouter' || u.ecrivable === false) && ((Number.isInteger(u.imageCount) && u.imageCount >= 1) || indexImages[u.url])),
     maximumReleve: o => maximumReleve({ ...o, synchro: o.synchro ?? (o.dossier ? { etat: RC.lireJson(fichierSynchro(o.dossier), null) } : null) }),
     releve: o => releve({ ...o, synchro: o.synchro ?? (o.dossier ? { fichier: fichierSynchro(o.dossier) } : null) }), construirePlan };
 if (require.main !== module) { module.exports = { synchroniser, manifeste, planCatalogue, maximumReleve, maximumImages: CLI.maximumImages, releve, construirePlan, fichiersDe, client, def, DOSSIER, CODE }; return; }

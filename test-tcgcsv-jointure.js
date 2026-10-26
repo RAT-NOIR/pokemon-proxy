@@ -37,6 +37,15 @@ const C = (idProduct, name, numero, o = {}) => ({ idProduct, name, numero, slug:
         assert.strictEqual(JT.joindre({ tcg: [JT.lireTcg(T(1, 'Pidgeot (Delta Species)', '12/110'))], cm: [JT.lireCm(C(1, 'Pidgeot δ Delta Species [Delta Reverse | Rotating Claws]', '12'))] }).joints.length, 1);
         assert.strictEqual(JT.joindre({ tcg: [JT.lireTcg(T(2, 'Paras Lv.16', '5/10'))], cm: [JT.lireCm(C(2, 'Paras Lv.16 [Scratch]', '5'))] }).joints.length, 1);
     });
+    await test('planifierCatalogue : un produit joint dont le marché n\'a AUCUN fichier (imageCount 0) n\'a pas d\'unité (sans-image-chez-la-source) ; imageCount absent ou ≥ 1 : une unité', () => {
+        const D = require('./collecte-cartes/tcgcsv-donnees');
+        const mkP = (id, name, numero) => ({ idProduct: id, name, numero, slug: name + '-X' + numero, slugSet: 'Set-A', codeSet: 'X', idExpansion: 10 });
+        const cm = D.assemblerCm({ sets: [{ _id: 'Set-A', tirage: 'intl' }], cartes: [1, 2, 3, 4].map(i => ({ _id: 70 + i, nomEn: 'Nom' + i, impressions: [], images: [] })), cp: [1, 2, 3, 4].map(i => ({ idProduct: i, carteId: 70 + i, slugSet: 'Set-A', numeroFiche: String(i) })), nc: [1, 2, 3, 4].map(i => mkP(i, 'Nom' + i, String(i))), cat: [1, 2, 3, 4].map(i => ({ idProduct: i, name: 'Nom' + i })) });
+        const prod = (i, ic) => ({ productId: 900 + i, name: 'Nom' + i + ' - ' + i + '/4', number: i + '/4', groupId: 5, rarity: 'Rare', imageUrl: 'https://tcgplayer-cdn.tcgplayer.com/product/' + (900 + i) + '_200w.jpg', ...(ic === undefined ? {} : { imageCount: ic }) });
+        const rel = { categories: { pokemon: 3, japon: 85 }, listes: { 3: [{ groupId: 5, name: 'G5' }], 85: [] }, 5: { categoryId: 3, produits: [prod(1, 0), prod(2, 1), prod(3), prod(4, 2)] } };
+        const r = JT.planifierCatalogue({ rel, cm });
+        assert.deepStrictEqual(r.unites.map(u => u.produits[0]).sort(), [2, 3, 4]); assert.deepStrictEqual(r.restes.map(x => [x.idProduct, x.motif]), [[1, 'sans-image-chez-la-source']]);
+    });
     await test('cleNom : les accents tombent des DEUX côtés, puis la normalisation de production (Pokémon = Pokemon, Mr. Mime = Mr-Mime, apostrophes)', () => {
         assert.deepStrictEqual(JT.cleNom('Pokémon Breeder'), JT.cleNom('Pokemon Breeder'));
         assert.deepStrictEqual(JT.cleNom("Farfetch’d"), JT.cleNom("Farfetch'd")); assert.deepStrictEqual(JT.cleNom('Mr. Mime'), JT.cleNom('Mr-Mime'));

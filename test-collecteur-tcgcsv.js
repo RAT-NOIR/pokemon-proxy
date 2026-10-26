@@ -54,7 +54,7 @@ const transportOk = (appels = []) => ({ async get(u) {
         assert.ok(appels.every(u => !/prices/.test(u)), 'aucune adresse de prix'); assert.ok(appels.every(u => u.startsWith('https://tcgcsv.com/')), 'aucune requête vers l\'hôte des images');
         assert.ok(appels.includes('https://tcgcsv.com/tcgplayer/85/90001/products') && appels.includes('https://tcgcsv.com/tcgplayer/3/24831/products'));
         const rel = JSON.parse(fs.readFileSync(fichier, 'utf8'));
-        assert.strictEqual(rel[22880].produits.length, 9); assert.deepStrictEqual(Object.keys(rel[22880].produits[0]).sort(), ['groupId', 'imageUrl', 'name', 'number', 'productId', 'rarity']);
+        assert.strictEqual(rel[22880].produits.length, 9); assert.deepStrictEqual(Object.keys(rel[22880].produits[0]).sort(), ['groupId', 'imageCount', 'imageUrl', 'name', 'number', 'productId', 'rarity']); assert.strictEqual(rel[22880].v, 2, 'la version de la réduction est écrite');
         assert.strictEqual(rel[90001].produits.length, 2); assert.strictEqual(rel[90001].categoryId, 85); assert.strictEqual(rel[90001].modifiedOn, 'M1');
         assert.deepStrictEqual(rel.categories, { pokemon: 3, japon: 85 }); assert.ok(!/price|CardText|secret/i.test(JSON.stringify(rel)));
         const st = JSON.parse(fs.readFileSync(sy, 'utf8'));
@@ -179,9 +179,10 @@ const transportOk = (appels = []) => ({ async get(u) {
             cartes: [{ _id: 21, nomEn: 'Alpha', impressions: [{ numero: '1', total: '2' }], images: [] }, { _id: 22, nomEn: 'Beta', impressions: [{ numero: '2', total: '2' }], images: [] }, { _id: 23, nomEn: 'Jota', impressions: [{ numero: '1', total: '1' }], images: [] }],
             cp: [{ idProduct: 11, carteId: 21, slugSet: 'Set-A', numeroFiche: '1' }, { idProduct: 12, carteId: 22, slugSet: 'Set-A', numeroFiche: '2' }, { idProduct: 13, carteId: 23, slugSet: 'Set-J', numeroFiche: '1' }],
             nc: [mkP(11, 'Alpha', '1', 90, 'Set-A'), mkP(12, 'Beta', '2', 90, 'Set-A'), mkP(13, 'Jota', '1', 91, 'Set-J')], cat: [[11, 'Alpha'], [12, 'Beta'], [13, 'Jota']].map(([idProduct, name]) => ({ idProduct, name })) });
-        const rel = { ...relevesOk(), categories: { pokemon: 3, japon: 85 }, listes: { 3: [{ groupId: 7001, name: 'Set A' }], 85: [{ groupId: 7002, name: 'Set J' }] },
-            7001: { categoryId: 3, produits: [{ productId: 31, name: 'Alpha - 1/2', number: '1/2', groupId: 7001, imageUrl: 'https://tcgplayer-cdn.tcgplayer.com/product/31_200w.jpg' }, { productId: 32, name: 'Beta - 2/2', number: '2/2', groupId: 7001, imageUrl: 'https://tcgplayer-cdn.tcgplayer.com/product/32_200w.jpg' }] },
-            7002: { categoryId: 85, produits: [{ productId: 41, name: 'Jota - 1/1', number: '1/1', groupId: 7002, imageUrl: 'https://tcgplayer-cdn.tcgplayer.com/product/41_200w.jpg' }] } };
+        const avecImages = r => ({ ...r, produits: r.produits.map(p => ({ ...p, imageCount: 1 })) });
+        const rel0 = relevesOk(), rel = { ...rel0, 22880: avecImages(rel0[22880]), 2208: avecImages(rel0[2208]), categories: { pokemon: 3, japon: 85 }, listes: { 3: [{ groupId: 7001, name: 'Set A' }], 85: [{ groupId: 7002, name: 'Set J' }] },
+            7001: { categoryId: 3, produits: [{ productId: 31, name: 'Alpha - 1/2', number: '1/2', groupId: 7001, imageUrl: 'https://tcgplayer-cdn.tcgplayer.com/product/31_200w.jpg', imageCount: 1 }, { productId: 32, name: 'Beta - 2/2', number: '2/2', groupId: 7001, imageUrl: 'https://tcgplayer-cdn.tcgplayer.com/product/32_200w.jpg', imageCount: 1 }] },
+            7002: { categoryId: 85, produits: [{ productId: 41, name: 'Jota - 1/1', number: '1/1', groupId: 7002, imageUrl: 'https://tcgplayer-cdn.tcgplayer.com/product/41_200w.jpg', imageCount: 1 }] } };
         const db = baseDb(); db.cartes.push({ _id: 21, nomEn: 'Alpha', impressions: [], images: [] }, { _id: 22, nomEn: 'Beta', impressions: [], images: [] }, { _id: 23, nomEn: 'Jota', impressions: [], images: [] });
         const r = await K.construirePlan({ db: fauxDb(db), releves: rel, dossierArrets: tmp(), cm, minCommuns: 1 });
         const cat = r.resume.catalogue; assert.strictEqual(cat.etat, 'planifie'); assert.strictEqual(cat.unites, 3);
@@ -193,6 +194,10 @@ const transportOk = (appels = []) => ({ async get(u) {
         assert.ok(Array.isArray(r.nonJoints) && r.nonJoints.every(x => x.length === 2 && x[1]), 'chaque produit non joint porte sa cause');
         const aTel = K.def.aTelecharger(r).map(u => u.produits[0]).sort();
         assert.deepStrictEqual(aTel, [11, 12, 13, 501, 502, 503].sort());
+        // la garde de téléchargement : imageCount INCONNU (relevé d'avant la version 2) n'autorise rien, sauf une image déjà au cache ; imageCount 0 jamais
+        const inconnu = { ...r, unites: r.unites.map(u => ({ ...u, imageCount: u.produits[0] === 11 ? null : u.produits[0] === 12 ? 0 : u.imageCount })) };
+        assert.ok(!K.def.aTelecharger(inconnu).some(u => [11, 12].includes(u.produits[0])));
+        assert.ok(K.def.aTelecharger(inconnu, { indexImages: { [inconnu.unites.find(u => u.produits[0] === 11).url]: { statut: 'ok' } } }).some(u => u.produits[0] === 11), 'déjà au cache : repris');
         const sans = await K.construirePlan({ db: fauxDb(baseDb()), releves: rel, dossierArrets: tmp() });
         assert.strictEqual(sans.resume.catalogue.etat, 'cm-absent'); assert.match(sans.resume.catalogue.raison, /production/);
         const ancien = await K.construirePlan({ db: fauxDb(baseDb()), releves: relevesOk(), dossierArrets: tmp() });

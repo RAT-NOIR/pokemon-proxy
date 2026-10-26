@@ -58,7 +58,7 @@ function lireTcg(p) {
     if (partie) { const m = /^(.*?)\s+-\s+(\S+)\s*$/.exec(s); if (m && J.cleNumero(m[2].split('/')[0]) === J.cleNumero(partie)) s = m[1].trim(); }
     const fort = partie && aUnChiffre(partie) ? J.cleNumero(partie) : null;
     return { productId: p?.productId ?? null, groupId: p?.groupId ?? null, nomBrut: String(p?.name ?? ''), nomBase: s, nomCles: clesDeNom(s), numeroBrut: brut, fort, faible: faibleDe(fort), total: tot && /^\d+$/.test(tot) ? Number(tot) : null,
-        desamb, marqueurs: [...new Set(marqueurs)].sort(), url: p?.imageUrl ?? null, rarete: p?.rarity ?? null };
+        desamb, marqueurs: [...new Set(marqueurs)].sort(), url: p?.imageUrl ?? null, rarete: p?.rarity ?? null, imageCount: p?.imageCount ?? null };
 }
 /** Un produit Cardmarket { idProduct, name (catalogue), numero, slug, slugSet, codeSet, idExpansion } -> ce que la jointure lit. Le numéro de la base d'abord ; à défaut celui du slug, MARQUÉ « slug » (moins sûr). */
 function lireCm(p) {
@@ -341,7 +341,7 @@ function uniteDe({ joint, tcg, ligne, cm, categoryId, langueDeCategorie, groupe,
     const l = ligne.lignes[0], langue = langueDeCategorie?.[categoryId] ?? null;
     if (!langue) return null;
     return { carteId: l.carteId, slugSet: l.slugSet, numero: l.numeroFiche ?? null, produits: [joint.idProduct], slugProduit: ligne.slug ?? null, url, idSource: String(tcg.productId), groupe, langue, ecrivable: langue === 'en',
-        carteNom: ligne.carteNom ?? null, nomSource: tcg.nomBrut, numeroSource: tcg.fort == null ? null : tcg.total != null ? `${tcg.fort}/${tcg.total}` : String(tcg.fort), niveau: joint.niveau ?? null,
+        carteNom: ligne.carteNom ?? null, imageCount: tcg.imageCount ?? null, nomSource: tcg.nomBrut, numeroSource: tcg.fort == null ? null : tcg.total != null ? `${tcg.fort}/${tcg.total}` : String(tcg.fort), niveau: joint.niveau ?? null,
         preuveNeutre: String(joint.niveau).startsWith('wcd')
             ? `jointure par année ${tcg.annee}, numéro d'origine ${tcg.fort}${tcg.total != null ? `/${tcg.total}` : ''} et nom « ${tcg.nomBase} » = fiche « ${ligne.carteNom ?? '?'} », une seule carte de chaque côté pour cette année (un seul deck la joue)`
             : joint.niveau === 'nom-seul'
@@ -397,6 +397,7 @@ function planifierCatalogue({ rel, cm, accepterSlug = false, exclureGroupes = ne
         if (exclureGroupes.has(j.groupId)) { restes.push({ idProduct, motif: 'groupe-traite-a-part', groupId: j.groupId }); continue; }
         if (p.lignes.length !== 1) { restes.push({ idProduct, motif: p.lignes.length ? 'plusieurs-lignes' : 'sans-ligne', groupId: j.groupId }); continue; }
         if (p.images.some(i => i?.set === p.lignes[0].slugSet)) { restes.push({ idProduct, motif: 'deja-image', groupId: j.groupId }); continue; }
+        if (tcgDe.get(j.joint.productId)?.imageCount === 0) { restes.push({ idProduct, motif: 'sans-image-chez-la-source', groupId: j.groupId }); continue; }       // le marché n'a aucun fichier : l'adresse répondrait 403 (arrêt de l'hôte)
         const exp = cm.expansions.get(p.idExpansion);
         const u = uniteDe({ joint: j.joint, tcg: tcgDe.get(j.joint.productId), ligne: { idProduct, lignes: p.lignes, carteNom: p.carteNom, slug: p.slug }, cm: p.lu, categoryId: j.joint.categoryId, langueDeCategorie, groupe: familleDe(p.slugSet, exp?.tirage), nomGroupe: lus.get(j.groupId)?.name });
         if (!u) { restes.push({ idProduct, motif: 'unite-impossible', groupId: j.groupId }); continue; }

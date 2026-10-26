@@ -22,7 +22,7 @@ const imp = (numero, total) => ({ tirage: 'intl', expansion: 'X', numero: String
 (async () => {
     await test('la lecture RÉDUITE ne garde aucun prix ni texte : productId, nom, adresse, groupe, numéro, rareté — et lève sur une liste illisible', () => {
         const r = JSON.parse(TC.reduireProduits(F.pp));
-        assert.deepStrictEqual(Object.keys(r.results[0]).sort(), ['groupId', 'imageUrl', 'name', 'number', 'productId', 'rarity']);
+        assert.deepStrictEqual(Object.keys(r.results[0]).sort(), ['groupId', 'imageCount', 'imageUrl', 'name', 'number', 'productId', 'rarity']);
         assert.ok(!/price|prix|CardText|Attack/i.test(JSON.stringify(r)));
         assert.throws(() => TC.reduireProduits('<html>Just a moment</html>'), /./);
         assert.throws(() => TC.reduireProduits(JSON.stringify({ success: false })), /illisible/);
@@ -85,14 +85,21 @@ const imp = (numero, total) => ({ tirage: 'intl', expansion: 'X', numero: String
         for (const mauvais of ['', '<html>Just a moment</html>', 'hier', null]) assert.strictEqual(TC.synchroApresLastUpdated(etat, mauvais).action, 'refuser', String(mauvais));
         assert.strictEqual(TC.synchroApresLastUpdated({ reussie: true, lastUpdated: 'cassé' }, '2026-10-26T20:08:21+0000').action, 'synchroniser', 'un état illisible ne bloque pas une synchro, il la déclenche');
     });
+    await test('T4 : imageCount est gardé (un produit sans image n\'a pas de fichier : l\'adresse répondrait 403 et arrêterait l\'hôte) et la version de la réduction est dite', () => {
+        const r = JSON.parse(TC.reduireProduits(JSON.stringify({ success: true, results: [{ productId: 1, name: 'A', imageUrl: 'u', groupId: 1, imageCount: 0, extendedData: [] }, { productId: 2, name: 'B', imageUrl: 'u', groupId: 1, imageCount: 2 }, { productId: 3, name: 'C', groupId: 1 }] })));
+        assert.deepStrictEqual(r.results.map(p => p.imageCount), [0, 2, null]); assert.strictEqual(TC.REDUCTION_VERSION, 2);
+        assert.strictEqual(TC.reduireProduits(TC.reduireProduits(JSON.stringify({ success: true, results: [{ productId: 1, name: 'A', groupId: 1, imageCount: 0 }] }))), TC.reduireProduits(JSON.stringify({ success: true, results: [{ productId: 1, name: 'A', groupId: 1, imageCount: 0 }] })), 'idempotente');
+    });
     await test('T4 : quels groupes redemander — jamais relevé, ou dont `modifiedOn` a changé ; un groupe inchangé ne se redemande pas', () => {
         const listes = { 3: [{ groupId: 1, modifiedOn: 'A' }, { groupId: 2, modifiedOn: 'B' }, { groupId: 3, modifiedOn: 'C' }], 85: [{ groupId: 9, modifiedOn: 'Z' }] };
-        const rel = { 1: { produits: [], modifiedOn: 'A' }, 2: { produits: [], modifiedOn: 'vieux' }, 9: { produits: [], modifiedOn: 'Z' } };
+        const rel = { 1: { produits: [], modifiedOn: 'A', v: 2 }, 2: { produits: [], modifiedOn: 'vieux', v: 2 }, 9: { produits: [], modifiedOn: 'Z', v: 2 } };
         const q = TC.groupesARedemander({ listes, rel });
         assert.deepStrictEqual(q.map(x => [x.groupId, x.raison]), [[2, 'modifie'], [3, 'jamais-releve']]);
         assert.strictEqual(q.find(x => x.groupId === 2).sansCache, true); assert.strictEqual(q.find(x => x.groupId === 3).sansCache, false);
-        assert.deepStrictEqual(TC.groupesARedemander({ listes, rel: { ...rel, 2: { produits: [], modifiedOn: 'B' }, 3: { produits: [], modifiedOn: 'C' } } }), []);
+        assert.deepStrictEqual(TC.groupesARedemander({ listes, rel: { ...rel, 2: { produits: [], modifiedOn: 'B', v: 2 }, 3: { produits: [], modifiedOn: 'C', v: 2 } } }), []);
         assert.strictEqual(TC.groupesARedemander({ listes, rel: {} }).length, 4);
+        // la réduction a changé de forme (imageCount) : un groupe relevé sous l'ancienne version se redemande, même inchangé
+        const vieux = TC.groupesARedemander({ listes, rel: { ...rel, 1: { produits: [], modifiedOn: 'A' } } }); assert.deepStrictEqual(vieux.filter(x => x.groupId === 1).map(x => [x.raison, x.sansCache]), [['schema', true]]);
     });
     await test('l\'image pleine : la miniature du miroir devient la taille mesurée le 24/10 (et rien d\'autre ne se devine)', () => {
         assert.strictEqual(TC.urlPleine('https://tcgplayer-cdn.tcgplayer.com/product/475973_200w.jpg'), 'https://tcgplayer-cdn.tcgplayer.com/product/475973_in_1000x1000.jpg');
@@ -165,6 +172,12 @@ const imp = (numero, total) => ({ tirage: 'intl', expansion: 'X', numero: String
         const c = /^(.*?) - (\d+)\/(\d+) \(Cosmos Holo\)$/.exec(F.cosmosSeul);
         const l2 = ligne(SERIE('One'), 8, 508, `X-PPS1ABC-${c[2]}`, carte(8, c[1], [imp(Number(c[2]), Number(c[3]))]));
         assert.strictEqual(planPP([l2]).parMotif['seule-finition-cosmos'], 1);
+    });
+    await test('T4 PP et kit : un produit du marché SANS image (imageCount 0) n\'a pas d\'unité — jamais une adresse qui répondrait 403 ; imageCount absent (relevé ancien) ne bloque pas', () => {
+        const sans = PP.map(p => (p.productId === 475973 ? { ...p, imageCount: 0 } : p));
+        const r = TC.planifierPrizePacks({ lignes: [L.kric, L.cher], produits: sans });
+        assert.strictEqual(r.unites.length, 1); assert.strictEqual(r.parMotif['sans-image-chez-la-source'], 1);
+        assert.strictEqual(TC.planifierPrizePacks({ lignes: [L.kric], produits: PP }).unites.length, 1);
     });
     await test('PP : le dénominateur du marché — produits, lus, formes inconnues (énergies de série, tampons), cosmos — est imprimé avec le plan', () => {
         const r = planPP([]);
