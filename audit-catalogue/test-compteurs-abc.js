@@ -58,6 +58,29 @@ verifier('C : motifs de l\'aucun visuel', tri(R.C.motifsAucun), { 'aucun-visuel'
 verifier('contrôle : les classes de fiche et de visuel somment au dénominateur', R.controles, { sommeFiches: 10, sommeVisuels: 10 });
 verifier('résumé plat pour l\'historique', R.resume, { produits: 10, sansLigne: 3, ligneSansFiche: 1, douteuses: 2, vraiScan: 1, emprunte: 2, basseDefinition: 1, aucunVisuel: 6, empruntNonServi: 1, rienNExiste: 2 });
 
+// ── B1 : les confirmations par deux sources sont COMPTÉES à part (sorties de B comprises), et les confirmations ignorées aussi
+const INFO = (classe, infos, motifs = []) => ({ classe, motifs, infos });
+const prod3 = [
+    P(1, 10, INFO('FICHE_OK', ['confirmee-deux-sources']), VRAI),                                   // levée : sort de B
+    P(2, 10, INFO('FICHE_OK', ['confirmee-deux-sources']), VRAI),
+    P(3, 10, INFO('FICHE_DOUTEUSE', ['confirmee-deux-sources'], ['sans-numero']), VRAI),            // confirmée mais reste douteuse (autre motif)
+    P(4, 10, INFO('FICHE_DOUTEUSE', ['confirmation-ignoree'], ['preuve-nom-seul']), VRAI),          // ligne modifiée depuis : ignorée
+    P(5, 10, INFO('FICHE_DOUTEUSE', [], ['preuve-nom-seul']), VRAI),
+    P(6, 10, OK, VRAI),
+];
+const R3 = K.calculerCompteurs({ produits: prod3, lignesSet, denominateur: { catalogue: 6, cartesCode: 0 }, rang: 20 });
+verifier('B1 : douteuses restantes (les confirmées levées n\'y sont plus)', R3.B.douteuses, 3);
+verifier('B1 : confirmées par deux sources (levées ou non), comptées à part', R3.B.confirmeesDeuxSources, 3);
+verifier('B1 : dont levées (sorties de B)', R3.B.confirmeesLevees, 2);
+verifier('B1 : confirmations ignorées (la ligne a changé depuis), comptées', R3.B.confirmationsIgnorees, 1);
+verifier('B1 : le résumé plat ne change pas de forme (l\'historique garde ses clés)', Object.keys(R3.resume), ['produits', 'sansLigne', 'ligneSansFiche', 'douteuses', 'vraiScan', 'emprunte', 'basseDefinition', 'aucunVisuel', 'empruntNonServi', 'rienNExiste']);
+verifier('B1 : les contrôles somment toujours au dénominateur', R3.controles.sommeFiches, 6);
+verifier('B1 : sans aucun info (les fixtures d\'avant), les compteurs valent 0', [R.B.confirmeesDeuxSources, R.B.confirmeesLevees, R.B.confirmationsIgnorees], [0, 0, 0]);
+const R4 = K.calculerCompteurs({ produits: [P(1, 10, INFO('FICHE_OK', ['confirmee-deux-sources', 'confirmee-generique']), VRAI), P(2, 10, INFO('FICHE_OK', ['confirmee-deux-sources']), VRAI)], lignesSet, denominateur: { catalogue: 2, cartesCode: 0 }, rang: 20 });
+verifier('B1 générique : compteur à part (1 sur 2 confirmées)', [R4.B.confirmeesGeneriques, R4.B.confirmeesDeuxSources, R3.B.confirmeesGeneriques], [1, 2, 0]);
+verifier('B1 générique : la sortie imprimée le dit', /visuel générique sans marque de set 1/.test(K.formater(R4, null)), true);
+verifier('B1 : la sortie imprimée les dit', /confirmées par deux sources 3 \(dont levées 2, sorties de B\) · confirmations ignorées 1 /.test(K.formater(R3, null)), true);
+
 // ── le rang : les N premières seulement
 const beaucoup = [];
 for (let e = 1; e <= 25; e++) for (let i = 0; i < e; i++) beaucoup.push(P(e * 100 + i, e, SL, MQ(['sans-ligne'])));
