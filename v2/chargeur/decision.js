@@ -93,14 +93,15 @@ function admissionDuCatalogue({ ligne, set, carte, regle, positions }) {
     if (f === 'tamponnees-nommees') {
         const pos = positionDuSlug(ligne.slug, set._id);
         if (!pos || positions.get(`${ligne.carteId}|${set._id}|${pos}`) !== 1) return null;
-        const c = images.filter(m => m.source === 'prv' && texte(m.preuveLueRegle) && m.imageEmprunteeTirage !== true && m.numero === pos && regle.visuelAdmisPourLaRegion(m, tir));
+        const c = images.filter(m => m.source === 'prv' && texte(m.preuveLueRegle) && m.imageEmprunteeTirage !== true && m.differenceEmprunt == null && m.numero === pos && regle.visuelAdmisPourLaRegion(m, tir));
         return c.length === 1 ? { im: c[0], visuel: 'du-set', mention: null, nature: 'prv-position' } : null;
     }
     if (f === 'wcd') {
         // désignée : au numéro de la fiche ; ou, fiche SANS numéro (les WCD de Cardmarket n'en portent pas), la SEULE entrée de la carte dans le set, elle-même sans numéro (l'image d'origine est la même
         // pour toutes les variantes V1…Vn d'un deck : affichage seulement, marquée empruntée)
         const voulu = ligne.numeroFiche == null ? null : regle.normaliserNumero(ligne.numeroFiche);
-        const c = images.filter(m => m.source === 'emprunt' && m.imageEmprunteeTirage === true && m.differenceEmprunt === 'autre-tirage' && !(tir !== 'jp' && m.langue === 'ja')
+        // la langue : celle que la règle du SITE admet pour la région du set (écrite par ce qu'elle autorise ; relecture CAT I2), comme pour la voie A
+        const c = images.filter(m => m.source === 'emprunt' && m.imageEmprunteeTirage === true && m.differenceEmprunt === 'autre-tirage' && regle.visuelAdmisPourLaRegion(m, tir)
             && (voulu === null ? m.numero == null : m.numero != null && regle.normaliserNumero(m.numero) === voulu));
         const seule = voulu === null ? images.length === 1 : true;
         return c.length === 1 && seule ? { im: c[0], visuel: 'autre-tirage', mention: MENTION_WCD, nature: 'wcd-emprunt' } : null;
@@ -270,13 +271,17 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         if (choix.sansFiche) { d.sansFicheDuSite++; continue; }
         let { im, visuel, mention } = choix;
         // ADMISSION-CATALOGUE (A) : un scan de position n'appartient qu'au produit dont le slug nomme cette position
-        let contredit = false;
-        if (visuel === 'du-set' && estScanDePosition(im, s._id) && positionDuSlug(l.slug, s._id) !== im.numero) { im = null; contredit = true; }
+        let contredit = false, admise = null;         // admise : la nature de l'admission, comptée seulement quand l'entrée est ÉCRITE (relecture CAT : pas avant les écartements d'aval)
+        // (relecture CAT I1) même règle que l'admission : la position nommée par le slug, portée par CE SEUL produit, et un scan qui ne se dit pas emprunté
+        if (visuel === 'du-set' && estScanDePosition(im, s._id)) {
+            const pos = positionDuSlug(l.slug, s._id);
+            if (pos !== im.numero || positions.get(`${l.carteId}|${s._id}|${pos}`) !== 1 || im.differenceEmprunt != null) { im = null; contredit = true; }
+        }
         // REPLI-REIMPRESSIONS : APRÈS le choix (la fonction partagée n'est pas touchée), AVANT toute entrée : jamais l'image d'un autre tirage à une réimpression
         let refus = im ? refusDeRepli({ ligne: l, set: s, im, visuel }) : null;
         if (!im || refus) {
             const a = admissionDuCatalogue({ ligne: l, set: s, carte: c, regle, positions });
-            if (a) { ({ im, visuel, mention } = a); refus = null; contredit = false; d.admisCatalogue[a.nature]++; }
+            if (a) { ({ im, visuel, mention } = a); refus = null; contredit = false; admise = a.nature; }
         }
         if (contredit) { d.positionContredite++; continue; }
         if (!im) { d.aucun++; d.aucunDetail['aucun visuel']++; continue; }
@@ -316,6 +321,7 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         }
         if (sink) sink.entree(e); else entrees.push(e);
         d.ecrites++;
+        if (admise) d.admisCatalogue[admise]++;
     }
     for (const id of metacarte.keys()) if (!emis.has(id)) emettre({ idProduct: id, idMetacard: metaDe(id), idExpansion: null, numero: null, tirage: null });
     entrees.sort((a, b) => a.idProduct - b.idProduct);

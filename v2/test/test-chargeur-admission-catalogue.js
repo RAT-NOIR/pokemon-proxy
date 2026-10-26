@@ -30,12 +30,16 @@ const { lireEntree } = require('../identifier/visuels');
         carte(53, 'Battle-Academy-2020', null, [prv('Battle-Academy-2020', 'C37', 'c37'), prv('Battle-Academy-2020', 'MWT', 'mwt')]),
         carte(54, 'Set-A', null, [prv('Set-A', 'A01', 's1'), prv('Set-A', 'A02', 's2')]),
         carte(55, 'Battle-Academy-2020', null, [prv('Battle-Academy-2020', 'C05', 'c05')]),            // UN seul scan du set : choisirVisuel le donnerait à tous les produits sans numéro
+        carte(56, 'Battle-Academy-2020', null, [prv('Battle-Academy-2020', 'C06', 'c06')]),            // un seul scan, mais DEUX produits nomment sa position (relecture I1)
+        carte(57, 'Battle-Academy-2020', null, [prv('Battle-Academy-2020', 'C08', 'c08', { differenceEmprunt: 'autre-tirage' }), prv('Battle-Academy-2020', 'C09', 'c09')]),   // m4 : un prv qui se dit emprunté
         // (B) WCD 2024 : l'emprunt du catalogue au numéro de la fiche
         carte(60, 'WCD-2024', '006', [emp('WCD-2024', '006', 'w6')]),
         carte(61, 'WCD-2024', '007', [emp('WCD-2024', '007', 'w7', { differenceEmprunt: null })]),
         carte(62, 'WCD-2024', '008', [emp('WCD-2024', '009', 'w9')]),
         carte(63, 'WCD-2024', '010', [emp('WCD-2024', '010', 'w10', { source: 'tcgdex' })]),
         carte(64, 'WCD-2024', '011', [emp('WCD-2024', '011', 'w11', { langue: 'ja' })]),
+        carte(68, 'WCD-2024', '013', [emp('WCD-2024', '013', 'w13', { langue: 'zh-hans' })]),          // relecture I2 : toute langue que la règle du site refuse, pas seulement ja
+        carte(69, 'WCD-2024', '014', [emp('WCD-2024', '014', 'w14', { langue: null })]),
         carte(65, 'Set-A', '012', [emp('Set-A', '012', 'sa12')]),
         carte(66, 'WCD-2024', null, [emp('WCD-2024', null, 'w66')]),                                     // la forme réelle : ni la fiche ni l'entrée n'ont de numéro (variantes V1…Vn d'un deck)
         carte(67, 'WCD-2024', null, [emp('WCD-2024', null, 'w67'), im('WCD-2024', null, 'w67b')])        // une AUTRE image de la carte dans le set : l'emprunt n'est plus seul, refusé
@@ -55,10 +59,13 @@ const { lireEntree } = require('../identifier/visuels');
         ligne(5301, 53, 'Battle-Academy-2020', null, 'Potion-V2-BA20C37'), ligne(5302, 53, 'Battle-Academy-2020', null, 'Potion-V5-BA20MWT'),
         ligne(5401, 54, 'Set-A', null, 'Foo-BA24A01'),
         ligne(5501, 55, 'Battle-Academy-2020', null, 'Bar-V1-SUM001'), ligne(5502, 55, 'Battle-Academy-2020', null, 'Bar-V2-BA20C05'), ligne(5503, 55, 'Battle-Academy-2020', null, 'Bar-V3-BA20P07'),
+        ligne(5601, 56, 'Battle-Academy-2020', null, 'Baz-V2-BA20C06'), ligne(5602, 56, 'Battle-Academy-2020', null, 'Baz-V3-BA20C06'),
+        ligne(5701, 57, 'Battle-Academy-2020', null, 'Qux-BA20C08'),
         ligne(6001, 60, 'WCD-2024', '006', 'Zapdos-WCD24PGO-006'), ligne(6101, 61, 'WCD-2024', '007', 'X-WCD24PGO-007'), ligne(6201, 62, 'WCD-2024', '008', 'X-WCD24PGO-008'),
         ligne(6301, 63, 'WCD-2024', '010', 'X-WCD24PGO-010'), ligne(6401, 64, 'WCD-2024', '011', 'X-WCD24PGO-011'), ligne(6501, 65, 'Set-A', '012', 'X-SA-012'),
         ligne(6601, 66, 'WCD-2024', null, 'Rare-Candy-V1-WCD24HP-090', { visuelSubstitut: SUBST }), ligne(6602, 66, 'WCD-2024', null, 'Rare-Candy-V2-WCD24HP-090'),
-        ligne(6701, 67, 'WCD-2024', null, 'Y-WCD24HP-091')
+        ligne(6701, 67, 'WCD-2024', null, 'Y-WCD24HP-091'),
+        ligne(6801, 68, 'WCD-2024', '013', 'X-WCD24PGO-013'), ligne(6901, 69, 'WCD-2024', '014', 'X-WCD24PGO-014')
     ];
     const metacarte = new Map(lignes.map((l, i) => [l.idProduct, 9000 + i]));
     const r = await decider({ sets, docs, lignes, metacarte, regle });
@@ -81,7 +88,9 @@ const { lireEntree } = require('../identifier/visuels');
     H.v('A12. hors famille (Set-A) : la règle ne s\'applique pas', e(5401), undefined);
     H.v('A13. un scan admis par la position n\'est PAS un emprunt', [r.emprunts.includes(5001), r.emprunts.includes(5301)], [false, false]);
     H.v('A14. le SEUL scan prv du set (C05) ne va qu\'au produit de SA position : pas au slug sans position, pas à une autre position', [e(5501), cle(5502), e(5503)], [undefined, 'cartes/c05.webp', undefined]);
-    H.v('A15. compteur nommé : les scans de position servis à un autre produit sont retirés (5201 A21, 5501 et 5503 C05)', d.positionContredite, 3);
+    H.v('A15. compteur nommé : les scans de position servis à un autre produit sont retirés (5201 A21, 5501 et 5503 C05, 5601 et 5602 C06)', d.positionContredite, 5);
+    H.v('A16. (relecture I1) un seul scan, deux produits à SA position : aucun des deux, même quand choisirVisuel l\'a choisi', [e(5601), e(5602)], [undefined, undefined]);
+    H.v('A17. (relecture m4) un scan prv qui porte differenceEmprunt n\'est pas admis', e(5701), undefined);
 
     // ── (B) WCD
     H.v('B1. WCD : l\'emprunt du catalogue au numéro de la fiche est servi, en AUTRE TIRAGE, avec sa mention', [e(6001)?.visuel, cle(6001), /autre tirage/i.test(e(6001)?.mention || '')], ['autre-tirage', 'cartes/w6.webp', true]);
@@ -90,6 +99,7 @@ const { lireEntree } = require('../identifier/visuels');
     H.v('B4. l\'emprunt ne porte pas le numéro de la fiche : refusé', e(6201), undefined);
     H.v('B5. une source autre que « emprunt » : refusé', e(6301), undefined);
     H.v('B6. un emprunt japonais sur un set occidental : refusé', e(6401), undefined);
+    H.v('B6b. (relecture I2) un emprunt chinois, ou sans langue, sur un set occidental : refusé par la règle du site', [e(6801), e(6901)], [undefined, undefined]);
     H.v('B7. un emprunt hors WCD (Set-A) : refusé comme avant (image-empruntee)', e(6501), undefined);
     H.v('B8. fiche et entrée sans numéro, entrée seule : servie aux DEUX variantes, en autre tirage, marquées empruntées', [e(6601)?.visuel, cle(6602), r.emprunts.includes(6601), r.emprunts.includes(6602)], ['autre-tirage', 'cartes/w66.webp', true, true]);
     H.v('B9. sans numéro, mais la carte a une autre image dans le set : l\'emprunt n\'est pas désigné', e(6701)?.grande?.cle === 'cartes/w67.webp', false);
