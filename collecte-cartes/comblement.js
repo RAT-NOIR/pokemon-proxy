@@ -73,6 +73,21 @@ function trousResolus(existants, classeVisuelParId, trousDuJour) {
     const ecrits = new Set(trousDuJour.map(t => t.idProduct));
     return existants.filter(e => e.resolu !== true && !ecrits.has(idDe(e)) && classeVisuelParId.has(idDe(e)) && classeVisuelParId.get(idDe(e)) !== 'MANQUANT').map(idDe);
 }
+/** Le bilan de ce que l'écriture ferait (pur) : la MÊME fonction sert le bilan d'avant le lot et l'écriture. */
+function bilanTrous(existants, trous, classeVisuelParId) {
+    const { nouveaux, changes, inchanges } = comparerTrous(existants, trous);
+    const resoudre = trousResolus(existants, classeVisuelParId, trous);
+    const rouverts = changes.filter(t => existants.find(e => idDe(e) === t.idProduct)?.resolu === true).length;
+    return { nouveaux, changes, inchanges, resoudre, rouverts };
+}
+/** Tour 3 : le bilan AVANT le lot, en LECTURE seule. `rien` = aucun visuel ET nouveaux = changés = résolus = rouverts = 0 : aucun lot-additif (une sauvegarde complète pour rien). */
+async function lireBilanTrous(db, trous, { classeVisuelParId = new Map(), visuels = 0 } = {}) {
+    for (const t of trous) construireTrou(t);
+    const existants = await db.collection('trous_nommes').find({}, { projection: { motif: 1, sources: 1, resolu: 1 } }).toArray();
+    const b = bilanTrous(existants, trous, classeVisuelParId);
+    const r = { nouveaux: b.nouveaux.length, changes: b.changes.length, inchanges: b.inchanges.length, resolus: b.resoudre.length, rouverts: b.rouverts };
+    return { ...r, rien: visuels === 0 && !r.nouveaux && !r.changes && !r.resolus && !r.rouverts };
+}
 /**
  * Écrit les trous dans `trous_nommes` (la base `cartes`, par la connexion de ÉCRITURE de lot-additif.js seulement) : LIT d'abord les trous existants, n'écrit que les nouveaux ou changés (`$set` + `$setOnInsert premierLe`),
  * marque les résolus (`$set resolu/resoluLe`). ADDITIF : jamais de suppression.
@@ -82,9 +97,7 @@ async function ecrireTrous(db, trous, { taille = 1000, classeVisuelParId = new M
     for (const t of trous) { construireTrou(t); }                // TOUT est validé AVANT la première écriture
     const coll = db.collection('trous_nommes');
     const existants = await coll.find({}, { projection: { motif: 1, sources: 1, resolu: 1 } }).toArray();
-    const { nouveaux, changes, inchanges } = comparerTrous(existants, trous);
-    const resoudre = trousResolus(existants, classeVisuelParId, trous);
-    const rouverts = changes.filter(t => existants.find(e => idDe(e) === t.idProduct)?.resolu === true).length;
+    const { nouveaux, changes, inchanges, resoudre, rouverts } = bilanTrous(existants, trous, classeVisuelParId);
     const ops = [...nouveaux, ...changes].map(t => ({ updateOne: { filter: { _id: t.idProduct }, update: { $set: { idProduct: t.idProduct, motif: t.motif, sources: t.sources, le: t.le, instrument: t.instrument, preuve: t.preuve, resolu: false }, $setOnInsert: { premierLe: t.le } }, upsert: true } }));
     for (const id of resoudre) ops.push({ updateOne: { filter: { _id: id }, update: { $set: { resolu: true, resoluLe: le } } } });
     for (let i = 0; i < ops.length; i += taille) await coll.bulkWrite(ops.slice(i, i + taille), { ordered: false });
@@ -449,4 +462,4 @@ function redigerCompteRendu({ date, aBlanc, etat, population, comptesPlan, rappo
 
 module.exports = { FOURNISSEURS, chargerFournisseurs, MOTIFS, motifAdmis, INSTRUMENT, construireTrou, ecrireTrous, LANGUE_DU_TIRAGE, langueDuTirage, reduireNumero, tirageProduit, tirageCandidat,
     PLAFOND_PAR_DEFAUT, choisirPopulation, calculerNeufs, regrouperUnites, candidatsDuProduit, classerProduit, planifier, recolterUnites, telechargerPlan, choisirGagnant, jugerProduit, assembler, executerEcriture,
-    existeStrict, choisirNouvelEtat, regenererEtat, comparerTrous, trousResolus, ETAT_AGE_MAX_JOURS, etatTropVieux, verifierGardes, AUTORISES, MODES, verifierArguments, DOSSIER_PAR_DEFAUT, DOSSIER_COMPTEURS, dossierDe, dernierEtat, redigerCompteRendu };
+    bilanTrous, lireBilanTrous, existeStrict, choisirNouvelEtat, regenererEtat, comparerTrous, trousResolus, ETAT_AGE_MAX_JOURS, etatTropVieux, verifierGardes, AUTORISES, MODES, verifierArguments, DOSSIER_PAR_DEFAUT, DOSSIER_COMPTEURS, dossierDe, dernierEtat, redigerCompteRendu };
