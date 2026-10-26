@@ -3,7 +3,7 @@
 // ============================================================
 // Décision du testeur (2026-10-17 soir) : « Tamponnées sans source ouverte (Prize Packs S5-S9, Battle Academy, Trick or Trade 2024) : l'image du tirage normal est permise
 // POUR L'AFFICHAGE SEULEMENT, avec `tamponNonRepresente`, la mention du site « tampon non représenté », et `imageEmprunteeTirage: true` (exclue de l'archive servie à
-// l'identification). WCD : NON (bordure, dos, signature diffèrent) — les WCD restent sans visuel. »
+// l'identification). WCD : NON (bordure, dos, signature diffèrent) — les WCD restent sans visuel. » REMPLACÉ pour les WCD le 27/10 (testeur) : liste fermée ORIGINES_WCD, plus bas.
 //
 // L'image à emprunter est celle que `cartes_produits.visuelSubstitut` porte déjà (le scan de la carte d'ORIGINE, choisi et relu le 26/09) : aucune nouvelle sélection,
 // aucune requête. Le lot pose UNE entrée dans `cartes.images` de la carte, pour le set de la ligne, et rien d'autre (aucun document `images`).
@@ -48,18 +48,28 @@ const ORIGINES_EXPLICITES = Object.freeze({
 });
 // Le motif de ces entrées : « autre tirage » (code de deck différent), jamais « tampon ». Le site rend, tant qu'il n'a pas ce motif, sa mention d'emprunt ordinaire : l'outil ne s'arrête pas dessus, il le DIT.
 const MOTIF_AUTRE_TIRAGE = 'autre-tirage';
-const LANGUE_PREUVE_AUTRE_TIRAGE = "image d'un autre tirage empruntée (code de deck différent : même Dresseur, scan du deck Classic Charizard & Ho-Oh)";const setExplicite = s => Object.prototype.hasOwnProperty.call(ORIGINES_EXPLICITES, s);
+const LANGUE_PREUVE_AUTRE_TIRAGE = "image d'un autre tirage empruntée (code de deck différent : même Dresseur, scan du deck Classic Charizard & Ho-Oh)";
+// WCD (décision du testeur, 27/10) — exception NOMMÉE à « WCD : jamais » : un produit WCD dont la carte d'ORIGINE est prouvée par deux sources de données (slug Cardmarket : code + n° d'origine ;
+// fiche TCGCSV de la même année : nom + n°) ET dont un scan WCD concorde à l'image avec le visuel d'origine (lu par le coordinateur : même illustration, même n°/total imprimé, chaque scan de joueur)
+// reçoit le visuel d'origine, motif « autre tirage » — jamais présenté comme le scan signé. LISTE FERMÉE PAR PRODUIT, construite hors du dépôt (S8\PHASE4\WCD\construire-origines-wcd.js) et relue :
+// collecte-cartes/origines-wcd.json. Tout WCD absent de la liste reste refusé. Le vrai scan signé, s'il passe la cascade, remplace l'emprunt (retrait exact par le manifeste).
+const geler = o => Object.freeze(Object.fromEntries(Object.entries(o).map(([s, ps]) => [s, Object.freeze(Object.fromEntries(Object.entries(ps).map(([id, v]) => [id, Object.freeze({ carteId: v.carteId, setOrigine: v.setOrigine, numero: v.numero, cleR2: v.cleR2, produitOrigine: v.produitOrigine })])))])));
+const ORIGINES_WCD = geler(require('./origines-wcd.json'));
+const LANGUE_PREUVE_WCD = "visuel d'un autre tirage emprunté (carte d'origine du deck de championnat : signature du joueur, dos et code du deck non représentés)";
+const setExplicite = s => Object.prototype.hasOwnProperty.call(ORIGINES_EXPLICITES, s);
+const setWCDListe = s => Object.prototype.hasOwnProperty.call(ORIGINES_WCD, s);
+const origineWCD = (s, idProduct) => (setWCDListe(s) && Object.prototype.hasOwnProperty.call(ORIGINES_WCD[s], idProduct) ? ORIGINES_WCD[s][idProduct] : null);
 const origineExplicite = (s, idProduct) => (setExplicite(s) && Object.prototype.hasOwnProperty.call(ORIGINES_EXPLICITES[s], idProduct) ? ORIGINES_EXPLICITES[s][idProduct] : null);
-const setBorne = s => Object.prototype.hasOwnProperty.call(SETS_BORNES, s) || setExplicite(s);
-const estBorne = (s, idProduct) => (Object.prototype.hasOwnProperty.call(SETS_BORNES, s) && SETS_BORNES[s].includes(idProduct)) || origineExplicite(s, idProduct) !== null;
+const setBorne = s => Object.prototype.hasOwnProperty.call(SETS_BORNES, s) || setExplicite(s) || setWCDListe(s);
+const estBorne = (s, idProduct) => (Object.prototype.hasOwnProperty.call(SETS_BORNES, s) && SETS_BORNES[s].includes(idProduct)) || origineExplicite(s, idProduct) !== null || origineWCD(s, idProduct) !== null;
 /** Tout ce que l'outil LIT (le périmètre entier + les sets dont une liste de produits est admise). */
-const SETS_LUS = Object.freeze([...PERIMETRE, ...Object.keys(SETS_BORNES), ...Object.keys(ORIGINES_EXPLICITES)]);
+const SETS_LUS = Object.freeze([...PERIMETRE, ...Object.keys(SETS_BORNES), ...Object.keys(ORIGINES_EXPLICITES), ...Object.keys(ORIGINES_WCD)]);
 
-/** WCD : toute clé de set qui COMMENCE par « WCD » (casse et espaces ignorés) — refusée, jamais écrite. */
+/** WCD : toute clé de set qui COMMENCE par « WCD » (casse et espaces ignorés) — refusée, jamais écrite, SAUF un produit de la liste fermée ORIGINES_WCD. */
 const estWCD = s => /^wcd/i.test(String(s ?? '').trim());
 const dansLePerimetre = s => !estWCD(s) && PERIMETRE.includes(s);
-/** Une ligne est-elle dans le champ d'écriture ? Un set du périmètre (tous ses produits), ou UN des produits d'une liste fermée. WCD : jamais. */
-const dansLeChamp = (s, idProduct) => !estWCD(s) && (dansLePerimetre(s) || estBorne(s, idProduct));
+/** Une ligne est-elle dans le champ d'écriture ? Un set du périmètre (tous ses produits), ou UN des produits d'une liste fermée. WCD : seulement un produit de ORIGINES_WCD. */
+const dansLeChamp = (s, idProduct) => (estWCD(s) ? origineWCD(s, idProduct) !== null : (dansLePerimetre(s) || estBorne(s, idProduct)));
 /** Le substitut d'une ligne sans `visuelSubstitut` se DÉRIVE de son origine (Trick or Trade 2024, et les produits des listes fermées). */
 const derivableDeLOrigine = (s, idProduct) => !estWCD(s) && (SETS_TRICK_OR_TRADE.includes(s) || (Object.prototype.hasOwnProperty.call(SETS_BORNES, s) && SETS_BORNES[s].includes(idProduct)));
 /** Le tampon que l'image NE montre PAS : « Play! Pokémon » pour les Prize Packs seulement (rien pour Battle Academy et Trick or Trade). */
@@ -76,7 +86,7 @@ function verifierPerimetre(idsDeSets) {
 /** Les sets à liste fermée doivent exister en base (un slug absent est une liste périmée, pas un set vide). */
 function verifierBornes(idsDeSets) {
     const ids = new Set(idsDeSets || []);
-    const absents = [...Object.keys(SETS_BORNES), ...Object.keys(ORIGINES_EXPLICITES)].filter(s => !ids.has(s));
+    const absents = [...Object.keys(SETS_BORNES), ...Object.keys(ORIGINES_EXPLICITES), ...Object.keys(ORIGINES_WCD)].filter(s => !ids.has(s));
     if (absents.length) throw new Error(`sets à liste fermée : introuvable(s) en base : ${absents.join(', ')}`);
 }
 
@@ -195,13 +205,14 @@ function planifier(etat, { maintenant = new Date(), sets = null } = {}) {
     const bucket = s => (plan.parSet[s] ||= compteurs());
     for (const l of etat.lignes || []) {
         const set = l.slugSet;
-        if (estWCD(set)) { const b = (plan.parSet.WCD ||= { lignes: 0, refusWCD: 0 }); b.lignes++; b.refusWCD++; plan.refusWCD.push({ idProduct: l.idProduct, slugSet: set }); continue; }
+        if (estWCD(set) && !origineWCD(set, l.idProduct)) { const b = (plan.parSet.WCD ||= { lignes: 0, refusWCD: 0 }); b.lignes++; b.refusWCD++; plan.refusWCD.push({ idProduct: l.idProduct, slugSet: set }); continue; }
         if (sets !== null && !sets.includes(set)) { plan.horsSelection++; continue; }
         if (!dansLeChamp(set, l.idProduct)) { if (setBorne(set)) plan.horsListe++; else plan.horsPerimetre++; continue; }
         const b = bucket(set); b.lignes++;
         const idProduct = l.idProduct;
         if (!entier(l.carteId)) { plan.sansCarte.push({ idProduct, slugSet: set }); b.sansCarte++; continue; }
-        const expl = origineExplicite(set, idProduct);   // L1 : l'origine explicite PRIME sur tout visuelSubstitut et ne se dérive jamais du detail
+        const wcd = origineWCD(set, idProduct);
+        const expl = origineExplicite(set, idProduct) ?? wcd;   // L1 : l'origine explicite PRIME sur tout visuelSubstitut et ne se dérive jamais du detail (WCD : idem, liste fermée)
         let sub = expl ? null : l.visuelSubstitut;
         const aSubstitut = !!sub && typeof sub.cleR2 === 'string' && !!sub.cleR2;
         // Trick or Trade 2024 n'a pas de visuelSubstitut : son image est l'entrée de la même carte dans le set d'ORIGINE (liste fermée : ce set seulement)
@@ -217,7 +228,7 @@ function planifier(etat, { maintenant = new Date(), sets = null } = {}) {
         else if (depuisOrigine) { const d = substitutDepuisOrigine(l, c, etat); if (d.refus) { refus(d.refus); continue; } sub = d.sub; }
         const cle = `${l.carteId}|${set}|${numero == null ? '' : cleNumero(numero)}`;
         const g = groupes.get(cle);
-        if (!g) groupes.set(cle, { carteId: l.carteId, set, numero, sub, carte: c, produits: [idProduct], diverge: false, autreTirage: !!expl });
+        if (!g) groupes.set(cle, { carteId: l.carteId, set, numero, sub, carte: c, produits: [idProduct], diverge: false, autreTirage: !!expl, wcd: !!wcd });
         else { g.produits.push(idProduct); if (g.sub.cleR2 !== sub.cleR2 || g.sub.w !== sub.w || g.sub.h !== sub.h) g.diverge = true; }
     }
     for (const g of groupes.values()) {
@@ -232,7 +243,7 @@ function planifier(etat, { maintenant = new Date(), sets = null } = {}) {
         const origine = (g.carte.images || []).find(e => e && e.cleR2 === g.sub.cleR2 && e.vignette && typeof e.vignette === 'object');
         const entree = { set: g.set, numero: g.numero, cleR2: g.sub.cleR2, w: g.sub.w, h: g.sub.h };
         if (origine) entree.vignette = copie(origine.vignette);
-        Object.assign(entree, { langue: g.sub.langue ?? 'en', languePreuve: g.autreTirage ? LANGUE_PREUVE_AUTRE_TIRAGE : LANGUE_PREUVE, source: SOURCE, lot: LOT, imageEmprunteeTirage: true });
+        Object.assign(entree, { langue: g.sub.langue ?? 'en', languePreuve: g.wcd ? LANGUE_PREUVE_WCD : (g.autreTirage ? LANGUE_PREUVE_AUTRE_TIRAGE : LANGUE_PREUVE), source: SOURCE, lot: LOT, imageEmprunteeTirage: true });
         if (g.autreTirage) entree.differenceEmprunt = MOTIF_AUTRE_TIRAGE;
         const tampon = tamponDuSet(g.set);
         if (tampon) entree.tamponNonRepresente = tampon;
@@ -320,6 +331,6 @@ function garderSousLot(env, ppid) {
     if (!env || !env.LOT_ADDITIF_PID || env.LOT_ADDITIF_PID !== String(ppid)) throw new Error('--ecrire refusé hors de lot-additif.js : node lot-additif.js --quoi="TAMPONNEES : N entrées" --collections=cartes --annonce=<annonce.json> -- node poser-images-empruntees.js --ecrire --attendu=N (rien n\'est écrit)');
 }
 
-module.exports = { MOTIF_AUTRE_TIRAGE, LANGUE_PREUVE_AUTRE_TIRAGE, produitsMentionEnAttente, ORIGINES_EXPLICITES, origineExplicite, origineDeLaLigne, mentionServie, motifDArret, garderSousLot, SOURCE, LOT, MARQUE, LANGUE_PREUVE, TAMPON_PRIZE_PACK, SETS_PRIZE_PACK, SETS_BATTLE_ACADEMY, SETS_TRICK_OR_TRADE, PERIMETRE, estWCD, dansLePerimetre, tamponDuSet, verifierPerimetre,
+module.exports = { MOTIF_AUTRE_TIRAGE, LANGUE_PREUVE_AUTRE_TIRAGE, LANGUE_PREUVE_WCD, ORIGINES_WCD, origineWCD, produitsMentionEnAttente, ORIGINES_EXPLICITES, origineExplicite, origineDeLaLigne, mentionServie, motifDArret, garderSousLot, SOURCE, LOT, MARQUE, LANGUE_PREUVE, TAMPON_PRIZE_PACK, SETS_PRIZE_PACK, SETS_BATTLE_ACADEMY, SETS_TRICK_OR_TRADE, PERIMETRE, estWCD, dansLePerimetre, tamponDuSet, verifierPerimetre,
     SETS_BORNES, SETS_LUS, setBorne, estBorne, dansLeChamp, derivableDeLOrigine, verifierBornes, verifierSelection, produitsHorsChamp, verdictApi, produitsSansMention, memeSelection,
     planifier, appliquer, manifeste, totalManifeste, decisionManifeste, retirer, operationsVersMongo, operationsDeRetrait };
