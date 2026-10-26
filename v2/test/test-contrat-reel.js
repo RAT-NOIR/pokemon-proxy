@@ -20,7 +20,10 @@ const R = path.join(__dirname, '..', '..');
 const CHARGES = path.join(R, 'verrou', 'charges.json');
 const IMAGE = require(CHARGES).charges.find(c => c.cellule === 'occidentale').imageUrl;
 const IMAGE_INCONNUE = 'https://images1.vinted.net/t/00_rm-b7b1/f800/inconnue.webp';
-const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_INSCRIPTION_IP_HEURE: '3', V2_OUBLI_IP_HEURE: '3', V2_REINIT_IP_HEURE: '3', V2_VERIFICATION_IP_HEURE: '3', V2_LOT_CARTES_MAX: '100', V2_RESOLUTION_CARDMARKET: '1', V2_PHOTOS_MULTIPLES: '1' });      // RESOUDRE-CARDMARKET et PHOTOS-MULTIPLES : les drapeaux sont allumés pour les serveurs de ce banc (éteints, ces routes n'existent pas)   // les lots de ce banc dépassent 20 cartes (le défaut les refuserait : test-plafonds.js)
+const ENV_BANC = { MONGODB_BASE: 'test_scratch', V2_INSCRIPTION_IP_HEURE: '3', V2_OUBLI_IP_HEURE: '3', V2_REINIT_IP_HEURE: '3', V2_VERIFICATION_IP_HEURE: '3', V2_LOT_CARTES_MAX: '100', V2_RESOLUTION_CARDMARKET: '1', V2_PHOTOS_MULTIPLES: '1' };
+// CALCUL-CLIENT : `POST /api/identifier/mesures` n'existe que si V2_MESURES_CLIENT=1 ET V2_EMPREINTE_EXTENSION=1 (modèle d'empreinte valide) : un serveur À PART le monte (cfgM), les autres gardent le défaut (route absente).
+const cfgM = lireConfig({ ...ENV_BANC, V2_MESURES_CLIENT: '1', V2_EMPREINTE_EXTENSION: '1', V2_MODELE_EMPREINTE_ID: 'p-banc-1', V2_MODELE_EMPREINTE_SHA256: 'cd'.repeat(32) });
+const cfg = lireConfig(ENV_BANC);      // RESOUDRE-CARDMARKET et PHOTOS-MULTIPLES : les drapeaux sont allumés pour les serveurs de ce banc (éteints, ces routes n'existent pas)   // les lots de ce banc dépassent 20 cartes (le défaut les refuserait : test-plafonds.js)
 const EXT = cfg.origines.extension, SITE = cfg.origines.site;
 const raw = n => mongoose.connection.db.collection(n);
 const attendre = ms => new Promise(r => setTimeout(r, ms));
@@ -878,6 +881,39 @@ const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empr
         }
         consignerHorsContrat('POST /api/creer-recharge', 'paiement non branché (501)', await H.appel(V, '/api/creer-recharge', { methode: 'POST', corps: {}, entetes: extH(x.jeton) }));
     }
+    // CALCUL-CLIENT : POST /api/identifier/mesures (le second envoi), sur un serveur à part (drapeaux V2_MESURES_CLIENT et V2_EMPREINTE_EXTENSION allumés). Le scan est une ligne `analyses` FABRIQUÉE avec son
+    // `complementMesures` et un jeton signé par le MÊME module que la route (identifier/calcul-client.js) : tous les statuts documentés sont joués par un état réel, sauf le 500 (déclaré non joué, avec sa raison) et
+    // le 503 (garde d'index, ci-dessous). Le `change: true` n'est PAS joué ici : il exige l'index d'empreintes chargé et la règle G rejouée (joué par test-calcul-client-route.js).
+    H.vrai('CALCUL-CLIENT : le serveur des mesures a bien les deux drapeaux (sinon la route n\'existerait pas)', cfgM.mesuresClient === true && cfgM.empreinteExtension === true);
+    const svM = await monter(cfgM);
+    {
+        const R = 'POST /api/identifier/mesures', CH = '/api/identifier/mesures', MC = require('../identifier/calcul-client');
+        const mesures = [{ type: 'zones', ref: 'banc/jeu-1.webp' }], refs = [{ ref: 'banc/jeu-1.webp', sha256: null }];
+        // un scan DÉJÀ tranché (cartes[0].statut identifiee) : le second envoi ne trouve plus de question à promouvoir -> 200 change: false, sans que la règle G soit appelée
+        const scanM = async (i, { exp = Date.now() + 120e3 } = {}) => {
+            const _id = new mongoose.Types.ObjectId();
+            await raw('analyses').insertOne({ _id, porteur: `installation:${i._id}`, cartes: [{ statut: 'identifiee' }], complementMesures: { mesures, refs, ligne: { top: [], essai: 0 }, exp: new Date(exp), index: null, corps: {}, ids: [], consomme: false } });
+            const scanId = String(_id);
+            return { scanId, jeton: MC.signerJeton({ scanId, mesures, refs, exp }, cfgM.empreinte.secret) };
+        };
+        const corpsM = (s, plus = {}) => ({ scanId: s.scanId, jeton: s.jeton, opencv: '5.0.0-banc', resultats: [], ...plus });
+        const xm = await inst(3), s1 = await scanM(xm.i);
+        const ok = await jouer(svM.url, R, 'le premier verdict reste (200, change: false)', 200, CH, { corps: corpsM(s1), entetes: extH(xm.jeton) });
+        H.v('   le 200 dit change: false et rend le scanId', [ok.json && ok.json.success, ok.json && ok.json.change, ok.json && ok.json.scanId], [true, false, s1.scanId]);
+        await jouer(svM.url, R, 'second envoi du même scan (CONFLIT)', 409, CH, { corps: corpsM(s1), entetes: extH(xm.jeton) });
+        await jouer(svM.url, R, 'scanId mal formé (ENTREE scan-id)', 400, CH, { corps: corpsM(s1, { scanId: 'x' }), entetes: extH(xm.jeton) });
+        await jouer(svM.url, R, 'sans Authorization', 401, CH, { corps: corpsM(s1), entetes: extH(null) });
+        await jouer(svM.url, R, 'scan inconnu', 404, CH, { corps: corpsM(s1, { scanId: String(new mongoose.Types.ObjectId()) }), entetes: extH(xm.jeton) });
+        await jouer(svM.url, R, 'le scan d\'un AUTRE porteur (404, rien révélé)', 404, CH, { corps: corpsM(await scanM(xm.i)), entetes: extH((await inst(3)).jeton) });
+        const s2 = await scanM(xm.i);
+        await jouer(svM.url, R, 'jeton falsifié (CODE_EXPIRE)', 410, CH, { corps: corpsM(s2, { jeton: s2.jeton.replace(/.$/, c => (c === 'A' ? 'B' : 'A')) }), entetes: extH(xm.jeton) });
+        await jouer(svM.url, R, 'jeton expiré (CODE_EXPIRE)', 410, CH, { corps: corpsM(await scanM(xm.i, { exp: Date.now() - 1000 })), entetes: extH(xm.jeton) });
+        const kM = cle();
+        await jouer(svM.url, R, 'Idempotency-Key : première requête', 200, CH, { corps: corpsM(s2), entetes: extH(xm.jeton, { 'idempotency-key': kM }) });
+        await jouer(svM.url, R, 'Idempotency-Key réutilisée avec un autre corps (cle-reutilisee)', 422, CH, { corps: corpsM(await scanM(xm.i)), entetes: extH(xm.jeton, { 'idempotency-key': kM }) });
+        const xp = await inst(3); await plafonner('mesures', 'installation', xp.i._id, 100000);
+        await jouer(svM.url, R, 'plafond horaire par porteur atteint (DEBIT, Retry-After)', 429, CH, { corps: corpsM(await scanM(xp.i)), entetes: extH(xp.jeton) });
+    }
     // 503 : la garde d'index (routes v2 fermées) sur CHAQUE route de `paths` servie par l'assembleur
     {
         pret.armer(async () => ({ manquants: ['index-du-banc'] }));
@@ -886,6 +922,7 @@ const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empr
             'POST /api/installation': { chemin: '/api/installation', corps: { versionExtension: '2.0.0' } },
             'POST /api/identifier': { chemin: '/api/identifier', corps: corpsId(), entetes: { 'idempotency-key': cle() } },
             'POST /api/identifier/reponse': { chemin: '/api/identifier/reponse', corps: { scanId: fauxId, choix: 'a' } },
+            'POST /api/identifier/mesures': { chemin: '/api/identifier/mesures', corps: { scanId: fauxId, jeton: 'x', resultats: [] }, serveur: 'mesures' },      // CALCUL-CLIENT : la route n'existe que sur le serveur des mesures (drapeaux allumés)
             'POST /api/retour-live': { chemin: '/api/retour-live', corps: { scanId: fauxId, prixLive: 5 }, entetes: { authorization: 'Bearer ' + 'a'.repeat(32) } },
             'POST /api/solde': { chemin: '/api/solde', corps: {}, entetes: { authorization: 'Bearer ' + 'a'.repeat(32) } },
             'GET /api/compte': { chemin: '/api/compte' },
@@ -918,11 +955,11 @@ const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empr
         for (const [route, q] of Object.entries(REQ503)) {
             const entetes = { origin: EXT, ...siteH(null), ...(q.entetes || {}) };
             if (q.form) await jouerFormulaire(V, route, 'garde d\'index : routes v2 fermées', 503, q.chemin, formulaire(), { ...siteH('rm_session=x'), ...ip() }, { garde: true });
-            else await jouer(V, route, 'garde d\'index : routes v2 fermées', 503, q.chemin, { corps: q.corps, garde: true, entetes: { ...entetes, origin: route.includes('/compte') || route.includes('/scanner') || route.includes('/collection') ? SITE : EXT } });
+            else await jouer(q.serveur === 'mesures' ? svM.url : V, route, 'garde d\'index : routes v2 fermées', 503, q.chemin, { corps: q.corps, garde: true, entetes: { ...entetes, origin: route.includes('/compte') || route.includes('/scanner') || route.includes('/collection') ? SITE : EXT } });
         }
         pret.armer(M.verifierIndex);
     }
-    await sv.fermer();
+    await sv.fermer(); await svM.fermer();
     const tousLesCas = grandLivre.length;
 
     // ═══════════════════════════ BILAN DU STEP 1 ═══════════════════════════
@@ -952,6 +989,7 @@ const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empr
     // chaque statut documenté : joué par un état réel, joué par la garde d'index (503 seulement), ou déclaré non joué avec sa raison — et une déclaration périmée est vue
     const NON_JOUES = {
         ...Object.fromEntries(['302', '404', '429', '502', '503'].map(st => [`GET /api/modele-empreinte/{sha256} ${st}`, 'INDEX-EMPREINTES : route derrière V2_EMPREINTE_EXTENSION=1, absente de ce banc (drapeau éteint) ; ses cinq statuts sont joués sur un serveur réel par test-modele-empreinte.js (302 vers l\'adresse présignée, 404, 429, 502, 503)'])),
+        'POST /api/identifier/mesures 500': 'CALCUL-CLIENT : SERVEUR n\'est rendu que si la carte PROMUE ne peut pas être fabriquée depuis `analyses` (identifier/calcul-client-route.js l.146), donc APRÈS une promotion réelle : index d\'empreintes chargé, règle G rejouée sur les mesures, question réservée réglée — un état qui exige la doublure de l\'index (test-calcul-client-route.js la fabrique, mais ne joue pas ce 500) ; aucune autre branche de la route ne rend 500 (les pannes de lecture rendent 503 INDISPONIBLE)',
         'DELETE /api/compte 400': 'aucun chemin ne rend 400 : v2/comptes/routes.js l.117-125 — supprimerCompte rend 401 IDENTIFIANTS ou 409 CREDITS_ACHETES, parSession rend 401/403 ; un corps non objet devient {} (donc 401), jamais 400',
         'POST /api/compte/deconnexion 401': 'aucun chemin ne rend 401 : v2/comptes/routes.js l.63-69 — la déconnexion rend 200 même sans cookie ; seul le garde de site peut refuser (403)',
         'POST /api/identifier 403': 'O3 : le 403 VERIFICATION n\'est plus atteignable — un compte non confirmé n\'est plus un porteur (v2/porteur.js : session refusée, installation liée = installation seule) ; la garde de la chaîne reste en profondeur. Le contrat OpenAPI le documente encore (aucun contrat changé par O3 hors comptes)',
