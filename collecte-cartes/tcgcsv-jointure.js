@@ -14,6 +14,7 @@
 'use strict';
 const J = require('./jointure');
 const { urlPleine } = require('./tcgcsv');
+const { aliasDe } = require('./alias-noms');
 
 const fold = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '');
 /** Le nom normalisé : accents tombés des DEUX côtés, puis la normalisation de production (ponctuation, apostrophes, sexe). */
@@ -24,6 +25,10 @@ const aUnChiffre = s => /\d/.test(String(s ?? ''));
 const faibleDe = fort => (fort == null ? null : (String(fort).replace(/^[A-Z-]+(?=\d)/, '') || null));
 /** Les seuils de la table (mesurés le 26/10 sur le relevé complet, voir RAPPORT-T4.md). */
 const MIN_COMMUNS = 3, PART_GROUPE_MIN = 0.25, PART_UNION_MIN = 0.5, FAIBLE_SI_FORTE_SOUS = 0.25;
+const SANS_NUMERO_MIN = 0.8, TAILLE_MIN = 0.8, TAILLE_MAX = 1.25;
+/** La garde de TAILLE du nom seul : le groupe (ses cartes) et l'expansion (ses produits) ont à peu près le même nombre d'éléments ; sinon le nom seul n'est PAS une clé. */
+const estApparie = s => s === 'apparie' || s === 'apparie-nom-seul';
+const tailleCompatible = (nTcg, nCm) => nCm > 0 && nTcg / nCm >= TAILLE_MIN && nTcg / nCm <= TAILLE_MAX;
 const LANGUE_DU_TIRAGE = Object.freeze({ intl: 'en', jp: 'ja' });
 
 // ── 1. LA LECTURE DES PRODUITS ───────────────────────────────────────────────────────────────────────────────────────────────
@@ -71,7 +76,7 @@ function motifMarqueurs(c, ts) {
  * @param {{tcg: object[], cm: object[], accepterSlug?: boolean, faible?: 'auto'|boolean}} o  produits LUS (lireTcg / lireCm) d'UN groupe et des expansions qui lui sont appariées
  * @returns {{joints: {idProduct, productId, niveau}[], non: {idProduct, motif}[], faiblePermis: boolean}}
  */
-function joindre({ tcg, cm, accepterSlug = false, faible = 'auto' }) {
+function joindre({ tcg, cm, accepterSlug = false, faible = 'auto', nomSeul = false }) {
     const fortIdx = new Map(), faibleIdx = new Map();
     const ajoute = (idx, k, t) => { const l = idx.get(k) || idx.set(k, []).get(k); if (!l.includes(t)) l.push(t); };
     const lus = tcg.filter(t => t.fort != null);
@@ -81,7 +86,19 @@ function joindre({ tcg, cm, accepterSlug = false, faible = 'auto' }) {
     const avecForte = lus.filter(t => cm.some(c => c.fort != null && t.nomCles.some(n => c.nomCles.includes(n)) && c.fort === t.fort)).length;
     const faiblePermis = faible === 'auto' ? (lus.length > 0 && avecForte / lus.length < FAIBLE_SI_FORTE_SOUS) : Boolean(faible);
     const non = [], provisoire = [];
+    // LE NOM SEUL (groupe sans aucun numéro des deux côtés, gardé par la taille — voir joindreTable) : la clé est le nom, et l'unicité des DEUX côtés + les marqueurs font le reste
+    const nomIdx = new Map();
+    if (nomSeul) for (const t of tcg) for (const n of t.nomCles) ajoute(nomIdx, n, t);
     for (const c of cm) {
+        if (nomSeul) {
+            const cands = []; for (const n of c.nomCles) for (const t of nomIdx.get(n) || []) if (!cands.includes(t)) cands.push(t);
+            if (!cands.length) { non.push({ idProduct: c.idProduct, motif: 'absent-de-la-source' }); continue; }
+            const egaux = cands.filter(t => memesMarqueurs(t.marqueurs, c.marqueurs));
+            if (!egaux.length) { non.push({ idProduct: c.idProduct, motif: motifMarqueurs(c, cands) }); continue; }
+            if (egaux.length > 1) { non.push({ idProduct: c.idProduct, motif: 'ambigu-tcg', detail: egaux.map(t => t.productId) }); continue; }
+            provisoire.push({ idProduct: c.idProduct, productId: egaux[0].productId, niveau: 'nom-seul' });
+            continue;
+        }
         if (c.fort == null) { non.push({ idProduct: c.idProduct, motif: 'sans-numero' }); continue; }
         if (c.numeroSource === 'slug' && !accepterSlug) { non.push({ idProduct: c.idProduct, motif: 'numero-du-slug-non-admis' }); continue; }
         let cands = cherche(fortIdx, c.fort, c), niveau = 'fort';
@@ -118,7 +135,17 @@ function construireTable({ groupes, expansions, langueDeCategorie, minCommuns = 
         const langueG = langueDeCategorie?.[g.categoryId] ?? null;
         const tcg = g.produits.map(lireTcg).filter(t => t.fort != null);
         const base = { groupId: g.groupId, name: g.name, categoryId: g.categoryId, produits: g.produits.length, avecNumero: tcg.length };
-        if (!tcg.length) { lignes.push({ ...base, statut: 'sans-numero', expansions: [] }); continue; }
+        if (!tcg.length) {
+            // un groupe SANS aucun numéro : seule une expansion sans numéro (≥ 80 % de ses produits) peut lui répondre, par les NOMS (≥ minCommuns et ≥ 50 % des cartes du groupe, une seule retenue, la 2e sous la moitié de la 1re)
+            const cartes = g.produits.map(lireTcg).filter(t => t.rarete);
+            const toutesSN = cartes.length >= minCommuns ? E.filter(e => e.produits.length && e.produits.filter(p => p.fort == null).length / e.produits.length >= SANS_NUMERO_MIN)
+                .map(e => { const noms = new Set(e.produits.flatMap(p => p.nomCles)); return { e, communs: cartes.filter(t => t.nomCles.some(n => noms.has(n))) }; }).filter(m => m.communs.length >= minCommuns).sort((a, b) => b.communs.length - a.communs.length) : [];
+            const sn = toutesSN.filter(m => m.e.langue && m.e.langue === langueG);
+            if (sn.length && sn[0].communs.length / cartes.length >= PART_UNION_MIN && !(sn[1] && sn[1].communs.length >= sn[0].communs.length / 2)) {
+                lignes.push({ ...base, statut: 'apparie-nom-seul', cartes: cartes.length, expansions: [{ idExpansion: sn[0].e.idExpansion, slugSet: sn[0].e.slugSet, codeSet: sn[0].e.codeSet, communs: sn[0].communs.length, partGroupe: sn[0].communs.length / cartes.length, produitsCm: sn[0].e.produits.length }] });
+            } else lignes.push({ ...base, statut: !sn.length && toutesSN.some(m => m.communs.length / cartes.length >= PART_UNION_MIN) ? 'tirage-incompatible' : cartes.length >= minCommuns ? 'non-apparie' : 'sans-numero', expansions: [], cartes: cartes.length });
+            continue;
+        }
         const mesure = e => { const communs = tcg.filter(t => clesDe(t).some(k => e.cles.has(k))); return { e, communs }; };
         const toutes = E.map(mesure).filter(m => m.communs.length >= minCommuns).sort((a, b) => b.communs.length - a.communs.length);
         const compat = toutes.filter(m => m.e.langue && m.e.langue === langueG);
@@ -133,7 +160,7 @@ function construireTable({ groupes, expansions, langueDeCategorie, minCommuns = 
     }
     const par = {};
     for (const l of lignes) par[l.statut] = (par[l.statut] || 0) + 1;
-    return { lignes, resume: { groupes: lignes.length, parStatut: par, appariees: lignes.filter(l => l.statut === 'apparie').length, nonAppariees: lignes.filter(l => l.statut !== 'apparie').map(l => ({ groupId: l.groupId, name: l.name, statut: l.statut, produits: l.produits, avecNumero: l.avecNumero, meilleur: l.meilleur ?? [] })) } };
+    return { lignes, resume: { groupes: lignes.length, parStatut: par, appariees: lignes.filter(l => estApparie(l.statut)).length, nonAppariees: lignes.filter(l => !estApparie(l.statut)).map(l => ({ groupId: l.groupId, name: l.name, statut: l.statut, produits: l.produits, avecNumero: l.avecNumero, meilleur: l.meilleur ?? [] })) } };
 }
 
 /**
@@ -144,12 +171,16 @@ function construireTable({ groupes, expansions, langueDeCategorie, minCommuns = 
  */
 function joindreTable({ table, groupes, cm, accepterSlug = false }) {
     const sortie = new Map(), vus = new Map();
-    for (const l of table.lignes.filter(x => x.statut === 'apparie')) {
+    for (const l of table.lignes.filter(x => estApparie(x.statut))) {
         const g = groupes.get(l.groupId);
         if (!g) continue;
         const ids = new Set(l.expansions.map(e => e.idExpansion));
         const produits = [...ids].flatMap(id => cm.expansions.get(id)?.produits || []);
-        const r = joindre({ tcg: g.produits, cm: produits.map(p => p.lu), accepterSlug });
+        const nomSeul = l.statut === 'apparie-nom-seul';
+        const cartes = nomSeul ? g.produits.filter(t => t.rarete) : g.produits;
+        // le nom seul n'est une clé que si le groupe et l'expansion ont à peu près la même taille : sinon aucun produit ne se joint, et le motif le dit
+        if (nomSeul && !tailleCompatible(cartes.length, produits.length)) { for (const p of produits) if (!sortie.has(p.idProduct)) sortie.set(p.idProduct, { motif: 'tailles-differentes', groupId: l.groupId }); continue; }
+        const r = joindre({ tcg: cartes, cm: produits.map(p => p.lu), accepterSlug, nomSeul });
         for (const j of r.joints) (vus.get(j.idProduct) || vus.set(j.idProduct, []).get(j.idProduct)).push({ ...j, groupId: l.groupId, categoryId: g.categoryId });
         for (const n of r.non) { if (!vus.has(n.idProduct)) vus.set(n.idProduct, []); const a = sortie.get(n.idProduct); if (!a || (a.motif === 'absent-de-la-source' && n.motif !== 'absent-de-la-source')) sortie.set(n.idProduct, { motif: n.motif, groupId: l.groupId }); }
     }
@@ -186,9 +217,11 @@ const nomCompatible = (fiche, t) => clesDeNomFiche(fiche).some(k => t.nomCles.so
 }));
 // Le numéro imprimé d'une impression peut porter un commentaire (« SWSH215 (Top Left) ») : on lit le numéro, pas la note
 const numeroImprime = n => String(n ?? '').replace(/\([^)]*\)/g, ' ').trim().split(/\s+/)[0] || '';
-function temoinFiche(t, fiche) {
+function temoinFiche(t, fiche, { cm = null } = {}) {
     if (!fiche?.nomEn || !t) return { verdict: 'non-jugeable', cause: 'aucune fiche' };
-    const nomOk = clesDeNomFiche(fiche.nomEn).some(k => t.nomCles.includes(k));
+    // l'alias de production (Cardmarket -> Bulbapedia, ex. « EXP. ALL » = « Exp. Share ») : une table constatée à la main, la MÊME que celle de la jointure du texte
+    const alias = cm ? aliasDe(cm.nomBase, cm.idExpansion) : undefined;
+    const nomOk = clesDeNomFiche(fiche.nomEn).some(k => t.nomCles.includes(k) || (alias && clesDeNom(alias).includes(k)));
     const lache = !nomOk && nomCompatible(fiche.nomEn, t);
     if (!nomOk && !lache) return { verdict: 'faux', cause: `nom : fiche « ${fiche.nomEn} », marché « ${t.nomBase} »` };
     const imps = (fiche.impressions || []).filter(i => i && i.numero != null && String(i.numero).trim() !== '' && aUnChiffre(i.numero)).map(i => ({ ...i, numero: numeroImprime(i.numero) }));
@@ -207,10 +240,10 @@ function temoinFiche(t, fiche) {
  */
 function calibrer({ tcg, cm, accepterSlug = false, faible = 'auto' }) {
     const r = joindre({ tcg, cm: cm.map(x => x.cm), accepterSlug, faible });
-    const parTcg = new Map(tcg.map(t => [t.productId, t])), ficheDe = new Map(cm.map(x => [x.cm.idProduct, x.fiche]));
+    const parTcg = new Map(tcg.map(t => [t.productId, t])), ficheDe = new Map(cm.map(x => [x.cm.idProduct, x.fiche])), cmDe = new Map(cm.map(x => [x.cm.idProduct, x.cm]));
     let justes = 0, faux = 0, laches = 0, nonJugeables = 0; const fauxDetail = [], lachesDetail = [], muetsParMotif = {};
     for (const j of r.joints) {
-        const v = temoinFiche(parTcg.get(j.productId), ficheDe.get(j.idProduct));
+        const v = temoinFiche(parTcg.get(j.productId), ficheDe.get(j.idProduct), { cm: cmDe.get(j.idProduct) });
         if (v.verdict === 'juste') justes++;
         else if (v.verdict === 'faux') { faux++; fauxDetail.push({ idProduct: j.idProduct, productId: j.productId, niveau: j.niveau, cause: v.cause }); }
         else if (v.verdict === 'lache') { laches++; lachesDetail.push({ idProduct: j.idProduct, productId: j.productId, niveau: j.niveau, cause: v.cause }); }
@@ -218,6 +251,24 @@ function calibrer({ tcg, cm, accepterSlug = false, faible = 'auto' }) {
     }
     for (const n of r.non) muetsParMotif[n.motif] = (muetsParMotif[n.motif] || 0) + 1;
     return { total: cm.length, justes, faux, laches, muets: r.non.length, nonJugeables, fauxDetail, lachesDetail, muetsParMotif, faiblePermis: r.faiblePermis, retenue: cm.length > 0 && justes > 0 && faux === 0 };
+}
+
+/**
+ * La calibration du NOM SEUL : on prend des produits dont le numéro est CONNU des deux côtés, on le CACHE à la clé (nom + unicité des deux côtés + marqueurs + garde de taille), puis le témoin de la fiche (qui lit les
+ * numéros imprimés) juge. Retenue seulement à 0 faux. C'est le seul moyen de mesurer ce que vaut une clé sans numéro (§48 : le nom seul n'a pas le droit d'être admis sans cette mesure).
+ */
+function calibrerNomSeul({ tcg, cm }) {
+    if (!tailleCompatible(tcg.length, cm.length)) return { total: cm.length, justes: 0, faux: 0, muets: cm.length, nonJugeables: 0, fauxDetail: [], muetsParMotif: { 'tailles-differentes': cm.length }, retenue: false };
+    const sansNumero = x => ({ ...x, fort: null, faible: null });
+    const r = joindre({ tcg: tcg.map(sansNumero), cm: cm.map(x => sansNumero(x.cm)), nomSeul: true });
+    const parTcg = new Map(tcg.map(t => [t.productId, t])), ficheDe = new Map(cm.map(x => [x.cm.idProduct, x.fiche])), cmDe = new Map(cm.map(x => [x.cm.idProduct, x.cm]));
+    let justes = 0, faux = 0, nonJugeables = 0; const fauxDetail = [], muetsParMotif = {};
+    for (const j of r.joints) {
+        const v = temoinFiche(parTcg.get(j.productId), ficheDe.get(j.idProduct), { cm: cmDe.get(j.idProduct) });
+        if (v.verdict === 'juste' || v.verdict === 'lache') justes++; else if (v.verdict === 'faux') { faux++; fauxDetail.push({ idProduct: j.idProduct, productId: j.productId, cause: v.cause }); } else nonJugeables++;
+    }
+    for (const n of r.non) muetsParMotif[n.motif] = (muetsParMotif[n.motif] || 0) + 1;
+    return { total: cm.length, justes, faux, muets: r.non.length, nonJugeables, fauxDetail, muetsParMotif, retenue: cm.length > 0 && justes > 0 && faux === 0 };
 }
 
 // ── 5. L'UNITÉ DU FORMAT COMMUN ───────────────────────────────────────────────────────────────────────────────────────────
@@ -233,8 +284,10 @@ function uniteDe({ joint, tcg, ligne, cm, categoryId, langueDeCategorie, groupe,
     const l = ligne.lignes[0], langue = langueDeCategorie?.[categoryId] ?? null;
     if (!langue) return null;
     return { carteId: l.carteId, slugSet: l.slugSet, numero: l.numeroFiche ?? null, produits: [joint.idProduct], slugProduit: ligne.slug ?? null, url, idSource: String(tcg.productId), groupe, langue, ecrivable: langue === 'en',
-        carteNom: ligne.carteNom ?? null, nomSource: tcg.nomBrut, numeroSource: tcg.total != null ? `${tcg.fort}/${tcg.total}` : String(tcg.fort), niveau: joint.niveau ?? null,
-        preuveNeutre: `jointure par numéro ${tcg.fort}${tcg.total != null ? `/${tcg.total}` : ''} (clé ${joint.niveau ?? 'fort'}) et nom « ${tcg.nomBase} » = fiche « ${ligne.carteNom ?? '?'} », un seul produit de chaque côté, aucun marqueur de variante` };
+        carteNom: ligne.carteNom ?? null, nomSource: tcg.nomBrut, numeroSource: tcg.fort == null ? null : tcg.total != null ? `${tcg.fort}/${tcg.total}` : String(tcg.fort), niveau: joint.niveau ?? null,
+        preuveNeutre: joint.niveau === 'nom-seul'
+            ? `jointure par le nom seul « ${tcg.nomBase} » = fiche « ${ligne.carteNom ?? '?'} » (groupe et expansion sans numéro, de tailles voisines), nom unique des deux côtés, aucun marqueur de variante`
+            : `jointure par numéro ${tcg.fort}${tcg.total != null ? `/${tcg.total}` : ''} (clé ${joint.niveau ?? 'fort'}) et nom « ${tcg.nomBase} » = fiche « ${ligne.carteNom ?? '?'} », un seul produit de chaque côté, aucun marqueur de variante` };
 }
 
 // ── 6. LE PLAN DU CATALOGUE COMPLET ───────────────────────────────────────────────────────────────────────────────────────
@@ -287,4 +340,4 @@ function planifierCatalogue({ rel, cm, accepterSlug = false, exclureGroupes = ne
     return { table, jointure, unites, restes, nonJoints, resume: { groupes: groupes.length, parStatutTable: table.resume.parStatut, produitsJoints: [...jointure.values()].filter(x => x.joint).length, unites: unites.length, restesParMotif: parMotif } };
 }
 
-module.exports = { groupesDuReleve, langueDeCategorieDe, familleDe, planifierCatalogue, MIN_COMMUNS, PART_GROUPE_MIN, PART_UNION_MIN, FAIBLE_SI_FORTE_SOUS, LANGUE_DU_TIRAGE, fold, cleNom, clesDeNom, faibleDe, lireTcg, lireCm, joindre, construireTable, joindreTable, temoinFiche, calibrer, uniteDe };
+module.exports = { groupesDuReleve, langueDeCategorieDe, familleDe, planifierCatalogue, MIN_COMMUNS, PART_GROUPE_MIN, PART_UNION_MIN, FAIBLE_SI_FORTE_SOUS, LANGUE_DU_TIRAGE, fold, cleNom, clesDeNom, faibleDe, lireTcg, lireCm, joindre, construireTable, joindreTable, temoinFiche, calibrer, calibrerNomSeul, tailleCompatible, estApparie, uniteDe };

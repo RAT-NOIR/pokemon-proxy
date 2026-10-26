@@ -116,6 +116,43 @@ const C = (idProduct, name, numero, o = {}) => ({ idProduct, name, numero, slug:
         assert.strictEqual(t.lignes.find(x => x.groupId === 2).statut, 'non-apparie', 'MIN_COMMUNS');
     });
 
+    // ───────── le NOM SEUL, gardé : un groupe sans aucun numéro des DEUX côtés (My First Battle) ─────────
+    const tcgSN = (groupId, noms, o = {}) => ({ groupId, name: `G${groupId}`, categoryId: 3, produits: noms.map((n, i) => ({ productId: groupId * 100 + i, name: n, number: null, groupId, rarity: o.sansRarete?.includes(n) ? null : 'Promo', imageUrl: `https://tcgplayer-cdn.tcgplayer.com/product/${groupId * 100 + i}_200w.jpg` })) });
+    const cmSN = (idExpansion, noms, tirage = 'intl') => ({ idExpansion, slugSet: `E${idExpansion}`, codeSet: 'X', tirage, produits: noms.map((n, i) => JT.lireCm(C(idExpansion * 1000 + i, n, null, { idExpansion, slug: n.replace(/\W+/g, '-') }))) });
+    const NOMS = ['Ivysaur', 'Oddish', 'Gloom', 'Scyther', 'Wartortle'];
+    await test('nom seul — la table : un groupe SANS numéro s\'apparie à une expansion SANS numéro par les noms (communs ≥ 3, ≥ 50 % du groupe) ; jamais à une expansion numérotée', () => {
+        const t = JT.construireTable({ groupes: [tcgSN(1, NOMS)], expansions: [cmSN(100, NOMS)], langueDeCategorie: { 3: 'en' } });
+        assert.strictEqual(t.lignes[0].statut, 'apparie-nom-seul'); assert.strictEqual(t.lignes[0].expansions[0].communs, 5);
+        const numerotee = { idExpansion: 200, slugSet: 'E200', codeSet: 'X', tirage: 'intl', produits: NOMS.map((n, i) => JT.lireCm(C(200000 + i, n, String(i + 1), { idExpansion: 200 }))) };
+        assert.strictEqual(JT.construireTable({ groupes: [tcgSN(1, NOMS)], expansions: [numerotee], langueDeCategorie: { 3: 'en' } }).lignes[0].statut, 'non-apparie');
+        assert.strictEqual(JT.construireTable({ groupes: [tcgSN(1, NOMS)], expansions: [cmSN(100, NOMS, 'jp')], langueDeCategorie: { 3: 'en' } }).lignes[0].statut, 'tirage-incompatible');
+    });
+    await test('nom seul — la jointure : un nom UNIQUE des deux côtés se joint ; un nom en double (V1/V2) = ambigu ; un marqueur d\'un seul côté (Blue Border) = rien ; niveau « nom-seul »', () => {
+        const tcg = ['Ivysaur', 'Oddish', 'Bulbasaur', 'Bulbasaur (Blue Border)', 'Potion (Bulbasaur)'].map((n, i) => JT.lireTcg({ productId: 50 + i, name: n, number: null, rarity: 'Promo', imageUrl: 'https://tcgplayer-cdn.tcgplayer.com/product/1_200w.jpg' }));
+        const cm = ['Ivysaur', 'Oddish', 'Bulbasaur', 'Bulbasaur', 'Potion'].map((n, i) => JT.lireCm(C(i + 1, n, null, { slug: `${n}-V${i}` })));
+        const r = JT.joindre({ tcg, cm, nomSeul: true });
+        assert.deepStrictEqual(r.joints.map(j => [j.idProduct, j.niveau]), [[1, 'nom-seul'], [2, 'nom-seul']]);
+        assert.deepStrictEqual(r.non.map(x => x.motif).sort(), ['ambigu-cm', 'ambigu-cm', 'marqueur-tcg-seul'].sort(), 'Bulbasaur x2 chez nous : ambigu ; Potion (Bulbasaur) : marqueur d un seul côté');
+    });
+    await test('nom seul — la garde de TAILLE : le groupe et l\'expansion doivent avoir à peu près le même nombre de cartes (0,8 à 1,25) ; sinon rien ne se joint et le motif le dit', () => {
+        const D = require('./collecte-cartes/tcgcsv-donnees');
+        const cm = D.assemblerCm({ sets: [{ _id: 'E100', tirage: 'intl' }], cartes: [], cp: [], nc: NOMS.map((n, i) => ({ idProduct: 1000 + i, idExpansion: 100, slugSet: 'E100', codeSet: 'X', numero: null, slug: n })), cat: NOMS.map((n, i) => ({ idProduct: 1000 + i, name: n })) });
+        const row = { groupId: 1, statut: 'apparie-nom-seul', expansions: [{ idExpansion: 100 }] };
+        const ok2 = JT.joindreTable({ table: { lignes: [row] }, groupes: new Map([[1, { categoryId: 3, name: 'G1', produits: tcgSN(1, NOMS).produits.map(JT.lireTcg) }]]), cm });
+        assert.strictEqual(ok2.get(1000).joint.niveau, 'nom-seul');
+        const trop = JT.joindreTable({ table: { lignes: [row] }, groupes: new Map([[1, { categoryId: 3, name: 'G1', produits: tcgSN(1, [...NOMS, ...NOMS.map(n => `${n} X`), 'Y1', 'Y2', 'Y3']).produits.map(JT.lireTcg) }]]), cm });
+        assert.strictEqual(trop.get(1000).motif, 'tailles-differentes');
+    });
+    await test('nom seul — la calibration : les numéros sont CACHÉS à la clé (nom + unicité + taille) et rendus au témoin de la fiche ; justes / faux / muets dits', () => {
+        const nums = [1, 2, 3, 4, 5, 6].map(i => ({ n: `Carte${i}`, i }));
+        const tcg = nums.map(({ n, i }) => JT.lireTcg(T(i, `${n} - ${i}/6`, `${i}/6`)));
+        const cm = nums.map(({ n, i }) => ({ cm: JT.lireCm(C(i, n, String(i))), fiche: { nomEn: n, impressions: [{ numero: String(i), total: '6' }] } }));
+        cm[0].fiche.impressions[0].numero = '99';         // une fiche qui contredit : un faux, vu par le témoin
+        const r = JT.calibrerNomSeul({ tcg, cm });
+        assert.deepStrictEqual([r.total, r.justes, r.faux, r.muets], [6, 5, 1, 0]); assert.strictEqual(r.retenue, false);
+        assert.strictEqual(JT.calibrerNomSeul({ tcg, cm: cm.slice(1) }).retenue, true);
+    });
+
     // ───────── le témoin de la fiche (indépendant de la clé) ─────────
     await test('témoin : le nom ET un numéro imprimé de la fiche concordent = juste ; un autre nom ou un autre numéro = faux ; une fiche sans numéro = non jugeable', () => {
         const fiche = { nomEn: 'Kricketune V', impressions: [{ tirage: 'intl', numero: '006', total: '163' }] };
@@ -132,6 +169,9 @@ const C = (idProduct, name, numero, o = {}) => ({ idProduct, name, numero, slug:
         assert.strictEqual(JT.temoinFiche(JT.lireTcg(T(6, 'Yveltal EX - XY150a', 'XY150a')), { nomEn: 'Yveltal-EX', impressions: [{ numero: '150a' }] }).verdict, 'juste', 'préfixe d\'un seul côté + tiret du nom');
         assert.strictEqual(JT.temoinFiche(JT.lireTcg(T(7, 'Morpeko V-Union - SWSH287', 'SWSH287')), { nomEn: 'Morpeko V-UNION', impressions: [{ numero: 'SWSH287 (Top Left)' }, { numero: '226' }] }).verdict, 'juste', 'le commentaire du numéro imprimé se lit à part');
         assert.strictEqual(JT.temoinFiche(JT.lireTcg(T(8, 'Fairy Charm G - 174/214', '174/214')), { nomEn: 'Fairy Charm Grass', impressions: [{ numero: '174', total: '214' }] }).verdict, 'juste', 'le type d\'une Énergie : lettre chez Cardmarket, mot sur la fiche');
+        const exp = JT.lireTcg(T(12, 'EXP.ALL - 093/105', '093/105')), expFiche = { nomEn: 'Exp. Share', impressions: [{ numero: '093', total: '105' }] };
+        assert.strictEqual(JT.temoinFiche(exp, expFiche).verdict, 'faux', 'sans l\'alias de production, deux noms');
+        assert.strictEqual(JT.temoinFiche(exp, expFiche, { cm: JT.lireCm(C(1, 'EXP. ALL', '093')) }).verdict, 'juste', 'l\'alias constaté de la production (alias-noms.js) est celui du témoin');
         assert.strictEqual(JT.temoinFiche(JT.lireTcg(T(9, 'Fairy Charm G - 174/214', '174/214')), { nomEn: 'Fairy Charm Fire', impressions: [{ numero: '174', total: '214' }] }).verdict, 'faux');
     });
 

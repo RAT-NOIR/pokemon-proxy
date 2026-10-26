@@ -14,6 +14,20 @@ const D = require('./collecte-cartes/tcgcsv-donnees');
 
 const arg = (args, nom) => args.find(a => a.startsWith(`--${nom}=`))?.slice(nom.length + 3);
 const groupesDuReleve = JT.groupesDuReleve, LANGUE_DE_CATEGORIE = JT.langueDeCategorieDe;
+/** La calibration du NOM SEUL sur les lignes NUMÉROTÉES de la table : le numéro est caché à la clé, le témoin de la fiche le relit. Une ligne = un groupe contre l'ensemble de ses expansions. */
+function calibrerNomSeulTout({ table, lus, cm }) {
+    const total = { lignes: 0, lignesTaillesDifferentes: 0, produits: 0, justes: 0, faux: 0, muets: 0, nonJugeables: 0 }, fauxDetail = [];
+    for (const l of table.lignes.filter(x => x.statut === 'apparie')) {
+        const g = lus.get(l.groupId);
+        const produits = [...new Set(l.expansions.map(e => e.idExpansion))].flatMap(id => cm.expansions.get(id)?.produits || []);
+        const r = JT.calibrerNomSeul({ tcg: g.produits.filter(t => t.fort != null), cm: produits.map(p => ({ cm: p.lu, fiche: p.fiche && p.nImages > 0 ? p.fiche : null })) });
+        total.lignes++;
+        if (r.muetsParMotif['tailles-differentes']) { total.lignesTaillesDifferentes++; continue; }
+        total.produits += r.total; total.justes += r.justes; total.faux += r.faux; total.muets += r.muets; total.nonJugeables += r.nonJugeables;
+        for (const f of r.fauxDetail) fauxDetail.push({ groupId: l.groupId, nomGroupe: l.name, ...f, nomCm: cm.produits.get(f.idProduct)?.name });
+    }
+    return { ...total, retenue: total.justes > 0 && total.faux === 0, fauxDetail };
+}
 function calibrerTout({ rel, cm, accepterSlug = false }) {
     const groupes = groupesDuReleve(rel), langueDeCategorie = LANGUE_DE_CATEGORIE(rel.categories);
     const table = JT.construireTable({ groupes, expansions: D.expansionsPourTable(cm), langueDeCategorie });
@@ -26,7 +40,7 @@ function calibrerTout({ rel, cm, accepterSlug = false }) {
     for (const p of connus) {
         const j = jointure.get(p.idProduct);
         if (!j?.joint) { compte.muets++; const m = j?.motif ?? 'inconnu'; muetsParMotif[m] = (muetsParMotif[m] || 0) + 1; continue; }
-        const t = tcgParId.get(j.joint.productId), v = JT.temoinFiche(t, p.fiche);
+        const t = tcgParId.get(j.joint.productId), v = JT.temoinFiche(t, p.fiche, { cm: p.lu });
         const ligne = () => ({ idProduct: p.idProduct, nomCm: p.name, slugSet: p.slugSet, numero: p.numero, productId: t.productId, nomTcg: t.nomBrut, numeroTcg: t.numeroBrut, groupId: j.joint.groupId, niveau: j.joint.niveau, cause: v.cause });
         if (v.verdict === 'juste') compte.justes++;
         else if (v.verdict === 'non-jugeable') compte.nonJugeables++;
@@ -34,7 +48,8 @@ function calibrerTout({ rel, cm, accepterSlug = false }) {
         else { compte.faux++; const c = v.cause.split(' ')[0]; fauxParCause[c] = (fauxParCause[c] || 0) + 1; fauxDetail.push(ligne()); }
     }
     const tousJoints = [...jointure.values()].filter(x => x.joint).length;
-    return { table, jointure, lus, calibration: { ...compte, retenue: compte.population > 0 && compte.justes > 0 && compte.faux === 0, muetsParMotif, fauxParCause, lachesParCause, fauxDetail, lachesDetail, tousLesProduitsJoints: tousJoints, produitsCm: cm.produits.size, accepterSlug } };
+    const nomSeul = calibrerNomSeulTout({ table, lus, cm });
+    return { table, jointure, lus, nomSeul, calibration: { ...compte, retenue: compte.population > 0 && compte.justes > 0 && compte.faux === 0, muetsParMotif, fauxParCause, lachesParCause, fauxDetail, lachesDetail, tousLesProduitsJoints: tousJoints, produitsCm: cm.produits.size, accepterSlug } };
 }
 
 async function main(args = process.argv.slice(2)) {
@@ -68,6 +83,10 @@ async function main(args = process.argv.slice(2)) {
     console.log(`CALIBRATION (${c.accepterSlug ? 'numéro du slug admis' : 'numéro de la base seulement'}) : population ${c.population} (fiche numérotée + visuel existant) · JUSTES ${c.justes} · lâches ${c.laches} ${JSON.stringify(c.lachesParCause)} · FAUX ${c.faux} · MUETS ${c.muets} · non jugeables ${c.nonJugeables} · clé ${c.retenue ? 'RETENUE (0 faux)' : 'NON retenue'}`);
     console.log(`   muets par motif : ${JSON.stringify(c.muetsParMotif)} · faux par cause : ${JSON.stringify(c.fauxParCause)} · tous produits Cardmarket joints : ${c.tousLesProduitsJoints} / ${c.produitsCm}`);
     fs.writeFileSync(path.join(sortie, `calibration${c.accepterSlug ? '-slug' : ''}.json`), JSON.stringify({ le: new Date().toISOString(), ...c }, null, 1));
+    const ns = r.nomSeul;
+    console.log(`NOM SEUL (numéro caché à la clé, relu par la fiche) : ${ns.lignes} lignes numérotées (${ns.lignesTaillesDifferentes} refusées par la garde de taille) · produits ${ns.produits} · JUSTES ${ns.justes} · FAUX ${ns.faux} · muets ${ns.muets} · non jugeables ${ns.nonJugeables} · ${ns.retenue ? 'RETENU (0 faux)' : 'NON retenu sur les ensembles numérotés'}`);
+    fs.writeFileSync(path.join(sortie, 'calibration-nom-seul.json'), JSON.stringify({ le: new Date().toISOString(), ...ns }, null, 1));
+    for (const f of ns.fauxDetail.slice(0, 12)) console.log(`   nom-seul faux : ${f.nomGroupe} · ${f.idProduct} « ${f.nomCm} » <- ${f.productId} ${f.cause}`);
     for (const f of c.fauxDetail.slice(0, +(arg(args, 'faux') ?? 25))) console.log(`   faux : ${f.idProduct} « ${f.nomCm} » ${f.slugSet} n°${f.numero} <- ${f.productId} « ${f.nomTcg} » ${f.numeroTcg} [${f.niveau}] ${f.cause}`);
 }
 if (require.main === module) main().catch(e => { console.error('❌', e.message); process.exitCode = 1; });
