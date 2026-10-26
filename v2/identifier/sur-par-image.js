@@ -16,6 +16,7 @@
 const G = require('../../ratmarket/decision-g');
 const { statuts, CHAMPS } = require('./garde-contradiction');
 const MT = require('./marques-tampon');
+const { statutsPourImage } = require('./comparateur-image');
 
 const MARGE = G.SEUILS_G.marge_carte;                      // M : la marge de la règle G (decision-g.js:25)
 const MOTIFS = Object.freeze(['photo-non-redressee', 'candidats', 'donnee-manquante', 'meme-dessin', 'pas-voisin-n1', 'produit-sans-visuel', 'ecart', 'emprunt-inconnu', 'visuel-suspect', 'visuel-partage', 'contredit', 'marques', 'jumeaux']);
@@ -38,6 +39,7 @@ const f2 = x => (Math.round(x * 100) / 100).toFixed(2);
  *   lu         la lecture de la photo (garde-contradiction.lectureDe) ou null si rien n'a été lu
  *   marquesLues les marques lues deux fois sur la carte (liste fermée) ou null
  *   redressee  vrai si le vecteur est celui d'une carte redressée
+ *   comparateur true EXACTEMENT : la condition (6) passe par le comparateur juste (comparateur-image.js, V2_SPI_COMPARATEUR) ; absent ou autre chose : la définition brute de la production
  *   marge      M (défaut : celui du code) — pour les bancs de mesure seulement
  * @returns {{sur:true, produit:number, ecart:number, cosinus:number, raison:string} | {sur:false, motif:string}}
  */
@@ -96,7 +98,8 @@ function decider(e) {
         if (!(e.produits instanceof Map) || !e.produits.has(meilleur.id)) return se_tait('donnee-manquante');
         const ligne = e.produits.get(meilleur.id);
         if (e.lu) {
-            const st = statuts(e.lu, ligne);
+            // SPI-CONTRADICTIONS (V2_SPI_COMPARATEUR, `e.comparateur === true` exactement) : le comparateur juste (comparateur-image.js) à la place de la définition brute de la production ; les autres candidats servent à reconnaître un jumeau ou un rival à l'attaque concordante ; une ligne absente reste undefined (détection indécidable : le veto reste)
+            const st = e.comparateur === true ? statutsPourImage(e.lu, ligne, ids.filter(i => i !== meilleur.id).map(i => e.produits.get(i))) : statuts(e.lu, ligne);
             if (CHAMPS.some(k => st[k] === 'ko')) return se_tait('contredit');
         }
         if (Array.isArray(e.marquesLues) && e.marquesLues.length) {

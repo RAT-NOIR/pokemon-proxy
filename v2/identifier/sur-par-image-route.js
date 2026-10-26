@@ -155,7 +155,8 @@ async function consulterSurParImage({ cfg, entree, resultat, corpsChaine, produi
             return SPI.decider({
                 ids: liste, cles, cosinus: c => (cos.has(c) ? cos.get(c) : null), top1: p.trouve.top.length ? p.trouve.top[0][0] : null, contexte: p.courant.index.contexteG,
                 signaux: signauxDe(version), emprunte: emprunteDe(version), partages: version.colonneMarquages === true && typeof version.partagesDe === 'function' ? id => version.partagesDe(id) : () => null,
-                jumeaux: typeof jumeaux === 'function' ? jumeaux : null, produits: prods, lu: lectureDe(corpsChaine), marquesLues: Array.isArray(marquesLues) ? marquesLues : null, redressee: p.e0.redressee === true
+                jumeaux: typeof jumeaux === 'function' ? jumeaux : null, produits: prods, lu: lectureDe(corpsChaine), marquesLues: Array.isArray(marquesLues) ? marquesLues : null, redressee: p.e0.redressee === true,
+                comparateur: cfg.spiComparateur === true      // SPI-CONTRADICTIONS : le comparateur juste de la condition (6) ; éteint, la définition brute de la production
             });
         };
         // la règle d'avant, d'abord et seule tant qu'elle a deux candidats (une question à un seul n'a jamais été relue par l'image)
