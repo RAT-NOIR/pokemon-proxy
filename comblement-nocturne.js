@@ -152,8 +152,11 @@ async function etapeEcrire({ dossier, attendu }) {
     if (!D?.gagnants) throw new Error('decisions-comblement.json absent : lancer --decider d\'abord');
     if (CO.etatTropVieux(new Date(D.etat?.le))) throw new Error(`l'état A/B/C (${D.etat?.fichier ?? '?'}) a plus de ${CO.ETAT_AGE_MAX_JOURS} jours (ou sa date est illisible) : aucune écriture — relancer compteurs-abc.js puis le plan`);
     const fournisseurs = CO.chargerFournisseurs(), defs = new Map(fournisseurs.map(f => [f.code, f.def])), F = fichiersDe(dossier);
-    const { ouvrirConnexions } = require('./collecte-cartes/garde'), { modeles } = require('./collecte-cartes/schemas'), r2 = require('./collecte-cartes/r2');
-    const { vignetterApresJointure } = require('./collecte-cartes/vignettes-apres-jointure'), { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
+    const { ouvrirConnexions } = require('./collecte-cartes/garde');
+    const { modeles } = require('./collecte-cartes/schemas');
+    const r2 = require('./collecte-cartes/r2');
+    const { vignetterApresJointure } = require('./collecte-cartes/vignettes-apres-jointure');
+    const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
     if (Object.keys(D.gagnants).length && !process.env.R2_BUCKET_IMAGES) throw new Error('R2_BUCKET_IMAGES : nom de bucket absent — aucune écriture');
     const { cartes: cx, fermer } = await ouvrirConnexions({ production: false, buckets: Object.keys(D.gagnants).length ? ['R2_BUCKET_IMAGES'] : [] });
     try {
