@@ -25,7 +25,7 @@ async function leve(nom, f, motif) {
 // ── des fournisseurs de mémoire ──
 const SRC = (code, langue = 'en', tampon = () => undefined) => ({ SOURCE: code, LANGUE: langue, tampon });
 const def = (code, o = {}) => ({ CODE: code, SRC: SRC(code, o.langue, o.tampon), DOSSIER: path.join(os.tmpdir(), `faux-${code}`), hoteImages: o.hote ?? `img.${code}.example.com`,
-    clientDe: o.clientDe ?? (() => { throw new Error(`clientDe(${code}) ne devait pas être appelé`); }), construirePlan: o.construirePlan ?? (async () => ({ unites: [], restes: [] })) });
+    clientDe: o.clientDe ?? (() => { throw new Error(`clientDe(${code}) ne devait pas être appelé`); }), construirePlan: o.construirePlan ?? (async () => ({ unites: [], restes: [] })), ...(o.synchronise ? { synchronise: o.synchronise } : {}) });
 const unite = (o) => ({ carteId: 1, slugSet: 'Set-A', numero: '024', produits: [100], url: 'https://x/1.jpg', numeroSource: '024/208', idSource: 'k1', groupe: 'g', decision: { action: 'ajouter', remplace: [] }, ...o });
 
 (async () => {
@@ -132,6 +132,8 @@ const unite = (o) => ({ carteId: 1, slugSet: 'Set-A', numero: '024', produits: [
     v('tirageCandidat : langue = celle de la SOURCE, pas celle du set', CO.tirageCandidat(def('ppr', { langue: 'zh-hans' }), unite({})).langue, 'zh-hans');
     v('tirageCandidat : tampon de la source (tampon(slugSet))', CO.tirageCandidat(def('scx', { tampon: s => (s === 'Set-A' ? 'Play! Pokémon' : undefined) }), unite({ slugSet: 'Set-A' })).tampon, 'Play! Pokémon');
     v('tirageCandidat : tampon indéfini = null', CO.tirageCandidat(def('scx', { tampon: () => undefined }), unite({})).tampon, null);
+    v('tirageCandidat (T4) : la langue PROPRE de l\'unité (celle de la catégorie du marché) prime sur celle de la source', CO.tirageCandidat(def('tcs', { langue: 'en' }), unite({ langue: 'ja' })).langue, 'ja');
+    v('tirageCandidat (T4) : sans langue d\'unité, celle de la source', CO.tirageCandidat(def('tcs', { langue: 'en' }), unite({})).langue, 'en');
 
     // ───────────── regroupement par produit ─────────────
     const ids = new Set([100, 101, 102]);
@@ -276,6 +278,19 @@ const unite = (o) => ({ carteId: 1, slugSet: 'Set-A', numero: '024', produits: [
     v('I2 : au moins un set / groupe planifié et une unité : passe', ok2[0].unites.length, 1);
     const bl = await CO.recolterUnites({ fournisseurs: [{ code: 'tcs', def: def('tcs', { construirePlan: async () => ({ unites: [], restes: [], resume: { parGroupe: [] } }) }) }], db: {}, lireReleves: () => { throw new Error('absent'); }, arret: () => ({ motif: 'x' }) });
     v('I2 : un fournisseur BLOQUÉ n\'est pas jugé muet (0 requête de toute façon)', bl[0].bloquee, true);
+    // T4 : la production (lecture seule) est passée à chaque plan de fournisseur
+    let recu = null;
+    await CO.recolterUnites({ fournisseurs: [{ code: 'tcs', def: def('tcs', { construirePlan: async o => { recu = o; return { unites: [unite({ produits: [1], url: 'https://tcs/1.jpg', carteId: 1 })], restes: [], resume: { parGroupe: [{ etat: 'planifie' }] } }; } }) }], db: { cartes: 1 }, prod: { prod: 1 }, lireReleves: () => ({}), arret: () => null });
+    v('T4 : le plan du fournisseur reçoit `prod` (la production en lecture seule)', [recu.db, recu.prod], [{ cartes: 1 }, { prod: 1 }]);
+    // T4 : la synchro quotidienne conditionnelle d'un fournisseur, avant le plan — un échec n'arrête PAS la nuit (il est dit), un arrêt d'hôte non plus
+    const traces = [];
+    const sy = await CO.synchroniserFournisseurs({ fournisseurs: [
+        { code: 'scx', def: def('scx', {}) },
+        { code: 'tcs', def: def('tcs', { synchronise: async () => ({ etat: 'rien-de-neuf', requetes: 1, motif: 'last-updated pas plus récent' }) }) },
+        { code: 'pmk', def: def('pmk', { synchronise: async () => { throw new Error('boum'); } }) },
+        { code: 'ppr', def: def('ppr', { synchronise: async () => ({ etat: 'arret-definitif', requetes: 1, motif: 'HTTP 403' }) }) }], journal: m => traces.push(m) });
+    v('T4 synchro : un fournisseur sans synchro est ignoré ; chaque autre rend son état ; une exception devient un état « echec » (la nuit continue)', sy.map(x => [x.code, x.etat]), [['tcs', 'rien-de-neuf'], ['pmk', 'echec'], ['ppr', 'arret-definitif']]);
+    v('T4 synchro : tout est journalisé, et les états qui demandent attention sont marqués', [traces.length, sy.filter(x => x.attention).map(x => x.code)], [3, ['pmk', 'ppr']]);
 
     // M1 : une erreur d'accès n'est jamais « STOP absent »
     const stat = (e) => () => { if (e) throw e; return {}; };

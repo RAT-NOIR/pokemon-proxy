@@ -115,7 +115,8 @@ function reduireNumero(n) {
     return s === '' ? null : s;
 }
 const tirageProduit = p => ({ langue: langueDuTirage(p?.langue), codeSet: p?.codeSet ?? null, numero: reduireNumero(p?.numero), tampon: p?.tamponnee ?? null });
-const tirageCandidat = (def, u) => ({ langue: def.SRC.LANGUE, numero: reduireNumero(u.numeroSource), codeSet: null, tampon: def.SRC.tampon(u.slugSet) ?? null });
+// T4 : la langue PROPRE de l'unité (celle de la catégorie du marché : anglais ou japonais) prime sur celle de la source ; sans elle, la langue de la source (R2 : ce que la SOURCE dit)
+const tirageCandidat = (def, u) => ({ langue: u.langue ?? def.SRC.LANGUE, numero: reduireNumero(u.numeroSource), codeSet: null, tampon: def.SRC.tampon(u.slugSet) ?? null });
 
 // ── 3. R1 : la population ─────────────────────────────────────────────────────────────────────────────────────────────────────
 const PLAFOND_PAR_DEFAUT = 200;
@@ -206,7 +207,7 @@ function planifier({ cibles, parFournisseur, ordre, le = new Date(), limite = PL
 }
 
 /** Les unités de chaque fournisseur (plan de SA collecte, 0 requête). Un plan qui échoue ARRÊTE TOUT : un fournisseur muet ne devient jamais « aucune source ». */
-async function recolterUnites({ fournisseurs, db, lireReleves, arret, fichiersDe = null }) {
+async function recolterUnites({ fournisseurs, db, prod = null, lireReleves, arret, fichiersDe = null }) {
     const sortie = [];
     for (const { code, def } of fournisseurs) {
         const bloquee = Boolean(arret(def.hoteImages));
@@ -215,7 +216,7 @@ async function recolterUnites({ fournisseurs, db, lireReleves, arret, fichiersDe
             let releves;
             // I2 : un relevé absent ou illisible d'un fournisseur NON bloqué arrête le passage (la lecture LÈVE) ; un fournisseur bloqué n'est pas jugé muet (0 requête de toute façon)
             try { releves = lireReleves(def); } catch (e) { if (!bloquee) throw e; releves = {}; }
-            plan = await def.construirePlan({ db, releves, fichiers: fichiersDe ? fichiersDe(def) : undefined });
+            plan = await def.construirePlan({ db, prod, releves, fichiers: fichiersDe ? fichiersDe(def) : undefined });
         } catch (e) { throw new Error(`${code} : plan en échec (${e.message}) — rien ne se conclut sur un fournisseur qui n'a pas répondu`); }
         if (!bloquee) {
             // I2 : « je ne sais pas » n'est jamais « aucune source » — un fournisseur muet SANS exception (0 unité, aucun set planifié, pas de résumé) arrête tout
@@ -225,6 +226,26 @@ async function recolterUnites({ fournisseurs, db, lireReleves, arret, fichiersDe
             if (!plan.unites?.length) throw new Error(`${code} : plan à 0 unité — rien ne se conclut sur un fournisseur muet`);
         }
         sortie.push({ code, bloquee, unites: plan.unites || [] });
+    }
+    return sortie;
+}
+
+/**
+ * T4 : la SYNCHRO QUOTIDIENNE CONDITIONNELLE des fournisseurs qui en ont une (`def.synchronise`), AVANT le plan : « une synchronisation par jour au plus, et seulement si la source a changé » est décidé par le fournisseur
+ * lui-même (tcgcsv : last-updated.txt contre la dernière synchro réussie). Un fournisseur sans synchro est ignoré ; un échec ou un arrêt d'hôte est DIT (état + `attention`), il n'arrête pas la nuit : le plan lit alors le dernier
+ * relevé complet (un relevé absent ou illisible, lui, arrête toujours le plan, I2).
+ */
+async function synchroniserFournisseurs({ fournisseurs, journal = () => {} }) {
+    const sortie = [];
+    for (const { code, def } of fournisseurs) {
+        if (typeof def.synchronise !== 'function') continue;
+        let r;
+        try { r = await def.synchronise(); }
+        catch (e) { r = { etat: 'echec', requetes: 0, motif: e.message }; }
+        const attention = !['termine', 'plafond', 'deja-synchronise', 'rien-de-neuf'].includes(r.etat) || r.etat === 'plafond';
+        const fait = { code, etat: r.etat, requetes: r.requetes ?? 0, motif: r.motif ?? null, ...(attention ? { attention: true } : {}) };
+        journal(`SYNCHRO ${code} : ${fait.etat} · ${fait.requetes} requête(s)${fait.motif ? ` · ${fait.motif}` : ''}`);
+        sortie.push(fait);
     }
     return sortie;
 }
@@ -461,5 +482,5 @@ function redigerCompteRendu({ date, aBlanc, etat, population, comptesPlan, rappo
 }
 
 module.exports = { FOURNISSEURS, chargerFournisseurs, MOTIFS, motifAdmis, INSTRUMENT, construireTrou, ecrireTrous, LANGUE_DU_TIRAGE, langueDuTirage, reduireNumero, tirageProduit, tirageCandidat,
-    PLAFOND_PAR_DEFAUT, choisirPopulation, calculerNeufs, regrouperUnites, candidatsDuProduit, classerProduit, planifier, recolterUnites, telechargerPlan, choisirGagnant, jugerProduit, assembler, executerEcriture,
+    PLAFOND_PAR_DEFAUT, synchroniserFournisseurs, choisirPopulation, calculerNeufs, regrouperUnites, candidatsDuProduit, classerProduit, planifier, recolterUnites, telechargerPlan, choisirGagnant, jugerProduit, assembler, executerEcriture,
     bilanTrous, lireBilanTrous, existeStrict, choisirNouvelEtat, regenererEtat, comparerTrous, trousResolus, ETAT_AGE_MAX_JOURS, etatTropVieux, verifierGardes, AUTORISES, MODES, verifierArguments, DOSSIER_PAR_DEFAUT, DOSSIER_COMPTEURS, dossierDe, dernierEtat, redigerCompteRendu };

@@ -209,12 +209,20 @@ async function manifeste({ unites, indexImages, dossierCache, dossier }) {
 
 // T4 : l'état de la synchro quotidienne vit à côté du relevé (derniere-synchro.json, dans le dossier de sorties) ; la ligne de commande donne le dossier.
 const fichierSynchro = dossier => path.join(dossier, 'derniere-synchro.json');
+/** La synchro quotidienne conditionnelle, appelable par le comblement nocturne (comblement.synchroniserFournisseurs) avant le plan : last-updated.txt contre la dernière synchro réussie, une seule par jour, le maximum imprimé avant la première requête. */
+async function synchroniser({ dossier = DOSSIER, plafond = 2000, journal = m => console.log(m), cliDe = client } = {}) {
+    const F = fichiersDe(dossier);
+    const m = maximumReleve({ F, releves: RC.lireJson(F.releves, {}), plafondTotal: plafond, synchro: { etat: RC.lireJson(fichierSynchro(dossier), null) } });
+    journal(`MAXIMUM de la synchro tcs : ${m.total} requête(s) (${m.detail}) · plafond total ${plafond}`);
+    if (m.total === 0) return { etat: 'deja-synchronise', requetes: 0, motif: m.detail };
+    return releve({ cli: cliDe(F, plafond), fichier: F.releves, synchro: { fichier: fichierSynchro(dossier) } });
+}
 const def = { CODE, SRC, DOSSIER, hoteImages: TC.HOTE_IMAGES, hotesLibelle: `hôtes ${TC.HOTE_DONNEES} (données) et ${TC.HOTE_IMAGES} (images)`, clientDe: client,
     // les unités à télécharger : celles à ajouter ET les visuels non écrivables (japonais) dont la lecture sert de preuve ; jamais les autres
-    avecProduction: true, manifeste,
+    avecProduction: true, manifeste, synchronise: () => synchroniser(),
     aTelecharger: plan => plan.unites.filter(u => u.decision?.action === 'ajouter' || u.ecrivable === false),
     maximumReleve: o => maximumReleve({ ...o, synchro: o.synchro ?? (o.dossier ? { etat: RC.lireJson(fichierSynchro(o.dossier), null) } : null) }),
     releve: o => releve({ ...o, synchro: o.synchro ?? (o.dossier ? { fichier: fichierSynchro(o.dossier) } : null) }), construirePlan };
-if (require.main !== module) { module.exports = { manifeste, planCatalogue, maximumReleve, maximumImages: CLI.maximumImages, releve, construirePlan, fichiersDe, client, def, DOSSIER, CODE }; return; }
+if (require.main !== module) { module.exports = { synchroniser, manifeste, planCatalogue, maximumReleve, maximumImages: CLI.maximumImages, releve, construirePlan, fichiersDe, client, def, DOSSIER, CODE }; return; }
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE.
 CLI.lancer(def);

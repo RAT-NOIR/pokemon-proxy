@@ -117,6 +117,15 @@ const transportOk = (appels = []) => ({ async get(u) {
         assert.strictEqual(r.etat, 'termine');
         const rel = JSON.parse(fs.readFileSync(fichier, 'utf8')); assert.match(rel.groupes.erreurVerification, /renommé/);
     });
+    await test('T4 synchroniser (appelé par le comblement nocturne) : relève le catalogue complet dans le dossier de la récolte, annonce le maximum avant la première requête, et le même jour ne refait RIEN (aucun client construit)', async () => {
+        const dossier = tmp(), dits = [];
+        const r1 = await K.synchroniser({ dossier, plafond: 100, journal: m => dits.push(m), cliDe: (F, p) => mkCli(transportOk0([]), F.cache, p) });
+        assert.strictEqual(r1.etat, 'termine'); assert.match(dits[0], /MAXIMUM de la synchro tcs : \d+ requête/);
+        assert.ok(fs.existsSync(path.join(dossier, 'derniere-synchro.json')) && fs.existsSync(path.join(dossier, 'releves-tcs.json')));
+        const r2 = await K.synchroniser({ dossier, plafond: 100, journal: m => dits.push(m), cliDe: () => { throw new Error('aucun client ne devait être construit'); } });
+        assert.strictEqual(r2.etat, 'deja-synchronise'); assert.strictEqual(r2.requetes, 0);
+        assert.strictEqual(typeof K.def.synchronise, 'function');
+    });
     await test('T4 maximum (§38) : compté AVANT la première requête — fixe (robots, last-updated, catégories, 2 listes) + les produits au plus ; au cache ne compte pas ; le jour clos = 0', () => {
         const dossier = tmp(), F2 = K.fichiersDe(dossier, path.join(dossier, 'c'));
         const m0 = K.maximumReleve({ F: F2, releves: {}, plafondTotal: 300, synchro: null, now: J26 });
