@@ -113,11 +113,16 @@ const C = (idProduct, name, numero, o = {}) => ({ idProduct, name, numero, slug:
         assert.strictEqual(JT.temoinFiche(t, fiche).verdict, 'juste');
         assert.strictEqual(JT.temoinFiche(JT.lireTcg(T(2, 'Kricketune - 006/163', '006/163')), fiche).verdict, 'faux'); assert.match(JT.temoinFiche(JT.lireTcg(T(2, 'Kricketune - 006/163', '006/163')), fiche).cause, /nom/);
         const autreNumero = JT.temoinFiche(JT.lireTcg(T(3, 'Kricketune V - 007/163', '007/163')), fiche); assert.strictEqual(autreNumero.verdict, 'faux'); assert.match(autreNumero.cause, /numéro/);
-        const autreTotal = JT.temoinFiche(JT.lireTcg(T(4, 'Kricketune V - 006/200', '006/200')), fiche); assert.strictEqual(autreTotal.verdict, 'faux'); assert.match(autreTotal.cause, /total/);
+        const autreTotal = JT.temoinFiche(JT.lireTcg(T(4, 'Kricketune V - 006/200', '006/200')), fiche); assert.strictEqual(autreTotal.verdict, 'lache'); assert.match(autreTotal.cause, /total/);
+        const forme = JT.temoinFiche(JT.lireTcg(T(10, 'Burmy Trash Cloak - 56/99', '56/99')), { nomEn: 'Burmy', impressions: [{ numero: '56', total: '99' }] }); assert.strictEqual(forme.verdict, 'lache'); assert.match(forme.cause, /nom-forme/);
+        assert.strictEqual(JT.temoinFiche(JT.lireTcg(T(11, 'Miracle Sphere Alpha - 129/144', '129/144')), { nomEn: 'Miracle Sphere α', impressions: [{ numero: '129', total: '144' }] }).verdict, 'juste', 'lettre grecque');
         assert.strictEqual(JT.temoinFiche(t, { nomEn: 'Kricketune V', impressions: [{ tirage: 'intl', numero: null, total: null }] }).verdict, 'non-jugeable');
         assert.strictEqual(JT.temoinFiche(t, null).verdict, 'non-jugeable');
         assert.strictEqual(JT.temoinFiche(JT.lireTcg(T(5, 'Chespin - XY01', 'XY01')), { nomEn: 'Chespin', impressions: [{ numero: 'XY01', total: null }] }).verdict, 'juste');
         assert.strictEqual(JT.temoinFiche(JT.lireTcg(T(6, 'Yveltal EX - XY150a', 'XY150a')), { nomEn: 'Yveltal-EX', impressions: [{ numero: '150a' }] }).verdict, 'juste', 'préfixe d\'un seul côté + tiret du nom');
+        assert.strictEqual(JT.temoinFiche(JT.lireTcg(T(7, 'Morpeko V-Union - SWSH287', 'SWSH287')), { nomEn: 'Morpeko V-UNION', impressions: [{ numero: 'SWSH287 (Top Left)' }, { numero: '226' }] }).verdict, 'juste', 'le commentaire du numéro imprimé se lit à part');
+        assert.strictEqual(JT.temoinFiche(JT.lireTcg(T(8, 'Fairy Charm G - 174/214', '174/214')), { nomEn: 'Fairy Charm Grass', impressions: [{ numero: '174', total: '214' }] }).verdict, 'juste', 'le type d\'une Énergie : lettre chez Cardmarket, mot sur la fiche');
+        assert.strictEqual(JT.temoinFiche(JT.lireTcg(T(9, 'Fairy Charm G - 174/214', '174/214')), { nomEn: 'Fairy Charm Fire', impressions: [{ numero: '174', total: '214' }] }).verdict, 'faux');
     });
 
     // ───────── la calibration ─────────
@@ -146,6 +151,38 @@ const C = (idProduct, name, numero, o = {}) => ({ idProduct, name, numero, slug:
         assert.strictEqual(JT.uniteDe({ joint: { idProduct: 1, productId: 10 }, tcg: { ...JT.lireTcg(T(10, 'x', '1/1')), url: null }, ligne, cm, categoryId: 3, langueDeCategorie: { 3: 'en' }, groupe: 'G', nomGroupe: 'x' }), null, 'sans adresse d\'image : aucune unité');
         // une fiche à plusieurs lignes (un produit sur plusieurs cartes) ne désigne aucune carte
         assert.strictEqual(JT.uniteDe({ joint: { idProduct: 1, productId: 10 }, tcg: JT.lireTcg(T(10, 'Pikachu - 025/185', '025/185')), ligne: { ...ligne, lignes: [...ligne.lignes, { carteId: 8, slugSet: 'Set-A', numeroFiche: '025' }] }, cm, categoryId: 3, langueDeCategorie: { 3: 'en' }, groupe: 'G', nomGroupe: 'x' }), null);
+    });
+    await test('joindreTable : l\'unicité compte TOUS les produits de l\'expansion ; deux groupes qui désignent deux produits différents = ambigu ; une expansion non appariée = pas de jointure', () => {
+        const D = require('./collecte-cartes/tcgcsv-donnees');
+        const mkP = (id, name, numero, idExpansion) => ({ idProduct: id, name, numero, slug: null, slugSet: `E${idExpansion}`, codeSet: 'X', idExpansion });
+        const cm = D.assemblerCm({ sets: [{ _id: 'E10', tirage: 'intl' }, { _id: 'E20', tirage: 'intl' }], cartes: [], cp: [],
+            nc: [mkP(1, 'Alpha', '1', 10), mkP(2, 'Beta', '2', 10), mkP(3, 'Gamma', '3', 10), mkP(4, 'Beta', '2', 10), mkP(5, 'Delta', '1', 20)], cat: [1, 2, 3, 4, 5].map(i => ({ idProduct: i, name: ['Alpha', 'Beta', 'Gamma', 'Beta', 'Delta'][i - 1] })) });
+        const g = (groupId, ps) => ({ categoryId: 3, name: `G${groupId}`, produits: ps.map(JT.lireTcg) });
+        const gs = new Map([[1, g(1, [T(101, 'Alpha - 1/3', '1/3'), T(102, 'Beta - 2/3', '2/3'), T(103, 'Gamma - 3/3', '3/3')])]]);
+        const table = { lignes: [{ groupId: 1, statut: 'apparie', expansions: [{ idExpansion: 10 }] }, { groupId: 9, statut: 'non-apparie', expansions: [] }] };
+        const r = JT.joindreTable({ table, groupes: gs, cm });
+        assert.deepStrictEqual([r.get(1).joint.productId, r.get(3).joint.productId], [101, 103]);
+        assert.deepStrictEqual([r.get(2).motif, r.get(4).motif], ['ambigu-cm', 'ambigu-cm'], 'deux produits Cardmarket Beta (n° 2) : AUCUN joint');
+        assert.strictEqual(r.get(5).motif, 'expansion-non-appariee');
+        // deux groupes, deux produits du marché différents pour le même produit Cardmarket
+        const g2 = new Map([[1, g(1, [T(101, 'Alpha - 1/3', '1/3')])], [2, g(2, [T(201, 'Alpha - 1/3', '1/3')])]]);
+        const t2 = { lignes: [{ groupId: 1, statut: 'apparie', expansions: [{ idExpansion: 10 }] }, { groupId: 2, statut: 'apparie', expansions: [{ idExpansion: 10 }] }] };
+        assert.strictEqual(JT.joindreTable({ table: t2, groupes: g2, cm }).get(1).motif, 'ambigu-groupes');
+    });
+
+    // ───────── les données Cardmarket ─────────
+    await test('assemblerCm : produits par expansion, tirage lu sur le set, fiche seulement si UNE ligne ; les dénominateurs sont imprimés ; une population vide LÈVE', () => {
+        const D = require('./collecte-cartes/tcgcsv-donnees');
+        const d = D.assemblerCm({ sets: [{ _id: 'Set-A', tirage: 'intl' }, { _id: 'Set-J', region: 'jp' }], cartes: [{ _id: 7, nomEn: 'Pikachu', impressions: [{ numero: '025', total: '185' }], images: [{ source: 'x' }] }],
+            cp: [{ idProduct: 1, carteId: 7, slugSet: 'Set-A', numeroFiche: '025' }, { idProduct: 2, carteId: 7, slugSet: 'Set-A' }, { idProduct: 2, carteId: 8, slugSet: 'Set-A' }],
+            nc: [{ idProduct: 1, idExpansion: 10, slugSet: 'Set-A', codeSet: 'A', numero: '025', slug: 'Pikachu-A25' }, { idProduct: 2, idExpansion: 10, slugSet: 'Set-A', codeSet: 'A', numero: '026', slug: 'Raichu-A26' }, { idProduct: 3, idExpansion: 20, slugSet: 'Set-J', codeSet: 'J', numero: '1', slug: 'X-J1' }, { idProduct: 4, idExpansion: 20, slugSet: 'Set-J', numero: '2' }],
+            cat: [{ idProduct: 1, name: 'Pikachu [Thunder Shock]' }, { idProduct: 2, name: 'Raichu' }, { idProduct: 3, name: 'X' }] });
+        assert.deepStrictEqual([d.expansions.get(10).tirage, d.expansions.get(20).tirage, d.expansions.get(10).produits.length], ['intl', 'jp', 2]);
+        assert.deepStrictEqual([d.produits.get(1).carteNom, d.produits.get(1).fiche.impressions[0].numero, d.produits.get(1).nImages], ['Pikachu', '025', 1]);
+        assert.strictEqual(d.produits.get(2).fiche, null, 'deux lignes : aucune fiche');
+        assert.deepStrictEqual([d.denominateurs.produits, d.denominateurs.sansCatalogue, d.denominateurs.produitsAvecLigne], [3, 1, 2]);
+        assert.throws(() => D.assemblerCm({ sets: [], cp: [], cartes: [], nc: [], cat: [] }), /vide/);
+        assert.strictEqual(D.expansionsPourTable(d)[0].produits[0].fort, '25');
     });
     console.log(`${ok} passés, ${ko} en échec`);
     process.exitCode = ko ? 1 : 0;

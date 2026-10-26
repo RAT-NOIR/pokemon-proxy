@@ -1,0 +1,84 @@
+// ============================================================
+// LA TABLE ET LA CALIBRATION DE LA JOINTURE « tcs » (T4) — lecture seule : le relevé du marché (fichier) + les produits Cardmarket (base en lecture seule, ou un fichier de dépôt)
+// ============================================================
+//   node calibrer-tcgcsv.js --releves=<releves-tcs.json> [--depuis=<cm.json>] [--sortie=<dossier>] [--slug]
+//     1. la TABLE groupe -> expansion, MESURÉE (recouvrement des (numéro, nom), tirage compatible) -> table-groupes.json ; les groupes non appariés sont IMPRIMÉS ;
+//     2. la CALIBRATION : la jointure rejouée sur les produits dont la carte est CONNUE (une fiche numérotée ET un visuel existant), la fiche n'entrant pas dans la clé -> justes / faux / muets -> calibration.json.
+//   `--depuis` : un fichier { sets, cp, cartes, nc, cat } (le dépôt de la base, pour rejouer sans connexion). Sans lui : MONGODB_CARTES_LECTURE_URI et la production en lecture seule. AUCUNE écriture.
+//   La clé n'est retenue (`retenue: true`) que si elle rend 0 faux ; sinon le rapport dit lesquels, et c'est la clé qu'on resserre.
+require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
+const JT = require('./collecte-cartes/tcgcsv-jointure');
+const D = require('./collecte-cartes/tcgcsv-donnees');
+
+const arg = (args, nom) => args.find(a => a.startsWith(`--${nom}=`))?.slice(nom.length + 3);
+const LANGUE_DE_CATEGORIE = categories => ({ [categories.pokemon]: 'en', [categories.japon]: 'ja' });
+
+/** Les groupes du relevé -> { groupId, name, categoryId, produits } (ceux dont la liste de produits a été lue). */
+function groupesDuReleve(rel) {
+    const sortie = [];
+    for (const [cat, liste] of Object.entries(rel.listes || {})) for (const g of liste) {
+        const r = rel[g.groupId];
+        if (r?.produits) sortie.push({ groupId: g.groupId, name: g.name, abbreviation: g.abbreviation, categoryId: Number(cat), produits: r.produits });
+    }
+    return sortie;
+}
+function calibrerTout({ rel, cm, accepterSlug = false }) {
+    const groupes = groupesDuReleve(rel), langueDeCategorie = LANGUE_DE_CATEGORIE(rel.categories);
+    const table = JT.construireTable({ groupes, expansions: D.expansionsPourTable(cm), langueDeCategorie });
+    const lus = new Map(groupes.map(g => [g.groupId, { categoryId: g.categoryId, name: g.name, produits: g.produits.map(JT.lireTcg) }]));
+    const jointure = JT.joindreTable({ table: table, groupes: lus, cm, accepterSlug });
+    const tcgParId = new Map(); for (const g of lus.values()) for (const t of g.produits) tcgParId.set(t.productId, t);
+    // la population de calibration : une fiche numérotée ET un visuel existant (la vérité est connue sans la jointure)
+    const connus = [...cm.produits.values()].filter(p => p.fiche && p.nImages > 0 && p.fiche.impressions.some(i => i?.numero != null && /\d/.test(String(i.numero))));
+    const compte = { population: connus.length, justes: 0, laches: 0, faux: 0, muets: 0, nonJugeables: 0 }, fauxDetail = [], lachesDetail = [], muetsParMotif = {}, fauxParCause = {}, lachesParCause = {};
+    for (const p of connus) {
+        const j = jointure.get(p.idProduct);
+        if (!j?.joint) { compte.muets++; const m = j?.motif ?? 'inconnu'; muetsParMotif[m] = (muetsParMotif[m] || 0) + 1; continue; }
+        const t = tcgParId.get(j.joint.productId), v = JT.temoinFiche(t, p.fiche);
+        const ligne = () => ({ idProduct: p.idProduct, nomCm: p.name, slugSet: p.slugSet, numero: p.numero, productId: t.productId, nomTcg: t.nomBrut, numeroTcg: t.numeroBrut, groupId: j.joint.groupId, niveau: j.joint.niveau, cause: v.cause });
+        if (v.verdict === 'juste') compte.justes++;
+        else if (v.verdict === 'non-jugeable') compte.nonJugeables++;
+        else if (v.verdict === 'lache') { compte.laches++; const c = v.cause.split(' ')[0]; lachesParCause[c] = (lachesParCause[c] || 0) + 1; lachesDetail.push(ligne()); }
+        else { compte.faux++; const c = v.cause.split(' ')[0]; fauxParCause[c] = (fauxParCause[c] || 0) + 1; fauxDetail.push(ligne()); }
+    }
+    const tousJoints = [...jointure.values()].filter(x => x.joint).length;
+    return { table, jointure, lus, calibration: { ...compte, retenue: compte.population > 0 && compte.justes > 0 && compte.faux === 0, muetsParMotif, fauxParCause, lachesParCause, fauxDetail, lachesDetail, tousLesProduitsJoints: tousJoints, produitsCm: cm.produits.size, accepterSlug } };
+}
+
+async function main(args = process.argv.slice(2)) {
+    const releves = arg(args, 'releves');
+    if (!releves) throw new Error('--releves=<releves-tcs.json> exigé');
+    const sortie = arg(args, 'sortie') ?? path.dirname(releves);
+    const rel = JSON.parse(fs.readFileSync(releves, 'utf8'));
+    if (!rel.listes || !rel.categories) throw new Error(`${releves} : ni listes de groupes ni catégories — relevé incomplet`);
+    let donnees = null;
+    if (arg(args, 'depuis')) donnees = JSON.parse(fs.readFileSync(arg(args, 'depuis'), 'utf8'));
+    else {
+        const { ouvrirLecture } = require('./collecte-cartes/ouvrir-lecture');
+        const { ouvrirConnexions } = require('./collecte-cartes/garde');
+        const lecture = await ouvrirLecture();
+        if (!lecture) throw new Error('MONGODB_CARTES_LECTURE_URI absente : lecture seule exigée, aucune connexion ouverte');
+        const cx = await ouvrirConnexions({ production: true, buckets: [], lectureSeule: true });
+        try { donnees = await D.lireCmDepuisBase(lecture, cx.prod.db); } finally { await lecture.fermer(); await cx.fermer(); }
+    }
+    const cm = D.assemblerCm(donnees);
+    console.log(`DÉNOMINATEURS : ${JSON.stringify(cm.denominateurs)}`);
+    const groupes = groupesDuReleve(rel);
+    const nbGroupes = Object.values(rel.listes).reduce((n, l) => n + l.length, 0);
+    console.log(`GROUPES : ${nbGroupes} listés, ${groupes.length} avec leurs produits lus${groupes.length < nbGroupes ? ' (⚠️ relevé incomplet)' : ''}`);
+    const r = calibrerTout({ rel, cm, accepterSlug: args.includes('--slug') });
+    const resume = r.table.resume;
+    console.log(`TABLE : ${JSON.stringify(resume.parStatut)}`);
+    fs.mkdirSync(sortie, { recursive: true });
+    fs.writeFileSync(path.join(sortie, 'table-groupes.json'), JSON.stringify({ le: new Date().toISOString(), seuils: { MIN_COMMUNS: JT.MIN_COMMUNS, PART_GROUPE_MIN: JT.PART_GROUPE_MIN, PART_UNION_MIN: JT.PART_UNION_MIN, FAIBLE_SI_FORTE_SOUS: JT.FAIBLE_SI_FORTE_SOUS }, denominateurs: cm.denominateurs, resume: resume.parStatut, lignes: r.table.lignes }, null, 1));
+    fs.writeFileSync(path.join(sortie, 'groupes-non-apparies.txt'), resume.nonAppariees.map(g => `${g.groupId} | ${g.statut} | ${g.name} | ${g.produits} produits / ${g.avecNumero} numérotés | meilleur ${g.meilleur.map(m => `${m.slugSet} ${m.communs} (${(m.partGroupe * 100).toFixed(0)} % du groupe)`).join(' ; ') || '—'}`).join('\n'));
+    const c = r.calibration;
+    console.log(`CALIBRATION (${c.accepterSlug ? 'numéro du slug admis' : 'numéro de la base seulement'}) : population ${c.population} (fiche numérotée + visuel existant) · JUSTES ${c.justes} · lâches ${c.laches} ${JSON.stringify(c.lachesParCause)} · FAUX ${c.faux} · MUETS ${c.muets} · non jugeables ${c.nonJugeables} · clé ${c.retenue ? 'RETENUE (0 faux)' : 'NON retenue'}`);
+    console.log(`   muets par motif : ${JSON.stringify(c.muetsParMotif)} · faux par cause : ${JSON.stringify(c.fauxParCause)} · tous produits Cardmarket joints : ${c.tousLesProduitsJoints} / ${c.produitsCm}`);
+    fs.writeFileSync(path.join(sortie, `calibration${c.accepterSlug ? '-slug' : ''}.json`), JSON.stringify({ le: new Date().toISOString(), ...c }, null, 1));
+    for (const f of c.fauxDetail.slice(0, +(arg(args, 'faux') ?? 25))) console.log(`   faux : ${f.idProduct} « ${f.nomCm} » ${f.slugSet} n°${f.numero} <- ${f.productId} « ${f.nomTcg} » ${f.numeroTcg} [${f.niveau}] ${f.cause}`);
+}
+if (require.main === module) main().catch(e => { console.error('❌', e.message); process.exitCode = 1; });
+module.exports = { calibrerTout, groupesDuReleve, LANGUE_DE_CATEGORIE };

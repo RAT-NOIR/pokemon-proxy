@@ -136,21 +136,69 @@ function construireTable({ groupes, expansions, langueDeCategorie }) {
     return { lignes, resume: { groupes: lignes.length, parStatut: par, appariees: lignes.filter(l => l.statut === 'apparie').length, nonAppariees: lignes.filter(l => l.statut !== 'apparie').map(l => ({ groupId: l.groupId, name: l.name, statut: l.statut, produits: l.produits, avecNumero: l.avecNumero, meilleur: l.meilleur ?? [] })) } };
 }
 
+/**
+ * LA JOINTURE DE TOUTE LA TABLE : chaque groupe apparié est joint à TOUS les produits de ses expansions (l'unicité compte tous les produits, pas seulement les trous) ; un produit Cardmarket vu par plusieurs
+ * groupes garde sa jointure s'il n'en a qu'une, sinon (deux produits du marché différents) il est ambigu ; sinon le motif le plus parlant. Un produit dont l'expansion n'est dans aucune ligne appariée n'est PAS joint.
+ * @param {{table: object, groupes: Map<number, {categoryId, name, produits: object[]}>, cm: {produits: Map, expansions: Map}, accepterSlug?: boolean}} o  `groupes` : les produits LUS (lireTcg) de chaque groupe
+ * @returns {Map<number, {joint?: object, motif?: string, groupId?: number}>}
+ */
+function joindreTable({ table, groupes, cm, accepterSlug = false }) {
+    const sortie = new Map(), vus = new Map();
+    for (const l of table.lignes.filter(x => x.statut === 'apparie')) {
+        const g = groupes.get(l.groupId);
+        if (!g) continue;
+        const ids = new Set(l.expansions.map(e => e.idExpansion));
+        const produits = [...ids].flatMap(id => cm.expansions.get(id)?.produits || []);
+        const r = joindre({ tcg: g.produits, cm: produits.map(p => p.lu), accepterSlug });
+        for (const j of r.joints) (vus.get(j.idProduct) || vus.set(j.idProduct, []).get(j.idProduct)).push({ ...j, groupId: l.groupId, categoryId: g.categoryId });
+        for (const n of r.non) { if (!vus.has(n.idProduct)) vus.set(n.idProduct, []); const a = sortie.get(n.idProduct); if (!a || (a.motif === 'absent-de-la-source' && n.motif !== 'absent-de-la-source')) sortie.set(n.idProduct, { motif: n.motif, groupId: l.groupId }); }
+    }
+    for (const [id, js] of vus) {
+        if (js.length === 1) sortie.set(id, { joint: js[0], groupId: js[0].groupId });
+        else if (js.length > 1) { const p = new Set(js.map(j => j.productId)); if (p.size === 1) sortie.set(id, { joint: js[0], groupId: js[0].groupId }); else sortie.set(id, { motif: 'ambigu-groupes', groupId: js[0].groupId }); }
+    }
+    for (const id of cm.produits.keys()) if (!sortie.has(id)) sortie.set(id, { motif: 'expansion-non-appariee' });
+    return sortie;
+}
+
 // ── 4. LE TÉMOIN DE LA FICHE ET LA CALIBRATION ─────────────────────────────────────────────────────────────────────────────
 /**
  * La fiche (nom et numéros imprimés de NOTRE carte) est une donnée que la clé n'a PAS utilisée : elle juge. `faux` = le nom, un numéro ou le total imprimé contredit le produit du marché ; `non-jugeable` = la fiche ne dit rien
  * de numéroté (jamais compté juste).
  */
+// Cardmarket écrit le TYPE d'une Énergie par sa lettre (« Fairy Charm [G] »), la fiche par son mot (« Fairy Charm Grass ») : même carte, deux écritures
+const TYPE_PAR_LETTRE = Object.freeze({ G: 'Grass', R: 'Fire', W: 'Water', L: 'Lightning', P: 'Psychic', F: 'Fighting', D: 'Darkness', M: 'Metal', Y: 'Fairy', N: 'Dragon', C: 'Colorless' });
+// Les lettres grecques d'un nom de fiche (« Miracle Sphere α ») s'écrivent en toutes lettres chez les deux places de marché (« Alpha »)
+const GREC = Object.freeze({ 'α': 'Alpha', 'β': 'Beta', 'γ': 'Gamma', 'δ': 'Delta', 'ε': 'Epsilon' });
+const clesDeNomFiche = nomEn => {
+    const base = clesDeNom(nomEn), m = /^(.*\S)\s+(Grass|Fire|Water|Lightning|Psychic|Fighting|Darkness|Metal|Fairy|Dragon|Colorless)$/i.exec(String(nomEn));
+    const lettre = m && Object.entries(TYPE_PAR_LETTRE).find(([, mot]) => mot.toLowerCase() === m[2].toLowerCase())?.[0];
+    const grec = String(nomEn).replace(/[αβγδε]/g, c => ` ${GREC[c]}`);
+    return [...base, ...(lettre ? clesDeNom(`${m[1]} ${lettre}`) : []), ...(grec !== String(nomEn) ? clesDeNom(grec) : [])];
+};
+/** Le nom du marché PRÉCISE le nom de la fiche (forme, fait de nom : « Burmy » / « Burmy Trash Cloak ») ou l'inverse : compatible, jamais « juste » à part entière (une inclusion apparie toujours quelque chose, §31). */
+// ⚠️ ce qui s'ajoute n'est jamais une règle de carte (V, ex, GX… sont d'AUTRES cartes) : « Kricketune » et « Kricketune V » ne sont pas compatibles
+const SUFFIXE_D_IDENTITE = /^(v|vmax|vstar|vunion|ex|gx|break|prime|legend|lvx|star|goldstar|tagteam|radiant|shiny|mega|m|x|y|\d+)$/;
+const nomCompatible = (fiche, t) => clesDeNomFiche(fiche).some(k => t.nomCles.some(n => {
+    if (n === k || n.length < 4 || k.length < 4) return false;
+    const [court, long] = n.length < k.length ? [n, k] : [k, n];
+    return long.startsWith(court) && !SUFFIXE_D_IDENTITE.test(long.slice(court.length));
+}));
+// Le numéro imprimé d'une impression peut porter un commentaire (« SWSH215 (Top Left) ») : on lit le numéro, pas la note
+const numeroImprime = n => String(n ?? '').replace(/\([^)]*\)/g, ' ').trim().split(/\s+/)[0] || '';
 function temoinFiche(t, fiche) {
     if (!fiche?.nomEn || !t) return { verdict: 'non-jugeable', cause: 'aucune fiche' };
-    const nomOk = clesDeNom(fiche.nomEn).some(k => t.nomCles.includes(k));
-    if (!nomOk) return { verdict: 'faux', cause: `nom : fiche « ${fiche.nomEn} », marché « ${t.nomBase} »` };
-    const imps = (fiche.impressions || []).filter(i => i && i.numero != null && String(i.numero).trim() !== '' && aUnChiffre(i.numero));
+    const nomOk = clesDeNomFiche(fiche.nomEn).some(k => t.nomCles.includes(k));
+    const lache = !nomOk && nomCompatible(fiche.nomEn, t);
+    if (!nomOk && !lache) return { verdict: 'faux', cause: `nom : fiche « ${fiche.nomEn} », marché « ${t.nomBase} »` };
+    const imps = (fiche.impressions || []).filter(i => i && i.numero != null && String(i.numero).trim() !== '' && aUnChiffre(i.numero)).map(i => ({ ...i, numero: numeroImprime(i.numero) }));
     if (!imps.length || t.fort == null) return { verdict: 'non-jugeable', cause: 'la fiche ne porte aucun numéro imprimé' };
     const memeNumero = imps.filter(i => { const k = J.cleNumero(i.numero); return k === t.fort || k === t.faible || faibleDe(k) === t.faible; });
     if (!memeNumero.length) return { verdict: 'faux', cause: `numéro : fiche ${imps.map(i => i.numero).join('/')}, marché ${t.numeroBrut}` };
     const totaux = memeNumero.map(i => i.total).filter(x => x != null && /^\d+$/.test(String(x))).map(Number);
-    if (t.total != null && totaux.length && !totaux.includes(t.total)) return { verdict: 'faux', cause: `total : fiche ${totaux.join('/')}, marché ${t.total}` };
+    // le nom ET le numéro concordent mais un total diffère, ou le nom n'est que compatible : « lâche » — jamais compté juste, jamais compté faux, listé pour être LU
+    if (t.total != null && totaux.length && !totaux.includes(t.total)) return { verdict: 'lache', cause: `total : fiche ${totaux.join('/')}, marché ${t.total}` };
+    if (lache) return { verdict: 'lache', cause: `nom-forme : fiche « ${fiche.nomEn} », marché « ${t.nomBase} »` };
     return { verdict: 'juste', cause: null };
 }
 /**
@@ -160,13 +208,16 @@ function temoinFiche(t, fiche) {
 function calibrer({ tcg, cm, accepterSlug = false, faible = 'auto' }) {
     const r = joindre({ tcg, cm: cm.map(x => x.cm), accepterSlug, faible });
     const parTcg = new Map(tcg.map(t => [t.productId, t])), ficheDe = new Map(cm.map(x => [x.cm.idProduct, x.fiche]));
-    let justes = 0, faux = 0, nonJugeables = 0; const fauxDetail = [], muetsParMotif = {};
+    let justes = 0, faux = 0, laches = 0, nonJugeables = 0; const fauxDetail = [], lachesDetail = [], muetsParMotif = {};
     for (const j of r.joints) {
         const v = temoinFiche(parTcg.get(j.productId), ficheDe.get(j.idProduct));
-        if (v.verdict === 'juste') justes++; else if (v.verdict === 'faux') { faux++; fauxDetail.push({ idProduct: j.idProduct, productId: j.productId, niveau: j.niveau, cause: v.cause }); } else nonJugeables++;
+        if (v.verdict === 'juste') justes++;
+        else if (v.verdict === 'faux') { faux++; fauxDetail.push({ idProduct: j.idProduct, productId: j.productId, niveau: j.niveau, cause: v.cause }); }
+        else if (v.verdict === 'lache') { laches++; lachesDetail.push({ idProduct: j.idProduct, productId: j.productId, niveau: j.niveau, cause: v.cause }); }
+        else nonJugeables++;
     }
     for (const n of r.non) muetsParMotif[n.motif] = (muetsParMotif[n.motif] || 0) + 1;
-    return { total: cm.length, justes, faux, muets: r.non.length, nonJugeables, fauxDetail, muetsParMotif, faiblePermis: r.faiblePermis, retenue: cm.length > 0 && justes > 0 && faux === 0 };
+    return { total: cm.length, justes, faux, laches, muets: r.non.length, nonJugeables, fauxDetail, lachesDetail, muetsParMotif, faiblePermis: r.faiblePermis, retenue: cm.length > 0 && justes > 0 && faux === 0 };
 }
 
 // ── 5. L'UNITÉ DU FORMAT COMMUN ───────────────────────────────────────────────────────────────────────────────────────────
@@ -186,4 +237,4 @@ function uniteDe({ joint, tcg, ligne, cm, categoryId, langueDeCategorie, groupe,
         preuveNeutre: `jointure par numéro ${tcg.fort}${tcg.total != null ? `/${tcg.total}` : ''} (clé ${joint.niveau ?? 'fort'}) et nom « ${tcg.nomBase} » = fiche « ${ligne.carteNom ?? '?'} », un seul produit de chaque côté, aucun marqueur de variante` };
 }
 
-module.exports = { MIN_COMMUNS, PART_GROUPE_MIN, PART_UNION_MIN, FAIBLE_SI_FORTE_SOUS, LANGUE_DU_TIRAGE, fold, cleNom, clesDeNom, faibleDe, lireTcg, lireCm, joindre, construireTable, temoinFiche, calibrer, uniteDe };
+module.exports = { MIN_COMMUNS, PART_GROUPE_MIN, PART_UNION_MIN, FAIBLE_SI_FORTE_SOUS, LANGUE_DU_TIRAGE, fold, cleNom, clesDeNom, faibleDe, lireTcg, lireCm, joindre, construireTable, joindreTable, temoinFiche, calibrer, uniteDe };
