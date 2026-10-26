@@ -32,6 +32,8 @@ function planifierVoie({ entrees, lecture, le = new Date() }) {
     const refus = [], retenus = [];
     const cartes = new Map(lecture.cartes.map(c => [c._id, c]));
     const index = indexer(lecture.cartes);
+    const cartesParSet = new Map();
+    for (const c of lecture.cartes) for (const s of c.sets || []) (cartesParSet.get(s) || cartesParSet.set(s, []).get(s)).push(c);
     const NC = new Map(lecture.NC || []);
     for (const prods of lecture.produits.values()) for (const p of prods) if (!NC.has(p.idProduct)) NC.set(p.idProduct, { numero: p.numero ?? null });
     const lignesParCarte = new Map(), lignesDuProduit = new Map();
@@ -62,12 +64,12 @@ function planifierVoie({ entrees, lecture, le = new Date() }) {
         // LA CANDIDATE : la même boucle que prouver() (variantes du nom), puis le départage par le numéro des fiches simples
         let cands = [];
         for (const v of variantesDuProduit(produit)) { cands = candidats(index, v, { forme: 'incluses' }); if (cands.length) break; }
-        const restantes = departagerParLeNumero(cands, numero, numerosDe);
+        const restantes = departagerParLeNumero(cands, numero, numerosDe, e.slugSet);
         if (restantes.length !== 1) { non(restantes.length ? `${restantes.length} cartes candidates après le départage par le numéro des fiches simples (${restantes.slice(0, 4).map(c => c._id).join(', ')}) — un doute est un refus` : `aucune carte candidate par nom + attaques (${cands.length} avant le départage)`); continue; }
         const carte = restantes[0];
         const entree = { idProduct: e.idProduct, carteId: carte._id, voie: 'deux-sources', tirage, slugSet: e.slugSet, secondeSource: e.secondeSource };
-        const cartesDuSet = lecture.cartes.filter(c => (c.sets || []).includes(e.slugSet));
-        const r = prouver({ entree, produit, carte, cartesDuSet, cartesPourCle: lecture.cartes, etatSetlist: null, numerosDe });
+        const cartesDuSet = cartesParSet.get(e.slugSet) || [];
+        const r = prouver({ entree, produit, carte, cartesDuSet, cartesPourCle: lecture.cartes, etatSetlist: null, numerosDe, index });
         if (!r.ok) { non(r.refus.join(' ; ')); continue; }
         retenus.push({ e, p0, produit, carte, tirage, numero, temoins: r.temoins });
     }

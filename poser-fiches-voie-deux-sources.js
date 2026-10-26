@@ -97,7 +97,7 @@ async function ouvrirLecture() {
     return { cartes: { db: cartes }, prod: { db: prod }, fermer: async () => { await Promise.allSettled([a.close(), b.close()]); } };
 }
 
-module.exports = { executer, entreesDeLaListe, lire, AUTORISES };
+module.exports = { executer, entreesDeLaListe, lire, ouvrirLecture, AUTORISES };
 
 if (require.main === module) {
     require('dotenv').config({ quiet: true });

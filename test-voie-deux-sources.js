@@ -38,6 +38,11 @@ const lisible = { source: 'artofpkm', ref: 'images 1', raison: 'nom discordant (
 const illisible = { source: 'tpc-asie', ref: 'tpc 1', raison: 'nom discordant (« ゲンガーex » / « Gengar ex »)' };
 verifier('CONTRADICTION : un relevé LISIBLE d\'une autre source dit un autre nom au même (set, numéro) → refus, même si pikaqian concorde', (() => { const r = p(entree({ secondeSource: { concordantes: [conc('pikaqian')], refusees: [lisible] } }), pGengar, gengar, [gengar]); return [r.ok, /contradi/i.test(r.refus.join())]; })(), [false, true]);
 verifier('un relevé au nom ILLISIBLE (japonais) n\'est pas une contradiction', p(entree({ secondeSource: { concordantes: [conc('pikaqian')], refusees: [illisible] } }), pGengar, gengar, [gengar]).ok, true);
+const finition = (nom, produitNom = 'Gengar ex') => ({ source: 'pikaqian', ref: 'pq 9', raison: `nom discordant (« ${nom} » / « ${produitNom} »)` });
+verifier('une FINITION ajoutée au nom (liste fermée : Pokeball Holo, Master Ball Holo, Holo, Reverse) n\'est pas une contradiction', ['Gengar ex Pokeball Holo', 'Gengar ex Master Ball Holo', 'Gengar ex Holo', 'Gengar ex Reverse Holo'].map(n => p(entree({ secondeSource: { concordantes: [conc('pikaqian')], refusees: [finition(n)] } }), pGengar, gengar, [gengar]).ok), [true, true, true, true]);
+verifier('sans le nom du produit, aucune finition n\'est excusée (contradictions() appelée seule)', require('./collecte-cartes/deux-sources').contradictions([finition('Gengar ex Holo')]).length, 1);
+verifier('une finition collée à un AUTRE nom reste une contradiction (« Haunter Holo » ≠ « Gengar ex »)', p(entree({ secondeSource: { concordantes: [conc('pikaqian')], refusees: [finition('Haunter Pokeball Holo')] } }), pGengar, gengar, [gengar]).ok, false);
+verifier('un mot qui n\'est pas dans la liste des finitions reste une contradiction (« Gengar ex Alt Art »)', p(entree({ secondeSource: { concordantes: [conc('pikaqian')], refusees: [finition('Gengar ex Alt Art')] } }), pGengar, gengar, [gengar]).ok, false);
 verifier('une refusée « numéro différent » / « set différent » n\'est pas une contradiction de nom', p(entree({ secondeSource: { concordantes: [conc('pikaqian')], refusees: [{ source: 'artofpkm', raison: 'numéro différent (5 / 214)' }, { source: 'tcgdex', raison: 'set différent (x)' }] } }), pGengar, gengar, [gengar]).ok, true);
 
 console.log('── les gardes de production restent entières');
@@ -54,6 +59,10 @@ verifier('une fiche simple qui porte le numéro d\'un AUTRE produit n\'est pas c
 verifier('une fiche simple au MÊME numéro reste candidate → deux candidates, refus', (() => { const r = p(entree(), pGengar, gengar, [gengar, fiche(-1, '214')]); return [r.ok, /candidate/.test(r.refus.join())]; })(), [false, true]);
 verifier('une fiche simple dont on ne connaît aucun numéro reste candidate (un doute est un refus)', p(entree(), pGengar, gengar, [gengar, fiche(-1, null)]).ok, false);
 verifier('une VRAIE carte homonyme aux mêmes attaques reste candidate, quel que soit son numéro → refus', p(entree(), pGengar, gengar, [gengar, carte(11, 'Gengar ex', ['Shadowy Claw'], [{ tirage: 'intl', expansion: 'X', numero: '1' }])]).ok, false);
+verifier('une fiche simple d\'un AUTRE set (même numéro par coïncidence, M-P ≠ SV-P) n\'est pas candidate : elle est la carte du produit de SON set', p(entree(), pGengar, gengar, [gengar, fiche(-1, '214', { sets: ['Autre-Set'] })]).ok, true);
+verifier('une fiche simple dont les sets sont INCONNUS (vides) reste candidate (un doute est un refus)', p(entree(), pGengar, gengar, [gengar, fiche(-1, '214', { sets: [] })]).ok, false);
+verifier('une fiche simple du MÊME set au même numéro reste candidate', p(entree(), pGengar, gengar, [gengar, fiche(-1, '214', { sets: [SET] })]).ok, false);
+verifier('une VRAIE carte d\'un autre set reste candidate (deux textes jumeaux : un doute est un refus)', p(entree(), pGengar, gengar, [gengar, carte(11, 'Gengar ex', ['Shadowy Claw'], [{ tirage: 'intl', expansion: 'X', numero: '1' }], { sets: ['Autre-Set'] })]).ok, false);
 verifier('le numéro d\'une fiche simple se lit aussi par ses LIGNES (numerosDe injecté)', (() => { const f = fiche(-1, null); return p(entree(), pGengar, gengar, [gengar, f], { numerosDe: c => new Set(c._id === -1 ? ['89'] : []) }).ok; })(), true);
 verifier('« 089 » et « 89 » sont le même numéro, « 214a » n\'est pas « 214 »', [p(entree(), pGengar, gengar, [gengar, fiche(-1, '214a')]).ok, p(entree(), produit(20, 'Gengar ex [Shadowy Claw]', '089'), gengar, [gengar, fiche(-1, '89')], { secondeSource: undefined }).ok], [true, false]);
 

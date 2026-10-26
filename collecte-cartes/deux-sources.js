@@ -71,13 +71,19 @@ function rejouer(produit, concordantes) {
 /**
  * (V5, 2026-10-26) Les CONTRADICTIONS d'une liste de refusées : un relevé d'une source admise, au MÊME (set, numéro), dont le nom est LISIBLE (lettres latines) et discorde. `juger` ne le voit pas : `ok` reste vrai
  * si une autre source concorde (D3 de la relecture du 24/10). Une voie qui écrit une ligne n'écrit pas contre un relevé lisible qui dit autre chose ; un nom illisible (japonais, chinois) ne contredit rien, il ne compare à rien.
- * Une finition en plus (« Pikachu Pokeball Holo ») est aussi comptée contradiction : refuser plutôt que poser (0 faux).
+ * Une FINITION en plus (« Pikachu Pokeball Holo » pour « Pikachu ») n'est PAS une contradiction : c'est la même carte dans une autre trame, et PikaQian la liste au même numéro. Écrit par ce qu'il autorise :
+ * seule une liste FERMÉE de finitions (Pokeball / Master Ball / Reverse / Holo, en suffixe, une fois) et un reste STRICTEMENT égal au nom du produit (`nomProduit`, sans lui rien n'est excusé) ; tout autre mot
+ * (« Alt Art », un autre nom) reste une contradiction — refuser plutôt que poser (0 faux).
  * @returns {object[]} les refusées qui contredisent
  */
-function contradictions(refusees) {
+const FINITION_EN_SUFFIXE = /\s+(?:(?:pok[eé] ?ball|master ?ball|reverse)(?:\s+holo)?|holo(?:\s+reverse)?)\s*$/i;
+const nuNom = s => String(s ?? '').normalize('NFKC').toLowerCase().replace(/[^a-z0-9δ]+/g, '');
+function contradictions(refusees, nomProduit = null) {
     return (refusees || []).filter(r => {
         const m = /^nom discordant \(« (.*) » \/ « (.*) »\)$/.exec(String(r?.raison ?? ''));
-        return Boolean(m) && nomLisible(m[1]);
+        if (!m || !nomLisible(m[1])) return false;
+        if (nomProduit != null && FINITION_EN_SUFFIXE.test(m[1]) && nuNom(m[1].replace(FINITION_EN_SUFFIXE, '')) === nuNom(nomProduit)) return false;
+        return true;
     });
 }
 
