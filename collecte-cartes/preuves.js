@@ -82,8 +82,16 @@ const memeNomQueLeProduit = (lu, nomProduit) => {
     const cles = new Set(J.clesNom(SANS_ACCENTS(J.decomposerNomCardmarket(nomProduit).nom)));
     return J.clesNom(SANS_ACCENTS(lu)).some(k => cles.has(k));
 };
-/** Tour 4 (1) : le nom lu est exigé PARTOUT. Il ne se compare qu'en anglais (le nom du produit est le nom anglais ; aucun autre chemin — n° de Pokédex… — n'existe aujourd'hui) : une autre langue lue = refus. */
-const motifDeNom = (lu, produit) => (lu.langue !== 'en' ? 'nom-langue-non-anglaise' : (memeNomQueLeProduit(lu.nom, produit?.nomEn) ? null : 'nom-different'));
+/**
+ * Tour 4 (1) : le nom lu est exigé PARTOUT. Lu en anglais, il se compare au nom anglais du produit (`nomEn`).
+ * Décision du testeur (27/10) : lu en français, il se compare au nom FRANÇAIS du produit (`nomFr`, numeros_cartes) — SEULEMENT si le produit est un tirage français (langue du produit = langue lue) ;
+ * jamais au nom anglais. Toute autre langue lue = refus.
+ */
+const motifDeNom = (lu, produit, langueProduit) => {
+    if (lu.langue === 'en') return memeNomQueLeProduit(lu.nom, produit?.nomEn) ? null : 'nom-different';
+    if (lu.langue === 'fr' && langueProduit === 'fr') return memeNomQueLeProduit(lu.nom, produit?.nomFr) ? null : 'nom-different';
+    return 'nom-langue-non-anglaise';
+};
 /**
  * Tour 4 (2) — l'ANNÉE d'un set Battle Academy (et la moitié d'un Trainer Kit) ne se lit pas sur l'image : DEUX conditions cumulées. (a) le couple (position, nom normalisé) désigne UN SEUL produit parmi tous les
  * produits des slugSet `Battle-Academy*` / `*Trainer-Kit*` connus de la base — et c'est le produit jugé ; (b) le numéro imprimé lu (et son total, s'il est lu) est une impression de la carte du produit.
@@ -201,17 +209,17 @@ function evaluerPreuveLue({ entree, produit, langueProduit }) {
         else if (np == null) motifs.push('position-sans-numero-produit');
         else if (J.cleNumero(String(lu.position).trim()) !== J.cleNumero(np)) motifs.push('numero-different');
         else motifs.push(...motifsDePosition(lu, produit));
-        const mn = motifDeNom(lu, produit); if (mn) motifs.push(mn);       // tour 4 (1) : le nom, branche position
+        const mn = motifDeNom(lu, produit, langueProduit); if (mn) motifs.push(mn);       // tour 4 (1) : le nom, branche position
     } else if (np != null) {
         const n = lu.numero == null ? '' : String(lu.numero).trim(), t = lu.total == null ? '' : String(lu.total).trim();
         // tour 2 (1) : une promo (« XY150a », « SM30a ») n'imprime aucun total — il n'est exigé que pour un numéro purement numérique (+ suffixe) ; un préfixe alphabétique se juge sans total
         if (n === '' || (t === '' && !PREFIXE_ALPHABETIQUE.test(n))) motifs.push('numero-ou-total-absent');
         else if (J.cleNumero(n) !== J.cleNumero(np) && !numeroSansPrefixeAdmis(n, np, produit?.slug)) motifs.push('numero-different');
-        const mn = motifDeNom(lu, produit); if (mn) motifs.push(mn);       // tour 4 (1) : le nom aussi, avec numéro
+        const mn = motifDeNom(lu, produit, langueProduit); if (mn) motifs.push(mn);       // tour 4 (1) : le nom aussi, avec numéro
     } else {
         if (entree.attendu?.numero != null && String(entree.attendu.numero).trim() !== '') motifs.push('numero-attendu-non-null');
         // tour 1 (1) : sans numéro, RIEN d'autre ne relie l'image au produit que son NOM — le nom lu doit être celui du produit (Cardmarket, avant « [ »), par la normalisation de la jointure
-        const mn = motifDeNom(lu, produit); if (mn) motifs.push(mn);       // tour 4 (1) : le nom, branche sans numéro
+        const mn = motifDeNom(lu, produit, langueProduit); if (mn) motifs.push(mn);       // tour 4 (1) : le nom, branche sans numéro
         // tour 4 (3) : et quand le slug du produit porte un numéro en fin (« …-PPS8MEG-114 »), le numéro lu doit être celui-là
         const sn = numeroFinDeSlug(produit?.slug);
         if (sn != null && (lu.numero == null || String(lu.numero).trim() === '' || J.cleNumero(String(lu.numero).trim()) !== J.cleNumero(sn))) motifs.push('numero-different');
