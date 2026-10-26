@@ -44,6 +44,12 @@ muter('generique-type-d-energie-etendu (Colorless, spéciales)', { ...OUTIL, tra
 muter('generique-chinois-sans-test-du-tirage-du-set', { ...OUTIL, transformer: s => remplacer(s, 'TIRAGES_CHINOIS.includes(set.tirage) && ', '') });
 muter('generique-chinois-sans-test-impression-du-tirage', { ...OUTIL, transformer: s => remplacer(s, "!(carte.impressions || []).some(i => i && i.tirage === set.tirage)", 'true') });
 muter('generique-energie-sans-controle-du-numero-porte-par-la-carte', { ...OUTIL, transformer: s => remplacer(s, "if (generique === 'energie-de-base' && !", "if (false && !") });
+muter('tour2-generique-sans-carte-sets-contenant-le-slug', { ...OUTIL, transformer: s => remplacer(s, "(carte.sets || []).includes(slug) ? 'energie-de-base' : null", "'energie-de-base'") });
+muter('tour2-generique-sans-numeroFiche-egal-aux-sources', { ...OUTIL, transformer: s => remplacer(s, '|| !memeNumero) return null', '|| false) return null') });
+muter('tour2-generique-sans-ligne-rattachee-au-set', { ...OUTIL, transformer: s => remplacer(s, '|| ligne.slugSet !== slug', '') });
+muter('tour2-generique-sans-set-existant', { ...OUTIL, transformer: s => remplacer(s, 'if (!set || !ligne', 'if (!ligne') });
+muter('tour2-chinois-sans-preuve-setlist', { ...OUTIL, transformer: s => remplacer(s, "ligne.preuve === 'setlist+nom' && ", '') });
+muter('tour2-I2-sans-comparaison-du-tirage', { ...OUTIL, transformer: s => remplacer(s, ' && (!setTirage || i.tirage === setTirage)', '') });
 muter('generique-tout-refus-I2-devient-generique', { ...OUTIL, transformer: s => remplacer(s, 'if (!generique) { no(`carte-sans-impression-du-set', "if (false) { no(`carte-sans-impression-du-set") });
 muter('generique-confirmation-sans-controle-de-la-marque-et-du-cas', { ...CONF, banc: 'collecte-cartes/test-confirmation.js', transformer: s => entre(s, '// [GENERIQUE-DEBUT]', '// [GENERIQUE-FIN]') });
 const CLASS = { fichier: 'audit-catalogue/classement.js', dossier: 'audit-catalogue', banc: 'audit-catalogue/test-classement.js', env: 'CLASSEMENT_MODULE' };

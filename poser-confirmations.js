@@ -25,11 +25,14 @@ const TYPES_ENERGIE = ['Grass', 'Fire', 'Water', 'Lightning', 'Psychic', 'Fighti
 const ENERGIES_DE_BASE = new Set(TYPES_ENERGIE.flatMap(t => clesNom(`${t} Energy`)));
 const TIRAGES_CHINOIS = ['zh-hans', 'zh-hant'];
 /** @returns {'energie-de-base'|'promo-chinoise-jointure-virtuelle'|null} — appelée seulement quand la carte n'a pas d'impression du set au numéro. */
-function casGenerique(carte, set) {
+function casGenerique(carte, set, { ligne, slug, cle } = {}) {
+    // le set existe en base, la ligne est rattachée à CE set et la fiche de la ligne porte le numéro des deux sources : sans cela, aucun cas générique
+    const memeNumero = ligne && ligne.numeroFiche != null && String(ligne.numeroFiche).trim() !== '' && cleNumero(String(ligne.numeroFiche)) === cle;
+    if (!set || !ligne || ligne.slugSet !== slug || !memeNumero) return null;
     // (a) énergie de base : la carte jointe est « <Type> Energy » (clesNom de production), types énumérés
-    if (clesNom(nomJointDe(carte)).some(k => ENERGIES_DE_BASE.has(k))) return 'energie-de-base';
+    if (clesNom(nomJointDe(carte)).some(k => ENERGIES_DE_BASE.has(k))) return (carte.sets || []).includes(slug) ? 'energie-de-base' : null;   // et la carte est membre du set de la ligne (carte.sets)
     // (b) promo chinoise à jointure VIRTUELLE (§42) : le set est d'un tirage chinois lu en base, et la carte n'a AUCUNE impression de ce tirage (la jointure vit dans cartes_produits)
-    if (set && TIRAGES_CHINOIS.includes(set.tirage) && !(carte.impressions || []).some(i => i && i.tirage === set.tirage)) return 'promo-chinoise-jointure-virtuelle';
+    if (ligne.preuve === 'setlist+nom' && TIRAGES_CHINOIS.includes(set.tirage) && !(carte.impressions || []).some(i => i && i.tirage === set.tirage)) return 'promo-chinoise-jointure-virtuelle';
     return null;
 }
 
@@ -71,9 +74,10 @@ function planifier({ entrees, lecture, le = new Date() }) {
         const cle = cleNumero(produit.numero);
         const expSet = [].concat(lecture.sets?.get(p.set)?.bulba?.expansion ?? []).filter(Boolean);
         let generique;
-        if (!expSet.length || !(carte.impressions || []).some(i => i && i.numero != null && cleNumero(String(i.numero)) === cle && expSet.includes(i.expansion))) {
+        const setTirage = lecture.sets?.get(p.set)?.tirage;   // quand le set porte un tirage (SV-P partagé jp / zh-hans), l'impression doit être de CE tirage
+        if (!expSet.length || !(carte.impressions || []).some(i => i && i.numero != null && cleNumero(String(i.numero)) === cle && expSet.includes(i.expansion) && (!setTirage || i.tirage === setTirage))) {
             // décision du testeur (26/10) : liste FERMÉE de deux cas où l'absence de marque de set est la réalité du visuel ; tout le reste reste refusé
-            generique = casGenerique(carte, lecture.sets?.get(p.set));
+            generique = casGenerique(carte, lecture.sets?.get(p.set), { ligne, slug: p.set, cle });
             // une énergie de base générique garde le contrôle faible d'avant (la carte porte CE numéro, dans un set quelconque) : sans lui, 3 énergies sans numéro (279093, 525175, 279094) restent refusées (consigne du testeur)
             if (generique === 'energie-de-base' && !(carte.impressions || []).some(i => i && i.numero != null && cleNumero(String(i.numero)) === cle)) { no(`sans-numero : la carte ${e.carteId} (énergie de base) ne porte aucune impression au numéro ${produit.numero} — la ligne ne désigne pas la carte des sources`); continue; }
             if (!generique) { no(`carte-sans-impression-du-set : la carte ${e.carteId} ne porte aucune impression de « ${expSet.join(' / ') || 'set sans nom d\'expansion'} » au numéro ${produit.numero} — la ligne ne désigne pas la carte des sources`); continue; }
