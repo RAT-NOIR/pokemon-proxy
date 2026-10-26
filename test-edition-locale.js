@@ -55,5 +55,20 @@ const S19 = { _id: 'McDonalds-Collection-2019-2', idExpansion: [3354], region: '
         assert.strictEqual(await EL.executer({ argv: ['--ecrire', '--attendu=3'], ouvrirLecture: o, ouvrirEcriture: o, garde: () => {}, log: silence, err: silence }), 1, 'attendu faux : rien écrit');
         assert.strictEqual(await EL.executer({ argv: ['--ecrire', '--attendu=2'], ouvrirLecture: o, ouvrirEcriture: o, garde: () => {}, log: silence, err: silence }), 0);
     });
+    await t('plan : editionLocale à null = une valeur présente → refus (modifier du vide demande un feu vert nommé)', () => {
+        const p = EL.planifier({ sets: [{ ...S18, editionLocale: null }, S19] });
+        assert.deepStrictEqual(p.ecrire.map(x => x._id), ['McDonalds-Collection-2019-2']); assert.match(p.refus.map(r => r.raison).join(), /McDonalds-Collection-2018.*on n'écrase jamais/);
+    });
+    await t('ligne de commande : un refus au plan ARRÊTE --ecrire même quand --attendu concorde ; rien n\'est écrit', async () => {
+        const db = fausseBase([S19]); const o = async () => ({ cartes: { db }, fermer: async () => {} }); const silence = () => {};
+        assert.strictEqual(await EL.executer({ argv: ['--ecrire', '--attendu=1'], ouvrirLecture: o, ouvrirEcriture: o, garde: () => {}, log: silence, err: silence }), 1);
+        assert.deepStrictEqual(db.docs, [S19], 'aucune écriture');
+    });
+    await t('relecture : un AUTRE champ du set modifié est détecté (alteres), ok = false', async () => {
+        const db = fausseBase([S18]); const p = EL.planifier({ sets: [S18] });
+        await EL.ecrire(db, p.ecrire.filter(c => c._id === S18._id)); db.docs[0].nomAffichage = 'changé ailleurs';
+        const rl = await EL.relire(db, p.ecrire.filter(c => c._id === S18._id), [S18]);
+        assert.strictEqual(rl.ok, false); assert.deepStrictEqual(rl.alteres, [S18._id]);
+    });
     console.log(`\n${n} ok, ${ko} échec(s)`); process.exit(ko ? 1 : 0);
 })();

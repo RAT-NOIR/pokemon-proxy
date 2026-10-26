@@ -23,7 +23,7 @@ function planifier({ sets }) {
         if (porteurs.length !== 1) { refus.push({ idExpansion, raison: `expansion ${idExpansion} : ${porteurs.length ? `${porteurs.length} sets (${porteurs.map(s => s._id).join(', ')})` : 'aucun set'} — un seul attendu` }); continue; }
         const s = porteurs[0];
         if ((s.tirage ?? s.region) !== 'intl') { refus.push({ idExpansion, raison: `set ${s._id} : tirage ${s.tirage ?? s.region} — une édition locale ne se pose que sur un set occidental (intl)` }); continue; }
-        if (s.editionLocale !== undefined && s.editionLocale !== null) {
+        if (s.editionLocale !== undefined) {   // null compris : une valeur présente, même vide, ne s'écrase pas (et `$exists:false` ne la toucherait pas)
             if (s.editionLocale === langue) deja.push({ _id: s._id }); else refus.push({ idExpansion, raison: `set ${s._id} : editionLocale déjà « ${s.editionLocale} », la table dit « ${langue} » — on n'écrase jamais` });
             continue;
         }
