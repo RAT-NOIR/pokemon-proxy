@@ -69,6 +69,44 @@ function refusDeRepli({ ligne, set, im, visuel }) {
     if (f) return f;
     return JETON_TAMPON_NOM.test(String(ligne.slug ?? '')) ? 'staff-prerelease' : null;
 }
+// ADMISSION-CATALOGUE (testeur, 2026-10-27) — deux entrées du catalogue que le repli ci-dessus refusait, admises par une règle FERMÉE, écrite par ce qu'elle AUTORISE :
+//   (A) Battle Academy : le slug Cardmarket porte la POSITION du deck (« Potion-V2-BA20C37 », « Picnicker-BA24A34 »), le scan `prv` porte la position LUE sur l'image (numero « C37 » : silhouette + rond).
+//       Deux sources indépendantes : le scan du set (source prv, preuveLue.regle, admis par la règle du site, jamais imageEmprunteeTirage) n'est servi qu'au produit dont le slug nomme SA position,
+//       et seulement s'il est seul à cette position et le produit seul à la porter. Dans le même geste, un scan de position choisi pour un AUTRE produit (choisirVisuel donne le seul visuel du set
+//       à tout produit sans numéro) est retiré : compté `positionContredite`.
+//   (B) WCD : l'emprunt du catalogue (source « emprunt », imageEmprunteeTirage, differenceEmprunt « autre-tirage », lot des origines prouvées par deux sources) au numéro de la fiche est servi
+//       pour l'AFFICHAGE, en « autre-tirage » avec sa mention : estEmprunt le marque, les règles d'image ne le lisent pas (identifier/emprunt.js).
+const ANNEE_BA = /^Battle-Academy-20(\d{2})$/;
+const POSITION_BA = /-BA(\d{2})([A-Z]{1,3}\d{0,3})$/;
+const POSITION_LUE = /^[A-Z]{1,3}\d{0,3}$/;
+const MENTION_WCD = 'Visuel de la même carte dans un autre tirage (carte d\'origine du deck) — pas le scan de ce produit';
+/** La position du deck nommée par le slug, si l'année du slug est celle du set Battle Academy ; sinon null. */
+function positionDuSlug(slug, setId) {
+    const a = ANNEE_BA.exec(String(setId ?? '')), m = POSITION_BA.exec(String(slug ?? ''));
+    return a && m && m[1] === a[1] ? m[2] : null;
+}
+const estScanDePosition = (im, setId) => Boolean(im && im.source === 'prv' && ANNEE_BA.test(String(setId ?? '')) && typeof im.numero === 'string' && POSITION_LUE.test(im.numero));
+/** @returns { im, visuel, mention, nature } | null — `positions` : Map « carteId|set|position » → nombre de produits qui la portent. */
+function admissionDuCatalogue({ ligne, set, carte, regle, positions }) {
+    const f = familleDuSet(set._id), tir = set.tirage ?? set.region;
+    const images = (carte.images || []).filter(m => m && m.set === set._id && m.cleR2);
+    if (f === 'tamponnees-nommees') {
+        const pos = positionDuSlug(ligne.slug, set._id);
+        if (!pos || positions.get(`${ligne.carteId}|${set._id}|${pos}`) !== 1) return null;
+        const c = images.filter(m => m.source === 'prv' && texte(m.preuveLueRegle) && m.imageEmprunteeTirage !== true && m.numero === pos && regle.visuelAdmisPourLaRegion(m, tir));
+        return c.length === 1 ? { im: c[0], visuel: 'du-set', mention: null, nature: 'prv-position' } : null;
+    }
+    if (f === 'wcd') {
+        // désignée : au numéro de la fiche ; ou, fiche SANS numéro (les WCD de Cardmarket n'en portent pas), la SEULE entrée de la carte dans le set, elle-même sans numéro (l'image d'origine est la même
+        // pour toutes les variantes V1…Vn d'un deck : affichage seulement, marquée empruntée)
+        const voulu = ligne.numeroFiche == null ? null : regle.normaliserNumero(ligne.numeroFiche);
+        const c = images.filter(m => m.source === 'emprunt' && m.imageEmprunteeTirage === true && m.differenceEmprunt === 'autre-tirage' && !(tir !== 'jp' && m.langue === 'ja')
+            && (voulu === null ? m.numero == null : m.numero != null && regle.normaliserNumero(m.numero) === voulu));
+        const seule = voulu === null ? images.length === 1 : true;
+        return c.length === 1 && seule ? { im: c[0], visuel: 'autre-tirage', mention: MENTION_WCD, nature: 'wcd-emprunt' } : null;
+    }
+    return null;
+}
 /**
  * basseDefinition à TROIS valeurs (la règle d'image exige `=== false`, défaut fermé : un `null` la fait taire) : le drapeau du catalogue s'il est booléen ; sinon la largeur de l'ORIGINAL (`im.w`, la même que
  * celle de la grande image) comparée au seuil de collecte (collecte-cartes/seuils-images.js::LARGEUR_MIN) — true dessous, false au seuil ou au-dessus ; null SEULEMENT quand la largeur est inconnue.
@@ -195,8 +233,12 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         // les marquages portés par les entrées écrites
         marquees: { partages: 0, holo: 0, tampon: 0, basse: 0 }, melangeProduits: 0,
         // MARQUE-EMPRUNT : les produits distincts dont l'entrée écrite porte un visuel emprunté (sommes par nature : les lignes d'un même produit ne comptent qu'une fois)
-        emprunts: 0, empruntsParNature: { 'autre-tirage': 0, substitut: 0 } };
+        emprunts: 0, empruntsParNature: { 'autre-tirage': 0, substitut: 0 },
+        // ADMISSION-CATALOGUE : les entrées admises par la règle fermée (à part du repli refusé), et les scans de position retirés d'un autre produit (somme : avecLigne compte aussi positionContredite)
+        admisCatalogue: { 'prv-position': 0, 'wcd-emprunt': 0 }, positionContredite: 0 };
     const empruntes = new Set();
+    const positions = new Map();
+    for (const l of lignes) { const p = positionDuSlug(l.slug, l.slugSet); if (p) { const k = `${l.carteId}|${l.slugSet}|${p}`; positions.set(k, (positions.get(k) || 0) + 1); } }
     const vus = new Set(lignes.map(l => l.idProduct));
     for (const id of metacarte.keys()) if (!vus.has(id)) d.sansLigne++;
     vus.clear();
@@ -226,10 +268,18 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         // la validation d'entrée le refuse (elle exige une mention non vide), alors que les logos posent un repli.
         const choix = Lg.choisirVisuel({ ligne: l, carte: c, set: s, fiche: f, regle, setsBase, substitutSansMention: 'refus' });
         if (choix.sansFiche) { d.sansFicheDuSite++; continue; }
-        const { im, visuel, mention } = choix;
-        if (!im) { d.aucun++; d.aucunDetail['aucun visuel']++; continue; }
+        let { im, visuel, mention } = choix;
+        // ADMISSION-CATALOGUE (A) : un scan de position n'appartient qu'au produit dont le slug nomme cette position
+        let contredit = false;
+        if (visuel === 'du-set' && estScanDePosition(im, s._id) && positionDuSlug(l.slug, s._id) !== im.numero) { im = null; contredit = true; }
         // REPLI-REIMPRESSIONS : APRÈS le choix (la fonction partagée n'est pas touchée), AVANT toute entrée : jamais l'image d'un autre tirage à une réimpression
-        const refus = refusDeRepli({ ligne: l, set: s, im, visuel });
+        let refus = im ? refusDeRepli({ ligne: l, set: s, im, visuel }) : null;
+        if (!im || refus) {
+            const a = admissionDuCatalogue({ ligne: l, set: s, carte: c, regle, positions });
+            if (a) { ({ im, visuel, mention } = a); refus = null; contredit = false; d.admisCatalogue[a.nature]++; }
+        }
+        if (contredit) { d.positionContredite++; continue; }
+        if (!im) { d.aucun++; d.aucunDetail['aucun visuel']++; continue; }
         if (refus) { d.repliRefuse.total++; d.repliRefuse.parFamille[refus]++; continue; }
         if (exclureBasseDefinition === true && im.basseDefinition === true) { d.basseDefinitionExclue++; continue; }
         // m2 (relecture r1) : une image marquée partagée dont le produit n'est PAS dans sa liste (ou dont la liste n'a pas de marquage) n'est pas servie à l'identification : fermé par défaut, compté
@@ -273,4 +323,4 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
     return { entrees, denominateurs: d, liens, ...(sink ? {} : { jumeaux, melanges: [...melanges].sort((a, b) => a - b), emprunts: [...empruntes].sort((a, b) => a - b) }) };
 }
 
-module.exports = { decider, verifierRegle, cleFiche, REGLE_REQUISE, FAMILLES_SANS_REPLI, refusDeRepli, estEmprunt, EXCLURE_BASSE_DEFINITION, partageIncoherent, varianteAvecPreuve };
+module.exports = { decider, verifierRegle, cleFiche, REGLE_REQUISE, FAMILLES_SANS_REPLI, refusDeRepli, estEmprunt, positionDuSlug, admissionDuCatalogue, EXCLURE_BASSE_DEFINITION, partageIncoherent, varianteAvecPreuve };

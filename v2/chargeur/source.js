@@ -11,7 +11,9 @@ const PROJECTIONS = Object.freeze({
         'images.set': 1, 'images.cleR2': 1, 'images.w': 1, 'images.h': 1, 'images.numero': 1, 'images.langue': 1, 'images.languePreuve': 1, 'images.source': 1,
         'images.vignette.cleR2': 1, 'images.vignette.w': 1, 'images.vignette.h': 1,
         // REPLI-REIMPRESSIONS : les marquages du catalogue sur l'image servie (avis du 2026-10-17) et les deux drapeaux qui la retirent ou la signalent
-        'images.partageeHoloNonHolo': 1, 'images.partageeTamponNonSepare': 1, 'images.produitsPartages': 1, 'images.tamponNonRepresente': 1, 'images.basseDefinition': 1, 'images.imageEmprunteeTirage': 1 }),
+        'images.partageeHoloNonHolo': 1, 'images.partageeTamponNonSepare': 1, 'images.produitsPartages': 1, 'images.tamponNonRepresente': 1, 'images.basseDefinition': 1, 'images.imageEmprunteeTirage': 1,
+        // ADMISSION-CATALOGUE : la RÈGLE de la preuve lue (rien d'autre de preuveLue) et la nature d'un emprunt
+        'images.preuveLue.regle': 1, 'images.differenceEmprunt': 1 }),
     cartes_produits: Object.freeze({ carteId: 1, idProduct: 1, idExpansion: 1, numeroFiche: 1, slug: 1, slugSet: 1, visuelSubstitut: 1, variante: 1, variantePreuve: 1, prixMelangeTampon: 1 })
 });
 const LOT = 500;
@@ -29,7 +31,8 @@ function compacterCarte(d, I) {
         images: liste(d.images, m => (m && typeof m === 'object' ? { set: I(m.set), cleR2: m.cleR2, w: m.w, h: m.h, numero: I(m.numero), langue: I(m.langue), languePreuve: I(m.languePreuve), source: I(m.source),
             vignette: m.vignette && typeof m.vignette === 'object' ? { cleR2: m.vignette.cleR2, w: m.vignette.w, h: m.vignette.h } : m.vignette,
             partageeHoloNonHolo: m.partageeHoloNonHolo, partageeTamponNonSepare: m.partageeTamponNonSepare, produitsPartages: m.produitsPartages, tamponNonRepresente: I(m.tamponNonRepresente),
-            basseDefinition: m.basseDefinition, imageEmprunteeTirage: m.imageEmprunteeTirage } : m)) };
+            basseDefinition: m.basseDefinition, imageEmprunteeTirage: m.imageEmprunteeTirage,
+            preuveLueRegle: m.preuveLue && typeof m.preuveLue === 'object' && typeof m.preuveLue.regle === 'string' ? I(m.preuveLue.regle) : null, differenceEmprunt: I(m.differenceEmprunt) } : m)) };
 }
 function compacterLigne(d, I) {
     const v = d.visuelSubstitut;
