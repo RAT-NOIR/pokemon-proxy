@@ -28,7 +28,8 @@ function calibrerNomSeulTout({ table, lus, cm }) {
     }
     return { ...total, retenue: total.justes > 0 && total.faux === 0, fauxDetail };
 }
-function calibrerTout({ rel, cm, accepterSlug = false }) {
+/** auxLus : { idProduct: raison } — les aux du témoin que l'OEIL a relus un à un (la jointure est juste, c'est la FICHE ou son nom qui diffère) ; ils sont comptés à part, jamais effacés. */
+function calibrerTout({ rel, cm, accepterSlug = false, fauxLus = {} }) {
     const groupes = groupesDuReleve(rel), langueDeCategorie = LANGUE_DE_CATEGORIE(rel.categories);
     const table = JT.construireTable({ groupes, expansions: D.expansionsPourTable(cm), langueDeCategorie });
     const lus = new Map(groupes.map(g => [g.groupId, { categoryId: g.categoryId, name: g.name, produits: g.produits.map(JT.lireTcg) }]));
@@ -36,7 +37,7 @@ function calibrerTout({ rel, cm, accepterSlug = false }) {
     const tcgParId = new Map(); for (const g of lus.values()) for (const t of g.produits) tcgParId.set(t.productId, t);
     // la population de calibration : une fiche numérotée ET un visuel existant (la vérité est connue sans la jointure)
     const connus = [...cm.produits.values()].filter(p => p.fiche && p.nImages > 0 && p.fiche.impressions.some(i => i?.numero != null && /\d/.test(String(i.numero))));
-    const compte = { population: connus.length, justes: 0, laches: 0, faux: 0, muets: 0, nonJugeables: 0 }, fauxDetail = [], lachesDetail = [], muetsParMotif = {}, fauxParCause = {}, lachesParCause = {};
+    const compte = { population: connus.length, justes: 0, laches: 0, faux: 0, fauxLus: 0, muets: 0, nonJugeables: 0 }, fauxLusDetail = [], fauxDetail = [], lachesDetail = [], muetsParMotif = {}, fauxParCause = {}, lachesParCause = {};
     for (const p of connus) {
         const j = jointure.get(p.idProduct);
         if (!j?.joint) { compte.muets++; const m = j?.motif ?? 'inconnu'; muetsParMotif[m] = (muetsParMotif[m] || 0) + 1; continue; }
@@ -45,11 +46,12 @@ function calibrerTout({ rel, cm, accepterSlug = false }) {
         if (v.verdict === 'juste') compte.justes++;
         else if (v.verdict === 'non-jugeable') compte.nonJugeables++;
         else if (v.verdict === 'lache') { compte.laches++; const c = v.cause.split(' ')[0]; lachesParCause[c] = (lachesParCause[c] || 0) + 1; lachesDetail.push(ligne()); }
+        else if (Object.hasOwn(fauxLus, p.idProduct)) { compte.fauxLus++; fauxLusDetail.push({ ...ligne(), lu: fauxLus[p.idProduct] }); }
         else { compte.faux++; const c = v.cause.split(' ')[0]; fauxParCause[c] = (fauxParCause[c] || 0) + 1; fauxDetail.push(ligne()); }
     }
     const tousJoints = [...jointure.values()].filter(x => x.joint).length;
     const nomSeul = calibrerNomSeulTout({ table, lus, cm });
-    return { table, jointure, lus, nomSeul, calibration: { ...compte, retenue: compte.population > 0 && compte.justes > 0 && compte.faux === 0, muetsParMotif, fauxParCause, lachesParCause, fauxDetail, lachesDetail, tousLesProduitsJoints: tousJoints, produitsCm: cm.produits.size, accepterSlug } };
+    return { table, jointure, lus, nomSeul, calibration: { ...compte, retenue: compte.population > 0 && compte.justes > 0 && compte.faux === 0, muetsParMotif, fauxParCause, lachesParCause, fauxDetail, fauxLusDetail, lachesDetail, tousLesProduitsJoints: tousJoints, produitsCm: cm.produits.size, accepterSlug } };
 }
 
 async function main(args = process.argv.slice(2)) {
@@ -73,14 +75,17 @@ async function main(args = process.argv.slice(2)) {
     const groupes = groupesDuReleve(rel);
     const nbGroupes = Object.values(rel.listes).reduce((n, l) => n + l.length, 0);
     console.log(`GROUPES : ${nbGroupes} listés, ${groupes.length} avec leurs produits lus${groupes.length < nbGroupes ? ' (⚠️ relevé incomplet)' : ''}`);
-    const r = calibrerTout({ rel, cm, accepterSlug: args.includes('--slug') });
+    const fichierLus = arg(args, 'faux-lus') ?? path.join(__dirname, 'collecte-cartes', 'tcgcsv-faux-lus.json');
+    const fauxLus = fs.existsSync(fichierLus) ? JSON.parse(fs.readFileSync(fichierLus, 'utf8')).lus ?? {} : {};
+    console.log(`FAUX RELUS À L'ŒIL (${path.basename(fichierLus)}) : ${Object.keys(fauxLus).length} produits (comptés à part, jamais effacés)`);
+    const r = calibrerTout({ rel, cm, accepterSlug: args.includes('--slug'), fauxLus });
     const resume = r.table.resume;
     console.log(`TABLE : ${JSON.stringify(resume.parStatut)}`);
     fs.mkdirSync(sortie, { recursive: true });
     fs.writeFileSync(path.join(sortie, 'table-groupes.json'), JSON.stringify({ le: new Date().toISOString(), seuils: { MIN_COMMUNS: JT.MIN_COMMUNS, PART_GROUPE_MIN: JT.PART_GROUPE_MIN, PART_UNION_MIN: JT.PART_UNION_MIN, FAIBLE_SI_FORTE_SOUS: JT.FAIBLE_SI_FORTE_SOUS }, denominateurs: cm.denominateurs, resume: resume.parStatut, lignes: r.table.lignes }, null, 1));
     fs.writeFileSync(path.join(sortie, 'groupes-non-apparies.txt'), resume.nonAppariees.map(g => `${g.groupId} | ${g.statut} | ${g.name} | ${g.produits} produits / ${g.avecNumero} numérotés | meilleur ${g.meilleur.map(m => `${m.slugSet} ${m.communs} (${(m.partGroupe * 100).toFixed(0)} % du groupe)`).join(' ; ') || '—'}`).join('\n'));
     const c = r.calibration;
-    console.log(`CALIBRATION (${c.accepterSlug ? 'numéro du slug admis' : 'numéro de la base seulement'}) : population ${c.population} (fiche numérotée + visuel existant) · JUSTES ${c.justes} · lâches ${c.laches} ${JSON.stringify(c.lachesParCause)} · FAUX ${c.faux} · MUETS ${c.muets} · non jugeables ${c.nonJugeables} · clé ${c.retenue ? 'RETENUE (0 faux)' : 'NON retenue'}`);
+    console.log(`CALIBRATION (${c.accepterSlug ? 'numéro du slug admis' : 'numéro de la base seulement'}) : population ${c.population} (fiche numérotée + visuel existant) · JUSTES ${c.justes} · lâches ${c.laches} ${JSON.stringify(c.lachesParCause)} · FAUX ${c.faux} (+ ${c.fauxLus} relus à l'œil : jointure juste, fiche différente) · MUETS ${c.muets} · non jugeables ${c.nonJugeables} · clé ${c.retenue ? 'RETENUE (0 faux)' : 'NON retenue'}`);
     console.log(`   muets par motif : ${JSON.stringify(c.muetsParMotif)} · faux par cause : ${JSON.stringify(c.fauxParCause)} · tous produits Cardmarket joints : ${c.tousLesProduitsJoints} / ${c.produitsCm}`);
     fs.writeFileSync(path.join(sortie, `calibration${c.accepterSlug ? '-slug' : ''}.json`), JSON.stringify({ le: new Date().toISOString(), ...c }, null, 1));
     const ns = r.nomSeul;
@@ -90,4 +95,4 @@ async function main(args = process.argv.slice(2)) {
     for (const f of c.fauxDetail.slice(0, +(arg(args, 'faux') ?? 25))) console.log(`   faux : ${f.idProduct} « ${f.nomCm} » ${f.slugSet} n°${f.numero} <- ${f.productId} « ${f.nomTcg} » ${f.numeroTcg} [${f.niveau}] ${f.cause}`);
 }
 if (require.main === module) main().catch(e => { console.error('❌', e.message); process.exitCode = 1; });
-module.exports = { calibrerTout, groupesDuReleve, LANGUE_DE_CATEGORIE };
+module.exports = { calibrerNomSeulTout, calibrerTout, groupesDuReleve, LANGUE_DE_CATEGORIE };
