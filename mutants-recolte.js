@@ -71,7 +71,7 @@ const GROUPES = [
         ['D1 : les remises oubliées de l\'annonce (fausses baisses)', "const ajout = remises.filter(", "const ajout = [].filter("]
     ] },
     { module: 'collecte-cartes/tcgcsv.js', bancs: ['test-tcgcsv.js'], mutants: [
-        ['/prices accepté', "tcgplayer\\/3\\/\\d{1,6}\\/products)$/;", "tcgplayer\\/3\\/\\d{1,6}\\/(products|prices))$/;"],
+        ['/prices accepté', "tcgplayer\\/\\d{1,4}\\/\\d{1,7}\\/products)$/;", "tcgplayer\\/\\d{1,4}\\/\\d{1,7}\\/(products|prices))$/;"],
         ['plusieurs séries acceptées', "if (lignesO.length > 1) {", "if (false) {"],
         ['total non confirmé accepté', "if (!impressionConfirme(l.carte, num, p.total)) {", "if (false) {"],
         ['finitions multiples acceptées', "if (memeCle.length > 1) {", "if (false) {"],
@@ -135,11 +135,13 @@ for (const G of GROUPES) {
     if (filtres.length && !filtres.some(f => G.module.includes(f))) continue;
     const fichier = path.join(__dirname, G.module);
     const original = fs.readFileSync(fichier, 'utf8');
+    // les motifs s'écrivent avec « \n » : un module passé en fins de ligne CRLF ne doit pas rendre « motif introuvable » (2026-10-26) ; la RESTAURATION, elle, rend l'original octet pour octet
+    const texte = original.replace(/\r\n/g, '\n');
     try {
         for (const [nom, de, vers, ...autres] of G.mutants) {
             total++;
-            if (![de, ...autres.map(a => a[0])].every(x => original.includes(x))) { console.log(`❌ motif introuvable pour « ${nom} » (${G.module})`); process.exitCode = 2; continue; }
-            let muté = original.replace(de, vers);
+            if (![de, ...autres.map(a => a[0])].every(x => texte.includes(x))) { console.log(`❌ motif introuvable pour « ${nom} » (${G.module})`); process.exitCode = 2; continue; }
+            let muté = texte.replace(de, vers);
             for (const [de2, vers2] of autres) muté = muté.replace(de2, vers2);
             fs.writeFileSync(fichier, muté);
             let tue = false;
