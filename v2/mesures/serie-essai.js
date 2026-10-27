@@ -188,12 +188,13 @@ async function serie(o, deps = {}) {
 
     // ── la CONNEXION NORMALE : installation → connexion (cookie) → code → liaison. Tout refus arrête la série AVANT le moindre scan payé ; aucun détail de réponse n'est recopié (ils pourraient porter un secret).
     const refus = (etape, r) => { throw new Arret(`connexion du compte de mesure : ${etape} refusée (${r.statut})${r.statut === 429 ? ` — réessayer dans ${r.retryApres ?? '?'} s` : ''}`); };
-    const inst = await appeler('/api/installation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ versionExtension: ping.corps.versionMinExtension, libelle: 'serie-essai' }) }, null);
-    if (inst.statut !== 201 || !inst.corps || typeof inst.corps.jetonInstallation !== 'string') refus('création de l\'installation', inst);
+    // INST-BANC : la connexion d'abord, puis l'installation AVEC la session — la limite « 2 installations par IP et par jour » ne s'efface que pour une session du compte de mesure (v2/installations/exemption-banc.js).
     const entetesSite = { Origin: origineSite, 'X-Rat-Market': '1', 'Content-Type': 'application/json' };
     const cx = await appeler('/api/compte/connexion', { method: 'POST', headers: entetesSite, body: JSON.stringify({ email: ids.identifiant, motDePasse: ids.motDePasse }) }, null);
     const session = cx.cookie ? /(?:^|[\s,;])rm_session=([^;\s,]+)/.exec(String(cx.cookie)) : null;
     if (cx.statut !== 200 || !session) refus('connexion', cx);
+    const inst = await appeler('/api/installation', { method: 'POST', headers: { ...entetesSite, Cookie: `rm_session=${session[1]}` }, body: JSON.stringify({ versionExtension: ping.corps.versionMinExtension, libelle: 'serie-essai' }) }, null);
+    if (inst.statut !== 201 || !inst.corps || typeof inst.corps.jetonInstallation !== 'string') refus('création de l\'installation', inst);
     const cd = await appeler('/api/compte/code', { method: 'POST', headers: { ...entetesSite, Cookie: `rm_session=${session[1]}` }, body: '{}' }, null);
     if (cd.statut !== 200 || !cd.corps || typeof cd.corps.code !== 'string') refus('code de liaison', cd);
     jeton = inst.corps.jetonInstallation;
