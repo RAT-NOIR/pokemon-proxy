@@ -46,7 +46,11 @@ const normaliser = t => sansAccent(t).replace(/[’‘`]/g, '\'');
 const sansElision = s => s.replace(/(^|[^a-z0-9])[ld]'(?=[a-z])/g, '$1 ');                 // « l'oversize », « d'oversize » : la lettre d'élision n'est pas un mot
 const motsDe = t => normaliser(t).match(/[a-z0-9]+/g) || [];
 const composesDe = t => (normaliser(t).match(/[a-z0-9]+(?:-[a-z0-9]+)+/g) || []);        // « ho-oh », « s-p » : un tiret À L'INTÉRIEUR d'un mot
-const PONCTUATION_ADMISE = /^[a-z0-9\s\-'.,()#]*$/;                                       // après avoir retiré les « 025/165 » : le « / » n'est admis qu'entre deux nombres
+const PONCTUATION_ADMISE = /^[a-z0-9\s\-'.,()]*$/;                                       // après avoir retiré les « 025/165 » : le « / » n'est admis qu'entre deux nombres
+// TOUR 3 : la FORME de la ponctuation, écrite par ce qui reste AUTORISÉ — une suite de mots séparés par des espaces ; chaque mot porte au plus UNE parenthèse ouvrante devant, UNE fermante derrière, puis au plus UN point ou UNE virgule ;
+// l'apostrophe et le tiret n'existent qu'ENTRE deux lettres/chiffres ; les parenthèses sont équilibrées. Ni guillemets, ni « # », ni deux signes d'affilée, ni signe isolé.
+const FORME_ADMISE = /^\s*(?:\(?[a-z0-9]+(?:[-'][a-z0-9]+)*\)?[.,]?\s+)*\(?[a-z0-9]+(?:[-'][a-z0-9]+)*\)?[.,]?\s*$/;
+const equilibre = t => { let d = 0; for (const c of t) { if (c === '(') d++; else if (c === ')' && --d < 0) return false; } return d === 0; };
 const TIRET_HORS_MOT = /(^|[^a-z0-9])-|-($|[^a-z0-9])/;                                   // un tiret en tête ou en fin de mot, ou isolé : « -jumbo », « jumbo- », « - »
 /**
  * Les mots que le produit JUMBO candidat permet d'admettre : son nom (Cardmarket et français, SANS les crochets d'attaques), le nom, le slug et le code de son set, son numéro (avec et sans zéros de tête) ; les mots composés
@@ -95,6 +99,8 @@ function lireTitreJumbo(titre, produit) {
     const refus = motif => ({ oui: false, ambigu: true, terme: trouves[0], motif });
     if (!PONCTUATION_ADMISE.test(propre)) return refus('ponctuation hors de la liste blanche');
     if (TIRET_HORS_MOT.test(propre)) return refus('tiret hors d\'un mot admis');
+    const forme = normal.replace(/\d+\/\d+/g, 'f0');
+    if (!FORME_ADMISE.test(forme) || !equilibre(forme)) return refus('ponctuation hors de la liste blanche');
     const mots = Array.isArray(produit) ? produit : produit && Array.isArray(produit.mots) ? produit.mots : [];
     const propres = mots.filter(m => typeof m === 'string').map(sansAccent).filter(m => m && !INTERDITS.has(m.replace(/^~/, '')));
     const duProduit = new Set(propres.filter(m => !m.startsWith('~'))), noms = propres.filter(m => m.startsWith('~')).map(m => m.slice(1).split(' '));
