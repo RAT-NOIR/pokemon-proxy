@@ -158,9 +158,8 @@ function validerEntree(cfg) {
 const mongoose = require('mongoose');
 const registre = require('../registre');
 const { fauxRes } = require('./captureres');
-const { adapter, codeLangueDe, prixLiveDe, affirmerParLaRoute, questionDeGroupe } = require('./adaptateur');
-const { construireProduit } = require('./produit');
-const { consulterMarqueurs } = require('./garde-marqueurs');         // MARQUEURS : le jumbo par le titre et la garde des groupes, derrière V2_JUMBO_TITRE et V2_GARDE_MARQUEURS (éteints : jamais appelée)
+const { adapter, codeLangueDe, prixLiveDe, affirmerParLaRoute } = require('./adaptateur');
+const { appliquerMarqueurs } = require('./garde-marqueurs');        // MARQUEURS : le jumbo par le titre et la garde des groupes, derrière V2_JUMBO_TITRE et V2_GARDE_MARQUEURS (éteints : jamais appelée)
 const { fournisseurParDefaut, idsAffirmes, idsACharger } = require('./jumeaux');
 const { idsDeLaGarde } = require('./garde-contradiction');
 const { preparer: preparerLD } = require('./langue-decisive-charge');
@@ -627,11 +626,7 @@ function traiterIdentifier(cfg, deps = {}) {
                     if (resultat.issue === 'question' || resultat.issue === 'affirmee') {
                         noterQuestion();
                         try {
-                            const pctx = { langueInterface: entree.langueInterface, cfg, ficheServie: false };
-                            const gm = consulterMarqueurs({ cfg, titre: annonce.titre, resultat, derniereQuestion, corpsChaine: c, desaccordG, empreinteInfo, produits, version: version0,
-                                affirmer: (id, surcharge, critere) => affirmerParLaRoute(c, id, { ...pctx, produits: surcharge || produits }, critere),
-                                marqueursDe: id => (produits instanceof Map && produits.has(id) ? construireProduit(produits.get(id), pctx).marqueurs : undefined),
-                                questionDeGroupe: ids => questionDeGroupe(c, ids, { ...pctx, produits, jumeaux }), journal: journalErreur });
+                            const gm = appliquerMarqueurs({ cfg, titre: annonce.titre, resultat, derniereQuestion, c, desaccordG, empreinteInfo, produits, version: version0, langueInterface: entree.langueInterface, jumeaux, journal: journalErreur });
                             if (gm) {
                                 traceMarqueurs = gm.trace;
                                 if (gm.resultat) {

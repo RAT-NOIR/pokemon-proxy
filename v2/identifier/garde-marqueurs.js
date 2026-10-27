@@ -157,4 +157,18 @@ function consulterMarqueurs({ cfg, titre, resultat, derniereQuestion = null, cor
     return trace || remplace ? { ...(remplace ? { resultat: courant } : {}), trace } : null;
 }
 
-module.exports = { consulterMarqueurs, lireTitreJumbo, memeDessin, ecartMarqueurs, signalReel, critereJumbo, CRITERE_JUMBO, TERMES_JUMBO, NEGATIONS, VERSION_NORMALE, FENETRE_NEGATION, FENETRE_APRES };
+/**
+ * UNE SEULE fonction d'appel pour la route d'une carte ET le lot (I1 de la relecture) : elle construit les outils de la route (l'affirmation, les marqueurs servis, la question du groupe) avec le MÊME contexte que l'adaptateur
+ * (produits, jumeaux, langue), puis délègue à consulterMarqueurs. @param c le corps de la chaîne de CETTE carte ; @param lot vrai dans un lot : le titre décrit plusieurs cartes, V2_JUMBO_TITRE n'y agit jamais.
+ */
+function appliquerMarqueurs({ cfg, titre, resultat, derniereQuestion = null, c, desaccordG = null, empreinteInfo = null, produits, version, langueInterface, jumeaux, lot = false, journal = () => { } }) {
+    if (!cfg || (cfg.jumboTitre !== true && cfg.gardeMarqueurs !== true)) return null;
+    const { affirmerParLaRoute, questionDeGroupe } = require('./adaptateur'), { construireProduit } = require('./produit');
+    const pctx = { langueInterface, cfg, ficheServie: false };
+    return consulterMarqueurs({ cfg: lot ? { ...cfg, jumboTitre: false } : cfg, titre, resultat, derniereQuestion, corpsChaine: c, desaccordG, empreinteInfo, produits, version,
+        affirmer: (id, surcharge, critere) => affirmerParLaRoute(c, id, { ...pctx, produits: surcharge || produits }, critere),
+        marqueursDe: id => (produits instanceof Map && produits.has(id) ? construireProduit(produits.get(id), pctx).marqueurs : undefined),
+        questionDeGroupe: ids => questionDeGroupe(c, ids, { ...pctx, produits, jumeaux }), journal });
+}
+
+module.exports = { consulterMarqueurs, appliquerMarqueurs, lireTitreJumbo, memeDessin, ecartMarqueurs, signalReel, critereJumbo, CRITERE_JUMBO, TERMES_JUMBO, NEGATIONS, VERSION_NORMALE, FENETRE_NEGATION, FENETRE_APRES };

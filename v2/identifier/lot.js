@@ -15,6 +15,7 @@
 const { dansUnScan } = require('../../sources');
 const { adapter, codeLangueDe } = require('./adaptateur');
 const { fournisseurParDefaut, idsAffirmes, idsACharger } = require('./jumeaux');
+const { appliquerMarqueurs } = require('./garde-marqueurs');
 const { idsDeLaGarde } = require('./garde-contradiction');
 const { preparer: preparerLD } = require('./langue-decisive-charge');
 const etatChargeur = require('../chargeur/etat');
@@ -152,6 +153,12 @@ async function executerLot(p) {
     const cartes = resultats.map((r, i) => {
         let a = null;
         try { a = adapterFn({ statutHttp: r && r.statutHttp, corps: r && r.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux, ...ctxLD }); } catch (e) { journal('adaptateur', e); }
+        // MARQUEURS (I1 de la relecture) : le MÊME point de sortie que la route d'une carte (garde-marqueurs.js::appliquerMarqueurs, une seule fonction) ; un sûr avec un rival de groupe redevient la question du groupe, qui suit
+        // le chemin des autres questions du lot (réservée plus bas, `lot: true`). Le titre décrit plusieurs cartes : V2_JUMBO_TITRE n'y agit jamais. Éteint : jamais appelée.
+        if (a && (a.issue === 'affirmee' || a.issue === 'question')) {
+            try { const gm = appliquerMarqueurs({ cfg, titre: annonce.titre, resultat: a, c: corpsDe(r), produits, version: version0, langueInterface: entree.langueInterface, jumeaux, lot: true, journal }); if (gm && gm.resultat) a = gm.resultat; }
+            catch (e) { journal('marqueurs', e); }
+        }
         motifs[i] = a && typeof a.motif === 'string' ? a.motif : null;
         const c = a && a.issue !== 'panne' && a.analyse && Array.isArray(a.analyse.cartes) ? a.analyse.cartes[0] : null;
         if (!c) { pannes.push(a && a.erreur ? a.erreur.code : 'SERVEUR'); return { index: i, statut: 'introuvable', carte: null, candidats: [], question: null, raison: 'panne-lecture', etat: null, prixLive: null, zone: null }; }
