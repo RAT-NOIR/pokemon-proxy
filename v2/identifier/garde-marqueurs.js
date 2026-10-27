@@ -10,25 +10,32 @@ const MQ = require('./marqueurs');
 
 // ── Le titre : liste fermée, mot entier, insensible à la casse et aux accents.
 const TERMES_JUMBO = Object.freeze(['jumbo', 'oversize', 'oversized', 'xxl', 'géant', 'geant', 'géante', 'geante']);
-const NEGATIONS = Object.freeze(['pas', 'non', 'not', 'no', 'never', 'sans', 'without', 'ni', 'aucun', 'aucune', 'jamais']);       // + tout mot finissant par « n't » (isn't, aren't, doesn't…)
-const FENETRE_NEGATION = 3, FENETRE_APRES = 2;                                              // les 3 mots qui précèdent le terme ET les 2 qui le suivent
-const VERSION_NORMALE = Object.freeze(['normal', 'normale', 'standard', 'regular', 'classique', 'classic']);       // un titre qui cite la version normale (« taille normale », « normal size », « regular size » compris) ne tranche rien
-const estNegation = m => NEGS.has(m) || m.endsWith('n\'t');
+// TOUR 2 : la règle s'écrit par ce qu'elle AUTORISE — un titre « propre » : un terme de la liste fermée, court, sans ponctuation de choix, sans mot de liaison, de doute, de négation ni de version normale, N'IMPORTE OÙ.
+// Ces listes servent à REFUSER le doute, elles ne décident rien seules : tout titre qui sort de ce cadre se tait (la question reste).
+const NEGATIONS = Object.freeze(['pas', 'non', 'no', 'nope', 'nein', 'not', 'never', 'jamais', 'sans', 'without', 'aucun', 'aucune', 'false', 'faux', 'ni']);       // + tout mot en « n't » et les contractions sans apostrophe (CONTRACTIONS)
+const CONTRACTIONS = Object.freeze(['isnt', 'arent', 'dont', 'doesnt', 'wasnt', 'werent', 'cant', 'wont', 'aint']);
+const LIAISONS = Object.freeze(['ou', 'or', 'et', 'and', 'vs', 'versus', 'contre', 'nor', 'neither', 'either']);       // choix ou comparaison : le titre cite plusieurs versions
+const VERSION_NORMALE = Object.freeze(['normal', 'normale', 'standard', 'regular', 'classique', 'classic', 'ordinaire', 'ordinary', 'petite', 'petit', 'mini', 'small', 'taille', 'size']);       // la version normale ou sa taille citées
+const PONCTUATION_DE_CHOIX = /[?/|+&]/;
+const TITRE_MAX = 200;
+const estNegation = m => NEGS.has(m) || m.endsWith('n\'t') || CONTR.has(m);
 // Les mots d'un titre : l'apostrophe typographique devient droite ; un mot en « n't » est gardé entier (c'est une négation), toute autre apostrophe sépare (« l'oversize » → l, oversize).
 const motsDe = t => (sansAccent(t).replace(/[’‘`]/g, '\'').match(/[a-z0-9]+(?:'[a-z0-9]+)*/g) || []).flatMap(m => (m.endsWith('n\'t') ? [m] : m.split('\'')));
 const sansAccent = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const TERMES = new Set(TERMES_JUMBO.map(sansAccent)), NEGS = new Set(NEGATIONS.map(sansAccent));
-const NORMALES = new Set(VERSION_NORMALE);
+const NORMALES = new Set(VERSION_NORMALE), CONTR = new Set(CONTRACTIONS), LIENS = new Set(LIAISONS);
 /** @returns { oui: boolean, terme?: string, motif: string } — oui SEULEMENT si un terme est présent et que NI sa fenêtre NI le titre ne nie ; le motif dit le silence. */
 function lireTitreJumbo(titre) {
     if (typeof titre !== 'string' || !titre.trim()) return { oui: false, motif: 'pas de titre' };
+    if (titre.length > TITRE_MAX) return { oui: false, motif: 'titre trop long' };
     const t = motsDe(titre), trouves = [];
     t.forEach((m, i) => { if (TERMES.has(m)) trouves.push(i); });
     if (!trouves.length) return { oui: false, motif: 'aucun terme' };
-    if (t.some(m => NORMALES.has(m))) return { oui: false, motif: 'version normale citée' };           // le titre compare ou cite les deux versions
-    // écrit par ce qu'il AUTORISE : AUCUNE négation dans les 3 mots avant NI les 2 mots après, pour CHAQUE occurrence (une seule occurrence niée, ou citée avec un autre contexte, suffit à se taire)
-    for (const i of trouves) if ([...t.slice(Math.max(0, i - FENETRE_NEGATION), i), ...t.slice(i + 1, i + 1 + FENETRE_APRES)].some(estNegation)) return { oui: false, motif: 'négation', terme: t[i] };
-    return { oui: true, terme: t[trouves[0]], motif: 'terme sans négation' };
+    if (PONCTUATION_DE_CHOIX.test(titre)) return { oui: false, motif: 'ponctuation de choix' };
+    if (t.some(estNegation)) return { oui: false, motif: 'négation', terme: t[trouves[0]] };                     // n'importe où : plus de fenêtre
+    if (t.some(m => LIENS.has(m))) return { oui: false, motif: 'liaison ou comparaison' };
+    if (t.some(m => NORMALES.has(m))) return { oui: false, motif: 'version normale citée' };
+    return { oui: true, terme: t[trouves[0]], motif: 'terme sans doute' };
 }
 /** Le critère journalisé de l'affirmation par le titre : il COMMENCE par CRITERE_JUMBO (la garde des marqueurs le reconnaît). */
 const CRITERE_JUMBO = 'jumbo (titre)';
@@ -151,7 +158,12 @@ function consulterMarqueurs({ cfg, titre, resultat, derniereQuestion = null, cor
             if (g) { trace = { ...(trace || {}), garde: g.trace }; if (g.resultat) { courant = g.resultat; remplace = true; } }
         } catch (e) {
             journal('garde des marqueurs', e);
-            if (derniereQuestion && derniereQuestion.issue === 'question') { trace = { ...(trace || {}), garde: { regle: 'garde-marqueurs', issue: 'en-erreur', retour: 'question-d-avant' } }; courant = derniereQuestion; remplace = true; }
+            // TOUR 2 : une garde en erreur rend la question du GROUPE (le produit et les produits connus de même dessin, sans lire un seul marqueur), jamais la question d'avant non contrôlée ; sans groupe, la réponse reste
+            try {
+                const c = carteDe(courant), p = c && c.carte ? c.carte.idProduct : null;
+                const groupe = Number.isInteger(p) && produits instanceof Map ? [...produits.keys()].filter(id => id !== p && memeDessin(version, p, id, { avecEmprunt: true })) : [];
+                if (groupe.length && typeof questionDeGroupe === 'function') { courant = questionDeGroupe([p, ...groupe]); trace = { ...(trace || {}), garde: { regle: 'garde-marqueurs', issue: 'en-erreur', retour: 'question-du-groupe', produit: p, rivaux: groupe } }; remplace = true; }
+            } catch (e2) { journal('garde des marqueurs (repli)', e2); }
         }
     }
     return trace || remplace ? { ...(remplace ? { resultat: courant } : {}), trace } : null;
@@ -171,4 +183,4 @@ function appliquerMarqueurs({ cfg, titre, resultat, derniereQuestion = null, c, 
         questionDeGroupe: ids => questionDeGroupe(c, ids, { ...pctx, produits, jumeaux }), journal });
 }
 
-module.exports = { consulterMarqueurs, appliquerMarqueurs, lireTitreJumbo, memeDessin, ecartMarqueurs, signalReel, critereJumbo, CRITERE_JUMBO, TERMES_JUMBO, NEGATIONS, VERSION_NORMALE, FENETRE_NEGATION, FENETRE_APRES };
+module.exports = { consulterMarqueurs, appliquerMarqueurs, lireTitreJumbo, memeDessin, ecartMarqueurs, signalReel, critereJumbo, CRITERE_JUMBO, TERMES_JUMBO, NEGATIONS, CONTRACTIONS, LIAISONS, VERSION_NORMALE, TITRE_MAX };
