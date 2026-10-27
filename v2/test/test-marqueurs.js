@@ -93,6 +93,15 @@ H.v('5g. des écrits qui ne sont pas une liste (objet, chaîne) sont ignorés', 
 H.v('5h. plus de 4 éléments après fusion : null et `trop` = 1', f(derWcd, [{ type: 'SHADOWLESS' }, { type: 'ORIGINS' }, { type: 'POKEMON_CENTER' }]), [null, 0, 0, 0, 1]);
 H.v('5i. marqueursDe = le tableau fusionné seul', [MQ.marqueursDe({ set: { slug: 'WCD-2018' } }, [{ type: 'SHADOWLESS' }]).length, MQ.marqueursDe({}, undefined)], [3, null]);
 
+// ── 5 bis. Un set WCD reconnu SUR UNE ENTRÉE (la seule exception de la validation d'entrée, CONTRAT-MARQUEURS §6)
+{
+    const L = 'https://www.cardmarket.com/fr/Pokemon/Products/Singles/';
+    H.v('5j. anneeDuSetWcd : WCD-<aaaa> de 1996 à 2099 seulement', ['WCD-2018', 'WCD-1996', 'WCD-2099', 'WCD-1995', 'WCD-2100', 'WCD-20188', 'WCD-', 'wcd-2018', 'XWCD-2018', null, 5].map(MQ.anneeDuSetWcd), [2018, 1996, 2099, null, null, null, null, null, null, null, null]);
+    H.v('5k. setWcdDeLEntree : par le lien Cardmarket (slugSet) OU par le nom affiché « WCD <aaaa> » ; rien d\'autre',
+        [{ lien: L + 'WCD-2018/Pikachu-V1' }, { setNom: 'WCD 2018' }, { lien: L + 'Set-A/X', setNom: 'WCD 2018' }, { lien: L + 'Set-A/X', setNom: 'Set A' }, { setNom: 'WCD 1995' }, { setNom: 'WCD 20188' }, { setNom: 'wcd 2018' }, { setNom: ' WCD 2018' }, { setNom: 'World Championship Decks 2018' }, { lien: L + 'WCD-2018' }, { lien: 'WCD-2018' }, {}, null, 'WCD 2018'].map(MQ.setWcdDeLEntree),
+        [true, true, true, false, false, false, false, false, false, false, false, false, false, false]);
+}
+
 // ── 6. LA LECTURE de ce que le catalogue écrit (cartes_produits.marqueurs, marqueursPreuve) par le chargeur
 {
     const { PROJECTIONS, compacterLigne, interneur } = require('../chargeur/source');

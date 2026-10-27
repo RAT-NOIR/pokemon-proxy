@@ -121,7 +121,7 @@ function creerChargeur(opts = {}) {
             if (comptes.repliRefuse) repli.push(`sans image d'un autre tirage ${comptes.repliRefuse.total} (${Object.entries(comptes.repliRefuse.parFamille).filter(([, n]) => n).map(([k, n]) => `${k} ${n}`).join(', ') || 'aucune'})`);
             if (comptes.exclus !== undefined) repli.push(`exclus de l'identification ${comptes.exclus} (${Object.entries(comptes.exclusParMotif || {}).map(([k, n]) => `${k} ${n}`).join(', ')}) · partages perdus ${comptes.partagesPerdus}`);
             if (Array.isArray(comptes.familleHorsListe) && comptes.familleHorsListe.length) repli.push(`FAMILLES HORS LISTE FERMÉE ${comptes.familleHorsListe.join(', ')}`);
-            for (const [k, nom] of [['basseDefinitionExclue', 'basse définition exclue'], ['partageIncoherent', 'partage incohérent écarté'], ['varianteSansPreuve', 'variante sans preuve'], ['varianteHorsListe', 'variante hors liste']]) if (comptes[k]) repli.push(`${nom} ${comptes[k]}`);
+            for (const [k, nom] of [['basseDefinitionExclue', 'basse définition exclue'], ['partageIncoherent', 'partage incohérent écarté'], ['varianteSansPreuve', 'variante sans preuve'], ['varianteHorsListe', 'variante hors liste'], ['wcdSansSetReconnu', 'emprunt WCD sans set reconnu écarté']]) if (comptes[k]) repli.push(`${nom} ${comptes[k]}`);
             if (repli.length) journal(`ℹ️ [v2 chargeur] repli : ${repli.join(' · ')}`);
             // les critères d'ÉCHEC : écrits par ce qu'ils protègent (jamais une version vide ni amputée)
             if (!v || comptes.visuels === 0) throw new Echec(`0 visuel sur une base non vide — ${dit}`);

@@ -45,6 +45,7 @@ const NOMS_REFUS = Object.freeze([...Object.keys(FAMILLES_SANS_REPLI), 'staff-pr
 // LOT TAMPONS : la variante d'une ligne est un jeton de la liste FERMÉE du catalogue (identifier/marques-tampon.js : une marque, un ensemble de marques joint par « + », jumbo, normale), avec sa
 // `variantePreuve`. La forme ancienne `staff-prerelease` se lit `staff+prerelease`. Une valeur hors de la liste est null ET comptée (varianteHorsListe) : jamais devinée, jamais perdue en silence.
 const MT = require('../identifier/marques-tampon');
+const MQ = require('../identifier/marqueurs');             // MARQUEURS : la reconnaissance d'un set WCD sur une entrée (une seule définition, partagée avec la validation d'entrée)
 // basseDefinition (original sous 350 px) : le coordinateur MESURE puis tranche. false = les entrées sont GARDÉES (et portent le champ) ; true = une entrée basseDefinition n'est pas servie à l'identification
 // (compteur d.basseDefinitionExclue). Le site, lui, continue d'afficher ces images ; le choix ne concerne que l'archive.
 const EXCLURE_BASSE_DEFINITION = false;
@@ -75,11 +76,11 @@ function refusDeRepli({ ligne, set, im, visuel }) {
 //       et seulement s'il est seul à cette position et le produit seul à la porter. Dans le même geste, un scan de position choisi pour un AUTRE produit (choisirVisuel donne le seul visuel du set
 //       à tout produit sans numéro) est retiré : compté `positionContredite`.
 //   (B) WCD : l'emprunt du catalogue (source « emprunt », imageEmprunteeTirage, differenceEmprunt « autre-tirage », lot des origines prouvées par deux sources) au numéro de la fiche est servi
-//       pour l'AFFICHAGE, en « autre-tirage » avec sa mention : estEmprunt le marque, les règles d'image ne le lisent pas (identifier/emprunt.js).
+//       pour l'AFFICHAGE, en « autre-tirage » : estEmprunt le marque, les règles d'image ne le lisent pas (identifier/emprunt.js). MARQUEURS (CONTRAT-MARQUEURS.md §6, décision de l'éditeur du 27/10) : SANS mention —
+//       le produit s'affiche avec ses marqueurs WCD et NON_LEGAL (dérivés du set) ; la classe EMPRUNTÉ reste interne. La validation d'entrée n'admet l'absence de mention que pour un set WCD reconnu sur l'entrée.
 const ANNEE_BA = /^Battle-Academy-20(\d{2})$/;
 const POSITION_BA = /-BA(\d{2})([A-Z]{1,3}\d{0,3})$/;
 const POSITION_LUE = /^[A-Z]{1,3}\d{0,3}$/;
-const MENTION_WCD = 'Visuel de la même carte dans un autre tirage (carte d\'origine du deck) — pas le scan de ce produit';
 /** La position du deck nommée par le slug, si l'année du slug est celle du set Battle Academy ; sinon null. */
 function positionDuSlug(slug, setId) {
     const a = ANNEE_BA.exec(String(setId ?? '')), m = POSITION_BA.exec(String(slug ?? ''));
@@ -104,7 +105,7 @@ function admissionDuCatalogue({ ligne, set, carte, regle, positions }) {
         const c = images.filter(m => m.source === 'emprunt' && m.imageEmprunteeTirage === true && m.differenceEmprunt === 'autre-tirage' && regle.visuelAdmisPourLaRegion(m, tir)
             && (voulu === null ? m.numero == null : m.numero != null && regle.normaliserNumero(m.numero) === voulu));
         const seule = voulu === null ? images.length === 1 : true;
-        return c.length === 1 && seule ? { im: c[0], visuel: 'autre-tirage', mention: MENTION_WCD, nature: 'wcd-emprunt' } : null;
+        return c.length === 1 && seule ? { im: c[0], visuel: 'autre-tirage', mention: null, nature: 'wcd-emprunt' } : null;
     }
     return null;
 }
@@ -236,7 +237,9 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         // MARQUE-EMPRUNT : les produits distincts dont l'entrée écrite porte un visuel emprunté (sommes par nature : les lignes d'un même produit ne comptent qu'une fois)
         emprunts: 0, empruntsParNature: { 'autre-tirage': 0, substitut: 0 },
         // ADMISSION-CATALOGUE : les entrées admises par la règle fermée (à part du repli refusé), et les scans de position retirés d'un autre produit (somme : avecLigne compte aussi positionContredite)
-        admisCatalogue: { 'prv-position': 0, 'wcd-emprunt': 0 }, positionContredite: 0 };
+        admisCatalogue: { 'prv-position': 0, 'wcd-emprunt': 0 }, positionContredite: 0,
+        // MARQUEURS : un emprunt WCD admis par la règle dont le set n'est pas reconnu SUR L'ENTRÉE (lien Cardmarket ou nom « WCD <année> ») : pas d'entrée (la validation d'entrée la refuserait sans mention) — somme : avecLigne le compte aussi
+        wcdSansSetReconnu: 0 };
     const empruntes = new Set();
     const positions = new Map();
     for (const l of lignes) { const p = positionDuSlug(l.slug, l.slugSet); if (p) { const k = `${l.carteId}|${l.slugSet}|${p}`; positions.set(k, (positions.get(k) || 0) + 1); } }
@@ -287,6 +290,10 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         if (!im) { d.aucun++; d.aucunDetail['aucun visuel']++; continue; }
         if (refus) { d.repliRefuse.total++; d.repliRefuse.parFamille[refus]++; continue; }
         if (exclureBasseDefinition === true && im.basseDefinition === true) { d.basseDefinitionExclue++; continue; }
+        // MARQUEURS : l'emprunt WCD n'a pas de mention ; la validation d'entrée ne l'admet que si l'ENTRÉE dit son set (lien Cardmarket ou nom affiché). Une entrée qu'elle refuserait ferait lever la colonne des emprunts : écartée ici, comptée.
+        const numero = l.numeroFiche == null ? null : String(l.numeroFiche);
+        const lienE = entier(l.idProduct) ? lienServi(regle.cardmarketUrl({ slug: l.slug, slugSet: l.slugSet }), numero) : null;
+        if (admise === 'wcd-emprunt' && !MQ.setWcdDeLEntree({ lien: lienE, setNom: texte(s.nomAffichage) })) { d.wcdSansSetReconnu++; continue; }
         // m2 (relecture r1) : une image marquée partagée dont le produit n'est PAS dans sa liste (ou dont la liste n'a pas de marquage) n'est pas servie à l'identification : fermé par défaut, compté
         if (partageIncoherent(im, l.idProduct, varianteProuvee(l))) { d.partageIncoherent++; if (varianteHorsListe(l)) d.varianteHorsListe++; continue; }
         if (visuel === 'du-set') d.duSet++; else if (visuel === 'substitut') d.substitut++; else d.autreTirage++;
@@ -299,12 +306,11 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         const distincts = champ => new Set(au.map(i => texte(i[champ])).filter(Boolean)).size;
         const rarete = valeur('rarete'), total = valeur('total');
         if (distincts('rarete') > 1 || distincts('total') > 1) d.rareteContredite++;
-        const numero = l.numeroFiche == null ? null : String(l.numeroFiche);
         const idMetacard = entier(metacarte.get(l.idProduct)) ? metacarte.get(l.idProduct) : null;
         if (idMetacard === null) d.idMetacardAbsent++;
         const e = { idProduct: l.idProduct, visuel, mention, idMetacard, numero, rarete, total, variante: varianteAvecPreuve(l, d), setNom: texte(s.nomAffichage),
             // LIEN-CARDMARKET : numéro connu + slug et slugSet (cardmarketUrl les exige) + la MÊME garde que la relecture ; la rareté n'est plus exigée
-            lien: entier(l.idProduct) ? lienServi(regle.cardmarketUrl({ slug: l.slug, slugSet: l.slugSet }), numero) : null,
+            lien: lienE,
             grande: entier(im.w) && entier(im.h) ? fichierDe(im.cleR2, im.w, im.h) : null };
         Object.assign(e, marquagesDe(im, l.idProduct, e.variante));
         const vs = im.vignette ?? vignetteDuFichier.get(im.cleR2);

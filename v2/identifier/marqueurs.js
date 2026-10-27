@@ -7,7 +7,9 @@
 const MT = require('./marques-tampon');
 const { couplePourLien } = require('./lien-cardmarket');
 
-const LIBELLE_MAX = 40;                                                                  // §2 : libelle.fr et libelle.en, 40 caractères au plus
+/** Le slugSet d'une impression ou d'une entrée, lu sur son lien Cardmarket (la seule trace du set qu'elle porte), ou null. */
+const slugSetDuLien = lien => { const c = couplePourLien(lien); return c ? c.slugSet : null; };
+const LIBELLE_MAX = 40;                                                                 // §2 : libelle.fr et libelle.en, 40 caractères au plus
 const MARQUEURS_MAX = 4;                                                                 // §2 : 0 à 4 éléments
 const ANNEE_MIN = 1996, ANNEE_MAX = 2099;
 const JOUEUR_MAX = 24;
@@ -120,11 +122,26 @@ const TYPE_DE_MARQUE = Object.freeze({ staff: 'STAFF', prerelease: 'PRERELEASE',
     for (const t of Object.values(TYPE_DE_MARQUE)) if (!PAR_TYPE.has(t)) throw new Error(`marqueurs.js : type de marque hors table ${t}`);
 }
 const ANNEE_SLUG = /^(\d{4})$/;
+/** L'année d'un slugSet `WCD-<aaaa>` (1996 à 2099), ou null : le seul endroit où cette forme est lue (marqueursDuSet, setWcdDeLEntree). */
+function anneeDuSetWcd(slugSet) {
+    const m = typeof slugSet === 'string' ? /^WCD-(\d{4})$/.exec(slugSet) : null;
+    return m && FORMES_PARAMS.annee(Number(m[1])) ? Number(m[1]) : null;
+}
+/**
+ * Une entrée d'archive (validation d'entrée, visuels.js::lireEntree) est-elle celle d'un produit d'un set `WCD-<aaaa>` ? Deux preuves portées par l'ENTRÉE elle-même (c'est tout ce que la validation relit, y compris à
+ * l'archive chargée) : le slugSet du lien Cardmarket, ou le nom affiché « WCD <aaaa> ». Rien d'autre (un nom approchant, une année hors plage, un set inconnu : faux).
+ */
+function setWcdDeLEntree(e) {
+    const o = e && typeof e === 'object' ? e : {};
+    if (anneeDuSetWcd(slugSetDuLien(o.lien)) !== null) return true;
+    const m = typeof o.setNom === 'string' ? /^WCD (\d{4})$/.exec(o.setNom) : null;
+    return m !== null && anneeDuSetWcd(`WCD-${m[1]}`) !== null;
+}
 /** Les marqueurs que le SET porte à tous ses produits (§3, familles de set) : [{ type, params }], ou []. Le slug est celui de `slugSet` ; rien d'autre n'est lu. */
 function marqueursDuSet(slugSet) {
     if (typeof slugSet !== 'string') return [];
     let m;
-    if ((m = /^WCD-(\d{4})$/.exec(slugSet)) && FORMES_PARAMS.annee(Number(m[1]))) return [{ type: 'WCD', params: { annee: Number(m[1]) } }, { type: 'NON_LEGAL', params: {} }];
+    if (anneeDuSetWcd(slugSet) !== null) return [{ type: 'WCD', params: { annee: anneeDuSetWcd(slugSet) } }, { type: 'NON_LEGAL', params: {} }];
     if (/^Play-Pokemon-Prize-Pack-Series-[A-Za-z]+$/.test(slugSet)) return [{ type: 'PLAY_POKEMON', params: {} }];
     if (slugSet === 'Trick-or-Trade' || ((m = /^Trick-or-Trade-(\d{4})$/.exec(slugSet)) && ANNEE_SLUG.test(m[1]))) return [{ type: 'TRICK_OR_TRADE', params: {} }];
     if ((m = /^Battle-Academy-(\d{4})$/.exec(slugSet)) && ANNEE_SLUG.test(m[1])) return [{ type: 'BATTLE_ACADEMY', params: {} }];
@@ -175,8 +192,6 @@ function deriver(produit) {
     return sortie.length <= MARQUEURS_MAX ? Object.freeze(sortie) : null;
 }
 
-/** Le slugSet d'une impression, lu sur son lien Cardmarket (la seule trace du set qu'elle porte), ou null. */
-const slugSetDuLien = lien => { const c = couplePourLien(lien); return c ? c.slugSet : null; };
 
 /**
  * §4.2 et 4.4 : le dérivé l'emporte sur un écrit du même type qui le contredit. @param derives le retour de deriver() (tableau ou null) ; @param ecrits la liste écrite par le catalogue (ou autre chose : ignorée).
@@ -209,4 +224,4 @@ function fusionner(derives, ecrits) {
 /** Raccourci pour le produit servi : le tableau fusionné seul (les comptes se lisent par fusionner). */
 const marqueursDe = (produit, ecrits) => fusionner(deriver(produit), ecrits).marqueurs;
 
-module.exports = { TYPES, NOMS_TYPES, LIBELLE_MAX, MARQUEURS_MAX, WCD_GABARITS, TYPE_DE_MARQUE, FORMES_PARAMS, valider, rendre, deriver, fusionner, marqueursDe, marqueursDuSet, slugSetDuLien };
+module.exports = { TYPES, NOMS_TYPES, LIBELLE_MAX, MARQUEURS_MAX, WCD_GABARITS, TYPE_DE_MARQUE, FORMES_PARAMS, valider, rendre, deriver, fusionner, marqueursDe, marqueursDuSet, slugSetDuLien, anneeDuSetWcd, setWcdDeLEntree };
