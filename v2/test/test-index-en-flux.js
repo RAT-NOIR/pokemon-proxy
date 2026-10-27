@@ -97,6 +97,14 @@ const lecteur = () => visuelBanc;
         const bilanP = await taire(() => cat3.prechauffer({ delaiMs: 5000 }));
         H.v('préchauffage : le code × numéro est refusé (sous le plancher, la base de banc), les familles construites — et rien ne lève', bilanP, { codeNumero: false, familles: true });
         H.v('…après le préchauffage, l\'index des familles est PRÊT au premier appel sans attente', cat3.indexFamillesSansAttente() !== null, true);
+        // le drapeau V2_INDEX_AU_DEMARRAGE : éteint par défaut, lecture stricte (« 1 » seulement)
+        const cat4 = creerCatalogue({ cfg, visuels: { instantane: () => ({ entree: () => null, tirage: () => null }) } });
+        delete process.env.V2_INDEX_AU_DEMARRAGE;
+        H.v('V2_INDEX_AU_DEMARRAGE absent : rien n\'est construit (null)', await cat4.prechaufferSiDemande(), null);
+        for (const v of ['0', 'true', '2', '']) { process.env.V2_INDEX_AU_DEMARRAGE = v; H.v(`V2_INDEX_AU_DEMARRAGE="${v}" : rien n'est construit`, await cat4.prechaufferSiDemande(), null); }
+        process.env.V2_INDEX_AU_DEMARRAGE = '1';
+        H.v('V2_INDEX_AU_DEMARRAGE="1" : construit (les familles ; le code × numéro est refusé sous le plancher de la base de banc)', await taire(() => cat4.prechaufferSiDemande({ delaiMs: 5000 })), { codeNumero: false, familles: true });
+        delete process.env.V2_INDEX_AU_DEMARRAGE;
     } finally { db.col = col; }
     await H.fermerBac(); H.bilan();
 })().catch(async e => { console.error('❌', e); try { await H.fermerBac(); } catch { } process.exit(1); });

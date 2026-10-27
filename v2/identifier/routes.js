@@ -422,7 +422,7 @@ function traiterIdentifier(cfg, deps = {}) {
     const catalogue = deps.catalogue || creerCatalogue({ cfg });
     // PERF-SCAN P2 : V2_INDEX_AU_DEMARRAGE=1 construit les index du catalogue (code × numéro, familles) dès la connexion à la base, avant le trafic, au lieu de pendant les premiers scans. Éteint par défaut : la route est celle d'avant.
     // ⚠️ Allumé, R4 et la désignation sont OUVERTES dès le premier scan (avant : fermées tant que l'index se construisait en arrière-plan) — c'est l'état de régime, pas un changement de règle.
-    if (!deps.catalogue && process.env.V2_INDEX_AU_DEMARRAGE === '1' && typeof catalogue.prechauffer === 'function') catalogue.prechauffer().catch(() => { });
+    if (!deps.catalogue && typeof catalogue.prechaufferSiDemande === 'function') catalogue.prechaufferSiDemande().catch(() => { });
     // MODELE-VISUEL-API : le fournisseur du vecteur de l'extension — celui du banc (deps.voisinsEmpreinte) ou celui de la production (index en place ; les PIXELS sont la carte redressée jointe par l'extension, les scans
     // viennent de NOTRE bucket public de visuels ou de deps.scanEmpreinte en banc). Le serveur ne télécharge jamais la photo.
     const fournisseurEmpreinte = cfg.empreinteExtension === true

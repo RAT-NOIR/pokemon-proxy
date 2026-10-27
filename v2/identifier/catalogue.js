@@ -108,6 +108,9 @@ function creerCatalogue(opts = {}) {
         return r;
     }
 
+    /** Le préchauffage SEULEMENT si V2_INDEX_AU_DEMARRAGE vaut exactement « 1 » (éteint par défaut : la route est celle d'avant). null si éteint. Lecture stricte, une valeur inconnue n'allume rien. */
+    function prechaufferSiDemande() { return process.env.V2_INDEX_AU_DEMARRAGE === '1' ? prechauffer() : Promise.resolve(null); }
+
     /** @returns Promise<Map<idProduct, ProduitSource>> — les produits introuvables ou innommables sont ABSENTS de la table. */
     async function lire(idProducts) {
         const ids = [...new Set((Array.isArray(idProducts) ? idProducts : []).filter(Number.isInteger))];
@@ -176,6 +179,6 @@ function creerCatalogue(opts = {}) {
                 return Object.freeze(d ? { ...i, version: versionDe(d.variante), prixMelangeTampon: d.prixMelangeTampon === true || i.prixMelangeTampon === true, nonLu: false } : { ...i, version: null, prixMelangeTampon: i.prixMelangeTampon === true, nonLu: true });
             });
     }
-    return { lire, plusRecentDansMetacarte, indexCodeNumero, indexSansAttente, indexFamilles, indexFamillesSansAttente, prechauffer };
+    return { lire, plusRecentDansMetacarte, indexCodeNumero, indexSansAttente, indexFamilles, indexFamillesSansAttente, prechauffer, prechaufferSiDemande };
 }
 module.exports = { creerCatalogue, COLLECTIONS_LUES, colLue, IMPRESSIONS_MAX_TIME_MS, IMPRESSIONS_DELAI_MS };
