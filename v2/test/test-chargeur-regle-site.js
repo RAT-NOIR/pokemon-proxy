@@ -9,8 +9,8 @@ const sha = b => crypto.createHash('sha256').update(b).digest('hex');
 (async () => {
     const dossier = C.DOSSIER;
     const emp = JSON.parse(fs.readFileSync(path.join(dossier, 'empreintes.json'), 'utf8'));
-    H.v('les huit sources du site sont empreintées', Object.keys(emp.sources).sort(), ['cardmarket.ts', 'expressionsSures.ts', 'imageDeLImpression.ts', 'impressionDuSet.ts', 'impressionsDuSet.ts', 'langueDuVisuel.ts', 'visuels-anglais-regardes.json', 'visuels-japonais-sur-sets-intl.json']);
-    H.v('le commit NOMMÉ est écrit dans les empreintes (4d1344d, forme complète de 40 caractères)', [/^4d1344d[0-9a-f]{33}$/.test(emp.commit || ''), C.COMMIT], [true, '4d1344d']);
+    H.v('les dix sources du site sont empreintées', Object.keys(emp.sources).sort(), ['annexes.json', 'annexes.ts', 'cardmarket.ts', 'expressionsSures.ts', 'imageDeLImpression.ts', 'impressionDuSet.ts', 'impressionsDuSet.ts', 'langueDuVisuel.ts', 'visuels-anglais-regardes.json', 'visuels-japonais-sur-sets-intl.json']);
+    H.v('le commit NOMMÉ est écrit dans les empreintes (29d2c0f, forme complète de 40 caractères)', [/^29d2c0f[0-9a-f]{33}$/.test(emp.commit || ''), C.COMMIT], [true, '29d2c0f']);
     // la copie n'a pas été retouchée à la main : chaque fichier produit porte l'empreinte écrite
     for (const [nom, h] of Object.entries(emp.produits)) H.v(`   ${nom} : empreinte de la copie conforme au fichier`, sha(fs.readFileSync(path.join(dossier, nom))), h);
     H.v('   aucune copie ne cite encore un fichier .ts (imports réécrits en .mjs)', Object.keys(emp.produits).filter(n => n.endsWith('.mjs')).filter(n => /from\s+["'][^"']+\.ts["']/.test(fs.readFileSync(path.join(dossier, n), 'utf8'))), []);
@@ -87,9 +87,10 @@ const sha = b => crypto.createHash('sha256').update(b).digest('hex');
         const m = leve1(() => C.produire(pin, SANS_EXPR));
         H.vrai('garde : le site au commit nommé sans expressionsSures.ts dans la liste → produire() LÈVE en nommant le fichier manquant et l\'importeur', m && /expressionsSures/.test(m) && /impressionsDuSet/.test(m));
         const m2 = leve1(() => C.produire(pin, SANS_IMP));
-        H.vrai('garde : sans impressionDuSet.ts dans la liste → produire() LÈVE (la copie importerait ./impressionDuSet.mjs, absent), nomme le fichier et l\'importeur', m2 && /impressionDuSet\.ts/.test(m2) && /impressionsDuSet/.test(m2));
-        H.v('   la liste réelle (huit sources) produit sans lever', leve1(() => C.produire(pin)), null);
-        H.v('   la copie produite importe ./impressionDuSet.mjs ET ce fichier est livré', [/from "\.\/impressionDuSet\.mjs"/.test(C.produire(pin).fichiers['impressionsDuSet.mjs'].toString('utf8')), 'impressionDuSet.mjs' in C.produire(pin).fichiers], [true, true]);
+        // depuis 29d2c0f, c'est annexes.ts qui importe impressionDuSet.ts (impressionsDuSet.ts passe par annexes.ts)
+        H.vrai('garde : sans impressionDuSet.ts dans la liste → produire() LÈVE (la copie importerait ./impressionDuSet.mjs, absent), nomme le fichier et l\'importeur', m2 && /impressionDuSet\.ts/.test(m2) && /annexes/.test(m2));
+        H.v('   la liste réelle (dix sources) produit sans lever', leve1(() => C.produire(pin)), null);
+        H.v('   la copie produite importe ./impressionDuSet.mjs ET ce fichier est livré', [/from "\.\/impressionDuSet\.mjs"/.test(C.produire(pin).fichiers['annexes.mjs'].toString('utf8')), 'impressionDuSet.mjs' in C.produire(pin).fichiers], [true, true]);
     }
     const L = ['a.ts', 'c.json'];
     H.v('garde : import relatif d\'un fichier de la liste (.ts) : accepté', leve1(() => C.fermeture('a.ts', 'import { x } from "./a.ts";', L)), null);

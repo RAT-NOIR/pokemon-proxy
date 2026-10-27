@@ -10,12 +10,13 @@ const fs = require('fs'); const path = require('path'); const crypto = require('
 const DOSSIER = path.join(__dirname, 'regle-site');
 const SITE_LIB = path.join(__dirname, '..', '..', '..', 'rat-market-site', 'lib');
 const REPO_SITE = path.dirname(SITE_LIB);
-// LE COMMIT NOMMÉ du site dont la copie est tirée (RESYNC-REGLE-SITE : le dernier commit du site qui touche l'une des huit sources, cardmarket.ts ; avant lui 35ed580, lot 2-A, le filtre par deck). Les sources se lisent par `git show <commit>:lib/<fichier>` (octets du commit, jamais ceux de l'arbre de travail, que les fins de ligne du poste changent).
+// LE COMMIT NOMMÉ du site dont la copie est tirée (RESYNC-REGLE-SITE-27 : 29d2c0f, relecture du lot 1 du site, après af48557, règles a-d de la nuit du 27/10 — `editionLocale` en liste fermée dans
+// langueDuVisuel.ts, Yellow A par annexes.ts/annexes.json importés par impressionsDuSet.ts ; avant eux 4d1344d, cardmarket.ts, puis 35ed580, lot 2-A, le filtre par deck). Les sources se lisent par `git show <commit>:lib/<fichier>` (octets du commit, jamais ceux de l'arbre de travail, que les fins de ligne du poste changent).
 // Le changer est un geste volontaire : on relance l'outil, on relit le diff des .mjs, et empreintes.json porte le commit (forme complète).
-const COMMIT = '4d1344d';
+const COMMIT = '29d2c0f';
 // la fermeture TRANSITIVE des imports des modules dont la décision a besoin (fichesDuDocument/setParImpression/impressionDuSet, produitsDeLaFiche/cardmarketUrl, visuelAdmisPourLaRegion, normaliserNumero)
-const TS = Object.freeze(['imageDeLImpression.ts', 'impressionDuSet.ts', 'impressionsDuSet.ts', 'cardmarket.ts', 'langueDuVisuel.ts', 'expressionsSures.ts']);
-const JSONS = Object.freeze(['visuels-japonais-sur-sets-intl.json', 'visuels-anglais-regardes.json']);
+const TS = Object.freeze(['imageDeLImpression.ts', 'impressionDuSet.ts', 'impressionsDuSet.ts', 'cardmarket.ts', 'langueDuVisuel.ts', 'expressionsSures.ts', 'annexes.ts']);
+const JSONS = Object.freeze(['visuels-japonais-sur-sets-intl.json', 'visuels-anglais-regardes.json', 'annexes.json']);
 const SOURCES = Object.freeze([...TS, ...JSONS]);
 const sha = b => crypto.createHash('sha256').update(b).digest('hex');
 const sortie = nom => nom.replace(/\.ts$/, '.mjs');

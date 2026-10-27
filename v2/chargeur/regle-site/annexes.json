@@ -1,0 +1,642 @@
+{
+  "genereLe": "2026-10-26",
+  "expansions": [
+    "Yellow A Alternate cards"
+  ],
+  "entrees": [
+    {
+      "carteId": 87404,
+      "nom": "Pokégear 3.0",
+      "numero": "182a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Unbroken Bonds"
+    },
+    {
+      "carteId": 87404,
+      "nom": "Pokégear 3.0",
+      "numero": "182b",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Unbroken Bonds"
+    },
+    {
+      "carteId": 87405,
+      "nom": "Pokémon Communication",
+      "numero": "152a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Team Up"
+    },
+    {
+      "carteId": 87405,
+      "nom": "Pokémon Communication",
+      "numero": "152b",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Team Up"
+    },
+    {
+      "carteId": 120929,
+      "nom": "Max Potion",
+      "numero": "128a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Guardians Rising"
+    },
+    {
+      "carteId": 148517,
+      "nom": "Ultra Ball",
+      "numero": "68a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Shining Legends"
+    },
+    {
+      "carteId": 152570,
+      "nom": "Enhanced Hammer",
+      "numero": "124a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Guardians Rising"
+    },
+    {
+      "carteId": 184448,
+      "nom": "Yveltal-EX",
+      "numero": "XY150a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "XY Black Star Promos"
+    },
+    {
+      "carteId": 187684,
+      "nom": "Professor's Letter",
+      "numero": "146a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "BREAKthrough"
+    },
+    {
+      "carteId": 200781,
+      "nom": "Acro Bike",
+      "numero": "123a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Celestial Storm"
+    },
+    {
+      "carteId": 203164,
+      "nom": "Trainers' Mail",
+      "numero": "92a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Roaring Skies"
+    },
+    {
+      "carteId": 204351,
+      "nom": "Jirachi",
+      "numero": "XY67a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "XY Black Star Promos"
+    },
+    {
+      "carteId": 214539,
+      "nom": "Karen",
+      "numero": "XY177a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "XY Black Star Promos"
+    },
+    {
+      "carteId": 219297,
+      "nom": "Eevee",
+      "numero": "101a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Sun & Moon"
+    },
+    {
+      "carteId": 219487,
+      "nom": "Lillie",
+      "numero": "125a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Ultra Prism"
+    },
+    {
+      "carteId": 219810,
+      "nom": "Sylveon-GX",
+      "numero": "92a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Guardians Rising"
+    },
+    {
+      "carteId": 220756,
+      "nom": "Choice Band",
+      "numero": "121a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Guardians Rising"
+    },
+    {
+      "carteId": 221222,
+      "nom": "Tapu Koko",
+      "numero": "SM30a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "SM Black Star Promos"
+    },
+    {
+      "carteId": 221302,
+      "nom": "Alolan Sandshrew",
+      "numero": "19a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Guardians Rising"
+    },
+    {
+      "carteId": 221577,
+      "nom": "Alolan Vulpix",
+      "numero": "21a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Guardians Rising"
+    },
+    {
+      "carteId": 221654,
+      "nom": "Tapu Fini-GX",
+      "numero": "39a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Burning Shadows"
+    },
+    {
+      "carteId": 221742,
+      "nom": "Garbodor",
+      "numero": "51a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Guardians Rising"
+    },
+    {
+      "carteId": 221756,
+      "nom": "Metagross-GX",
+      "numero": "157a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Guardians Rising"
+    },
+    {
+      "carteId": 221788,
+      "nom": "Rescue Stretcher",
+      "numero": "130a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Guardians Rising"
+    },
+    {
+      "carteId": 221815,
+      "nom": "Field Blower",
+      "numero": "125a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Guardians Rising"
+    },
+    {
+      "carteId": 222066,
+      "nom": "Acerola",
+      "numero": "112a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Burning Shadows"
+    },
+    {
+      "carteId": 222067,
+      "nom": "Darkrai-GX",
+      "numero": "88a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Burning Shadows"
+    },
+    {
+      "carteId": 223267,
+      "nom": "Porygon-Z",
+      "numero": "105a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Burning Shadows"
+    },
+    {
+      "carteId": 223268,
+      "nom": "Charmander",
+      "numero": "18a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Burning Shadows"
+    },
+    {
+      "carteId": 223298,
+      "nom": "Kiawe",
+      "numero": "116a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Burning Shadows"
+    },
+    {
+      "carteId": 223420,
+      "nom": "Guzma",
+      "numero": "115a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Burning Shadows"
+    },
+    {
+      "carteId": 223952,
+      "nom": "Kirlia",
+      "numero": "92a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Burning Shadows"
+    },
+    {
+      "carteId": 224077,
+      "nom": "M Camerupt-EX",
+      "numero": "XY198a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "XY Black Star Promos"
+    },
+    {
+      "carteId": 224087,
+      "nom": "M Sharpedo-EX",
+      "numero": "XY200a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "XY Black Star Promos"
+    },
+    {
+      "carteId": 224120,
+      "nom": "Entei-GX",
+      "numero": "10a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Shining Legends"
+    },
+    {
+      "carteId": 224190,
+      "nom": "Zoroark-GX",
+      "numero": "77a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Shining Legends"
+    },
+    {
+      "carteId": 225251,
+      "nom": "Regigigas",
+      "numero": "84a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Crimson Invasion"
+    },
+    {
+      "carteId": 225372,
+      "nom": "Lusamine",
+      "numero": "153a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Ultra Prism"
+    },
+    {
+      "carteId": 226511,
+      "nom": "Lunala-GX",
+      "numero": "SM103a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "SM Black Star Promos"
+    },
+    {
+      "carteId": 226512,
+      "nom": "Solgaleo-GX",
+      "numero": "SM104a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "SM Black Star Promos"
+    },
+    {
+      "carteId": 226517,
+      "nom": "Cynthia",
+      "numero": "119a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Ultra Prism"
+    },
+    {
+      "carteId": 226706,
+      "nom": "Volkner",
+      "numero": "135a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Ultra Prism"
+    },
+    {
+      "carteId": 226896,
+      "nom": "Escape Board",
+      "numero": "122a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Ultra Prism"
+    },
+    {
+      "carteId": 227264,
+      "nom": "Metal Frying Pan",
+      "numero": "112a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Forbidden Light"
+    },
+    {
+      "carteId": 227265,
+      "nom": "Beast Ring",
+      "numero": "102a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Forbidden Light"
+    },
+    {
+      "carteId": 227766,
+      "nom": "Mysterious Treasure",
+      "numero": "113a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Forbidden Light"
+    },
+    {
+      "carteId": 228317,
+      "nom": "Altaria",
+      "numero": "40a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Dragon Majesty"
+    },
+    {
+      "carteId": 228720,
+      "nom": "Fiery Flint",
+      "numero": "60a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Dragon Majesty"
+    },
+    {
+      "carteId": 229918,
+      "nom": "Sceptile",
+      "numero": "10a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Celestial Storm"
+    },
+    {
+      "carteId": 230007,
+      "nom": "Rayquaza-GX",
+      "numero": "177a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Celestial Storm"
+    },
+    {
+      "carteId": 230075,
+      "nom": "Tate & Liza",
+      "numero": "148a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Celestial Storm"
+    },
+    {
+      "carteId": 230364,
+      "nom": "Electropower",
+      "numero": "172a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Lost Thunder"
+    },
+    {
+      "carteId": 230506,
+      "nom": "Sightseer",
+      "numero": "189a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Lost Thunder"
+    },
+    {
+      "carteId": 231209,
+      "nom": "Net Ball",
+      "numero": "187a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Lost Thunder"
+    },
+    {
+      "carteId": 231720,
+      "nom": "Professor Elm's Lecture",
+      "numero": "188a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Lost Thunder"
+    },
+    {
+      "carteId": 234576,
+      "nom": "Dedenne-GX",
+      "numero": "195a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Unbroken Bonds"
+    },
+    {
+      "carteId": 235856,
+      "nom": "Welder",
+      "numero": "189a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Unbroken Bonds"
+    },
+    {
+      "carteId": 236775,
+      "nom": "Reset Stamp",
+      "numero": "206a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Unified Minds"
+    },
+    {
+      "carteId": 237806,
+      "nom": "Jirachi-GX",
+      "numero": "79a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Unified Minds"
+    },
+    {
+      "carteId": 237809,
+      "nom": "Cherish Ball",
+      "numero": "191a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Unified Minds"
+    },
+    {
+      "carteId": 240358,
+      "nom": "Togepi & Cleffa & Igglybuff-GX",
+      "numero": "143a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Cosmic Eclipse"
+    }
+  ],
+  "ecartees": [
+    {
+      "carteId": 141948,
+      "nom": "N",
+      "numero": "105a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "raison": "fiche-existante:-300302"
+    },
+    {
+      "carteId": 189928,
+      "nom": "Blacksmith",
+      "numero": "88a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "raison": "fiche-existante:-311412"
+    },
+    {
+      "carteId": 205104,
+      "nom": "Hex Maniac",
+      "numero": "75a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "raison": "fiche-existante:-311409"
+    },
+    {
+      "carteId": 181943,
+      "nom": "Team Flare Grunt",
+      "numero": "73a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "raison": "fiche-existante:-311413"
+    },
+    {
+      "carteId": 183396,
+      "nom": "Professor Sycamore",
+      "numero": "107a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "raison": "fiche-existante:-297896"
+    },
+    {
+      "carteId": 189031,
+      "nom": "Shauna",
+      "numero": "111a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "raison": "fiche-existante:-311411"
+    },
+    {
+      "carteId": 208661,
+      "nom": "Delinquent",
+      "numero": "98b",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "raison": "fiche-existante:-311410"
+    },
+    {
+      "carteId": 208661,
+      "nom": "Delinquent",
+      "numero": "98a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "raison": "fiche-existante:-782672"
+    },
+    {
+      "carteId": 221208,
+      "nom": "Tapu Lele-GX",
+      "numero": "60a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "raison": "parents-multiples:Guardians Rising | Celebrations"
+    },
+    {
+      "carteId": 225163,
+      "nom": "Guzzlord-GX",
+      "numero": "63a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "raison": "fiche-existante:-316307"
+    },
+    {
+      "carteId": 192719,
+      "nom": "M Lucario-EX",
+      "numero": "55a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "raison": "fiche-existante:-297891"
+    },
+    {
+      "carteId": 195236,
+      "nom": "Aegislash-EX",
+      "numero": "65a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "raison": "fiche-existante:-311407"
+    },
+    {
+      "carteId": 196315,
+      "nom": "M Manectric-EX",
+      "numero": "24a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "raison": "fiche-existante:-297894"
+    },
+    {
+      "carteId": 202651,
+      "nom": "Shaymin-EX",
+      "numero": "77a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "raison": "fiche-existante:-300303"
+    },
+    {
+      "carteId": 208260,
+      "nom": "Jolteon-EX",
+      "numero": "28a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "raison": "fiche-existante:-297892"
+    },
+    {
+      "carteId": 211624,
+      "nom": "Zygarde-EX",
+      "numero": "54a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "raison": "fiche-existante:-297893"
+    },
+    {
+      "carteId": 211843,
+      "nom": "Regirock-EX",
+      "numero": "43a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "raison": "fiche-existante:-311406"
+    },
+    {
+      "carteId": 227845,
+      "nom": "Alolan Exeggutor",
+      "numero": "2a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "raison": "parents-multiples:Forbidden Light | McDonald's Collection 2019"
+    }
+  ]
+}

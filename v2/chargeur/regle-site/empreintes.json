@@ -1,24 +1,28 @@
 {
-  "commentaire": "sha256 des fichiers SOURCE du site (rat-market-site/lib, lus au commit 4d1344d par git show) et des fichiers produits ici ; refait par v2/chargeur/copier-regle-site.js",
-  "commit": "4d1344d54e07c18ce41687e4457151c07db5b555",
+  "commentaire": "sha256 des fichiers SOURCE du site (rat-market-site/lib, lus au commit 29d2c0f par git show) et des fichiers produits ici ; refait par v2/chargeur/copier-regle-site.js",
+  "commit": "29d2c0f78fd7d1e0cfc0f2beda7a3cba826e675c",
   "sources": {
     "imageDeLImpression.ts": "e6f06c44d7eb98a18be7cc56929b3c0253123ac460853b99db2dfdf3a1de89ed",
     "impressionDuSet.ts": "ed1a78021c1814589a6eced8ec9c360c83f41bb65d2062f9d2c043dbb92b3503",
-    "impressionsDuSet.ts": "30fff0606b930a62c52133bdee4fc2330d70d8b2552c52e2da8b1c7fc570f427",
+    "impressionsDuSet.ts": "29aff851587d1bd64e13865088618a134a33b45320d871d3754d7647f5b084e6",
     "cardmarket.ts": "842a658de492a511a190d846c068629d4efaa08e649b149243b97660c4ca55ae",
-    "langueDuVisuel.ts": "c7a95ee600f5972bdf3a5155b4dfddcb45a6b6fd77c0c03dfa0b8699c34dc026",
+    "langueDuVisuel.ts": "7ec4c55ddadf3cb85a6b737af94e7946d23d2036e197aacda09af9e0b72e40fb",
     "expressionsSures.ts": "9399cb9db0b3aa59d0cd32a8d85fb1fecc8d0ffab47b4ed5261ef6a5920b9ae0",
+    "annexes.ts": "dc06bf1eea98a7a0c1d605183308db50144f9af0f790aef93979b1bc7b278f20",
     "visuels-japonais-sur-sets-intl.json": "75d2fb8fdeb6925d1359c9b4218e63990c48040c4aae03b624ed5ecba562a06a",
-    "visuels-anglais-regardes.json": "4b2766460157e06edf2781c168e10f8efd018465e61027d9915e49d3dc3977a4"
+    "visuels-anglais-regardes.json": "4b2766460157e06edf2781c168e10f8efd018465e61027d9915e49d3dc3977a4",
+    "annexes.json": "fc41c92c17bb3922b5b513b1efc60cc0921f63a55df4d3cfa6affef8519367d4"
   },
   "produits": {
     "imageDeLImpression.mjs": "13bd64c51f228a299d54c6be0a8e7c51c6eb17c60a8dda5dc362569f3ea89591",
     "impressionDuSet.mjs": "a1fb0cecc55d73eac34f0fcb7eda7e0f1ec3b67eb2d8846b5fc54e1aa3d315a3",
-    "impressionsDuSet.mjs": "97394b5526126f5f065c0939f5ab83cb6eaa59c1f6849404eb85f4cfbf1fc66a",
+    "impressionsDuSet.mjs": "517b86ef9c3ba665700f07ead2d66441c6b0cfff5ba22ec95e29c047d66c6578",
     "cardmarket.mjs": "bec13ca7abd5e67cc80911ba58eee2892f948771398ef964b2e16074531d6895",
-    "langueDuVisuel.mjs": "de700461c90cfd0863a39b4f02a550d17a5476b260440cbeeaeab22ddefe16bb",
+    "langueDuVisuel.mjs": "f2c00055ee568eba91b6bbda9063d60ca2bb813fcf3e342745c5bbbb80732c15",
     "expressionsSures.mjs": "39db4059c95e8556abd95740f45c397ad7d7a30e70b931de7bedc6a112879c0d",
+    "annexes.mjs": "9db5d8c8a63a2b3b5eb0d46e3de0c7dd3f2c106d32c4273d1cdbecdf837a0969",
     "visuels-japonais-sur-sets-intl.json": "75d2fb8fdeb6925d1359c9b4218e63990c48040c4aae03b624ed5ecba562a06a",
-    "visuels-anglais-regardes.json": "4b2766460157e06edf2781c168e10f8efd018465e61027d9915e49d3dc3977a4"
+    "visuels-anglais-regardes.json": "4b2766460157e06edf2781c168e10f8efd018465e61027d9915e49d3dc3977a4",
+    "annexes.json": "fc41c92c17bb3922b5b513b1efc60cc0921f63a55df4d3cfa6affef8519367d4"
   }
 }

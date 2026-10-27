@@ -120,8 +120,8 @@ const LANGUES_DES_TIRAGES_ASIATIQUES                                            
   idth: ["id", "th"],
 };
 
-export function visuelAdmisPourLaRegion(visuel                  , regionDuSet        )          {
-  return refusDuVisuel(visuel, regionDuSet) === null;
+export function visuelAdmisPourLaRegion(visuel                  , regionDuSet        , editionLocale                = null)          {
+  return refusDuVisuel(visuel, regionDuSet, editionLocale) === null;
 }
 
 /**
@@ -137,8 +137,10 @@ export function visuelAdmisPourLaRegion(visuel                  , regionDuSet   
  *   · `scan-japonais-connu` — la liste mesurée du 2026-09-23 ;
  *   · `format:<L×H>` — sans langue, format du fichier source jamais regardé ;
  *   · `sans-format` — sans langue, et la preuve ne dit aucun format.
+ * `editionLocale` (`sets.editionLocale`, posé par l'API, 2026-10-27) : un set OCCIDENTAL imprimé dans une seule langue d'Europe
+ * (McDonald's FR) admet en plus les scans de CETTE langue — rien d'autre ne change.
  */
-export function refusDuVisuel(visuel                  , regionDuSet        )                {
+export function refusDuVisuel(visuel                  , regionDuSet        , editionLocale                = null)                {
   // Par construction : artofpkm ne sert que du japonais. Mesuré à 0 cas sur
   // les sets intl le 2026-09-23 — le garde-fou est là pour la collecte de demain.
   if (regionDuSet !== "jp" && visuel.cleR2.startsWith("artofpkm/")) return "artofpkm-hors-jp";
@@ -149,6 +151,7 @@ export function refusDuVisuel(visuel                  , regionDuSet        )    
   // Un tirage inconnu (demain, `ko`) n'est pas « international » : refusé.
   if (regionDuSet !== "intl") return "tirage-inconnu";
   if (langue === "en") return null;
+  if (langue !== null && langue === editionLocale?.trim().toLowerCase()) return null;
   if (langue !== null) return `langue:${langue}`;
   if (estUnScanJaponaisConnu(visuel.cleR2)) return "scan-japonais-connu";
   if (VISUELS_ANGLAIS_REGARDES.has(visuel.cleR2)) return null;
