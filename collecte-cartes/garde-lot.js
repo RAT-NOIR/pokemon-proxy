@@ -301,7 +301,9 @@ const SITE_LIT = Object.freeze({
     lignes: Object.freeze(['carteId', 'idProduct', 'idExpansion', 'tirage', 'slug', 'slugSet', 'numeroFiche', 'variante', 'preuve', 'visuelSubstitut.cleR2', 'visuelSubstitut.w', 'visuelSubstitut.h', 'visuelSubstitut.mention']),
     // (tour de correction 1) les champs d'un document `sets` que le site lit (SPEC_SET de lireDonnee.ts), chemins pointés ; un chemin couvre ses sous-champs (`logo` : cleR2, w, h, set, region, langue, preuve, logoGenerique, sha1, vignette).
     sets: Object.freeze(['code', 'nomJa', 'nomAffichage', 'nomFr', 'nomFrSource', 'nomFrPreuve', 'region', 'tirage', 'dateSortieJa', 'dateSortieEn', 'periodeDistribution', 'dateSortieMois', 'totalImprime', 'idExpansion',
-        'bulba.expansion', 'bulba.titre', 'bulba.pageid', 'deck', 'logo', 'logoFr', 'logoCompose', 'symbole', 'symbolesIdentification', 'serie']),
+        'bulba.expansion', 'bulba.titre', 'bulba.pageid', 'deck', 'logo', 'logoFr', 'logoCompose', 'symbole', 'symbolesIdentification', 'serie',
+        // `editionLocale` : lu par le site depuis le 2026-10-27 (ses commits af48557 / 29d2c0f, visuels McDonald's FR) ; reporté quand l'étape 0 ter a refusé le lot JUMBO
+        'editionLocale']),
     // (tour 2, D3) Les objets que la comparaison lit à FORME FIGÉE : leurs sous-champs sont énumérés ici, et ce sont EXACTEMENT ceux que PROJECTION_CARTES / PROJECTION_SET comparent (elles lisent cette liste, pas une
     // copie). La confrontation au site (garde-site-lu.js) n'accepte sous ces chemins que ces sous-champs : un sous-champ que le site se met à lire REFUSE l'étape 0 ter, au lieu d'être « couvert » par l'ancêtre
     // alors que la comparaison ne le voit pas. (Les autres ancêtres déclarés — `logo`, `attaques`, `periodeDistribution`… — sont comparés EN ENTIER, moins la date `le` : un sous-champ nouveau y est vu.)
