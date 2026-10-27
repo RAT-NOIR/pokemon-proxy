@@ -123,7 +123,7 @@ async function charger(client, base, dossier, nom) {
         const stats = await dbm.command({ dbStats: 1 });
         const taille = async nom => { const s = await dbm.command({ collStats: nom }); return { donnees: s.size, index: s.totalIndexSize, nomIndex: s.indexSizes }; };
         console.log(`clés posées. catalogue_produits : ${JSON.stringify(await taille('catalogue_produits'))} · numeros_cartes : ${JSON.stringify(await taille('numeros_cartes'))} · poids base ${(stats.dataSize + stats.indexSize) / 1e6} Mo`);
-        index.oublierIndexNom(); IL.oublierIndexNom();
+        index.oublierIndexNom(); IL.oublierIndexNom(); await index.controlerIndexNom(); await IL.controlerIndexNom();      // tour 2 : le contrôle vit en arrière-plan ; on le force avant la phase APRÈS
 
         // ── APRÈS
         const profApresSerie = await profil(async () => { await rejouer(serieC, 'apres-serie'); });
@@ -153,6 +153,7 @@ async function charger(client, base, dossier, nom) {
             const liste = [...noms]; const cp = dbm.collection('catalogue_produits');
             const IN = require(path.join(racine, 'v2', 'identifier', 'index-nom.js')), CN = require(path.join(racine, 'v2', 'identifier', 'cle-nom.js'));
             const dispo = IN.creerDisponibilite({ col: cp, champ: CN.CHAMP_NOM_MIN, nomIndex: CN.INDEX_NOM_MIN, source: { champ: 'name', temoin: CN.CHAMP_SOURCE_CATALOGUE } });
+            await dispo.controle();
             const pas2 = Math.max(1, Math.floor(liste.length / echant));
             for (let i = 0; i < liste.length; i += pas2) {
                 for (const nom of [liste[i], liste[i].toUpperCase()]) {

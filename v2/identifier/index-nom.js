@@ -7,6 +7,7 @@
 // collection copiée par _id). Le filtre propre à l'appelant (les cibles normalisées) s'applique ensuite, comme avant.
 const CN = require('./cle-nom');
 
+const AGE_MAX_VERDICT_MS = 3 * 60 * 1000;           // au-delà, le verdict n'est plus servi (minuterie morte, base en panne) : repli sur la requête d'avant
 const DUREE_PAR_DEFAUT_MS = 60 * 1000;               // la fenêtre pendant laquelle un produit ajouté sans clé peut ne pas être vu : une minute, puis le contrôle est refait
 const FRAICHEUR = new Map();                           // collection|champ|témoin -> { le, p } : la dernière lecture de fraîcheur (partagée, vidée par oublier())
 const interrupteurOuvert = () => process.env.V2_INDEX_NOM !== '0';
@@ -18,13 +19,16 @@ const indexDuScan = () => S.lireDansLeScan('catalogueIndex');
 const noterScan = servi => { if (servi === false || S.lireDansLeScan('catalogueIndex') !== false) S.noterDansLeScan('catalogueIndex', servi); };
 
 /**
- * @param {{ col: object|function, champ: string, nomIndex: string, source?: { champ: string, temoin: string }, dureeMs?: number, maintenant?: () => number }} p  `col` : une collection native (pilote) ou celle d'un modèle mongoose.
+ * @param {{ col: object|function, champ: string, nomIndex: string, source?: { champ: string, temoin: string }, dureeMs?: number, ageMaxMs?: number, maintenant?: () => number }} p  `col` : une collection native (pilote) ou celle d'un modèle mongoose.
  *        `source` : { champ: le champ dont les clés dérivent (« name »), temoin: le champ où l'outil de pose en a gardé la valeur } — la FRAÎCHEUR des clés (un produit renommé par l'import garde ses anciennes clés).
- * @returns {{ disponible(): Promise<boolean>, oublier(): void }}
- * Chaque TRANSITION de verdict (index → repli, repli → index) est écrite au journal avec sa cause, une fois : un essai qui tourne des heures en balayage complet ne passe pas inaperçu.
+ * @returns {{ disponible(): boolean, controle(): Promise<boolean>, oublier(): void }}
+ * TOUR 2 : le contrôle (index, couverture, fraîcheur : un balayage de tout le catalogue) est HORS du chemin du scan. Une minuterie `unref`, UNE SEULE à la fois (le tour suivant n'est armé qu'à la fin du contrôle : jamais deux
+ * contrôles concurrents, jamais d'empilement), le refait toutes les `dureeMs`. `disponible()` ne lit que le DERNIER verdict : aucune lecture de base, aucune attente. Garde par ce qu'elle AUTORISE : « oui » seulement si
+ * un contrôle a RÉUSSI (il est allé au bout), qu'il a dit oui, et qu'il date de moins de `ageMaxMs` (3 min) ; jamais de contrôle réussi (démarrage), contrôle qui lève, minuterie morte, base en panne : repli sur la requête d'avant.
+ * Chaque TRANSITION de verdict (index → repli, repli → index) est écrite au journal avec sa cause, une fois.
  */
-function creerDisponibilite({ col, champ, nomIndex, source = null, dureeMs = DUREE_PAR_DEFAUT_MS, maintenant = Date.now }) {
-    let verdict = null, le = 0, enCours = null, publie = null;
+function creerDisponibilite({ col, champ, nomIndex, source = null, dureeMs = DUREE_PAR_DEFAUT_MS, ageMaxMs = AGE_MAX_VERDICT_MS, maintenant = Date.now }) {
+    let verdict = false, leSucces = null, enCours = null, publie = null, minuterie = null;
     const publier = (ok, cause) => {
         if (publie === ok) return;
         const avant = publie; publie = ok;
@@ -36,7 +40,7 @@ function creerDisponibilite({ col, champ, nomIndex, source = null, dureeMs = DUR
     async function controler() {
         try {
             const c = typeof col === 'function' ? col() : col;                          // une fonction : la collection n'existe qu'une fois la connexion ouverte (pont-cartes.js)
-            if (!c) return { ok: false, cause: 'collection injoignable' };
+            if (!c) return { ok: false, cause: 'collection injoignable', echec: true };
             const index = await c.indexes();
             if (!index.some(i => i.name === nomIndex && i.key && Object.keys(i.key).length === 1 && i.key[champ] === 1)) return { ok: false, cause: `index absent (${nomIndex})` };
             // aucun document sans le champ : par l'index lui-même (les documents sans champ y sont à la clé null), donc instantané quand la couverture est entière
@@ -52,19 +56,35 @@ function creerDisponibilite({ col, champ, nomIndex, source = null, dureeMs = DUR
                 if (perime !== null && perime !== undefined) return { ok: false, cause: `clé périmée (« ${source.champ} » ≠ « ${source.temoin} » : un produit modifié depuis la pose)` };
             }
             return { ok: true, cause: null };
-        } catch { return { ok: false, cause: 'lecture en panne' }; }                    // « je ne sais pas » n'est jamais « tout va bien »
+        } catch { return { ok: false, cause: 'lecture en panne', echec: true }; }       // « je ne sais pas » n'est jamais « tout va bien »
+    }
+    /** Un contrôle, un seul à la fois ; rend le verdict. Un contrôle qui ÉCHOUE (lève, base en panne) retire le verdict ET la date du dernier succès. */
+    function controle() {
+        if (!interrupteurOuvert()) return Promise.resolve(false);
+        if (!enCours) enCours = controler().then(r => {
+            if (r.echec) { verdict = false; leSucces = null; } else { verdict = r.ok; leSucces = maintenant(); }
+            publier(verdict, r.cause); return verdict;
+        }).catch(() => { verdict = false; leSucces = null; publier(false, 'lecture en panne'); return false; }).finally(() => { enCours = null; });
+        return enCours;
+    }
+    /** La minuterie : armée au premier usage, jamais deux ; le tour suivant n'est armé qu'APRÈS la fin du contrôle (pas d'empilement si la base est lente). */
+    function armer() {
+        if (minuterie !== null) return;
+        const tour = () => { minuterie = setTimeout(() => { controle().finally(tour); }, dureeMs); if (minuterie && typeof minuterie.unref === 'function') minuterie.unref(); };
+        minuterie = 0; controle().finally(tour);                                         // le premier contrôle part tout de suite, hors du scan
     }
     return {
-        async disponible() {
+        disponible() {
             if (!interrupteurOuvert()) { publier(false, 'interrupteur V2_INDEX_NOM=0'); return false; }
-            if (verdict !== null && maintenant() - le < dureeMs) return verdict;
-            if (!enCours) enCours = controler().then(r => { verdict = r.ok; le = maintenant(); publier(r.ok, r.cause); return r.ok; }).finally(() => { enCours = null; });
-            return enCours;
+            armer();
+            if (leSucces === null) return false;                                            // pas encore de contrôle réussi (démarrage, ou le dernier a levé : sa transition est déjà dite) : le repli, sans bruit
+            if (maintenant() - leSucces > ageMaxMs) { publier(false, `verdict trop ancien (aucun contrôle réussi depuis plus de ${Math.round(ageMaxMs / 60000)} min)`); return false; }
+            return verdict;
         },
-        oublier() { verdict = null; le = 0; if (source) for (const k of [...FRAICHEUR.keys()]) if (k.endsWith('|' + source.champ + '|' + source.temoin)) FRAICHEUR.delete(k); }
+        controle,
+        oublier() { verdict = false; leSucces = null; if (source) for (const k of [...FRAICHEUR.keys()]) if (k.endsWith('|' + source.champ + '|' + source.temoin)) FRAICHEUR.delete(k); }
     };
 }
-
 async function sous(dispo, quoi, fn) {
     if (!(await dispo.disponible())) { noterScan(false); return null; }
     try { const r = await fn(); noterScan(true); return r; }

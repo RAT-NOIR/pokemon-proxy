@@ -8,6 +8,7 @@ const M = require('../migrations/poser-cles-nom'); const CN = require('../identi
 const taire = async f => { const l = console.log, e = console.error; console.log = () => { }; console.error = () => { }; try { return await f(); } finally { console.log = l; console.error = e; } };
 const sansChamp = (d, ...champs) => { const reste = { ...d }; for (const c of champs) delete reste[c]; return reste; };
 
+const D = async d => { d.disponible(); d.oublier(); await d.controle(); return d.disponible(); };      // tour 2 : le contrôle vit en arrière-plan ; on le FORCE, puis on lit le verdict
 (async () => {
     await H.ouvrirBac('test-poser-cles-nom.js');
     const client = mongoose.connection.getClient();
@@ -123,7 +124,7 @@ const sansChamp = (d, ...champs) => { const reste = { ...d }; for (const c of ch
     H.v('interruption après le 2e lot : code 1, journalisée « interrompue », champ posé sur une PARTIE seulement', [cI, journal.some(l => l.etat === 'interrompue'), (await cat.countDocuments({ nomCles: { $exists: true } })) > 0, (await cat.countDocuments({ nomCles: { $exists: false } })) > 0], [1, true, true, true]);
     H.v('…et l\'index n\'est PAS créé sur un champ incomplet', (await cat.indexes()).some(i => i.name === CN.INDEX_CATALOGUE), false);
     const dispoPartielle = IN.creerDisponibilite({ col: cat, champ: CN.CHAMP_CATALOGUE, nomIndex: CN.INDEX_CATALOGUE });
-    H.v('…donc le serveur ne l\'utilise pas', await dispoPartielle.disponible(), false);
+    H.v('…donc le serveur ne l\'utilise pas', await D(dispoPartielle), false);
 
     // ── 8. la POSE complète (reprise)
     const lots = [];
@@ -148,7 +149,7 @@ const sansChamp = (d, ...champs) => { const reste = { ...d }; for (const c of ch
     // ── 10. le serveur trouve ensuite le même ensemble que la requête d'avant
     const srcCat = { champ: 'name', temoin: CN.CHAMP_SOURCE_CATALOGUE }, srcFr = { champ: 'nomFr', temoin: CN.CHAMP_SOURCE_FR };
     const dCat = IN.creerDisponibilite({ col: cat, champ: CN.CHAMP_CATALOGUE, nomIndex: CN.INDEX_CATALOGUE, source: srcCat }), dFr = IN.creerDisponibilite({ col: num, champ: CN.CHAMP_FR, nomIndex: CN.INDEX_FR, source: srcFr });
-    H.v('après la pose, index-nom.js juge les deux index disponibles', [await dCat.disponible(), await dFr.disponible()], [true, true]);
+    H.v('après la pose, index-nom.js juge les deux index disponibles', [await D(dCat), await D(dFr)], [true, true]);
     const rx = /pikachu/i;
     const viaIndex = await IN.preselection({ col: cat, dispo: dCat, cles: ['pikachu'], regexPremierMot: rx });
     const viaRegex = (await cat.find({ name: rx }).sort({ _id: 1 }).toArray()).filter(d => CN.clesDuProduit(d.name).includes('pikachu'));
@@ -164,7 +165,7 @@ const sansChamp = (d, ...champs) => { const reste = { ...d }; for (const c of ch
     {
         await cat.updateOne({ idProduct: 2 }, { $set: { name: 'Pikachu ex' } });
         dCat.oublier();
-        H.v('B1 : après le renommage (clés anciennes, témoin ancien) : index indisponible côté serveur', await dCat.disponible(), false);
+        H.v('B1 : après le renommage (clés anciennes, témoin ancien) : index indisponible côté serveur', await D(dCat), false);
         lots.length = 0;
         const simul = []; const l0 = console.log; console.log = (...a) => simul.push(a.join(' '));
         try { await M.principal(['--base=rm_essai'], {}, { ...profil, apresLot: async l => lots.push(l) }); } finally { console.log = l0; }
@@ -172,7 +173,7 @@ const sansChamp = (d, ...champs) => { const reste = { ...d }; for (const c of ch
         const cRen = await taire(() => M.principal(['--base=rm_essai', '--appliquer'], {}, { ...profil, apresLot: async l => lots.push(l) }));
         const d2 = await cat.findOne({ idProduct: 2 });
         dCat.oublier();
-        H.v('B1 : la relance réécrit ses clés ET son témoin ; l\'index redevient disponible', [cRen, lots.map(l => l.lot), d2.nomCles, d2.nomMin, d2.nomSrc, await dCat.disponible()], [0, [1], ['pikachuex'], 'pikachu ex', 'Pikachu ex', true]);
+        H.v('B1 : la relance réécrit ses clés ET son témoin ; l\'index redevient disponible', [cRen, lots.map(l => l.lot), d2.nomCles, d2.nomMin, d2.nomSrc, await D(dCat)], [0, [1], ['pikachuex'], 'pikachu ex', 'Pikachu ex', true]);
     }
 
     // ── 13. I3 : --retirer — simulation par défaut ; --appliquer retire les champs que l'outil pose et son index, sur rm_essai seulement ; rien d'autre ne bouge

@@ -234,4 +234,4 @@ async function identifierEnLocal({
     };
 }
 
-module.exports = { identifierEnLocal, normaliserNom, oublierIndexNom: () => { DISPO_NOM_CATALOGUE.oublier(); DISPO_NOM_FR.oublier(); } };
+module.exports = { identifierEnLocal, normaliserNom, oublierIndexNom: () => { DISPO_NOM_CATALOGUE.oublier(); DISPO_NOM_FR.oublier(); }, controlerIndexNom: () => Promise.all([DISPO_NOM_CATALOGUE.controle(), DISPO_NOM_FR.controle()]) };

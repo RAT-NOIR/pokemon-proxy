@@ -7225,6 +7225,7 @@ module.exports = {
     app, gererIdentifier, gererRetourLive, trouverParSetCodeEtNumero, nomOpposeUnVeto, trouverProduitsLocaux,
     // PERF-SCAN P1 : oublie le verdict de couverture de l'index de nom (le rejeu d'identité pose les clés puis veut l'utiliser sans attendre la fenêtre).
     oublierIndexNom: () => { DISPO_NOM_CATALOGUE.oublier(); },
+    controlerIndexNom: () => DISPO_NOM_CATALOGUE.controle(),
     // Exportés pour que le re-classement du veto soit rejouable À L'IDENTIQUE dans les
     // tests. Les rejouer avec une réimplémentation ne prouverait rien : c'est précisément
     // l'erreur qui a produit « la simulation dit 12, la production dit 0 ».
