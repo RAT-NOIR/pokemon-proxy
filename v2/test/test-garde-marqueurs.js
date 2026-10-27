@@ -21,8 +21,12 @@ H.v('1b. aucun terme, pas un mot entier, pas un titre : non — l\'absence du mo
 H.v('1c. une négation dans les 3 mots qui précèdent : non (pas, non, not, no, sans, without, ni ; casse et accents indifférents)',
     ['pas jumbo', 'pas de jumbo', 'non jumbo', 'not a jumbo', 'not oversized', 'no jumbo', 'sans version jumbo', 'without any xxl', 'ni jumbo ni oversize', 'PAS DE VRAIE jumbo'.toUpperCase(), 'Pas de géant'].map(t),
     ['non:négation', 'non:négation', 'non:négation', 'non:négation', 'non:négation', 'non:négation', 'non:négation', 'non:négation', 'non:négation', 'non:négation', 'non:négation']);
-H.v('1d. la fenêtre est de 3 mots : une négation plus loin ne nie pas ; après le terme, elle ne nie pas non plus', ['pas de la belle carte jumbo', 'jumbo pas cher', 'jumbo, pas abîmée'].map(t), ['oui:jumbo', 'oui:jumbo', 'oui:jumbo']);
-H.v('1e. « taille normale » / « normal size » dans le titre : non, où qu\'ils soient', ['jumbo taille normale', 'Taille Normale ou jumbo ?', 'normal size jumbo', 'jumbo normal size'].map(t), Array(4).fill('non:taille normale'));
+H.v('1d. la fenêtre est de 3 mots AVANT et de 2 mots APRÈS : une négation plus loin ne nie pas', ['pas de la belle carte jumbo', 'jumbo en parfait état pas cher', 'jumbo rare holo non abîmée'].map(t), ['oui:jumbo', 'oui:jumbo', 'oui:jumbo']);
+H.v('1d2. une négation dans les 2 mots APRÈS le terme nie aussi', ['jumbo pas cher', 'jumbo, pas abîmée', 'Pikachu jumbo ? non', 'jumbo jamais joué', 'oversized sans défaut'].map(t), Array(5).fill('non:négation'));
+H.v('1e. un mot de la version normale (normal, normale, standard, regular, classique, classic) n\'importe où dans le titre : non', ['jumbo taille normale', 'Taille Normale ou jumbo ?', 'normal size jumbo', 'jumbo normal size', 'Jumbo or regular size?', 'Lot Pikachu jumbo et normale', 'version normale / jumbo en vente', 'standard et jumbo', 'jumbo classique', 'classic jumbo', 'Jumbo ou Normale'].map(t), Array(11).fill('non:version normale citée'));
+H.v('1e2. B1 (relecture) : les contractions et les négations hors de la première liste nient : isn\'t, aren\'t, doesn\'t, never, aucune, aucun, jamais', ['Dracaufeu isn\'t jumbo', 'these aren\'t oversized', 'it doesn’t look jumbo', 'Pikachu never oversized', 'Carte aucune version jumbo', 'aucun jumbo ici', 'jamais jumbo', 'ISN\'T JUMBO'].map(t), Array(8).fill('non:négation'));
+H.v('1e3. B1 : les sept titres de la relecture se taisent', ['Dracaufeu isn\'t jumbo', 'Pikachu never oversized', 'Carte standard, aucune version jumbo', 'Pikachu jumbo ? non', 'Jumbo or regular size?', 'Lot Pikachu jumbo et normale', 'version normale / jumbo en vente'].map(s => G.lireTitreJumbo(s).oui), Array(7).fill(false));
+H.v('1e4. un titre propre reste affirmé (la règle ne se tait pas partout) : une apostrophe française n\'est pas une contraction', ['Pikachu jumbo holo', 'l\'oversize de Dracaufeu', 'Carte jumbo promo, état neuf'].map(t), ['oui:jumbo', 'oui:oversize', 'oui:jumbo']);
 H.v('1f. UNE occurrence niée suffit à se taire (on ne tranche pas un titre qui se contredit)', ['jumbo mais pas jumbo', 'pas jumbo mais oversized'].map(t), ['non:négation', 'non:négation']);
 
 // ── fabriques
@@ -78,7 +82,7 @@ H.v('3d. le critère du jumbo commence par « jumbo (titre) » (le contrat) et n
     H.v('4a. le groupe, un titre « jumbo » sans négation : le produit JUMBO est affirmé, critère « jumbo (titre) », UNE affirmation', [issue(r1), r1.appels.affirmer.length, r1.appels.affirmer[0][0], r1.appels.affirmer[0][1].startsWith('jumbo (titre)'), r1.x.resultat.critere.startsWith('jumbo (titre)')], [['affirmee:12', 'sur', 'terme sans négation'], 1, 12, true, true]);
     H.v('4b. le produit JUMBO est choisi quel que soit l\'ordre des candidats', issue(jouer(CFG_JUMBO, 'xxl', question([12, 11]))), ['affirmee:12', 'sur', 'terme sans négation']);
     H.v('4c. tout le reste LAISSE la question : aucun terme, négation, taille normale, pas de titre — jamais la version normale', ['Pikachu 025', 'pas de jumbo', 'not oversized', 'jumbo taille normale', null, '', 42].map(s => issue(jouer(CFG_JUMBO, s))),
-        [['question-reste', 'se-tait', 'aucun terme'], ['question-reste', 'se-tait', 'négation'], ['question-reste', 'se-tait', 'négation'], ['question-reste', 'se-tait', 'taille normale'], ['question-reste', 'se-tait', 'pas de titre'], ['question-reste', 'se-tait', 'pas de titre'], ['question-reste', 'se-tait', 'pas de titre']]);
+        [['question-reste', 'se-tait', 'aucun terme'], ['question-reste', 'se-tait', 'négation'], ['question-reste', 'se-tait', 'négation'], ['question-reste', 'se-tait', 'version normale citée'], ['question-reste', 'se-tait', 'pas de titre'], ['question-reste', 'se-tait', 'pas de titre'], ['question-reste', 'se-tait', 'pas de titre']]);
     H.v('4d. et il n\'y a AUCUNE affirmation quand le titre se tait (0 appel à affirmer)', ['Pikachu 025', 'pas de jumbo'].map(s => jouer(CFG_JUMBO, s).appels.affirmer.length), [0, 0]);
     H.v('4e. un produit « sans Jumbo » dont les marqueurs sont inconnus (null) est admis dans le groupe ; deux Jumbo, deux sans, ou un Jumbo contre un tampon : pas le cas (rien d\'appelé)',
         [issue(jouer(CFG_JUMBO, 'jumbo', question([15, 16]))), jouer(CFG_JUMBO, 'jumbo', question([16, 18])).x, jouer(CFG_JUMBO, 'jumbo', question([11, 13])).x, jouer(CFG_JUMBO, 'jumbo', question([11, 15])).x],
@@ -154,7 +158,7 @@ H.v('3d. le critère du jumbo commence par « jumbo (titre) » (le contrat) et n
     const contrat = fs.readFileSync(path.join(__dirname, '..', '..', 'CONTRAT-MARQUEURS.md'), 'utf8');
     const section = contrat.split(/^## 5\./m)[1].split(/^## 6\./m)[0];
     H.v('6a. le §5 du contrat cite les termes du titre (jumbo, oversize, XXL, géant) et la négation', [/jumbo, oversize\(d\), XXL, géant\(e\)/.test(section), /pas jumbo/.test(section), /taille normale/.test(section)], [true, true, true]);
-    H.v('6b. la liste fermée du code : huit termes, sept négations, fenêtre de 3 mots', [G.TERMES_JUMBO.length, G.NEGATIONS.length, G.FENETRE_NEGATION], [8, 7, 3]);
+    H.v('6b. la liste fermée du code : huit termes, onze négations (+ « n\'t »), six mots de la version normale, fenêtres de 3 avant et 2 après', [G.TERMES_JUMBO.length, G.NEGATIONS.length, G.VERSION_NORMALE.length, G.FENETRE_NEGATION, G.FENETRE_APRES], [8, 11, 6, 3, 2]);
 }
 
 H.bilan();

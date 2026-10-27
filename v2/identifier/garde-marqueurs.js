@@ -10,19 +10,24 @@ const MQ = require('./marqueurs');
 
 // ── Le titre : liste fermée, mot entier, insensible à la casse et aux accents.
 const TERMES_JUMBO = Object.freeze(['jumbo', 'oversize', 'oversized', 'xxl', 'géant', 'geant', 'géante', 'geante']);
-const NEGATIONS = Object.freeze(['pas', 'non', 'not', 'no', 'sans', 'without', 'ni']);
-const FENETRE_NEGATION = 3;                                                                // les 3 mots qui précèdent le terme
+const NEGATIONS = Object.freeze(['pas', 'non', 'not', 'no', 'never', 'sans', 'without', 'ni', 'aucun', 'aucune', 'jamais']);       // + tout mot finissant par « n't » (isn't, aren't, doesn't…)
+const FENETRE_NEGATION = 3, FENETRE_APRES = 2;                                              // les 3 mots qui précèdent le terme ET les 2 qui le suivent
+const VERSION_NORMALE = Object.freeze(['normal', 'normale', 'standard', 'regular', 'classique', 'classic']);       // un titre qui cite la version normale (« taille normale », « normal size », « regular size » compris) ne tranche rien
+const estNegation = m => NEGS.has(m) || m.endsWith('n\'t');
+// Les mots d'un titre : l'apostrophe typographique devient droite ; un mot en « n't » est gardé entier (c'est une négation), toute autre apostrophe sépare (« l'oversize » → l, oversize).
+const motsDe = t => (sansAccent(t).replace(/[’‘`]/g, '\'').match(/[a-z0-9]+(?:'[a-z0-9]+)*/g) || []).flatMap(m => (m.endsWith('n\'t') ? [m] : m.split('\'')));
 const sansAccent = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const TERMES = new Set(TERMES_JUMBO.map(sansAccent)), NEGS = new Set(NEGATIONS.map(sansAccent));
-const mots = t => sansAccent(t).match(/[a-z0-9]+/g) || [];
+const NORMALES = new Set(VERSION_NORMALE);
 /** @returns { oui: boolean, terme?: string, motif: string } — oui SEULEMENT si un terme est présent et que NI sa fenêtre NI le titre ne nie ; le motif dit le silence. */
 function lireTitreJumbo(titre) {
     if (typeof titre !== 'string' || !titre.trim()) return { oui: false, motif: 'pas de titre' };
-    const t = mots(titre), trouves = [];
+    const t = motsDe(titre), trouves = [];
     t.forEach((m, i) => { if (TERMES.has(m)) trouves.push(i); });
     if (!trouves.length) return { oui: false, motif: 'aucun terme' };
-    for (let i = 0; i < t.length - 1; i++) if ((t[i] === 'taille' && t[i + 1] === 'normale') || (t[i] === 'normal' && t[i + 1] === 'size')) return { oui: false, motif: 'taille normale' };
-    for (const i of trouves) if (t.slice(Math.max(0, i - FENETRE_NEGATION), i).some(m => NEGS.has(m))) return { oui: false, motif: 'négation', terme: t[i] };       // une seule occurrence niée suffit : on ne tranche pas
+    if (t.some(m => NORMALES.has(m))) return { oui: false, motif: 'version normale citée' };           // le titre compare ou cite les deux versions
+    // écrit par ce qu'il AUTORISE : AUCUNE négation dans les 3 mots avant NI les 2 mots après, pour CHAQUE occurrence (une seule occurrence niée, ou citée avec un autre contexte, suffit à se taire)
+    for (const i of trouves) if ([...t.slice(Math.max(0, i - FENETRE_NEGATION), i), ...t.slice(i + 1, i + 1 + FENETRE_APRES)].some(estNegation)) return { oui: false, motif: 'négation', terme: t[i] };
     return { oui: true, terme: t[trouves[0]], motif: 'terme sans négation' };
 }
 /** Le critère journalisé de l'affirmation par le titre : il COMMENCE par CRITERE_JUMBO (la garde des marqueurs le reconnaît). */
@@ -150,4 +155,4 @@ function consulterMarqueurs({ cfg, titre, resultat, derniereQuestion = null, cor
     return trace || remplace ? { ...(remplace ? { resultat: courant } : {}), trace } : null;
 }
 
-module.exports = { consulterMarqueurs, lireTitreJumbo, memeDessin, ecartMarqueurs, signalReel, critereJumbo, CRITERE_JUMBO, TERMES_JUMBO, NEGATIONS, FENETRE_NEGATION };
+module.exports = { consulterMarqueurs, lireTitreJumbo, memeDessin, ecartMarqueurs, signalReel, critereJumbo, CRITERE_JUMBO, TERMES_JUMBO, NEGATIONS, VERSION_NORMALE, FENETRE_NEGATION, FENETRE_APRES };
