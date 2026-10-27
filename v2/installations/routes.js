@@ -1,6 +1,6 @@
 'use strict';
 const { col } = require('../db'); const registre = require('../registre'); const L = require('../transport/limites');
-const { repondreErreur } = require('../erreurs'); const S = require('./service'); const liaison = require('./liaison');
+const { repondreErreur } = require('../erreurs'); const S = require('./service'); const liaison = require('./liaison'); const exemption = require('./exemption-banc');
 const { resoudrePorteur, exigerInstallation } = require('../porteur'); const { idempotente, FORME_FORTE } = require('../transport/idempotence'); const { ipKeyGenerator } = require('express-rate-limit');
 
 // `heritage` (réponse 201 de /api/installation) : une valeur par issue RÉELLE de reprendreHeritage, aucune silencieuse.
@@ -32,7 +32,17 @@ function montrerInstallation(router, cfg, deps) {
     };
     // IPv6 regroupée par /56 (ipKeyGenerator d'express-rate-limit, la MÊME fonction que v2/limiteur-heritage.js) : un /64 ne multiplie pas les seaux ; une IPv4 reste telle quelle
     const cleIp = q => L.empreinteIp(ipKeyGenerator(String(q.ip || '?')));
-    const limite = L.limiteur({ nom: 'inst-ip', max: cfg.limites.installationParIpJour, fenetreMs: 86400e3, cle: cleIp });
+    const limiteIp = L.limiteur({ nom: 'inst-ip', max: cfg.limites.installationParIpJour, fenetreMs: 86400e3, cle: cleIp });
+    // INST-BANC : le compte de mesure (session valide, banc, administrateur, confirmé — exemption-banc.js) n'est pas compté dans `inst-ip` mais dans SON plafond (par compte, 50 par jour par défaut : une session
+    // volée ou un banc emballé ne peut pas créer d'installations sans fin). Tout autre cas, exception comprise, passe par `inst-ip` comme avant. `inst-req-ip` et l'idempotence précèdent : ils valent pour le banc aussi.
+    const compteExempte = exemption.exemptionBanc(cfg), exempte = new WeakMap();
+    const limiteBanc = L.limiteur({ nom: 'inst-banc', max: cfg.limites.installationBancJour, fenetreMs: 86400e3, cle: q => exempte.get(q) || null });
+    const limite = async (req, res, next) => {
+        const id = await compteExempte(req);
+        if (!id) return limiteIp(req, res, next);
+        exempte.set(req, id);
+        return limiteBanc(req, res, next);
+    };
     // Idempotency-Key FACULTATIVE (l'extension en envoie une ; sans clé : comportement d'avant). AVANT le limiteur : un rejeu servi par la clé ne consomme pas le plafond 2/IP/jour.
     // Personne n'a encore de jeton : le claim vit sous un porteur unique « anonyme » (la clé, aléatoire côté client, est le secret). La réponse porte le jeton : elle est conservée SCELLÉE.
     // La clé tient lieu de SECRET (aucun porteur) : 32 caractères au moins sur CETTE route (400 ENTREE, detail `cle-trop-courte` | `cle-trop-longue` | `cle-caractere-interdit`), et un limiteur par IP AVANT la recherche de la clé compte TOUTES les

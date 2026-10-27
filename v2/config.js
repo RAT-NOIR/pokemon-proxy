@@ -138,7 +138,7 @@ function lireConfig(env = process.env) {
                // MOYENS-B2a tour 1 (M-1) : la réparation d'un débit sans trace (`reparerDebitRembourseSansMouvement`) refuse tant qu'un mouvement du porteur sur la même poche date de moins de ce délai (minutes, entier de 5 à 1440,
                // défaut 15) : l'écart de poche est un agrégat, un mouvement en vol le fausserait. C'est aussi l'âge au-delà duquel une marque `reparation` laissée par un arrêt est REPRISE (la preuve est refaite).
                reparationAgeMs: entier('V2_REPARATION_AGE_MIN', env.V2_REPARATION_AGE_MIN, 15, 5, 1440) * 60e3 },
-        limites: { installationParIpJour: 2, installationRequetesIpHeure: entier('V2_INSTALLATION_REQUETES_HEURE', env.V2_INSTALLATION_REQUETES_HEURE, 30, 1), essaisGlobauxJour: entier('V2_ESSAIS_GLOBAUX_JOUR', env.V2_ESSAIS_GLOBAUX_JOUR, 500),
+        limites: { installationParIpJour: 2, installationBancJour: entier('V2_INSTALLATION_BANC_JOUR', env.V2_INSTALLATION_BANC_JOUR, 50, 1, 1000), installationRequetesIpHeure: entier('V2_INSTALLATION_REQUETES_HEURE', env.V2_INSTALLATION_REQUETES_HEURE, 30, 1), essaisGlobauxJour: entier('V2_ESSAIS_GLOBAUX_JOUR', env.V2_ESSAIS_GLOBAUX_JOUR, 500),
                    identifierParCompteHeure: 120, codeEssaisInstallationHeure: 5, codeEssaisIpHeure: 20, connexionParCompteHeure: 10,
                    inscriptionIpHeure: entier('V2_INSCRIPTION_IP_HEURE', env.V2_INSCRIPTION_IP_HEURE, 10, 1), oubliIpHeure: entier('V2_OUBLI_IP_HEURE', env.V2_OUBLI_IP_HEURE, 10, 1),
                    reinitIpHeure: entier('V2_REINIT_IP_HEURE', env.V2_REINIT_IP_HEURE, 10, 1), verificationIpHeure: entier('V2_VERIFICATION_IP_HEURE', env.V2_VERIFICATION_IP_HEURE, 30, 1),
@@ -243,6 +243,9 @@ function lireConfig(env = process.env) {
         // DESIGNATION-REGLES (R5) : dans la voie « plus de 3 produits », le SEUL candidat restant est montre en QUESTION a un choix (jamais un sûr, jamais promu par la règle G). ÉTEINT par défaut ; allumé par « 1 » EXACTEMENT, toute autre valeur l'éteint sans invalider la configuration.
         confirmationNombreux: env.V2_CONFIRMATION_NOMBREUX === '1',
         resolutionCardmarket: env.V2_RESOLUTION_CARDMARKET === '1',
+        // INST-BANC : l'exemption de la limite « 2 installations par IP et par jour » (inst-ip) pour le SEUL compte de mesure (banc: true, administrateur, confirmé), reconnu par sa session (installations/exemption-banc.js).
+        // ÉTEINTE par défaut ; allumée par « 1 » EXACTEMENT (sur l'essai seulement), toute autre valeur l'éteint sans invalider la configuration. Le plafond du compte de mesure est `limites.installationBancJour`.
+        installationBancExempte: env.V2_INSTALLATION_BANC_EXEMPTE === '1',
         // PHOTOS-MULTIPLES (7d) : POST /api/photo (les octets d'une photo de l'annonce, AVANT le scan) et `photoIds` dans POST /api/identifier. ÉTEINT par défaut ; allumé par « 1 » EXACTEMENT. Toute autre valeur
         // éteint la route (elle n'existe pas) et laisse /api/identifier tel qu'il est aujourd'hui, SANS rendre la configuration invalide. Phase 1 : administrateur seulement.
         photosMultiples: env.V2_PHOTOS_MULTIPLES === '1',

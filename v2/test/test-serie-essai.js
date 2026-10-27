@@ -105,16 +105,17 @@ const nid = srv => srv.appels.filter(a => a.chemin === '/api/identifier').length
         H.v('lireIdentifiants : les deux, ou rien', [S.lireIdentifiants(ENV_BANC, null), S.lireIdentifiants({ V2_ESSAI_BANC_IDENTIFIANT: 'a' }, null)], [{ identifiant: IDENTIFIANT, motDePasse: SECRET }, null]);
         { const s = fauxServeur(), d = deps(s), b = base({ n: 2 });
           const r = await essaie(() => S.serie(b, d));
-          H.v('la connexion normale, dans l\'ordre : ping, installation, connexion, code, liaison, puis photo et identifier', s.appels.map(a => `${a.methode} ${a.chemin}`),
-              ['GET /ping', 'POST /api/installation', 'POST /api/compte/connexion', 'POST /api/compte/code', 'POST /api/compte/lier', 'POST /api/photo', 'POST /api/identifier', 'POST /api/photo', 'POST /api/identifier']);
+          H.v('la connexion normale, dans l\'ordre : ping, connexion, installation (avec la session), code, liaison, puis photo et identifier', s.appels.map(a => `${a.methode} ${a.chemin}`),
+              ['GET /ping', 'POST /api/compte/connexion', 'POST /api/installation', 'POST /api/compte/code', 'POST /api/compte/lier', 'POST /api/photo', 'POST /api/identifier', 'POST /api/photo', 'POST /api/identifier']);
           const par = c => s.appels.find(a => a.chemin === c);
           H.v('   connexion et code : les en-têtes du site (Origin exacte, X-Rat-Market) ; le code avec le cookie, sans Bearer', [par('/api/compte/connexion').entetes.Origin, par('/api/compte/connexion').entetes['X-Rat-Market'], par('/api/compte/code').entetes.Cookie === `rm_session=${COOKIE}`, par('/api/compte/code').entetes.Authorization], [S.ORIGINE_SITE, '1', true, undefined]);
           H.v('   la liaison : le jeton d\'INSTALLATION en Bearer ; photo et identifier : le jeton LIÉ (celui que la liaison a rendu)', [par('/api/compte/lier').entetes.Authorization === `Bearer ${JETON_INST}`, s.appels.filter(a => a.chemin === '/api/photo' || a.chemin === '/api/identifier').every(a => a.entetes.Authorization === `Bearer ${JETON_LIE}`)], [true, true]);
+          H.v('   INST-BANC : l\'installation est créée AVEC la session (cookie) et les en-têtes du site, sans Bearer : c\'est ce qui l\'exempte de la limite par IP', [par('/api/installation').entetes.Cookie === `rm_session=${COOKIE}`, par('/api/installation').entetes.Origin, par('/api/installation').entetes['X-Rat-Market'], par('/api/installation').entetes.Authorization], [true, S.ORIGINE_SITE, '1', undefined]);
           H.vrai('   ping, installation, connexion et code ne portent aucun Bearer', ['/ping', '/api/installation', '/api/compte/connexion', '/api/compte/code'].every(c => par(c).entetes.Authorization === undefined));
           const sortie = JSON.stringify(r.ok) + d.logs.join('\n') + fs.readFileSync(b.carnet, 'utf8');
           H.vrai('aucun secret (mot de passe, jetons, cookie) dans les journaux, le carnet ou le résultat', TOUS_LES_SECRETS.every(x => !sortie.includes(x)) && sortie.length > 100);
           H.vrai('   et le mot de passe ne part QUE dans le corps de la connexion (ni adresse, ni en-tête, ni autre corps)', s.appels.every(a => a.chemin === '/api/compte/connexion' || (!a.url.includes(SECRET) && !String(a.corps || '').includes(SECRET) && Object.values(a.entetes).every(v => !String(v).includes(SECRET)))));
-          H.vrai('   le cookie ne part QUE vers /api/compte/code', s.appels.every(a => a.chemin === '/api/compte/code' || !JSON.stringify(a.entetes).includes(COOKIE)));
+          H.vrai('   le cookie ne part QUE vers /api/installation et /api/compte/code', s.appels.every(a => a.chemin === '/api/compte/code' || a.chemin === '/api/installation' || !JSON.stringify(a.entetes).includes(COOKIE)));
           H.vrai('   le jeton d\'installation ne part QUE vers la liaison', s.appels.every(a => a.chemin === '/api/compte/lier' || !JSON.stringify(a.entetes).includes(JETON_INST))); }
         for (const [nom, avant, motif] of [['installation refusée', a => (a.chemin === '/api/installation' ? { status: 429, json: async () => ({}), headers: { get: n => (n === 'retry-after' ? '300' : null) } } : null), /installation.*429/],
             ['mauvais identifiants (401)', a => (a.chemin === '/api/compte/connexion' ? { status: 401, json: async () => ({}), headers: { get: () => null } } : null), /connexion refusée \(401\)/],
@@ -286,7 +287,7 @@ const nid = srv => srv.appels.filter(a => a.chemin === '/api/identifier').length
           const b = base({ n: 3, plafondUsd: 1, deuxiemeApresSignal: SIGNAL, apresSerie1: async r => { ordre.push(`serie1:${r.stats.n}`); } });
           const r = await essaie(() => S.serie(b, d));
           H.v('deux temps : la sortie de la série 1 est remise AVANT la première vérification du signal', ordre.slice(0, 2), ['serie1:3', `existe:${SIGNAL}`]);
-          H.v('   la séquence : UNE installation, UNE connexion, puis 3 scans, un second /ping, 3 scans', chemins(s), ['GET /ping', 'POST /api/installation', 'POST /api/compte/connexion', 'POST /api/compte/code', 'POST /api/compte/lier',
+          H.v('   la séquence : UNE connexion, UNE installation, puis 3 scans, un second /ping, 3 scans', chemins(s), ['GET /ping', 'POST /api/compte/connexion', 'POST /api/installation', 'POST /api/compte/code', 'POST /api/compte/lier',
               ...Array(3).fill(['POST /api/photo', 'POST /api/identifier']).flat(), 'GET /ping', ...Array(3).fill(['POST /api/photo', 'POST /api/identifier']).flat()]);
           H.v('   les MÊMES lignes dans le MÊME ordre', [r.ok.deuxieme.lignes, r.ok.deuxieme.stats.n], [r.ok.lignes, 3]);
           H.v('   en attente : 3 pauses de 30 s, une ligne d\'état à chacune', [pauses, d.logs.filter(l => /^en attente du signal/.test(l)).length], [[30000, 30000, 30000], 3]);
