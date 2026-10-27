@@ -4,7 +4,8 @@
 // Consultée APRÈS l'adaptateur et la seconde lecture, avant la règle G. Elle ne peut que PROMOUVOIR une question en affirmation du produit TAMPONNÉ quand la preuve est faite : deux lectures identiques d'un ensemble
 // NON VIDE de marques de la liste, sans `autre`, EXACTEMENT celui de la variante prouvée du produit. Toute autre issue (rien lu, marque hors liste, ensemble différent, incertain, désaccord, panne, délai,
 // plafond de dépense, deuxième passage, pas de carte valide) laisse la réponse d'AVANT, sans débit ni remboursement de plus. 🔴 Elle n'affirme JAMAIS la version normale : un tampon manqué n'est pas un tampon absent.
-// Un JUMBO reste une question (la règle « jumbo par le titre » est RETIRÉE : elle ne se défend pas contre la négation).
+// Un JUMBO reste une question pour cette décision, qui ne lit aucun titre. La règle « jumbo par le titre », retirée le 18/10 faute de garde contre la négation, a été RÉTABLIE le 27/10 (décision de l'éditeur) AVEC cette garde,
+// dans identifier/garde-marqueurs.js, derrière V2_JUMBO_TITRE (éteint par défaut) : elle seule lit un titre.
 // UNE SEULE image : `entree.empreintes[i].carte`, la carte redressée que l'extension joint à son vecteur et que MODELE-VISUEL-API valide (carte-redressee.js : JPEG, 420 x 587, 200 Ko au plus). Pas de photo pleine,
 // pas d'octets bruts, pas de géométrie, jamais un téléchargement. Une question sans carte valide ne déclenche rien (0 appel).
 // La facturation est celle d'une affirmation (comme le critère A et la désignation).

@@ -832,6 +832,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             V2_TE_FIN_PARALLELE: [c => c.tempsEtapes.finParallele, false, '2', 'leve'], V2_TE_ORB_UTILE: [c => c.tempsEtapes.orbUtile, false, '2', 'leve'],
             V2_VIVIER_IMAGE: [c => c.vivierImage, false, '2', 'leve'],      // VIVIER-IMAGE : éteint par défaut, tout autre que 0 ou 1 est invalide
             V2_SPI_COMPARATEUR: [c => c.spiComparateur, false, '2', 'leve'],      // SPI-CONTRADICTIONS : éteint par défaut, tout autre que 0 ou 1 est invalide
+            V2_GARDE_MARQUEURS: [c => c.gardeMarqueurs, false, '2', 'leve'], V2_JUMBO_TITRE: [c => c.jumboTitre, false, '2', 'leve'],      // MARQUEURS : les deux règles éteintes par défaut, tout autre que 0 ou 1 est invalide
             V2_MESURES_CLIENT: [c => c.mesuresClient, false, '2', 'leve'], V2_ORB_SERVEUR: [c => c.orbServeur, true, '2', 'leve'],      // CALCUL-CLIENT : le complément éteint, l'ORB serveur allumé par défaut ; tout autre que 0 ou 1 est invalide
             V2_TAUX_BCE: [c => c.tauxBce, false, '2', 'leve'],      // TAUX-BCE : éteint par défaut, tout autre que 0 ou 1 est invalide
             V2_EMPREINTE_EXTENSION: [c => c.empreinteExtension, false, '2', 'leve'],      // MODELE-VISUEL-API : éteint par défaut, tout autre que 0 ou 1 est invalide

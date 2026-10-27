@@ -237,7 +237,8 @@ const ids = c0 => c0.candidats.map(c => c.idProduct);
         H.v('6a. même clé d\'idempotence rejouée : la même réponse, le modèle n\'est pas rappelé, un seul débit', [norm(r2.texte) === norm(r1.texte), apres1, modele.appels.length, (await livre(x)).net], [true, 1, 1, -1]);
     }
 
-    // ── 7. LE JUMBO RESTE UNE QUESTION (C1) : aucun titre, aucune négation ne le tranche ; la règle « jumbo par le titre » n'existe plus
+    // ── 7. LE JUMBO RESTE UNE QUESTION (C1) pour la lecture du tampon, drapeau V2_JUMBO_TITRE éteint (ici, jamais allumé) : aucun titre, aucune négation ne le tranche. La règle « jumbo par le titre », rétablie le 27/10 avec la garde
+    //      de la négation, est dans garde-marqueurs.js et se mesure dans test-garde-marqueurs-route.js
     {
         modele.appels.length = 0;
         const titres = ['Pikachu JUMBO promo', 'pas de jumbo', 'not a jumbo', 'sans version jumbo', 'Pikachu normale, jumbo vendue séparément', 'jumbo oversize géante'];

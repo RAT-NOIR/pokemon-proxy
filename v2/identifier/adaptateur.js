@@ -295,5 +295,12 @@ function affirmerParLaRoute(corps, idProduct, ctx, critere) {
     source(ctx, idProduct);
     return affirmer(idProduct, etatDe(corps && corps.etat), ctx, corps || {}, critere);
 }
+/**
+ * MARQUEURS (V2_GARDE_MARQUEURS) : la question d'un GROUPE — le produit tenu pour sûr d'abord, puis ses rivaux de même dessin (garde-marqueurs.js) — par la MÊME construction que toute question de la chaîne
+ * (partenaires de partage compris ; plus de 3 produits : jamais tronquée, l'introuvable `impression-indeterminee` au motif compté). Chaque produit doit être dans ctx.produits, sinon la panne SERVEUR d'avant.
+ */
+function questionDeGroupe(corps, ids, ctx) {
+    return questionAvecPartenaires(ids, etatDe(corps && corps.etat), ctx, 'groupe de marqueurs');
+}
 // codeLangueDe / prixLiveDe : exportés pour que /api/identifier/reponse (B1b.5) fabrique le prixLive d'une carte tranchée par la MÊME règle que l'adaptateur (§21 bis : jamais une copie).
-module.exports = { adapter, RAISONS, codeLangueDe, prixLiveDe, affirmerParLaRoute };
+module.exports = { adapter, RAISONS, codeLangueDe, prixLiveDe, affirmerParLaRoute, questionDeGroupe };

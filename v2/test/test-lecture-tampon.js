@@ -13,7 +13,7 @@ const MF = 'les variantes ne sont pas une paire marque/normale';
     // ── 1. LE DÉCLENCHEMENT : écrit par ce qu'il autorise (un seul chemin mène à une paire)
     H.v('1a. la paire staff/normale séparée, prouvée par l\'archive : staff = 12, normale = 11 (quel que soit l\'ordre des candidats)', [type([11, 12]), type([12, 11])], [['staff', 12, 11], ['staff', 12, 11]]);
     const J = { 21: e({ variante: 'normale', produitsPartages: [21, 22], tamponNonRepresente: null }), 22: e({ variante: 'jumbo', produitsPartages: [21, 22], tamponNonRepresente: null }) };
-    H.v('1b. la paire jumbo/normale séparée : RIEN (un jumbo reste une question ; la règle « jumbo par le titre » est retirée)', type([21, 22], J), MF);
+    H.v('1b. la paire jumbo/normale séparée : RIEN (pour ce module un jumbo reste une question ; le titre est lu ailleurs, par garde-marqueurs.js, derrière V2_JUMBO_TITRE)', type([21, 22], J), MF);
     const nonSepare = { 11: e({ partageeTamponNonSepare: true }), 12: e({ variante: 'staff', partageeTamponNonSepare: true }) };
     H.v('1c. une paire NON séparée (true) ne déclenche rien', type([11, 12], nonSepare), 'la paire n\'est pas marquée séparée');
     H.v('1d. un candidat sans entrée d\'archive, ou une archive sans marquage (null) : rien', [type([11, 99]), type([11, 12], { 11: e({ partageeTamponNonSepare: null }), 12: e({ partageeTamponNonSepare: null, variante: 'staff' }) })], ['un candidat n\'a pas d\'entrée d\'archive', 'la paire n\'est pas marquée séparée']);
@@ -33,8 +33,19 @@ const MF = 'les variantes ne sont pas une paire marque/normale';
         [marque('league'), marque('kfc'), marque('staff+prerelease'), marque('league+place-2')], [['league', 'league', ['league'], 12, 11], ['kfc', 'kfc', ['kfc'], 12, 11], ['staff+prerelease', 'staff+prerelease', ['staff', 'prerelease'], 12, 11], ['league+place-2', 'league+place-2', ['league', 'place-2'], 12, 11]]);
     H.v('1l. un jumbo reste une question même en ensemble de la liste', marque('jumbo'), MF);
 
-    // ── 2. LA RÈGLE « JUMBO PAR LE TITRE » EST RETIRÉE DU CODE : plus aucune fonction ne lit un titre
-    H.v('2. le module n\'exporte plus aucune règle de titre (ni titreJumbo, ni liste de mots)', Object.keys(LT).filter(k => /titre|jumbo|MOTS|NEGATION/i.test(k)), []);
+    // ── 2. LA RÈGLE « JUMBO PAR LE TITRE » (rétablie le 27/10, avec la négation) NE VIT PAS ICI : ce module ne lit aucun titre ; SEULE la fonction de garde-marqueurs.js le lit, et seulement drapeau allumé
+    H.v('2a. ce module n\'exporte aucune règle de titre (ni titreJumbo, ni liste de mots)', Object.keys(LT).filter(k => /titre|jumbo|MOTS|NEGATION/i.test(k)), []);
+    {
+        const GM = require('../identifier/garde-marqueurs');
+        const fs = require('fs'), path = require('path');
+        const dossier = path.join(__dirname, '..', 'identifier');
+        const lisent = fs.readdirSync(dossier).filter(f => f.endsWith('.js')).filter(f => /lireTitreJumbo|TERMES_JUMBO/.test(fs.readFileSync(path.join(dossier, f), 'utf8'))).sort();
+        H.v('2b. SEUL garde-marqueurs.js définit ou nomme la lecture du titre Jumbo (aucun autre fichier de v2/identifier)', lisent, ['garde-marqueurs.js']);
+        const q = { issue: 'question', analyse: { cartes: [{ candidats: [{ idProduct: 1 }, { idProduct: 2 }] }] } };
+        let affirme = 0;
+        const appel = cfg => GM.consulterMarqueurs({ cfg, titre: 'Pikachu jumbo', resultat: q, produits: new Map(), version: { entree: () => ({ vignette: { cle: 'a' }, idMetacard: 1, numero: '1', setNom: 's' }) }, affirmer: () => { affirme++; return null; }, marqueursDe: id => (id === 1 ? [] : [{ type: 'JUMBO', params: {} }]), questionDeGroupe: () => null });
+        H.v('2c. drapeau éteint : le titre n\'est pas lu (rien d\'appelé) ; allumé : il l\'est (la fonction affirme)', [appel({ jumboTitre: false, gardeMarqueurs: false }), affirme, (appel({ jumboTitre: true, gardeMarqueurs: false }), affirme)], [null, 0, 1]);
+    }
 
     // ── 3. UN ESSAI : la réponse du lecteur -> { marques } | { autre } | 'incertain'
     const L = (marques, o = {}) => ({ marques, autre: false, incertain: false, ...o });
