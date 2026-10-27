@@ -236,7 +236,10 @@ for (const [nom, r, code] of pannes) {
             if (!ecarts.includes('deBase') && 'deBase' in leur) v(`vecteur ${nom} : deBase`, mien.deBase, leur.deBase);
             if (!ecarts.includes('reserves') && Array.isArray(leur.reserves)) vrai(`vecteur ${nom} : les réserves de l'extension sont de la liste fermée du serveur`, leur.reserves.every(r => require('../identifier/fiabilite-prix').RESERVES.includes(r)));
         };
-        const comparerCarte = (nom, mienne, fausse, ecartsProduit = []) => {
+        // MARQUEURS (27/10, CONTRAT-MARQUEURS.md) : le serveur sert `marqueurs` sur le Produit, les candidats et les impressions ; les vecteurs de l'extension identifiee*, a-trancher-* ne le portent pas encore (seul marqueurs.json le montre,
+        // avec un type FUTUR qu'aucun schéma ne connaît). Écart épinglé DANS LES DEUX SENS, par vecteur : le jour où l'extension l'ajoute à un de ces fichiers, ce banc le dit.
+        const ECART_MARQUEURS = ['marqueurs'];
+        const comparerCarte = (nom, mienne, fausse, ecartsProduit = [], ecartsCandidat = []) => {
             compare(`${nom} carte`, mienne, fausse);
             for (const k of ['etat', 'prixLive']) if (fausse[k] && mienne[k]) { compare(`${nom} ${k}`, mienne[k], fausse[k], k === 'etat' ? ECART_ETAT : []); }
             // écart DOCUMENTÉ, épinglé DANS LES DEUX SENS (CONTRAT-API-V2 §7.3 bis, E12 ; DEMANDE-SERVEUR-EXTENSION §B7) : le serveur sert `etat.declare`, le vecteur ne l'a plus
@@ -253,7 +256,8 @@ for (const [nom, r, code] of pannes) {
             }
             if (fausse.candidats.length) {
                 v(`vecteur ${nom} : nombre de candidats`, mienne.candidats.length, fausse.candidats.length);
-                compare(`${nom} candidat`, mienne.candidats[0], fausse.candidats[0]);
+                compare(`${nom} candidat`, mienne.candidats[0], fausse.candidats[0], ecartsCandidat);
+                if (ecartsCandidat.length) epingler(`${nom} candidat : ${ecartsCandidat.join(', ')}`, mienne.candidats[0], fausse.candidats[0], ecartsCandidat);
                 compare(`${nom} candidat.set`, mienne.candidats[0].set, fausse.candidats[0].set);
                 comparerPrix(`${nom} candidat.prixGuide`, mienne.candidats[0].prixGuide, fausse.candidats[0].prixGuide);
                 compare(`${nom} question`, mienne.question, fausse.question);
@@ -261,24 +265,25 @@ for (const [nom, r, code] of pannes) {
             }
         };
         const idf = lire('identifiee.json').analyse.cartes[0];
-        comparerCarte('identifiee', A(succes()).analyse.cartes[0], idf, ['marques']);
+        comparerCarte('identifiee', A(succes()).analyse.cartes[0], idf, ['marques', ...ECART_MARQUEURS]);
         v('vecteur identifiee : type de prixGuide.tendance', typeof A(succes()).analyse.cartes[0].carte.prixGuide.tendance, typeof idf.carte.prixGuide.tendance);
         v('vecteur identifiee : types de etat', [typeof A(succes()).analyse.cartes[0].etat.defauts, typeof A(succes()).analyse.cartes[0].etat.confiance], [typeof idf.etat.defauts, typeof idf.etat.confiance]);
         // la fausse « avec impressions » : mêmes clés que le serveur (impressions comprise), plus aucun écart (BANC-EXTENSION-2) ; le contenu des impressions est comparé plus bas, sur une impression servie par le serveur
         const idi = lire('identifiee-impressions.json').analyse.cartes[0];
-        comparerCarte('identifiee-impressions', A(succes()).analyse.cartes[0], idi);
+        comparerCarte('identifiee-impressions', A(succes()).analyse.cartes[0], idi, ECART_MARQUEURS);
         vrai('vecteur identifiee-impressions : le serveur et le vecteur portent tous deux `impressions` (une liste)', Array.isArray(A(succes()).analyse.cartes[0].carte.impressions) && Array.isArray(idi.carte.impressions));
         {   // une impression servie par le serveur (ligne de catalogue avec ses impressions), comparée à la première de l'extension. Plus aucun écart depuis le lot H de l'extension (BANC-EXTENSION-2) : `langue`, `marques` et `prixGuide.date` sont portés des deux côtés et comparés comme les autres clés.
             const imp = { idProduct: 900001, numero: '4', total: '102', rarete: 'Holo Rare', variante: 'holo', version: null, langue: 'en', set: { nom: 'Set 700' }, lien: null, prixGuide: { trend: 330, low: 285, avg30: 318, guideDu: new Date('2026-10-05') } };
             const avecImp = A(succes(), 200, ctx({ produits: new Map([[700, ligne(700, { impressions: [imp] })]]) })).analyse.cartes[0].carte.impressions[0];
             const leur = idi.carte.impressions[0];
             vrai('vecteur identifiee-impressions : le serveur sert bien une impression dans ce montage', Boolean(avecImp));
-            compare('identifiee-impressions impression', avecImp, leur);
+            compare('identifiee-impressions impression', avecImp, leur, ECART_MARQUEURS);
+            epingler('identifiee-impressions impression : marqueurs', avecImp, leur, ECART_MARQUEURS);
             compare('identifiee-impressions impression.set', avecImp.set, leur.set);
             comparerPrix('identifiee-impressions impression.prixGuide', avecImp.prixGuide, leur.prixGuide);
         }
-        comparerCarte('a-trancher-2', A(amb([700, 701])).analyse.cartes[0], lire('a-trancher-2.json').analyse.cartes[0]);
-        comparerCarte('a-trancher-3', A(amb([700, 701, 702])).analyse.cartes[0], lire('a-trancher-3.json').analyse.cartes[0]);
+        comparerCarte('a-trancher-2', A(amb([700, 701])).analyse.cartes[0], lire('a-trancher-2.json').analyse.cartes[0], [], ECART_MARQUEURS);
+        comparerCarte('a-trancher-3', A(amb([700, 701, 702])).analyse.cartes[0], lire('a-trancher-3.json').analyse.cartes[0], [], ECART_MARQUEURS);
         const intr = lire('introuvable.json').analyse.cartes[0];
         // ÉCART NOTÉ : la fausse réponse « introuvable » porte un objet etat ; CONTRAT-2 §3.1 dit null. Le contrat fait foi.
         compare('introuvable carte', A(refus('numero-illisible', 'refus-delibere')).analyse.cartes[0], intr);

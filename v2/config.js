@@ -212,6 +212,11 @@ function lireConfig(env = process.env) {
         // SUR-PAR-IMAGE : une question dont les candidats ne sont pas le même dessin devient un sûr quand la photo (le vecteur de l'extension) est nettement plus proche d'un seul (identifier/sur-par-image.js, M = SEUILS_G.marge_carte).
         // ÉTEINT par défaut (0) : la chaîne est identique octet pour octet. N'agit que si V2_EMPREINTE_EXTENSION est allumé aussi (le vecteur et l'index en viennent) ; jamais sur un sûr, un refus ni un « je ne sais pas ».
         surParImage: booleen('V2_SUR_PAR_IMAGE', env.V2_SUR_PAR_IMAGE, false),
+        // MARQUEURS (CONTRAT-MARQUEURS.md §5, identifier/garde-marqueurs.js) : DEUX règles, chacune ÉTEINTE par défaut (0) : la réponse est celle d'avant, octet pour octet.
+        // gardeMarqueurs : un sûr dont le produit a un rival de même dessin (même fiche et même visuel, ou visuel emprunté) aux marqueurs différents redevient la question d'avant, sauf signal réel du marqueur qui les sépare.
+        // jumboTitre : une question exactement { Jumbo, sans Jumbo } de même fiche et de même visuel devient le sûr du Jumbo quand le TITRE de l'annonce nomme un terme de la liste fermée sans négation (jamais la version normale).
+        gardeMarqueurs: booleen('V2_GARDE_MARQUEURS', env.V2_GARDE_MARQUEURS, false),
+        jumboTitre: booleen('V2_JUMBO_TITRE', env.V2_JUMBO_TITRE, false),
         // TEMPS-ETAPES (identifier/temps-etapes.js) : quatre coupes de TEMPS qui ne changent aucune décision, chacune ÉTEINTE par défaut (0) : la route est alors celle d'avant, octet pour octet.
         // voisinsUneFois : la recherche des voisins une fois par requête ; empreinteTot : la recherche et la garde des zones partent pendant l'attente du modèle ; finParallele : les lectures/écritures annexes de la fin de requête partent ensemble.
         // orbUtile : la règle G (recherche des voisins + garde des zones, donc l'ORB) n'est pas consultée quand la chaîne a rendu un INTROUVABLE — elle ne peut rien y changer (arbitrage-g.js, promotion-g.js) ; la réponse dit alors `empreinte: { utilisee: false, code: 'muette' }`.

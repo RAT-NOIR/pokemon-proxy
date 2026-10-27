@@ -14,7 +14,8 @@ const PROJECTIONS = Object.freeze({
         'images.partageeHoloNonHolo': 1, 'images.partageeTamponNonSepare': 1, 'images.produitsPartages': 1, 'images.tamponNonRepresente': 1, 'images.basseDefinition': 1, 'images.imageEmprunteeTirage': 1,
         // ADMISSION-CATALOGUE : la RÈGLE de la preuve lue (rien d'autre de preuveLue) et la nature d'un emprunt
         'images.preuveLue.regle': 1, 'images.differenceEmprunt': 1 }),
-    cartes_produits: Object.freeze({ carteId: 1, idProduct: 1, idExpansion: 1, numeroFiche: 1, slug: 1, slugSet: 1, visuelSubstitut: 1, variante: 1, variantePreuve: 1, prixMelangeTampon: 1 })
+    cartes_produits: Object.freeze({ carteId: 1, idProduct: 1, idExpansion: 1, numeroFiche: 1, slug: 1, slugSet: 1, visuelSubstitut: 1, variante: 1, variantePreuve: 1, prixMelangeTampon: 1,
+        marqueurs: 1, marqueursPreuve: 1 })                    // MARQUEURS (CONTRAT-MARQUEURS.md §4.2) : ce que le catalogue ÉCRIT, avec sa preuve ; la validation vit dans identifier/marqueurs.js
 });
 const LOT = 500;
 
@@ -38,6 +39,9 @@ function compacterLigne(d, I) {
     const v = d.visuelSubstitut;
     return { carteId: d.carteId, idProduct: d.idProduct, idExpansion: d.idExpansion, numeroFiche: I(d.numeroFiche), slug: d.slug, slugSet: I(d.slugSet), variante: I(d.variante), variantePreuve: typeof d.variantePreuve === 'string' && d.variantePreuve.trim() ? 'oui' : null,
         prixMelangeTampon: d.prixMelangeTampon === true ? true : d.prixMelangeTampon === false ? false : null,      // LOT TAMPONS (B) : booléen seulement ; la preuve interne du catalogue (une source nommée) n'est JAMAIS lue
+        // MARQUEURS : la liste écrite (objets simples { type, params }) et sa preuve (une phrase) ; rien n'est validé ni réparé ici (identifier/marqueurs.js::fusionner compte les invalides)
+        marqueurs: Array.isArray(d.marqueurs) ? d.marqueurs.map(m => (m && typeof m === 'object' && !Array.isArray(m) ? { type: I(m.type), params: m.params } : null)) : null,
+        marqueursPreuve: typeof d.marqueursPreuve === 'string' && d.marqueursPreuve.trim() ? d.marqueursPreuve.trim() : null,
         visuelSubstitut: v && typeof v === 'object' ? { ...v, set: I(v.set), mention: I(v.mention) } : v };
 }
 async function lireEnFlux(collection, projection, convertir) {

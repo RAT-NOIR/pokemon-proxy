@@ -1,7 +1,8 @@
 'use strict';
 // F1-TAMPON puis LOT TAMPONS (2026-10-18) — lire les MARQUES d'une carte tamponnée (Staff, Prerelease, League, enseignes…) sur la photo, dans une liste FERMÉE (marques-tampon.js), pour trancher une paire SÉPARÉE par
 // l'étiquette Cardmarket, à 0 faux. Module PUR : ni base, ni réseau, ni modèle (la préparation de l'image et le lecteur sont INJECTÉS ; les octets viennent de l'appelant, jamais d'un téléchargement).
-// Décision du testeur (17/10) : « STAFF lu => l'idProduct staff ; sinon une question », étendue le 18/10 à la liste fermée. Un JUMBO reste une question : la règle « jumbo par le titre » est RETIRÉE.
+// Décision du testeur (17/10) : « STAFF lu => l'idProduct staff ; sinon une question », étendue le 18/10 à la liste fermée. Un JUMBO reste une question POUR CE MODULE, qui ne lit aucun titre : la règle « jumbo par le titre » a été rétablie le 27/10 (décision de l'éditeur, AVEC la garde de la négation qui lui manquait) mais vit AILLEURS —
+// identifier/garde-marqueurs.js, derrière V2_JUMBO_TITRE (éteint) ; c'est la SEULE fonction du dépôt qui lit un titre.
 // 🔑 Écrit par ce qu'il AUTORISE :
 //   · le déclenchement : la question est EXACTEMENT une paire que l'archive prouve séparée (partageeTamponNonSepare false des deux côtés, la paire nommée par les listes OU séparée par la variante : même visuel,
 //     même fiche) ; un côté porte un ensemble de marques de la liste prouvé (`variante`), l'autre `normale` ;

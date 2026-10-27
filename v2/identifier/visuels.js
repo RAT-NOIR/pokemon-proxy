@@ -11,6 +11,7 @@ const { VARIANTES } = require('./produit');
 const { lienServi } = require('./lien-cardmarket');
 const { langueDeTirage } = require('./langue-decisive');
 const { separeeParVariante } = require('./partage-variante');
+const { setWcdDeLEntree } = require('./marqueurs');
 const { marquesProuvees, estVariante } = require('./marques-tampon');
 
 // LISTE FERMÉE des collections que ce module lit. Tout autre nom est refusé AVANT la lecture ; un test échoue si ce fichier en nomme une autre.
@@ -98,7 +99,9 @@ function lireEntree(e) {
     const nature = e.visuel === undefined || e.visuel === null ? 'du-set' : e.visuel;
     if (!['du-set', 'substitut', 'autre-tirage'].includes(nature)) return { ok: false, motif: `nature de visuel inconnue "${nature}"` };
     const mention = texte(e.mention);
-    if (nature !== 'du-set' && !mention) return { ok: false, motif: 'visuel de substitution sans mention' };
+    // MARQUEURS (CONTRAT-MARQUEURS.md §6) : l'UNIQUE exception — un visuel `autre-tirage` (l'emprunt marqué du catalogue) d'un produit d'un set WCD-<aaaa>, reconnu sur l'entrée elle-même (lien Cardmarket ou nom affiché),
+    // s'affiche sans mention : le bandeau WCD / NON_LEGAL la remplace. Un substitut, et tout autre set, gardent l'exigence.
+    if (nature !== 'du-set' && !mention && !(nature === 'autre-tirage' && setWcdDeLEntree(e))) return { ok: false, motif: 'visuel de substitution sans mention' };
     for (const c of CHAMPS_IMPRESSION) if (e[c] === undefined) return { ok: false, motif: `champ "${c}" absent (null admis, absent non)` };
     if (e.idMetacard !== null && !(Number.isInteger(e.idMetacard) && e.idMetacard > 0)) return { ok: false, motif: 'idMetacard ni entier ni null' };
     if (e.lien !== undefined && e.lien !== null && !lienCardmarket(e.lien)) return { ok: false, motif: 'lien hors Cardmarket (https://www.cardmarket.com/…)' };
