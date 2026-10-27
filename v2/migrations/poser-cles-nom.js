@@ -27,27 +27,44 @@ const mo = o => Number((o / 1e6).toFixed(1));
 const cause = e => (e && (e.codeName || e.code || e.name)) || 'erreur';
 const JOURNAL_PAR_DEFAUT = path.join(__dirname, '..', '..', 'backup-amorcage-essai', 'journal-cles-nom.jsonl');           // backup-*/ est ignoré par git
 
-/** Les deux champs : la collection, le champ lu pour calculer la clé, la clé, l'index. UNE liste fermée. */
+/**
+ * La liste FERMÉE de ce que l'outil pose, par collection : le champ lu (`lu`), le TÉMOIN de la source (`temoin` : la valeur de `lu` au moment de la pose, écrite dans le MÊME `$set` que les clés — un produit renommé ensuite
+ * par l'import a `lu` ≠ `temoin`, et le serveur refuse alors l'index : index-nom.js), et les clés (`champs`), chacune avec son index, sa forme attendue et une sonde de plan.
+ */
 const PLAN = Object.freeze([
-    Object.freeze({ collection: 'catalogue_produits', lu: 'name', champ: CN.CHAMP_CATALOGUE, nomIndex: CN.INDEX_CATALOGUE, cle: CN.clesDuProduit, sonde: { [CN.CHAMP_CATALOGUE]: { $in: ['pikachu'] } } }),
-    Object.freeze({ collection: 'numeros_cartes', lu: 'nomFr', champ: CN.CHAMP_FR, nomIndex: CN.INDEX_FR, cle: CN.cleNomFr, sonde: { [CN.CHAMP_FR]: 'pikachu' } }),
-    Object.freeze({ collection: 'catalogue_produits', lu: 'name', champ: CN.CHAMP_NOM_MIN, nomIndex: CN.INDEX_NOM_MIN, cle: CN.cleNomMin, sonde: { [CN.CHAMP_NOM_MIN]: { $gte: 'pikachu', $lt: 'pikachu￿' } } })
+    Object.freeze({
+        collection: 'catalogue_produits', lu: 'name', temoin: CN.CHAMP_SOURCE_CATALOGUE,
+        champs: Object.freeze([
+            Object.freeze({ champ: CN.CHAMP_CATALOGUE, nomIndex: CN.INDEX_CATALOGUE, cle: CN.clesDuProduit, forme: v => Array.isArray(v) && v.every(x => typeof x === 'string'), sonde: { [CN.CHAMP_CATALOGUE]: { $in: ['pikachu'] } } }),
+            Object.freeze({ champ: CN.CHAMP_NOM_MIN, nomIndex: CN.INDEX_NOM_MIN, cle: CN.cleNomMin, forme: v => typeof v === 'string', sonde: { [CN.CHAMP_NOM_MIN]: { $gte: 'pikachu', $lt: 'pikachu￿' } } })
+        ])
+    }),
+    Object.freeze({
+        collection: 'numeros_cartes', lu: 'nomFr', temoin: CN.CHAMP_SOURCE_FR,
+        champs: Object.freeze([Object.freeze({ champ: CN.CHAMP_FR, nomIndex: CN.INDEX_FR, cle: CN.cleNomFr, forme: v => typeof v === 'string', sonde: { [CN.CHAMP_FR]: 'pikachu' } })])
+    })
 ]);
+const champsDe = spec => [...spec.champs.map(c => c.champ), spec.temoin];
 
 function lireArguments(args) {
-    const r = { appliquer: false, base: null, lot: TAILLE_LOT, pauseMs: 0 };
+    const r = { appliquer: false, retirer: false, base: null, lot: TAILLE_LOT, pauseMs: 0 };
+    const vus = new Set();
     for (const a of args) {
         let m;
+        const nom = typeof a === 'string' ? (a.match(/^(--[a-z-]+)/) || [])[1] : null;
+        // I2 : un argument RÉPÉTÉ est refusé (lireArguments gardait le dernier --base, mongo-connexion.js le premier : `--base=test --base=rm_essai` ouvrait la production avant de refuser)
+        if (nom && vus.has(nom)) return { ok: false, raison: `l'argument « ${nom} » est répété : refusé avant toute connexion (une seule fois chacun).` };
+        if (nom) vus.add(nom);
         if (a === '--appliquer') r.appliquer = true;
+        else if (a === '--retirer') r.retirer = true;
         else if ((m = /^--base=(.*)$/.exec(a))) r.base = m[1];
         else if ((m = /^--lot=(\d+)$/.exec(a)) && Number(m[1]) >= 1 && Number(m[1]) <= 5000) r.lot = Number(m[1]);
         else if ((m = /^--pause-ms=(\d+)$/.exec(a)) && Number(m[1]) <= 60000) r.pauseMs = Number(m[1]);
-        else return { ok: false, raison: `argument non reconnu « ${String(a).slice(0, 40)} » (admis : --base=${BASE_CIBLE}, --appliquer, --lot=<1..5000>, --pause-ms=<0..60000>).` };
+        else return { ok: false, raison: `argument non reconnu « ${String(a).slice(0, 40)} » (admis : --base=${BASE_CIBLE}, --appliquer, --retirer, --lot=<1..5000>, --pause-ms=<0..60000>).` };
     }
     if (r.base !== BASE_CIBLE) return { ok: false, raison: `la seule cible est --base=${BASE_CIBLE} (reçu : ${r.base === null ? 'rien' : `« ${String(r.base).slice(0, 30)} »`}). La production n'est jamais une cible.` };
     return { ok: true, ...r };
 }
-
 async function ouvrirCibleParDefaut(env) {
     const { connecterMongo } = require('../../mongo-connexion');
     const mongoose = require('mongoose');
@@ -60,7 +77,7 @@ async function prouverStatutParDefaut(db) {
     let statut; try { statut = await db.admin().command({ connectionStatus: 1, showPrivileges: true }); } catch { return { ok: false, raison: 'connectionStatus a échoué : je ne peux pas prouver ce que l\'utilisateur de la cible peut faire.' }; }
     return jugerStatut(statut);
 }
-async function poidsCibleParDefaut(db) { const s = await db.command({ dbStats: 1 }); return s.dataSize + s.indexSize; }
+async function poidsCibleParDefaut(db) { const s = await db.command({ dbStats: 1 }); return Math.max(s.dataSize + s.indexSize, (s.storageSize || 0) + s.indexSize); }   // I4 : le plus GRAND des deux (le palier compte le fichier, pas le logique)
 function journalParDefaut(ligne) { fs.mkdirSync(path.dirname(JOURNAL_PAR_DEFAUT), { recursive: true }); fs.appendFileSync(JOURNAL_PAR_DEFAUT, JSON.stringify(ligne) + '\n'); }
 
 const memes = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -81,22 +98,62 @@ async function verifierOrdreNaturel(col) {
     return { ok: true, n: rang };
 }
 
-/** Lit la collection ENTIÈRE par curseur et rend ce qui reste à poser : { total, aPoser, octets } — `octets` : la taille BSON des valeurs à écrire (le champ seul). `ecrire(lot)` est appelée par lots d'`_id` à poser. */
+/**
+ * Lit la collection ENTIÈRE par curseur et rend ce qui reste à poser : { total, aPoser, octets, etrangers } — `octets` : la taille BSON de ce qui sera écrit (clés et témoin) ; `etrangers` : les documents qui portent
+ * déjà un champ de l'outil sous une FORME qui n'est pas la sienne (l'outil n'écrase pas ce qui n'est pas à lui). Un document est « à poser » dès qu'une clé OU son témoin manque ou diffère de ce que le nom donne
+ * aujourd'hui — c'est ce qui rattrape un produit RENOMMÉ par l'import. `ecrire(lot)` est appelée par lots d'`_id` à poser.
+ */
 async function parcourir(col, spec, { lot, ecrire = null }) {
     const { BSON } = require('mongoose').mongo;
-    let total = 0, aPoser = 0, octets = 0, ops = [];
+    let total = 0, aPoser = 0, octets = 0, etrangers = 0, ops = [];
     const vider = async () => { if (ops.length && ecrire) await ecrire(ops); ops = []; };
-    const curseur = col.find({}, { projection: { [spec.lu]: 1, [spec.champ]: 1 } }).sort({ _id: 1 });
-    for await (const d of curseur) {
+    const projection = { [spec.lu]: 1, [spec.temoin]: 1 }; for (const c of spec.champs) projection[c.champ] = 1;
+    for await (const d of col.find({}, { projection }).sort({ _id: 1 })) {
         total++;
-        const voulu = spec.cle(d[spec.lu]);
-        if (d[spec.champ] !== undefined && memes(d[spec.champ], voulu)) continue;
-        aPoser++; octets += BSON.calculateObjectSize({ [spec.champ]: voulu }) - 5;
-        ops.push({ updateOne: { filter: { _id: d._id }, update: { $set: { [spec.champ]: voulu } } } });
+        const voulu = { [spec.temoin]: CN.sourceDe(d[spec.lu]) };
+        for (const c of spec.champs) voulu[c.champ] = c.cle(d[spec.lu]);
+        if (spec.champs.some(c => d[c.champ] !== undefined && !c.forme(d[c.champ]))) etrangers++;
+        if (Object.keys(voulu).every(k => d[k] !== undefined && memes(d[k], voulu[k]))) continue;
+        aPoser++; octets += BSON.calculateObjectSize(voulu) - 5;
+        ops.push({ updateOne: { filter: { _id: d._id }, update: { $set: voulu } } });
         if (ops.length >= lot) await vider();
     }
     await vider();
-    return { total, aPoser, octets };
+    return { total, aPoser, octets, etrangers };
+}
+
+/** I3 : le RETOUR ARRIÈRE — retire les champs que l'outil pose (clés et témoins) et ses index, et rien d'autre. Simulation par défaut. */
+async function retirer(db, A, { say, stop, journal }) {
+    let aFaire = 0;
+    const etat = [];
+    for (const spec of PLAN) {
+        const col = db.collection(spec.collection);
+        const champs = champsDe(spec);
+        const avecChamps = await col.countDocuments({ $or: champs.map(c => ({ [c]: { $exists: true } })) });
+        const presents = (await col.indexes()).map(i => i.name).filter(n => spec.champs.some(c => c.nomIndex === n));
+        etat.push({ spec, col, champs, presents }); aFaire += avecChamps + presents.length;
+        say(`   ${spec.collection.padEnd(20)} documents portant au moins un champ de l'outil : ${String(avecChamps).padStart(7)} · index à retirer : ${presents.length ? presents.join(', ') : 'aucun'}`);
+    }
+    if (!A.appliquer) { say(`\n✅ Simulation terminée : rien n'a été retiré. Pour retirer : node v2/migrations/poser-cles-nom.js --base=${BASE_CIBLE} --retirer --appliquer`); return 0; }
+    for (const { spec, col, champs, presents } of etat) {
+        try {
+            for (const n of presents) await col.dropIndex(n);                                   // l'index d'abord : le retrait des champs n'a plus à le maintenir
+            await col.updateMany({ $or: champs.map(c => ({ [c]: { $exists: true } })) }, { $unset: Object.fromEntries(champs.map(c => [c, ''])) });
+        } catch (e) { journal({ le: new Date().toISOString(), collection: spec.collection, etat: 'retrait-interrompu', raison: cause(e) }); return stop(`retrait interrompu sur « ${spec.collection} » (${cause(e)}) : relancer --retirer --appliquer (idempotent).`); }
+        journal({ le: new Date().toISOString(), collection: spec.collection, etat: 'retiree' });
+    }
+    say('\nContrôle final :');
+    let ecarts = 0;
+    for (const { spec, col, champs } of etat) {
+        const restants = await col.countDocuments({ $or: champs.map(c => ({ [c]: { $exists: true } })) });
+        const idx = (await col.indexes()).map(i => i.name).filter(n => spec.champs.some(c => c.nomIndex === n));
+        const bon = restants === 0 && idx.length === 0;
+        if (!bon) ecarts++;
+        say(`   ${bon ? '✅' : '🔴'} ${spec.collection.padEnd(20)} documents avec un champ de l'outil : ${restants} · index restants : ${idx.length}`);
+    }
+    if (ecarts) return stop(`${ecarts} collection(s) en écart : relancer --retirer --appliquer.`);
+    say(`✅ Champs et index de l'outil retirés. Le serveur retombe sur la requête d'avant dès son prochain contrôle (≤ 60 s).`);
+    return 0;
 }
 
 async function principal(args = process.argv.slice(2), env = process.env, deps = {}) {
@@ -121,35 +178,38 @@ async function principal(args = process.argv.slice(2), env = process.env, deps =
         if (db.databaseName !== attendue) return stop(`la cible est la base "${String(db.databaseName).slice(0, 30)}" et non "${attendue}" : refusé.`);
         const pr = await (deps.prouverStatut || prouverStatutParDefaut)(db);
         if (!pr || pr.ok !== true) return stop(`la cible n'est pas prouvée — ${(pr && typeof pr.raison === 'string' && pr.raison) || 'je ne sais pas'}. Rien n'est lu ni écrit.`);
-        say(`🗄️  Cible : "${BASE_CIBLE}"  ·  ${A.appliquer ? '▶️  POSE' : '🔎 SIMULATION — rien n\'est écrit (--appliquer pour poser)'}`);
-        for (const spec of PLAN) if (!(await db.listCollections({ name: spec.collection }, { nameOnly: true }).toArray()).length) return stop(`la collection « ${spec.collection} » est absente de la cible : rien à poser, refusé.`);
+        say(`🗄️  Cible : "${BASE_CIBLE}"  ·  ${A.retirer ? (A.appliquer ? '↩️  RETRAIT' : '🔎 SIMULATION du retrait') : A.appliquer ? '▶️  POSE' : '🔎 SIMULATION — rien n\'est écrit (--appliquer pour poser)'}`);
+        for (const spec of PLAN) if (!(await db.listCollections({ name: spec.collection }, { nameOnly: true }).toArray()).length) return stop(`la collection « ${spec.collection} » est absente de la cible : rien à faire, refusé.`);
+        if (A.retirer) return await retirer(db, A, { say, stop, journal });
 
-        // L'ORDRE avant tout : sans lui, l'index change le gagnant d'une égalité de score (voir verifierOrdreNaturel). Refus en simulation comme à la pose.
+        // L'ORDRE n'est plus une condition (B2, tour 1) : toutes les recherches du serveur trient par _id, le repli d'avant comme l'index. Il reste une INFORMATION.
         for (const nom of [...new Set(PLAN.map(s => s.collection))]) {
             const o = await verifierOrdreNaturel(db.collection(nom));
-            if (!o.ok) return stop(`« ${nom} » : ${o.raison}. La recherche par l'index rendrait les candidats dans l'ordre des _id, le balayage d'aujourd'hui dans l'ordre naturel : une égalité de score se tranche à cet ordre. Rien n'est écrit. Remède : recopier la collection en _id croissant (amorcer-essai.js le fait).`);
-            say(`   ordre naturel de « ${nom} » = ordre des _id (${o.n} documents)`);
+            say(o.ok ? `   ordre naturel de « ${nom} » = ordre des _id (${o.n} documents) — information : les recherches trient par _id de toute façon`
+                : `   information : l'ordre naturel de « ${nom} » n'est pas l'ordre des _id (${o.raison}) — sans effet : toutes les recherches trient par _id`);
         }
         const poids0 = await poidsCible(db);
-        say(`   poids de la cible : ${mo(poids0)} Mo (données + index) · ARRÊT DUR ${mo(seuil)} Mo`);
+        say(`   poids de la cible : ${mo(poids0)} Mo (le plus grand de données+index et stockage+index) · ARRÊT DUR ${mo(seuil)} Mo`);
         // ── le plan : une lecture complète par collection (la même que fera la pose), RIEN d'écrit
         const plans = [];
         for (const spec of PLAN) {
             const col = db.collection(spec.collection);
             const p = await parcourir(col, spec, { lot: A.lot });
-            const indexes = await col.indexes(); const aIndex = indexes.some(i => i.name === spec.nomIndex);
+            const presents = (await col.indexes()).map(i => i.name);
+            const manquants = spec.champs.filter(c => !presents.includes(c.nomIndex)).map(c => c.nomIndex);
             // l'estimation : les valeurs écrites × 1,6 (MESURÉ sur l'instantané complet du 12/10 — 74 694 / 73 756 documents, collStats après la pose : valeurs 7,6 Mo, index 2,4 Mo, soit × 1,31 ; majoré d'un cinquième).
             // Sur la base du service de test (≈ 456 Mo pour 480 d'arrêt dur) une estimation à × 2,5 aurait REFUSÉ une pose qui n'ajoute que ≈ 10 Mo : le chiffre de l'arrêt se calibre sur la mesure, pas sur la peur.
             const estimation = Math.ceil(p.octets * 1.6);
-            plans.push({ spec, ...p, aIndex, estimation });
-            say(`   ${spec.collection.padEnd(20)} ${String(p.total).padStart(7)} documents · à poser ${String(p.aPoser).padStart(7)} · valeurs ${String(mo(p.octets)).padStart(5)} Mo · index ${aIndex ? 'présent' : 'À CRÉER'} · estimation +${mo(estimation)} Mo`);
+            plans.push({ spec, ...p, manquants, estimation });
+            say(`   ${spec.collection.padEnd(20)} ${String(p.total).padStart(7)} documents · à poser ${String(p.aPoser).padStart(7)} · valeurs ${String(mo(p.octets)).padStart(5)} Mo · index ${manquants.length ? `À CRÉER (${manquants.join(', ')})` : 'présents'} · estimation +${mo(estimation)} Mo`);
+            if (p.etrangers) return stop(`« ${spec.collection} » : ${p.etrangers} document(s) portent déjà un champ de l'outil (${champsDe(spec).join(', ')}) sous une forme qui n'est pas la sienne : l'outil n'écrase pas ce qui n'est pas à lui. Rien n'est écrit.`);
         }
         const ajout = plans.reduce((a, p) => a + p.estimation, 0);
         say(`   → ajout estimé : +${mo(ajout)} Mo ; poids final estimé : ${mo(poids0 + ajout)} Mo`);
         if (poids0 + ajout > seuil) return stop(`le poids final estimé (${mo(poids0 + ajout)} Mo) dépasserait l'arrêt dur de ${mo(seuil)} Mo : rien n'est écrit.`);
         if (!A.appliquer) { say(`\n✅ Simulation terminée : rien n'a été écrit. Pour poser : node v2/migrations/poser-cles-nom.js --base=${BASE_CIBLE} --appliquer`); return 0; }
 
-        // ── la pose : le champ d'abord, l'index ensuite (un index sur un champ incomplet n'est jamais utilisé par le serveur : index-nom.js exige la couverture entière)
+        // ── la pose : les champs d'abord (clés ET témoin dans le même $set), les index ensuite (un index sur un champ incomplet n'est jamais utilisé par le serveur : index-nom.js exige la couverture entière et fraîche)
         let lotsFaits = 0;
         for (const p of plans) {
             const col = db.collection(p.spec.collection);
@@ -165,37 +225,41 @@ async function principal(args = process.argv.slice(2), env = process.env, deps =
                         if (A.pauseMs) await new Promise(r => setTimeout(r, A.pauseMs));
                     }
                 });
-                await col.createIndex({ [p.spec.champ]: 1 }, { name: p.spec.nomIndex });
+                for (const c of p.spec.champs) await col.createIndex({ [c.champ]: 1 }, { name: c.nomIndex });
             } catch (e) {
                 journal({ le: new Date().toISOString(), collection: p.spec.collection, etat: 'interrompue', posees, raison: cause(e) });
                 console.error(`   Pose interrompue sur « ${p.spec.collection} » après ${posees} document(s) (${cause(e)}). La relancer reprend où elle s'est arrêtée (idempotente).`);
                 return stop(e && e.code === 'ARRET_DUR' ? `ARRÊT DUR avant de franchir ${mo(seuil)} Mo.` : `écriture interrompue (${cause(e)}).`);
             }
-            say(`✔️  « ${p.spec.collection} » : ${posees} clé(s) posée(s), index « ${p.spec.nomIndex} » présent.`);
+            say(`✔️  « ${p.spec.collection} » : ${posees} document(s) posé(s) (${champsDe(p.spec).join(', ')}), index ${p.spec.champs.map(c => `« ${c.nomIndex} »`).join(', ')} présents.`);
             journal({ le: new Date().toISOString(), collection: p.spec.collection, etat: 'posee', posees });
         }
 
-        // ── le contrôle : plus aucun document sans clé, l'index existe, et il sert (plan IXSCAN)
+        // ── le contrôle : plus aucun document sans clé ni à témoin périmé, les index existent, et ils servent (plan IXSCAN)
         say('\nContrôle final :');
         let ecarts = 0;
         for (const p of plans) {
             const col = db.collection(p.spec.collection);
-            const sans = await col.countDocuments({ [p.spec.champ]: { $exists: false } });
-            const indexes = await col.indexes(); const aIndex = indexes.some(i => i.name === p.spec.nomIndex);
-            const plan = JSON.stringify((await col.find(p.spec.sonde).explain('queryPlanner')).queryPlanner.winningPlan);
-            const sert = plan.includes('IXSCAN') && !plan.includes('COLLSCAN');
-            const bon = sans === 0 && aIndex && sert;
-            if (!bon) ecarts++;
-            say(`   ${bon ? '✅' : '🔴'} ${p.spec.collection.padEnd(20)} sans clé : ${sans} · index ${aIndex ? 'présent' : 'ABSENT'} · plan de la sonde : ${sert ? 'IXSCAN' : 'PAS d\'IXSCAN'}`);
+            const indexes = (await col.indexes()).map(i => i.name);
+            const perimes = await col.countDocuments({ $expr: { $ne: [{ $ifNull: ['$' + p.spec.lu, ''] }, { $ifNull: ['$' + p.spec.temoin, ''] }] } });
+            for (const c of p.spec.champs) {
+                const sans = await col.countDocuments({ [c.champ]: { $exists: false } });
+                const aIndex = indexes.includes(c.nomIndex);
+                const plan = JSON.stringify((await col.find(c.sonde).explain('queryPlanner')).queryPlanner.winningPlan);
+                const sert = plan.includes('IXSCAN') && !plan.includes('COLLSCAN');
+                const bon = sans === 0 && perimes === 0 && aIndex && sert;
+                if (!bon) ecarts++;
+                say(`   ${bon ? '✅' : '🔴'} ${(p.spec.collection + '.' + c.champ).padEnd(32)} sans clé : ${sans} · témoin périmé : ${perimes} · index ${aIndex ? 'présent' : 'ABSENT'} · plan de la sonde : ${sert ? 'IXSCAN' : 'PAS d\'IXSCAN'}`);
+            }
         }
         say(`\n   poids de la cible : ${mo(await poidsCible(db))} Mo (arrêt dur ${mo(seuil)} Mo).`);
-        if (ecarts) return stop(`${ecarts} collection(s) en écart (🔴 ci-dessus) : relancer la simulation pour comprendre.`);
-        say(`✅ Clés posées et indexées. Le serveur les utilise dans la minute qui suit son prochain contrôle de couverture (index-nom.js) ; relancer cet outil après chaque import du catalogue.`);
+        if (ecarts) return stop(`${ecarts} contrôle(s) en écart (🔴 ci-dessus) : relancer la simulation pour comprendre.`);
+        say(`✅ Clés posées et indexées. Le serveur les utilise dans la minute qui suit son prochain contrôle de couverture et de fraîcheur (index-nom.js) ; relancer cet outil après chaque import du catalogue.`);
         return 0;
     } finally { await co.fermer(); }
 }
 
-module.exports = { principal, lireArguments, verifierOrdreNaturel, PLAN, BASE_CIBLE, ARRET_DUR_MO };
+module.exports = { principal, lireArguments, verifierOrdreNaturel, poidsCibleParDefaut, PLAN, BASE_CIBLE, ARRET_DUR_MO };
 
 if (require.main === module) {
     require('dotenv').config();

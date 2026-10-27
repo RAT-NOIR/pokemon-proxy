@@ -16,8 +16,11 @@ const sansChamp = (d, ...champs) => { const reste = { ...d }; for (const c of ch
     const A = M.lireArguments;
     H.v('--base=rm_essai seul : simulation', [A(['--base=rm_essai']).ok, A(['--base=rm_essai']).appliquer], [true, false]);
     H.v('--appliquer, --lot, --pause-ms admis', [A(['--base=rm_essai', '--appliquer', '--lot=100', '--pause-ms=50']).ok, A(['--base=rm_essai', '--lot=100']).lot], [true, 100]);
-    for (const refus of [['--base=test'], ['--base=test_scratch'], ['--base=cartes'], [], ['--appliquer'], ['--base=rm_essai', '--executer'], ['--base=rm_essai', '--lot=0'], ['--base=rm_essai', '--lot=999999'], ['--base=rm_essai', '--pause-ms=99999999'], ['--base=rm_essai', 'test']])
+    for (const refus of [['--base=test'], ['--base=test_scratch'], ['--base=cartes'], [], ['--appliquer'], ['--base=rm_essai', '--executer'], ['--base=rm_essai', '--lot=0'], ['--base=rm_essai', '--lot=999999'], ['--base=rm_essai', '--pause-ms=99999999'], ['--base=rm_essai', 'test'],
+        ['--base=rm_essai', '--base=test'], ['--base=test', '--base=rm_essai'], ['--base=rm_essai', '--base=rm_essai'], ['--base=rm_essai', '--appliquer', '--appliquer'], ['--base=rm_essai', '--lot=10', '--lot=20'], ['--base=rm_essai', '--retirer', '--retirer']])
         H.v(`refusé : ${JSON.stringify(refus)}`, A(refus).ok, false);
+    H.v('I3 : --retirer admis (simulation par défaut)', [A(['--base=rm_essai', '--retirer']).ok, A(['--base=rm_essai', '--retirer']).retirer, A(['--base=rm_essai', '--retirer']).appliquer], [true, true, false]);
+    H.v('I2 : un --base répété est nommé comme tel dans la raison', /répété/.test(A(['--base=test', '--base=rm_essai']).raison), true);
     H.v('…et la production est nommée dans la raison, sans valeur', /production n'est jamais une cible/.test(A(['--base=test']).raison), true);
 
     // ── 2. sans variables d'environnement : refus AVANT d'ouvrir quoi que ce soit (aucune connexion de repli)
@@ -26,6 +29,12 @@ const sansChamp = (d, ...champs) => { const reste = { ...d }; for (const c of ch
     H.v('sans MONGODB_ESSAI_URI ni MONGODB_LECTURE_URI : code 1', code0, 1);
     const code1 = await taire(() => M.principal(['--base=rm_essai'], { MONGODB_ESSAI_URI: 'mongodb://h1.mongodb.net/', MONGODB_LECTURE_URI: 'mongodb://h1.mongodb.net/' }, {}));
     H.v('essai et lecture sur la MÊME grappe (celle de la production) : refus avant toute connexion', code1, 1);
+
+    {   // I2 : un argument répété est refusé AVANT toute connexion (ouvrirCible n'est jamais appelée)
+        let ouverts = 0;
+        for (const a of [['--base=test', '--base=rm_essai'], ['--base=rm_essai', '--base=test'], ['--base=rm_essai', '--appliquer', '--appliquer']]) await taire(() => M.principal(a, {}, { ouvrirCible: async () => { ouverts++; return { ok: false, raison: 'x' }; } }));
+        H.v('I2 : --base répété (dans les deux ordres) ou tout autre argument répété : refus, aucune connexion ouverte', ouverts, 0);
+    }
 
     // ── la cible de banc : « rm_essai » sur le mongod du banc, avec un catalogue qui a des cas difficiles
     const base = client.db('rm_essai');
@@ -65,23 +74,36 @@ const sansChamp = (d, ...champs) => { const reste = { ...d }; for (const c of ch
         const vide = base.collection('catalogue_produits_vide');
         await base.createCollection('catalogue_produits_vide');
         const r1 = await M.verifierOrdreNaturel(mauvaise), r2 = await M.verifierOrdreNaturel(bonne), r3 = await M.verifierOrdreNaturel(vide);
-        H.v('ordre naturel ≠ ordre des _id : refusé, avec le rang du premier écart', [r1.ok, r1.rang], [false, 1]);
-        H.v('ordre naturel = ordre des _id : accepté ; collection vide : acceptée', [r2.ok, r3.ok], [true, true]);
-        // la pose elle-même : refus AVANT toute écriture quand une des deux collections est dans le désordre
+        H.v('ordre naturel ≠ ordre des _id : la fonction le dit, avec le rang du premier écart', [r1.ok, r1.rang], [false, 1]);
+        H.v('ordre naturel = ordre des _id : ok ; collection vide : ok', [r2.ok, r3.ok], [true, true]);
+        // B2 (tour 1) : l'ordre ne dépend plus de l'ordre naturel (toutes les requêtes trient par _id) : le désordre n'est plus un REFUS, seulement une INFORMATION imprimée
         await base.collection('catalogue_produits').drop(); await base.collection('numeros_cartes').drop();
         const desordre = [new ObjectId('0000000000000000000000c2'), new ObjectId('0000000000000000000000c1')];
         await base.collection('catalogue_produits').insertMany(desordre.map((_id, i) => ({ _id, idProduct: 10 + i, name: `Carte ${i}`, idMetacard: 1 })));
         await base.collection('numeros_cartes').insertMany([{ idProduct: 10, nomFr: 'Carte' }]);
-        const cD = await taire(() => M.principal(['--base=rm_essai', '--appliquer'], {}, profil));
-        H.v('catalogue_produits écrit dans le désordre : la pose est REFUSÉE (code 1), aucun champ écrit', [cD, await base.collection('catalogue_produits').countDocuments({ nomCles: { $exists: true } }), await base.collection('numeros_cartes').countDocuments({ nomFrCle: { $exists: true } })], [1, 0, 0]);
-        const cS = await taire(() => M.principal(['--base=rm_essai'], {}, profil));
-        H.v('…la simulation le dit aussi (code 1) : on ne découvre pas le refus à la pose', cS, 1);
+        const sortie = []; const l0 = console.log; console.log = (...a) => sortie.push(a.join(' '));
+        let cD; try { cD = await M.principal(['--base=rm_essai', '--appliquer'], {}, profil); } finally { console.log = l0; }
+        H.v('B2 : catalogue_produits écrit dans le désordre : la pose n\'est PLUS refusée (code 0), les clés sont posées, et le désordre est dit', [cD, await base.collection('catalogue_produits').countDocuments({ nomCles: { $exists: true } }), sortie.some(l => /information/i.test(l) && /≠|différent|pas l'ordre/.test(l))], [0, 2, true]);
         await base.collection('catalogue_produits').drop(); await base.collection('numeros_cartes').drop();
         for (const n of ['catalogue_produits_desordre', 'catalogue_produits_ordre', 'catalogue_produits_vide']) await base.collection(n).drop();
         // on rétablit le jeu de la suite du banc (écrit en _id croissant par insertMany)
         await cat.insertMany(NOMS.map(([idProduct, name]) => ({ idProduct, name, idExpansion: 7, idMetacard: 700 + idProduct, extra: { a: idProduct } })));
         await num.insertMany([[1, 'Pikachu'], [2, 'Éveil'], [3, null], [4, 'Carabaffe'], [5, 'Flabébé'], [6, '']].map(([idProduct, nomFr]) => ({ idProduct, nomFr, numero: String(idProduct), slug: `s${idProduct}` })));
         avant.cat = await cat.find({}).sort({ _id: 1 }).toArray(); avant.num = await num.find({}).sort({ _id: 1 }).toArray(); avant.idxCat = (await cat.indexes()).length; avant.idxNum = (await num.indexes()).length;
+    }
+
+    // ── 4 ter. I3 : un champ du même nom, de FORME ÉTRANGÈRE (un `nomCles` qui n'est pas un tableau de chaînes) : refus avant toute écriture — l'outil n'écrase pas ce qui n'est pas à lui
+    {
+        await cat.updateOne({ idProduct: 2 }, { $set: { nomCles: 'pas un tableau' } });
+        const cF = await taire(() => M.principal(['--base=rm_essai', '--appliquer'], {}, profil));
+        H.v('champ nomCles de forme étrangère : refus (code 1), aucune clé posée ailleurs', [cF, await cat.countDocuments({ nomMin: { $exists: true } })], [1, 0]);
+        await cat.updateOne({ idProduct: 2 }, { $unset: { nomCles: '' } });
+    }
+    // ── 4 quater. I4 : l'arrêt dur mesure le plus grand de (données + index) et (stockage + index)
+    {
+        const fausse = { command: async () => ({ dataSize: 100e6, indexSize: 50e6, storageSize: 400e6 }) };
+        const fausse2 = { command: async () => ({ dataSize: 300e6, indexSize: 50e6, storageSize: 200e6 }) };
+        H.v('I4 : poids = max(données+index, stockage+index) — le stockage domine ici (450 Mo), les données là (350 Mo)', [await M.poidsCibleParDefaut(fausse), await M.poidsCibleParDefaut(fausse2)], [450e6, 350e6]);
     }
 
     // ── 5. la SIMULATION n'écrit rien
@@ -111,7 +133,8 @@ const sansChamp = (d, ...champs) => { const reste = { ...d }; for (const c of ch
     H.v('catalogue : chaque produit porte SES clés (fonction de cle-nom.js), même les noms absents ou vides', apres.cat.map(d => d.nomCles), NOMS.map(([, name]) => CN.clesDuProduit(name)));
     H.v('catalogue : le nom en minuscules sur chaque produit (« » sans nom)', apres.cat.map(d => d.nomMin), NOMS.map(([, name]) => CN.cleNomMin(name)));
     H.v('numeros_cartes : chaque ligne porte SA clé (« » sans nom français)', apres.num.map(d => d.nomFrCle), ['pikachu', 'eveil', '', 'carabaffe', 'flabebe', '']);
-    H.v('RIEN d\'autre n\'a bougé : tous les autres champs de chaque document, à l\'identique', JSON.stringify([apres.cat.map(d => sansChamp(d, 'nomCles', 'nomMin')), apres.num.map(d => sansChamp(d, 'nomFrCle'))]) === JSON.stringify([avant.cat, avant.num]), true);
+    H.v('B1 : les témoins de la source, écrits dans le même $set que les clés (« » sans nom)', [apres.cat.map(d => d.nomSrc), apres.num.map(d => d.nomFrSrc)], [NOMS.map(([, name]) => CN.sourceDe(name)), ['Pikachu', 'Éveil', '', 'Carabaffe', 'Flabébé', '']]);
+    H.v('RIEN d\'autre n\'a bougé : tous les autres champs de chaque document, à l\'identique', JSON.stringify([apres.cat.map(d => sansChamp(d, 'nomCles', 'nomMin', 'nomSrc')), apres.num.map(d => sansChamp(d, 'nomFrCle', 'nomFrSrc'))]) === JSON.stringify([avant.cat, avant.num]), true);
     H.v('aucun document créé ni supprimé', [apres.cat.length, apres.num.length], [avant.cat.length, avant.num.length]);
     H.v('les trois index existent', [(await cat.indexes()).some(i => i.name === CN.INDEX_CATALOGUE), (await cat.indexes()).some(i => i.name === CN.INDEX_NOM_MIN), (await num.indexes()).some(i => i.name === CN.INDEX_FR)], [true, true, true]);
     const plan = async (col, f) => JSON.stringify((await col.find(f).explain('queryPlanner')).queryPlanner.winningPlan);
@@ -123,7 +146,8 @@ const sansChamp = (d, ...champs) => { const reste = { ...d }; for (const c of ch
     H.v('relance : code 0 et AUCUN lot écrit (rien à poser)', [cR, lots.length], [0, 0]);
 
     // ── 10. le serveur trouve ensuite le même ensemble que la requête d'avant
-    const dCat = IN.creerDisponibilite({ col: cat, champ: CN.CHAMP_CATALOGUE, nomIndex: CN.INDEX_CATALOGUE }), dFr = IN.creerDisponibilite({ col: num, champ: CN.CHAMP_FR, nomIndex: CN.INDEX_FR });
+    const srcCat = { champ: 'name', temoin: CN.CHAMP_SOURCE_CATALOGUE }, srcFr = { champ: 'nomFr', temoin: CN.CHAMP_SOURCE_FR };
+    const dCat = IN.creerDisponibilite({ col: cat, champ: CN.CHAMP_CATALOGUE, nomIndex: CN.INDEX_CATALOGUE, source: srcCat }), dFr = IN.creerDisponibilite({ col: num, champ: CN.CHAMP_FR, nomIndex: CN.INDEX_FR, source: srcFr });
     H.v('après la pose, index-nom.js juge les deux index disponibles', [await dCat.disponible(), await dFr.disponible()], [true, true]);
     const rx = /pikachu/i;
     const viaIndex = await IN.preselection({ col: cat, dispo: dCat, cles: ['pikachu'], regexPremierMot: rx });
@@ -134,6 +158,38 @@ const sansChamp = (d, ...champs) => { const reste = { ...d }; for (const c of ch
     await cat.insertOne({ idProduct: 11, name: 'Pikachu VMAX', idExpansion: 7, idMetacard: 711 });
     lots.length = 0;
     const cN = await taire(() => M.principal(['--base=rm_essai', '--appliquer'], {}, { ...profil, apresLot: async l => lots.push(l) }));
-    H.v('produit ajouté sans clé : la relance pose ses clés (un lot d\'un document par champ)', [cN, lots.map(l => l.lot), (await cat.findOne({ idProduct: 11 })).nomCles, (await cat.findOne({ idProduct: 11 })).nomMin], [0, [1, 1], ['pikachuvmax'], 'pikachu vmax']);
+    H.v('produit ajouté sans clé : la relance pose ses clés (un seul lot d\'un document : clés et témoin ensemble)', [cN, lots.map(l => l.lot), (await cat.findOne({ idProduct: 11 })).nomCles, (await cat.findOne({ idProduct: 11 })).nomMin, (await cat.findOne({ idProduct: 11 })).nomSrc], [0, [1], ['pikachuvmax'], 'pikachu vmax', 'Pikachu VMAX']);
+
+    // ── 12. B1 : un produit RENOMMÉ par l'import (`$set name`, les clés restent) : le serveur refuse l'index, la simulation le COMPTE, la relance le rattrape
+    {
+        await cat.updateOne({ idProduct: 2 }, { $set: { name: 'Pikachu ex' } });
+        dCat.oublier();
+        H.v('B1 : après le renommage (clés anciennes, témoin ancien) : index indisponible côté serveur', await dCat.disponible(), false);
+        lots.length = 0;
+        const simul = []; const l0 = console.log; console.log = (...a) => simul.push(a.join(' '));
+        try { await M.principal(['--base=rm_essai'], {}, { ...profil, apresLot: async l => lots.push(l) }); } finally { console.log = l0; }
+        H.v('B1 : la simulation compte UN produit à poser (le renommé) et n\'écrit rien', [lots.length, simul.some(l => /catalogue_produits.*à poser\s+1\b/.test(l))], [0, true]);
+        const cRen = await taire(() => M.principal(['--base=rm_essai', '--appliquer'], {}, { ...profil, apresLot: async l => lots.push(l) }));
+        const d2 = await cat.findOne({ idProduct: 2 });
+        dCat.oublier();
+        H.v('B1 : la relance réécrit ses clés ET son témoin ; l\'index redevient disponible', [cRen, lots.map(l => l.lot), d2.nomCles, d2.nomMin, d2.nomSrc, await dCat.disponible()], [0, [1], ['pikachuex'], 'pikachu ex', 'Pikachu ex', true]);
+    }
+
+    // ── 13. I3 : --retirer — simulation par défaut ; --appliquer retire les champs que l'outil pose et son index, sur rm_essai seulement ; rien d'autre ne bouge
+    {
+        const avantRet = { cat: await cat.find({}).sort({ _id: 1 }).toArray(), num: await num.find({}).sort({ _id: 1 }).toArray() };
+        const champsPoses = ['nomCles', 'nomMin', 'nomSrc'];
+        const cSim = await taire(() => M.principal(['--base=rm_essai', '--retirer'], {}, profil));
+        H.v('I3 : --retirer sans --appliquer : simulation (code 0), rien n\'est retiré', [cSim, (await cat.countDocuments({ nomCles: { $exists: true } })) > 0, (await cat.indexes()).some(i => i.name === CN.INDEX_CATALOGUE)], [0, true, true]);
+        const cAutre = await taire(() => M.principal(['--base=test', '--retirer', '--appliquer'], {}, profil));
+        H.v('I3 : --retirer sur une autre base que rm_essai : refus avant toute connexion', cAutre, 1);
+        const cRet = await taire(() => M.principal(['--base=rm_essai', '--retirer', '--appliquer'], {}, profil));
+        const aprRet = { cat: await cat.find({}).sort({ _id: 1 }).toArray(), num: await num.find({}).sort({ _id: 1 }).toArray() };
+        H.v('I3 : --retirer --appliquer : code 0, les champs de l\'outil ont disparu de TOUS les documents', [cRet, aprRet.cat.some(d => champsPoses.some(c => c in d)), aprRet.num.some(d => ['nomFrCle', 'nomFrSrc'].some(c => c in d))], [0, false, false]);
+        H.v('I3 : …les trois index sont retirés, les index d\'avant (_id) restent', [(await cat.indexes()).map(i => i.name).sort(), (await num.indexes()).map(i => i.name).sort()], [['_id_'], ['_id_']]);
+        H.v('I3 : …et RIEN d\'autre n\'a bougé : les autres champs sont identiques à ceux d\'avant le retrait', JSON.stringify([aprRet.cat, aprRet.num]) === JSON.stringify([avantRet.cat.map(d => sansChamp(d, ...champsPoses)), avantRet.num.map(d => sansChamp(d, 'nomFrCle', 'nomFrSrc'))]), true);
+        const cRep = await taire(() => M.principal(['--base=rm_essai', '--appliquer'], {}, profil));
+        H.v('I3 : on peut reposer ensuite (le retrait est réversible)', [cRep, await cat.countDocuments({ nomSrc: { $exists: true } })], [0, (await cat.countDocuments({}))]);
+    }
     await H.fermerBac(); H.bilan();
 })().catch(async e => { console.error('❌', e); try { await H.fermerBac(); } catch { } process.exit(1); });
