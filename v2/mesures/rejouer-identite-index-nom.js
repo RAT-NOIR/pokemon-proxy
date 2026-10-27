@@ -6,6 +6,7 @@
 //   · phase APRÈS : avec le champ et l'index. Le diff imprimé : l'ensemble ET l'ordre des produits rendus, nom par nom, puis la décision complète d'identifierEnLocal.
 // Les noms rejoués : les lignes des bancs (banc-verites.json), les 468 lignes du rejeu (resultats-avecG.json → nom du produit de la vérité), les 50 de la série C, et un échantillon régulier de TOUS les noms du catalogue
 // (dont leurs formes en capitales / minuscules / préfixe Mega). Le dénominateur est imprimé à chaque ligne.
+// Options du tour 1 : --ordre=instantane charge l'ordre du fichier (et non celui des _id) ; --avant-sans-tri rejoue la phase AVANT SANS le tri par _id (le comportement d'avant le tour 1 : l'ordre naturel) — l'écart mesuré est l'effet du tri sur les égalités de score.
 // Usage : node v2/mesures/rejouer-identite-index-nom.js --instantane=<dossier> [--resultats=<resultats-avecG.json>] [--serie=<serie-C.json>] [--echantillon=<N>] [--sortie=<rapport.json>]
 const fs = require('fs'), path = require('path'), readline = require('readline');
 const arg = n => { const a = process.argv.find(x => x.startsWith(`--${n}=`)); return a ? a.slice(n.length + 3) : null; };
@@ -20,7 +21,7 @@ async function charger(client, base, dossier, nom) {
     // COMME L'AMORÇAGE de rm_essai (amorcer-essai.js) : copie en _id CROISSANT, donc l'ordre naturel de la collection est l'ordre des _id (précondition de l'identité des ordres : voir poser-cles-nom.js::verifierOrdreNaturel)
     const tous = []; let n = 0;
     for await (const l of rl) { if (!l) continue; tous.push(EJSON.parse(l, { relaxed: false })); n++; }
-    tous.sort((x, y) => (x._id.toHexString() < y._id.toHexString() ? -1 : 1));
+    if (arg('ordre') !== 'instantane') tous.sort((x, y) => (x._id.toHexString() < y._id.toHexString() ? -1 : 1));      // --ordre=instantane : l'ordre du FICHIER (celui d'un import réel), qui n'est PAS l'ordre des _id
     for (let i = 0; i < tous.length; i += 2000) await coll.insertMany(tous.slice(i, i + 2000), { ordered: true });
     const idx = JSON.parse(fs.readFileSync(path.join(dossier, `test.${nom}.indexes.json`), 'utf8'));
     for (const i of idx) { if (i.expireAfterSeconds !== undefined) continue; const { key, name, ...opts } = i; try { await coll.createIndex(key, { name, ...opts }); } catch { /* index non recréé */ } }
@@ -106,6 +107,8 @@ async function charger(client, base, dossier, nom) {
         const serieC = cas.filter(c => c.origine === 'serie-C');
 
         // ── AVANT
+        const triOriginal = mongoose.Query.prototype.sort;
+        if (process.argv.includes('--avant-sans-tri')) mongoose.Query.prototype.sort = function (s) { return (s && s._id === 1 && Object.keys(s).length === 1) ? this : triOriginal.apply(this, arguments); };
         const profAvantSerie = await profil(async () => { await rejouer(serieC, 'avant-serie'); });
         const t0 = Date.now(); const avant = await rejouer(cas, 'avant'); const msAvant = Date.now() - t0;
         console.log(`AVANT : ${avant.length} noms en ${Math.round(msAvant / 1000)} s · série C (${serieC.length}) : ${JSON.stringify(profAvantSerie)}`);
@@ -115,6 +118,8 @@ async function charger(client, base, dossier, nom) {
         const lt = console.log; console.log = () => { };
         let rc; try { rc = await M.principal(['--base=rm_essai', '--appliquer', '--lot=2000'], {}, { ouvrirCible: async () => ({ ok: true, db: dbm, fermer: async () => { } }), prouverStatut: async () => ({ ok: true }), journal: () => { }, poidsCible: async () => 0 }); } finally { console.log = lt; }
         if (rc !== 0) throw new Error(`la pose a échoué (code ${rc})`);
+        mongoose.Query.prototype.sort = triOriginal;
+        { const cp = dbm.collection('catalogue_produits'); const ex = await cp.find({ $expr: { $ne: [{ $ifNull: ['$name', ''] }, { $ifNull: ['$nomSrc', ''] }] } }, { projection: { _id: 1 } }).limit(1).explain('executionStats'); const tl = []; for (let k = 0; k < 5; k++) { const a = process.hrtime.bigint(); await cp.findOne({ $expr: { $ne: [{ $ifNull: ['$name', ''] }, { $ifNull: ['$nomSrc', ''] }] } }, { projection: { _id: 1 } }); tl.push(Number(process.hrtime.bigint() - a) / 1e6); } console.log('FRAÎCHEUR (catalogue_produits, tout frais) : plan ' + (/COLLSCAN/.test(JSON.stringify(ex.queryPlanner.winningPlan)) ? 'COLLSCAN' : 'autre') + ' · documents examinés ' + ex.executionStats.totalDocsExamined + ' · ms (5 essais) ' + tl.map(x => x.toFixed(1)).join('/')); }
         const stats = await dbm.command({ dbStats: 1 });
         const taille = async nom => { const s = await dbm.command({ collStats: nom }); return { donnees: s.size, index: s.totalIndexSize, nomIndex: s.indexSizes }; };
         console.log(`clés posées. catalogue_produits : ${JSON.stringify(await taille('catalogue_produits'))} · numeros_cartes : ${JSON.stringify(await taille('numeros_cartes'))} · poids base ${(stats.dataSize + stats.indexSize) / 1e6} Mo`);
@@ -146,12 +151,12 @@ async function charger(client, base, dossier, nom) {
             for await (const l of rl) { if (!l) continue; const d = EJSON.parse(l, { relaxed: true }); if (typeof d.nomEn === 'string' && d.nomEn.trim()) noms.add(d.nomEn); }
             const liste = [...noms]; const cp = dbm.collection('catalogue_produits');
             const IN = require(path.join(racine, 'v2', 'identifier', 'index-nom.js')), CN = require(path.join(racine, 'v2', 'identifier', 'cle-nom.js'));
-            const dispo = IN.creerDisponibilite({ col: cp, champ: CN.CHAMP_NOM_MIN, nomIndex: CN.INDEX_NOM_MIN });
+            const dispo = IN.creerDisponibilite({ col: cp, champ: CN.CHAMP_NOM_MIN, nomIndex: CN.INDEX_NOM_MIN, source: { champ: 'name', temoin: CN.CHAMP_SOURCE_CATALOGUE } });
             const pas2 = Math.max(1, Math.floor(liste.length / echant));
             for (let i = 0; i < liste.length; i += pas2) {
                 for (const nom of [liste[i], liste[i].toUpperCase()]) {
                     const rx = new RegExp('^' + nom.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\s|\\[|$)', 'i');
-                    const a = await cp.find({ name: { $in: [rx] } }, { projection: { idProduct: 1, idExpansion: 1 } }).toArray();
+                    const a = await cp.find({ name: { $in: [rx] } }, { projection: { idProduct: 1, idExpansion: 1 } }).sort({ _id: 1 }).toArray();
                     const b = await IN.debutDeNom({ col: cp, dispo, nom, regex: rx });
                     nPont++; if (!a.length) videsPont++;
                     const cle = l => JSON.stringify(l.map(d => [String(d._id), d.idProduct, d.idExpansion]).sort());
