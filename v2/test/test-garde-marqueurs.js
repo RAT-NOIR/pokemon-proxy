@@ -15,7 +15,7 @@ const M = {
 const PIKA = G.motsDuProduit({ nomCardmarket: 'Pikachu', nomFr: 'Pikachu', numero: '25', total: '165', set: { slug: 'Banc-Set', nom: 'Banc Set', code: 'PMJ' } });
 const t = s => { const r = G.lireTitreJumbo(s, PIKA); return r.oui ? `oui:${r.terme}` : `non:${r.motif}`; };
 H.v('1a. un titre entièrement admis (termes jumbo, mots du produit, mots neutres) : oui (casse et accents indifférents, mot entier)',
-    ['Pikachu jumbo', 'PIKACHU JUMBO promo', 'Dracaufeu Oversize'.replace('Dracaufeu', 'Pikachu'), 'carte oversized holo', 'Pikachu XXL', 'Pikachu GÉANT', 'carte géante', 'Carte Geante', 'carte geant', 'Jumbo-Pikachu', 'jumbo.', '(jumbo)'].map(t),
+    ['Pikachu jumbo', 'PIKACHU JUMBO promo', 'Dracaufeu Oversize'.replace('Dracaufeu', 'Pikachu'), 'carte oversized holo', 'Pikachu XXL', 'carte Pikachu GÉANT', 'carte géante', 'Carte Geante', 'carte geant', 'Jumbo Pikachu', 'jumbo.', '(jumbo)'].map(t),
     ['oui:jumbo', 'oui:jumbo', 'oui:oversize', 'oui:oversized', 'oui:xxl', 'oui:geant', 'oui:geante', 'oui:geante', 'oui:geant', 'oui:jumbo', 'oui:jumbo', 'oui:jumbo']);
 H.v('1b. aucun terme, pas un mot entier, pas un titre : non — l\'absence du mot ne prouve JAMAIS la version normale', ['Pikachu 025/165', 'jumbos', 'jumbo2', 'xxlarge', 'super jumboo', '', '   ', null, undefined, 5, {}].map(t),
     ['non:aucun terme', 'non:aucun terme', 'non:aucun terme', 'non:aucun terme', 'non:aucun terme', 'non:pas de titre', 'non:pas de titre', 'non:pas de titre', 'non:pas de titre', 'non:pas de titre', 'non:pas de titre']);

@@ -8,25 +8,27 @@
 // 🔑 Écrit par ce qu'il AUTORISE : tout ce qui ne se prouve pas (version illisible, produit sans ligne, groupe de plus de deux pour le Jumbo, exception) laisse la réponse d'AVANT ; seul un groupe PROUVÉ ouvre une des deux règles.
 const MQ = require('./marqueurs');
 
-// ── Le titre : LISTE BLANCHE (JUMBO-LB, 27/10). 🔑 Écrite par ce qu'elle AUTORISE : le titre n'affirme le Jumbo que si CHACUN de ses mots appartient à un ensemble FERMÉ — (1) les termes jumbo des langues de Vinted,
-// (2) les mots du produit JUMBO candidat lui-même (nom, nom français, set, code, numéro), (3) un petit ensemble de mots neutres. Un seul mot hors de ces ensembles, un titre trop long, une ponctuation hors de l'ensemble
-// fermé : PAS de sûr. Une liste de refus (négations, doute, contrefaçon, accessoire…) ne ferme jamais la classe : deux tours de relecture l'ont montré (« nope jumbo », « fake jumbo », « sleeve pour jumbo »…).
-// Tout est minuscule et sans accent (ß → ss). Un mot du produit n'entre JAMAIS s'il est une négation, une liaison, la version normale ou une contrefaçon (listes de garde-fou, jamais de décision seules).
+// ── Le titre : LISTE BLANCHE (JUMBO-LB, 27/10). 🔑 Écrite par ce qu'elle AUTORISE : le titre n'affirme le Jumbo que s'il nomme un terme jumbo ET que CHACUN de ses mots appartient à un ensemble FERMÉ — (1) le vocabulaire jumbo des langues
+// de Vinted, (2) les mots du produit JUMBO candidat lui-même (nom, nom français, numéro, code et nom de son set — jamais ses attaques), (3) un petit ensemble de mots neutres. Un seul mot hors de ces ensembles, un titre trop long,
+// une ponctuation hors de l'ensemble fermé, un tiret qui n'est pas À L'INTÉRIEUR d'un mot admis en entier : PAS de sûr. Une liste de refus ne ferme jamais la classe (deux tours de relecture l'ont montré).
+// Termes : ceux qui ne sont pas ambigus (jumbo, oversize, oversized, xxl, les composés Riesenkarte / reuzenkaart) suffisent seuls ; les ADJECTIFS « grand » (géant, gigante, riesig, reuze, obri…) ne comptent comme terme que si le titre
+// contient AUSSI le nom « carte » de la MÊME langue. Tout est minuscule et sans accent (ß → ss). Un mot du produit n'entre JAMAIS s'il est une négation, une liaison, la version normale, une contrefaçon, un doute ou un accessoire.
+const langue = (seuls, adjectifs, cartes, source) => Object.freeze({ seuls: Object.freeze(seuls), adjectifs: Object.freeze(adjectifs), cartes: Object.freeze(cartes), termes: Object.freeze([...seuls, ...adjectifs]), source });
 const TERMES_PAR_LANGUE = Object.freeze({
-    fr: { termes: ['jumbo', 'geant', 'geante', 'surdimensionne', 'surdimensionnee'], source: 'contrat §5 du 25/10 (jumbo, géant(e)) ; « carte surdimensionnée » = traduction usuelle d\'« oversized card » (annonces Vinted FR, fiches Cardmarket FR)' },
-    en: { termes: ['jumbo', 'oversize', 'oversized', 'xxl'], source: 'contrat §5 du 25/10 (jumbo, oversize(d), XXL) ; « Oversized Card » est le libellé de la pastille Cardmarket EN du marqueur JUMBO' },
-    de: { termes: ['jumbo', 'ubergross', 'ubergrosse', 'uebergross', 'uebergrosse', 'riesig', 'riesenkarte'], source: 'libellés Vinted/Cardmarket DE « Jumbo Karte », « Übergroße Karte » (ü → u ou ue, ß → ss), « Riesenkarte » ; établi le 27/10 sans requête, à valider sur de vrais titres' },
-    es: { termes: ['jumbo', 'gigante', 'gigantes', 'sobredimensionada', 'sobredimensionado'], source: 'libellés Vinted/Cardmarket ES « carta jumbo », « carta gigante », « sobredimensionada » ; établi le 27/10 sans requête, à valider sur de vrais titres' },
-    it: { termes: ['jumbo', 'gigante', 'giganti', 'sovradimensionata', 'sovradimensionato'], source: 'libellés Vinted/Cardmarket IT « carta jumbo », « carta gigante », « sovradimensionata » ; établi le 27/10 sans requête, à valider sur de vrais titres' },
-    nl: { termes: ['jumbo', 'reuzenkaart', 'reuze'], source: 'libellés Vinted/Cardmarket NL « jumbo kaart », « reuzenkaart » (« oversized » est déjà un terme anglais) ; établi le 27/10 sans requête, à valider sur de vrais titres' },
-    pt: { termes: ['jumbo', 'gigante', 'gigantes', 'sobredimensionada', 'sobredimensionado'], source: 'libellés Vinted PT « carta jumbo », « carta gigante », « sobredimensionada » ; établi le 27/10 sans requête, à valider sur de vrais titres' },
-    pl: { termes: ['jumbo', 'gigantyczna', 'gigantyczny', 'olbrzymia', 'nadwymiarowa'], source: 'libellés Vinted PL « karta jumbo », « gigantyczna », « nadwymiarowa » ; établi le 27/10 sans requête, à valider sur de vrais titres' },
-    cs: { termes: ['jumbo', 'obri', 'obrovska', 'nadmerna'], source: 'libellés Vinted CZ « jumbo karta », « obří », « obrovská », « nadměrná » (accents retirés) ; établi le 27/10 sans requête, à valider sur de vrais titres' }
+    fr: langue(['jumbo'], ['geant', 'geante', 'surdimensionne', 'surdimensionnee'], ['carte', 'cartes'], 'contrat §5 du 25/10 (jumbo, géant(e)) ; « carte surdimensionnée » = traduction usuelle d\'« oversized card » (annonces Vinted FR, fiches Cardmarket FR)'),
+    en: langue(['jumbo', 'oversize', 'oversized', 'xxl'], [], ['card', 'cards'], 'contrat §5 du 25/10 (jumbo, oversize(d), XXL) ; « Oversized Card » est le libellé de la pastille Cardmarket EN du marqueur JUMBO'),
+    de: langue(['jumbo', 'riesenkarte'], ['ubergross', 'ubergrosse', 'uebergross', 'uebergrosse', 'riesig'], ['karte', 'karten'], 'libellés Vinted/Cardmarket DE « Jumbo Karte », « Übergroße Karte » (ü → u ou ue, ß → ss), « Riesenkarte » ; établi le 27/10 sans requête, à valider sur de vrais titres'),
+    es: langue(['jumbo'], ['gigante', 'gigantes', 'sobredimensionada', 'sobredimensionado'], ['carta', 'cartas'], 'libellés Vinted/Cardmarket ES « carta jumbo », « carta gigante », « sobredimensionada » ; établi le 27/10 sans requête, à valider sur de vrais titres'),
+    it: langue(['jumbo'], ['gigante', 'giganti', 'sovradimensionata', 'sovradimensionato'], ['carta', 'carte'], 'libellés Vinted/Cardmarket IT « carta jumbo », « carta gigante », « sovradimensionata » ; établi le 27/10 sans requête, à valider sur de vrais titres'),
+    nl: langue(['jumbo', 'reuzenkaart'], ['reuze'], ['kaart', 'kaarten'], 'libellés Vinted/Cardmarket NL « jumbo kaart », « reuzenkaart » (« oversized » est déjà un terme anglais) ; établi le 27/10 sans requête, à valider sur de vrais titres'),
+    pt: langue(['jumbo'], ['gigante', 'gigantes', 'sobredimensionada', 'sobredimensionado'], ['carta', 'cartas'], 'libellés Vinted PT « carta jumbo », « carta gigante », « sobredimensionada » ; établi le 27/10 sans requête, à valider sur de vrais titres'),
+    pl: langue(['jumbo'], ['gigantyczna', 'gigantyczny', 'olbrzymia', 'nadwymiarowa'], ['karta', 'karty'], 'libellés Vinted PL « karta jumbo », « gigantyczna », « nadwymiarowa » ; établi le 27/10 sans requête, à valider sur de vrais titres'),
+    cs: langue(['jumbo'], ['obri', 'obrovska', 'nadmerna'], ['karta', 'karty'], 'libellés Vinted CZ « jumbo karta », « obří », « obrovská », « nadměrná » (accents retirés) ; établi le 27/10 sans requête, à valider sur de vrais titres')
 });
 const TERMES_JUMBO = Object.freeze([...new Set(Object.values(TERMES_PAR_LANGUE).flatMap(l => l.termes))]);
-const MOTS_NEUTRES = Object.freeze(['pokemon', 'carte', 'cartes', 'card', 'cards', 'karte', 'karten', 'carta', 'cartas', 'kaart', 'karta', 'tcg', 'holo', 'promo', 'de', 'la', 'le', 'un', 'une', 'the', 'der', 'die', 'das', 'el', 'l', 'd']);        // courts, sans négation : « l'oversize », « d'oversize » → l, d
+const MOTS_NEUTRES = Object.freeze(['pokemon', 'carte', 'cartes', 'card', 'cards', 'karte', 'karten', 'carta', 'cartas', 'kaart', 'kaarten', 'karta', 'karty', 'tcg', 'holo', 'promo', 'de', 'la', 'le', 'un', 'une', 'the', 'der', 'die', 'das', 'el']);        // aucune lettre seule ; l'élision (« l'oversize ») est retirée avant le découpage en mots
 // Les listes de GARDE-FOU : un mot du produit qui en fait partie n'entre jamais dans la liste blanche (un nom de produit qui contiendrait « Not » ou « Sans » ne blanchit pas une négation du titre).
-const NEGATIONS = Object.freeze(['pas', 'non', 'no', 'nope', 'nein', 'not', 'never', 'jamais', 'sans', 'without', 'aucun', 'aucune', 'false', 'faux', 'ni']);       // + tout mot en « n't » et les contractions sans apostrophe (CONTRACTIONS)
+const NEGATIONS = Object.freeze(['pas', 'non', 'no', 'nope', 'nein', 'not', 'never', 'jamais', 'sans', 'without', 'aucun', 'aucune', 'false', 'faux', 'ni']);       // + les contractions sans apostrophe (CONTRACTIONS)
 const CONTRACTIONS = Object.freeze(['isnt', 'arent', 'dont', 'doesnt', 'wasnt', 'werent', 'cant', 'wont', 'aint']);
 const LIAISONS = Object.freeze(['ou', 'or', 'et', 'and', 'vs', 'versus', 'contre', 'nor', 'neither', 'either']);       // choix ou comparaison : le titre cite plusieurs versions
 const VERSION_NORMALE = Object.freeze(['normal', 'normale', 'standard', 'regular', 'classique', 'classic', 'ordinaire', 'ordinary', 'petite', 'petit', 'mini', 'small', 'taille', 'size']);       // la version normale ou sa taille citées
@@ -34,49 +36,64 @@ const DOUTE_ACCESSOIRE = Object.freeze(['type', 'style', 'like', 'format', 'genr
 const CONTREFACON = Object.freeze(['fake', 'replica', 'replique', 'proxy', 'custom', 'copy', 'copie', 'reproduction', 'repro', 'contrefacon', 'imitation', 'bootleg', 'counterfeit']);
 const TITRE_MAX = 200, MOTS_MAX = 12;
 const sansAccent = s => String(s).replace(/ß/g, 'ss').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-// Les mots d'un titre : l'apostrophe typographique devient droite ; toute suite de lettres/chiffres est un mot (« isn't » → isn, t : ni l'un ni l'autre n'est admis).
-const motsDe = t => sansAccent(t).replace(/[’‘`]/g, '\'').match(/[a-z0-9]+/g) || [];
-const TERMES = new Set(TERMES_JUMBO), NEUTRES = new Set(MOTS_NEUTRES);
+const SEULS = new Set(Object.values(TERMES_PAR_LANGUE).flatMap(l => l.seuls));
+const ADJECTIFS = new Map();       // adjectif → les ensembles de noms « carte » des langues où il existe
+for (const l of Object.values(TERMES_PAR_LANGUE)) for (const a of l.adjectifs) ADJECTIFS.set(a, [...(ADJECTIFS.get(a) || []), new Set(l.cartes)]);
+const NEUTRES = new Set(MOTS_NEUTRES), VOCABULAIRE = new Set(TERMES_JUMBO);
 const INTERDITS = new Set([...NEGATIONS, ...CONTRACTIONS, ...LIAISONS, ...VERSION_NORMALE, ...CONTREFACON, ...DOUTE_ACCESSOIRE].map(sansAccent));
+// Normalise un texte : sans accent, apostrophe droite ; les crochets (attaques) ne sont pas lus ici.
+const normaliser = t => sansAccent(t).replace(/[’‘`]/g, '\'');
+const sansElision = s => s.replace(/(^|[^a-z0-9])[ld]'(?=[a-z])/g, '$1 ');                 // « l'oversize », « d'oversize » : la lettre d'élision n'est pas un mot
+const motsDe = t => normaliser(t).match(/[a-z0-9]+/g) || [];
+const composesDe = t => (normaliser(t).match(/[a-z0-9]+(?:-[a-z0-9]+)+/g) || []);        // « ho-oh », « s-p » : un tiret À L'INTÉRIEUR d'un mot
 const PONCTUATION_ADMISE = /^[a-z0-9\s\-'.,()#]*$/;                                       // après avoir retiré les « 025/165 » : le « / » n'est admis qu'entre deux nombres
-/** Les mots que le produit JUMBO candidat permet d'admettre : son nom (Cardmarket et français), le nom, le slug et le code de son set, son numéro (avec et sans zéros de tête) et son total. @returns string[] */
+const TIRET_HORS_MOT = /(^|[^a-z0-9])-|-($|[^a-z0-9])/;                                   // un tiret en tête ou en fin de mot, ou isolé : « -jumbo », « jumbo- », « - »
+/** Les mots que le produit JUMBO candidat permet d'admettre : son nom (Cardmarket et français, SANS les crochets d'attaques), le nom, le slug et le code de son set, son numéro (avec et sans zéros de tête) et son total ; les mots composés (« ho-oh », « s-p ») en entier. @returns string[] */
 function motsDuProduit(ligne) {
     if (!ligne || typeof ligne !== 'object') return [];
     const s = ligne.set && typeof ligne.set === 'object' ? ligne.set : {};
     const sortie = new Set();
-    for (const brut of [ligne.nomCardmarket, ligne.nomFr, ligne.nom, s.nom, s.slug, s.code, ligne.numero, ligne.total]) {
-        if (typeof brut !== 'string' && typeof brut !== 'number') continue;
-        if (/['’‘`]s(?![a-z0-9])/i.test(String(brut))) sortie.add('s');          // le possessif (« Rocket's ») : la lettre qui suit l'apostrophe est un mot du produit
-        for (const m of motsDe(String(brut))) {
+    const ajouter = (brut, { crochets = false } = {}) => {
+        if (typeof brut !== 'string' && typeof brut !== 'number') return;
+        const texte = crochets ? String(brut).replace(/\[[^\]]*\]/g, ' ') : String(brut);            // les attaques (« [Gnaw | Thunder Jolt] ») ne sont pas des mots du produit
+        if (/['’‘`]s(?![a-z0-9])/i.test(texte)) sortie.add('s');                                      // le possessif (« Rocket's »)
+        for (const m of motsDe(texte)) {
             if (INTERDITS.has(m)) continue;
             if (m.length >= 2 || /\d/.test(m) || m === 'v' || m === 'x') sortie.add(m);
             if (/^0+\d/.test(m)) sortie.add(m.replace(/^0+/, ''));
         }
-    }
+        for (const c of composesDe(texte)) if (!c.split('-').some(p => INTERDITS.has(p))) sortie.add(c);
+    };
+    for (const nom of [ligne.nomCardmarket, ligne.nomFr, ligne.nom]) ajouter(nom, { crochets: true });
+    for (const autre of [s.nom, s.slug, s.code, ligne.numero, ligne.total]) ajouter(autre);
     if (typeof ligne.numero === 'string' || typeof ligne.numero === 'number') {
         const n = String(ligne.numero).replace(/^0+(?=\d)/, ''), t = ligne.total === null || ligne.total === undefined ? '' : String(ligne.total).replace(/^0+(?=\d)/, '');
         if (/^\d+$/.test(n) && /^\d+$/.test(t)) sortie.add(`${n}/${t}`);          // « 025/165 » n'est admis que s'il est le numéro ET le total de CE produit (jamais « 50/50 » deux mots admis séparément)
     }
-    // le CODE du set s'écrit en lettres seules (« S-P », « SV »…) : ses lettres sont des mots du produit, même d'une lettre (un NOM d'une lettre, lui, n'entre pas)
-    if (typeof s.code === 'string') for (const m of motsDe(s.code)) if (!INTERDITS.has(m)) sortie.add(m);
     return [...sortie].sort();
 }
 /**
- * @param titre le titre de l'annonce ; @param produit les mots du produit JUMBO candidat (motsDuProduit) — un tableau, ou { mots } ; absent : seuls les termes jumbo et les mots neutres sont admis
+ * @param titre le titre de l'annonce ; @param produit les mots du produit JUMBO candidat (motsDuProduit) — un tableau, ou { mots } ; absent : seuls le vocabulaire jumbo et les mots neutres sont admis
  * @returns { oui, terme?, motif, ambigu } — oui SEULEMENT si le titre nomme un terme jumbo ET que chacun de ses mots est admis ; `ambigu` : le titre nomme un terme jumbo sans être admis (la question { normale, jumbo } reste, jamais un sûr).
  */
 function lireTitreJumbo(titre, produit) {
     if (typeof titre !== 'string' || !titre.trim()) return { oui: false, ambigu: false, motif: 'pas de titre' };
-    const t = motsDe(titre), trouves = t.filter(m => TERMES.has(m)), ambigu = trouves.length > 0;
+    const normal = sansElision(normaliser(titre));
+    const t = normal.match(/[a-z0-9]+/g) || [];
+    const estTerme = m => SEULS.has(m) || (ADJECTIFS.has(m) && ADJECTIFS.get(m).some(cartes => t.some(x => cartes.has(x))));        // un adjectif « grand » ne compte que si le titre a aussi le nom « carte » de sa langue
+    const trouves = t.filter(estTerme), ambigu = trouves.length > 0;
     if (titre.length > TITRE_MAX || t.length > MOTS_MAX) return { oui: false, ambigu, motif: 'titre trop long' };
     if (!ambigu) return { oui: false, ambigu: false, motif: 'aucun terme' };
-    const normal = sansAccent(titre).replace(/[’‘]/g, '\''), propre = normal.replace(/\d+\/\d+/g, ' ');
+    const propre = normal.replace(/\d+\/\d+/g, ' ');
     if (!PONCTUATION_ADMISE.test(propre)) return { oui: false, ambigu: true, terme: trouves[0], motif: 'ponctuation hors de la liste blanche' };
+    if (TIRET_HORS_MOT.test(propre)) return { oui: false, ambigu: true, terme: trouves[0], motif: 'tiret hors d\'un mot admis' };
     const mots = Array.isArray(produit) ? produit : produit && Array.isArray(produit.mots) ? produit.mots : [];
     const duProduit = new Set(mots.filter(m => typeof m === 'string').map(sansAccent).filter(m => m && !INTERDITS.has(m)));
     const sansZeros = m => (/^0+\d/.test(m) ? m.replace(/^0+/, '') : m);
     const fractions = (normal.match(/\d+\/\d+/g) || []).map(x => x.split('/').map(y => y.replace(/^0+(?=\d)/, '')).join('/')).filter(x => !duProduit.has(x));
-    const hors = fractions.length ? fractions[0] : t.find(m => !TERMES.has(m) && !NEUTRES.has(m) && !duProduit.has(m) && !duProduit.has(sansZeros(m)));
+    // les mots du titre, un mot composé (« ho-oh ») restant ENTIER : il n'est admis que s'il est tel quel un mot du produit
+    const admis = w => (w.includes('-') ? duProduit.has(w) : VOCABULAIRE.has(w) || NEUTRES.has(w) || duProduit.has(w) || duProduit.has(sansZeros(w)));
+    const hors = fractions.length ? fractions[0] : (propre.match(/[a-z0-9]+(?:-[a-z0-9]+)*/g) || []).find(w => !admis(w));
     if (hors !== undefined) return { oui: false, ambigu: true, terme: trouves[0], motif: 'mot hors de la liste blanche', mot: hors };
     return { oui: true, terme: trouves[0], motif: 'liste blanche', ambigu: false };
 }
