@@ -24,7 +24,8 @@ verifier('trois entrées, deux identiques et une différente : contradictoire (l
 // ── M3 : le rapprochement avec decider LÈVE s'il diverge
 const traceSansFiche = { sansFiche: true, im: null, refus: null }, traceRepli = { sansFiche: false, im: { cleR2: 'x' }, refus: 'wcd' }, traceVisuel = { sansFiche: false, im: { cleR2: 'x' }, refus: null }, traceAucun = { sansFiche: false, im: null, refus: null };
 const traces = [traceSansFiche, traceSansFiche, traceRepli, ...Array(6).fill(traceVisuel), traceAucun];
-const d = () => ({ avecLigne: 11, ecrites: 5, aucun: 2, aucunDetail: { 'carte absente': 0, 'aucun set candidat': 1, 'aucun visuel': 1 }, sansFicheDuSite: 2, repliRefuse: { total: 1 }, partageIncoherent: 1 });
+const d = () => ({ avecLigne: 11, ecrites: 5, aucun: 2, aucunDetail: { 'carte absente': 0, 'aucun set candidat': 1, 'aucun visuel': 1 }, sansFicheDuSite: 2, repliRefuse: { total: 1, parFamille: { wcd: 1 } }, partageIncoherent: 1,
+    admisCatalogue: { 'prv-position': 0, 'wcd-emprunt': 0 }, positionContredite: 0 });
 const base = () => ({ d: d(), traces, nLignes: 11, nEntrees: 5 });
 verifier('un état cohérent : le rapprochement rend ses comptes, sans lever', rapprocher(base()).ok, true);
 verifier('« sans fiche » qui diverge : LÈVE', leve(() => rapprocher({ ...base(), d: { ...d(), sansFicheDuSite: 3 } }), /sans fiche/), true);
@@ -35,6 +36,18 @@ verifier('PARTAGE INCOHÉRENT : le reste (écrites + partage) ne tombe plus just
 verifier('une exclusion NOUVELLE de l\'API (une trace de plus écartée, aucun compteur ne bouge) : LÈVE', leve(() => rapprocher({ ...base(), nEntrees: 4, d: { ...d(), ecrites: 4 } }), /partage/), true);
 verifier('écrites ≠ entrées reçues : LÈVE', leve(() => rapprocher({ ...base(), nEntrees: 6 }), /écrites/), true);
 verifier('lignes comptées par decider ≠ lignes lues : LÈVE', leve(() => rapprocher({ ...base(), nLignes: 10 }), /lignes/), true);
+
+// ── ADMISSION-CATALOGUE (API 1b305419, 27/10) : decider reprend APRÈS choisirVisuel des lignes que la trace voit « aucun visuel » ou « repli » (admisCatalogue, comptées une fois ÉCRITES)
+//    et en écarte d'autres que la trace voit servies (positionContredite). Équations exactes : rien ne passe par élimination.
+const tracesAdm = [...traces, traceAucun, { ...traceRepli }, traceVisuel];     // +1 aucun admise, +1 repli admise, +1 position contredite
+const dAdm = () => ({ ...d(), avecLigne: 14, ecrites: 7, admisCatalogue: { 'prv-position': 1, 'wcd-emprunt': 1 }, positionContredite: 1 });
+const baseAdm = () => ({ d: dAdm(), traces: tracesAdm, nLignes: 14, nEntrees: 7 });
+verifier('ADMISSION : 2 lignes admises (prises à « aucun visuel » et au repli) et 1 position contredite — le rapprochement tient et les nomme', (({ ok, comptes }) => ({ ok, admis: comptes.admis, contredit: comptes.positionContredite }))(rapprocher(baseAdm())), { ok: true, admis: 2, contredit: 1 });
+verifier('ADMISSION : decider compte moins d\'admises que ce que les traces ont perdu : LÈVE', leve(() => rapprocher({ ...baseAdm(), d: { ...dAdm(), admisCatalogue: { 'prv-position': 1, 'wcd-emprunt': 0 }, ecrites: 6 }, nEntrees: 6 }), /admis/), true);
+verifier('ADMISSION : decider compte PLUS de « aucun visuel » que les traces (une admission ne fait que retirer) : LÈVE', leve(() => rapprocher({ ...baseAdm(), d: { ...dAdm(), aucunDetail: { 'carte absente': 0, 'aucun set candidat': 1, 'aucun visuel': 3 } } }), /aucun visuel/), true);
+verifier('ADMISSION : une famille de repli où decider compte PLUS que les traces : LÈVE', leve(() => rapprocher({ ...base(), d: { ...d(), repliRefuse: { total: 1, parFamille: { wcd: 0, 'prize-packs': 1 } } } }), /prize-packs/), true);
+verifier('ADMISSION : une exclusion NOUVELLE (une trace servie de plus écartée, aucun compteur ne bouge) : LÈVE toujours', leve(() => rapprocher({ ...baseAdm(), nEntrees: 6, d: { ...dAdm(), ecrites: 6 } }), /partage/), true);
+verifier('decider SANS admisCatalogue ni positionContredite : LÈVE (version de l\'API que cet outil ne sait pas lire, jamais un 0 supposé)', leve(() => rapprocher({ ...base(), d: (({ admisCatalogue, positionContredite, ...r }) => r)(d()) }), /admisCatalogue|positionContredite/), true);
 
 // ── L1 : le motif `format` dès que le nom correspond, y compris sur un MANQUANT ; la finition ne se pose que sur une comparaison CONFORME
 const mf = o => C.motifsFinaux({ motifs: [], nom: 'Pikachu', comparaison: null, classeVisuel: 'MANQUANT', finition: null, ...o });
