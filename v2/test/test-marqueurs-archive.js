@@ -38,6 +38,30 @@ const D = new Date('2026-10-29T10:00:00.000Z');
     const ctr = MQ.marqueursDeLEntree({ variante: null, lien: 'https://www.cardmarket.com/en/Pokemon/Products/Singles/WCD-2018/Carte-WCD18X-001', marqueurs: [{ type: 'WCD', params: { annee: 2019 } }], marqueursPreuve: PREUVE });
     H.v('1j. marqueursDeLEntree (le MÊME calcul que le produit servi) : le dérivé WCD 2018 l\'emporte sur l\'écrit 2019, la contradiction est comptée', [ctr.marqueurs.map(m => [m.type, m.params.annee || null]), ctr.contradictions], [[['WCD', 2018], ['NON_LEGAL', null]], 1]);
 
+    // TOUR 1 (d) : un écrit qui AJOUTE seulement un paramètre facultatif au dérivé n'est pas une contradiction ; une autre année l'est (le dérivé l'emporte)
+    const slugWcd = 'https://www.cardmarket.com/en/Pokemon/Products/Singles/WCD-2012/Carte-WCD12X-001';
+    const ajout = MQ.marqueursDeLEntree({ variante: null, lien: slugWcd, marqueurs: [{ type: 'WCD', params: { annee: 2012, joueur: 'Igor Costa' } }, JN[1]], marqueursPreuve: PREUVE });
+    H.v('1k. WCD écrit = année du dérivé + joueur : l\'écrit est gardé (joueur conservé), 0 contradiction', [ajout.marqueurs.map(m => m.params), ajout.contradictions], [[{ annee: 2012, joueur: 'Igor Costa' }, {}], 0]);
+    const autreAn = MQ.marqueursDeLEntree({ variante: null, lien: slugWcd, marqueurs: [{ type: 'WCD', params: { annee: 2013, joueur: 'Igor Costa' } }], marqueursPreuve: PREUVE });
+    H.v('1l. autre année : le dérivé l\'emporte (sans joueur), 1 contradiction', [autreAn.marqueurs[0].params, autreAn.contradictions], [{ annee: 2012 }, 1]);
+    // TOUR 1 (3) : la coupe de la preuve aux points de code
+    const emoji = MQ.ecritsDeLaLigne({ marqueurs: JN, marqueursPreuve: `${'a'.repeat(MQ.PREUVE_MAX - 1)}😀 fin` }).preuve;
+    H.v('1m. la coupe ne tombe jamais au milieu d\'une paire de substitution', [emoji.length <= MQ.PREUVE_MAX, !/[\ud800-\udbff]$/.test(emoji), lireEntree(brut(9, { marqueurs: JN, marqueursPreuve: emoji })).ok], [true, true, true]);
+    // TOUR 1 (e) : avec les deux drapeaux, « jumbo (titre) » est le signal réel d'un groupe { JUMBO, sans JUMBO } même quand le jumeau normal est null ou []
+    {
+        const GM = require('../identifier/garde-marqueurs');
+        const aff = (p, critere) => ({ issue: 'affirmee', critere, analyse: { cartes: [{ carte: { idProduct: p } }] } });
+        const mk = { 1: JN.map(m => ({ ...m })), 2: null, 3: [] };
+        const version = { entree: () => ({ vignette: { cle: 'v.webp' }, grande: null, idMetacard: 5, numero: '1', setNom: 'S' }), memeFiche: () => true };
+        const jouer = (p, rival, critere) => {
+            const g = GM.consulterMarqueurs({ cfg: { jumboTitre: true, gardeMarqueurs: true }, titre: null, resultat: aff(p, critere), derniereQuestion: null, produits: new Map([[p, {}], [rival, {}]]), version, affirmer: () => null,
+                marqueursDe: id => mk[id], questionDeGroupe: ids => ({ issue: 'question', analyse: { cartes: [{ candidats: ids.map(idProduct => ({ idProduct })) }] } }) });
+            return g && g.resultat && g.resultat.issue === 'question' ? 'question' : 'sûr';
+        };
+        const titre = GM.critereJumbo('jumbo');
+        H.v('1n. deux drapeaux : le sûr par titre propre reste sûr face à un jumeau null ou [] ; un sûr d\'image sur le même groupe, ou par le titre sur un produit SANS JUMBO, redevient une question', [jouer(1, 2, titre), jouer(1, 3, titre), jouer(1, 2, 'image (inliers)'), jouer(1, 3, 'tampon (marque lue)'), jouer(2, 1, titre)], ['sûr', 'sûr', 'question', 'question', 'question']);
+    }
+
     // ── 2. la validation d'entrée
     const ok = e => lireEntree(brut(7, e));
     const a = ok({ marqueurs: JN, marqueursPreuve: PREUVE });

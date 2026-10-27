@@ -202,7 +202,7 @@ function fusionner(derives, ecrits) {
     const compte = { contradictions: 0, invalides: 0, doublons: 0, trop: 0 };
     const base = Array.isArray(derives) ? derives : null;
     const parType = new Map((base || []).map(e => [e.type, e]));
-    const ajouts = [];
+    const ajouts = [], remplaces = new Set();
     if (Array.isArray(ecrits)) {
         const vusEcrits = new Set();
         for (const brut of ecrits) {
@@ -211,12 +211,17 @@ function fusionner(derives, ecrits) {
             if (vusEcrits.has(v.type)) { compte.doublons++; continue; }
             vusEcrits.add(v.type);
             const d = parType.get(v.type);
-            if (d) { if (JSON.stringify(d.params) !== JSON.stringify(v.params)) compte.contradictions++; continue; }       // le dérivé l'emporte
+            if (d) {
+                if (JSON.stringify(d.params) === JSON.stringify(v.params)) continue;
+                // TOUR 1 (d) : un écrit qui garde tous les paramètres du dérivé et n'AJOUTE que des paramètres (le `joueur` facultatif d'un WCD) ne le contredit pas : l'élément écrit est gardé
+                if (Object.keys(d.params).every(k => JSON.stringify(d.params[k]) === JSON.stringify(v.params[k]))) { parType.set(v.type, v); remplaces.add(v.type); continue; }
+                compte.contradictions++; continue;                                  // une autre valeur : le dérivé l'emporte
+            }
             ajouts.push(v);
         }
     }
     if (base === null && ajouts.length === 0) return { marqueurs: null, ...compte };
-    const tous = dansOrdre([...(base || []), ...ajouts]);
+    const tous = dansOrdre([...(base || []).map(e => (remplaces.has(e.type) ? parType.get(e.type) : e)), ...ajouts]);
     if (tous.length > MARQUEURS_MAX) return { marqueurs: null, ...compte, trop: 1 };
     return { marqueurs: Object.freeze(tous), ...compte };
 }
@@ -244,7 +249,9 @@ function ecritsDeLaLigne(ligne) {
     if (!preuve) { sortie.sansPreuve = l.marqueurs.length - r.invalides - r.doublons; return sortie; }
     if (r.marqueurs === null) return sortie;
     sortie.elements = r.marqueurs.map(sansLibelle);
-    sortie.preuve = preuve.slice(0, PREUVE_MAX).trim();                                  // rognée APRÈS la coupe : une coupe sur une espace laisserait une preuve que l'archive refuserait (et le produit disparaîtrait)
+    let coupee = '';                                                                     // TOUR 1 : coupe aux POINTS DE CODE (jamais au milieu d'une paire de substitution), dans la borne en unités UTF-16 que la structure vérifie
+    for (const c of preuve) { if (coupee.length + c.length > PREUVE_MAX) break; coupee += c; }
+    sortie.preuve = coupee.trim();                                // rognée APRÈS la coupe : une coupe sur une espace laisserait une preuve que l'archive refuserait (et le produit disparaîtrait)
     return sortie;
 }
 /**
