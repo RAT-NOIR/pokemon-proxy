@@ -158,4 +158,90 @@ function creerIndexFamilles(numeros, produits, lecteur = () => () => null) {    
     };
 }
 
-module.exports = { designer, reglesDe, actives, candidatsAPreparer, creerIndexFamilles, compteurs, assouplisDe, ASSOUPLIS, REGLES_DESIGNATION, CHAMPS_DE };
+// ── PERF-SCAN P2 — le MÊME index, construit en lisant deux CURSEURS (itérables asynchrones) et gardé en colonnes compactes (tableaux typés, une réserve de chaînes dédoublonnées, les noms en octets UTF-8) :
+// ni le tableau des 73 756 lignes de numéros, ni celui des 74 694 produits (le transitoire du pic de mémoire des premiers scans), ni les 74 000 objets-lignes ne sont jamais tenus ; `famille(id)` reconstruit à la demande
+// les quelques lignes qu'elle rend, avec les MÊMES champs, dans le MÊME ordre de clés et le MÊME ordre de lignes que creerIndexFamilles (le banc test-index-en-flux.js le prouve produit par produit). La sémantique d'avant est
+// conservée jusque dans ses angles : « le dernier gagne » quand un idProduct revient (la ligne rendue est la dernière lue, les listes de famille gardent les rangs de TOUTES les occurrences, dédoublonnés par identifiant),
+// un produit sans nom lisible n'entre pas, une ligne de numéros sans identifiant entier est ignorée. Colonnes d'entiers : growable, sans objet par ligne.
+function colonneEntiers(Type) {
+    let a = new Type(1024), n = 0;
+    return { push(v) { if (n === a.length) { const b = new Type(a.length * 2); b.set(a); a = b; } a[n++] = v; }, get n() { return n; }, vue: () => a.subarray(0, n) };
+}
+function reserveDeChaines() {
+    const index = new Map(), liste = [];
+    return { id(s) { if (s === null || s === undefined) return -1; let i = index.get(s); if (i === undefined) { i = liste.length; index.set(s, i); liste.push(s); } return i; }, get: i => (i < 0 ? null : liste[i]), vider() { index.clear(); } };
+}
+const premierPlusGrand = (tab, v, n = tab.length) => { let lo = 0, hi = n; while (lo < hi) { const m = (lo + hi) >>> 1; if (tab[m] <= v) lo = m + 1; else hi = m; } return lo; };      // première position où tab[i] > v
+const premierNonInferieur = (tab, v, n = tab.length) => { let lo = 0, hi = n; while (lo < hi) { const m = (lo + hi) >>> 1; if (tab[m] < v) lo = m + 1; else hi = m; } return lo; };   // première position où tab[i] >= v
+async function creerIndexFamillesDepuisFlux(fluxNumeros, fluxProduits, lecteur = () => () => null, { numerosAttendus = null, produitsAttendus = null } = {}) {
+    const tronque = () => { throw new Error('index des familles : lecture tronquée'); };
+    // 1. les LIGNES DE NUMÉROS (arrivée dans l'ordre du curseur ; le dernier gagne pour un même idProduct)
+    const chaines = reserveDeChaines();
+    const nId = colonneEntiers(Float64Array), nNum = colonneEntiers(Int32Array), nCode = colonneEntiers(Int32Array), nTcg = colonneEntiers(Int32Array);
+    let nLus = 0;
+    for await (const n of fluxNumeros) {
+        nLus++;
+        if (!n || !Number.isInteger(n.idProduct)) continue;
+        nId.push(n.idProduct);
+        nNum.push(chaines.id(texte(n.numero == null ? null : String(n.numero)) || texte(n.numeroUrl == null ? null : String(n.numeroUrl))));
+        nCode.push(chaines.id(texte(n.codeSet)));
+        nTcg.push(chaines.id(texte(n.setTcgdex)));
+    }
+    if (Number.isInteger(numerosAttendus) && nLus < numerosAttendus) tronque();
+    const idsN = nId.vue(), ordreN = Int32Array.from(Array.from({ length: idsN.length }, (_, i) => i).sort((a, b) => idsN[a] - idsN[b] || a - b));
+    const idsNTries = Float64Array.from(ordreN, i => idsN[i]);
+    const dernierNumero = id => { const p = premierPlusGrand(idsNTries, id) - 1; return p >= 0 && idsNTries[p] === id ? ordreN[p] : -1; };   // la dernière arrivée pour cet identifiant
+    // 2. les PRODUITS : une rangée par produit lisible, jointe à sa dernière ligne de numéros
+    const pId = colonneEntiers(Float64Array), pMeta = colonneEntiers(Float64Array), pNum = colonneEntiers(Int32Array), pCode = colonneEntiers(Int32Array), pTcg = colonneEntiers(Int32Array), pDeb = colonneEntiers(Uint32Array);
+    const vNN = nNum.vue(), vNC = nCode.vue(), vNT = nTcg.vue();
+    let tas = new Uint8Array(1 << 20), fin = 0;
+    const encodeur = new TextEncoder(), decodeur = new TextDecoder('utf-8');
+    const groupesNom = new Map(), pGroupe = colonneEntiers(Int32Array);
+    let pLus = 0;
+    for await (const p of fluxProduits) {
+        pLus++;
+        if (!p || !Number.isInteger(p.idProduct) || !texte(p.name)) continue;
+        const k = dernierNumero(p.idProduct);
+        pId.push(p.idProduct); pMeta.push(Number.isInteger(p.idMetacard) ? p.idMetacard : NaN);
+        pNum.push(k < 0 ? -1 : vNN[k]); pCode.push(k < 0 ? -1 : vNC[k]); pTcg.push(k < 0 ? -1 : vNT[k]);
+        const b = encodeur.encode(p.name);
+        if (fin + b.length > tas.length) { const g = new Uint8Array(Math.max(tas.length * 2, fin + b.length)); g.set(tas.subarray(0, fin)); tas = g; }
+        pDeb.push(fin); tas.set(b, fin); fin += b.length;
+        const base = nomBase(p.name);
+        if (base) { let g = groupesNom.get(base); if (g === undefined) { g = groupesNom.size; groupesNom.set(base, g); } pGroupe.push(g); } else pGroupe.push(-1);
+    }
+    if (Number.isInteger(produitsAttendus) && pLus < produitsAttendus) tronque();
+    groupesNom.clear();
+    pDeb.push(fin);                                                                    // borne de fin du dernier nom
+    const n = pId.n, ids = pId.vue(), metas = pMeta.vue(), groupes = pGroupe.vue(), deb = pDeb.vue(), vNum = pNum.vue(), vCode = pCode.vue(), vTcg = pTcg.vue();
+    const octetsNoms = tas.slice(0, fin);
+    const nomDe = r => decodeur.decode(octetsNoms.subarray(deb[r], deb[r + 1]));
+    // 3. les accès : le dernier rang d'un identifiant, les rangs d'une métacarte, les rangs d'un groupe de nom — tous triés, tous cherchés par dichotomie
+    const ordreId = Int32Array.from(Array.from({ length: n }, (_, i) => i).sort((a, b) => ids[a] - ids[b] || a - b));
+    const idsTries = Float64Array.from(ordreId, i => ids[i]);
+    const dernierRang = id => { const p = premierPlusGrand(idsTries, id) - 1; return p >= 0 && idsTries[p] === id ? ordreId[p] : -1; };
+    let distincts = 0; for (let i = 0; i < n; i++) if (i === 0 || idsTries[i] !== idsTries[i - 1]) distincts++;
+    const rangsMeta = []; for (let i = 0; i < n; i++) if (!Number.isNaN(metas[i])) rangsMeta.push(i);
+    const ordreMeta = Int32Array.from(rangsMeta.sort((a, b) => metas[a] - metas[b] || a - b)), metasTriees = Float64Array.from(ordreMeta, i => metas[i]);
+    const rangsNom = []; for (let i = 0; i < n; i++) if (groupes[i] >= 0) rangsNom.push(i);
+    const ordreNom = Int32Array.from(rangsNom.sort((a, b) => groupes[a] - groupes[b] || a - b)), groupesTries = Int32Array.from(ordreNom, i => groupes[i]);
+    const plage = (tries, ordre, v) => { const a = premierNonInferieur(tries, v), b = premierPlusGrand(tries, v); return ordre.subarray(a, b); };
+    const ligneDe = (r, vis) => ({ idProduct: ids[r], nomCardmarket: nomDe(r), nomFr: null, numero: chaines.get(vNum[r]), total: vis.total ?? null, set: { code: chaines.get(vCode[r]) }, setTcgdex: chaines.get(vTcg[r]), tirageSource: vis.tirage ?? null,
+        meta: Number.isNaN(metas[r]) ? null : metas[r], base: nomBase(nomDe(r)) });
+    return {
+        taille: distincts,
+        /** Les lignes de la famille de `id` (hors lui). null : le produit est inconnu de l'index (la règle se ferme). */
+        famille(id) {
+            const r = Number.isInteger(id) ? dernierRang(id) : -1;
+            if (r < 0) return null;
+            const membres = new Set();
+            if (!Number.isNaN(metas[r])) for (const k of plage(metasTriees, ordreMeta, metas[r])) membres.add(ids[k]);
+            if (groupes[r] >= 0) for (const k of plage(groupesTries, ordreNom, groupes[r])) membres.add(ids[k]);
+            membres.delete(id);
+            const visuel = lecteur();
+            return [...membres].map(i => ligneDe(dernierRang(i), visuel(i) || {}));
+        }
+    };
+}
+
+module.exports = { designer, reglesDe, actives, candidatsAPreparer, creerIndexFamilles, creerIndexFamillesDepuisFlux, compteurs, assouplisDe, ASSOUPLIS, REGLES_DESIGNATION, CHAMPS_DE };

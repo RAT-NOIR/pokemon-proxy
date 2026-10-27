@@ -320,7 +320,8 @@ const idAffirme = r => (r.issue === 'affirmee' ? r.analyse.cartes[0].carte.idPro
 // ── (13) M-B, le câblage du plancher : catalogue.indexCodeNumero passe par construireIndexVerifie (jamais creerIndexCodeNumero nu)
 {
     const cat = require('fs').readFileSync(require('path').join(__dirname, '..', 'identifier', 'catalogue.js'), 'utf8');
-    vrai('(13) catalogue.js construit l\'index par construireIndexVerifie (plancher) et non par creerIndexCodeNumero', /construireIndexVerifie\(docs/.test(cat) && !/creerIndexCodeNumero\(/.test(cat));
+    // PERF-SCAN P2 : l'index se construit par un CURSEUR (construireIndexVerifieDepuisCurseur, mêmes gardes : tronqué, plancher — test-index-en-flux.js), plus par un tableau de documents ; le câblage reste « jamais creerIndexCodeNumero nu »
+    vrai('(13) catalogue.js construit l\'index par la construction vérifiée (plancher, lecture tronquée) et non par creerIndexCodeNumero', /construireIndexVerifie(DepuisCurseur)?\((docs|col\.find)/.test(cat) && !/creerIndexCodeNumero\(/.test(cat));
 }
 
 // ── (14) M-D, garde G2 : un code lu qui est PRÉFIXE du code d'un produit (ou l'inverse) DÉSIGNE ce produit — vivier ET catalogue, sans plancher de longueur ; à travers la VRAIE adapter + critère A + R4
@@ -358,6 +359,6 @@ const idAffirme = r => (r.issue === 'affirmee' ? r.analyse.cartes[0].carte.idPro
     vrai('(15) 62 108 lus sur 62 108 comptés : accepté', LD.construireIndexVerifie(lignes(12000), LD.INDEX_CODE_NUMERO_MIN, 12000).taille === 12000);
     vrai('(15) aucun compte fourni : le plancher seul s\'applique (compatibilité)', LD.construireIndexVerifie(lignes(12000)).taille === 12000);
     const cat = require('fs').readFileSync(require('path').join(__dirname, '..', 'identifier', 'catalogue.js'), 'utf8');
-    vrai('(15) catalogue.js compte (countDocuments) AVANT de lire, avec le même filtre, et passe le compte à construireIndexVerifie', /countDocuments\(\{\}\)/.test(cat) && /construireIndexVerifie\(.*attendu|construireIndexVerifie\(docs, .*, attendu\)/.test(cat) && cat.indexOf('countDocuments') < cat.indexOf('.find({}, { projection: { codeSet: 1'));
+    vrai('(15) catalogue.js compte (countDocuments) AVANT de lire, avec le même filtre, et passe le compte à construireIndexVerifie', /countDocuments\(\{\}\)/.test(cat) && /construireIndexVerifie(DepuisCurseur)?\(.*attendu|construireIndexVerifie\(docs, .*, attendu\)/.test(cat) && cat.indexOf('countDocuments') < cat.indexOf('.find({}, { projection: { codeSet: 1'));
 }
 bilan();
