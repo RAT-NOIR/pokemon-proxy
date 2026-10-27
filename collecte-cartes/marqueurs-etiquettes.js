@@ -25,6 +25,7 @@ function valide(m) {
     const cles = Object.keys(m.params);
     return cles.every(k => p.permis.includes(k) && FORME[k](m.params[k])) && p.requis.every(k => cles.includes(k));
 }
+const SOURCES_NOMMEES = /cardmarket|tcgplayer|tcgcsv|tcgdex|bulbapedia|pokemontcg/i;
 const ordonner = ms => [...ms].sort((a, b) => ORDRE.indexOf(a.type) - ORDRE.indexOf(b.type));
 const stable = v => JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map(c => [c, x[c]])) : x));
 
@@ -63,7 +64,11 @@ function planStaff({ etiquettes, cm, groupesDeExp, lusDe, releveLe }) {
     return { cibles, refus };
 }
 
-/** WCD : l'année (set WCD-<aaaa> + code du slug + étiquette) et le JOUEUR (lu sur l'étiquette = joueur du deck du second marché, pour la même carte de la même année). */
+/**
+ * WCD : l'ANNÉE vient de l'expansion du produit (set WCD-<aaaa>, « World Championships Decks <aaaa> ») — un fait du catalogue, une seule source suffit (décision de l'éditeur, 27/10 après-midi).
+ * Le JOUEUR exige toujours les deux sources (lu sur l'étiquette = joueur du deck du second marché, pour la même carte de la même année) ; sans elles il est OMIS, avec sa raison (`joueurOmis`),
+ * et le produit reçoit WCD{annee} seul. Seul refus : une année lue (code du slug, étiquette) qui contredit celle de l'expansion.
+ */
 function planWcd({ etiquettes, cm, tcgWcd, releveLe }) {
     const E = parProduit(etiquettes), cibles = [], refus = [];
     const no = (idProduct, raison, detail) => refus.push({ idProduct, famille: 'WCD', raison, ...(detail ? { detail } : {}) });
@@ -74,22 +79,31 @@ function planWcd({ etiquettes, cm, tcgWcd, releveLe }) {
         const s = /^WCD-(\d{4})$/.exec(String(p?.slugSet ?? ''));
         if (!p || !s) continue;                                  // hors set WCD : ce n'est pas un deck de championnat (la classe de l'étiquette ne suffit pas)
         const anneeSet = Number(s[1]);
+        if (!FORME.annee(anneeSet)) { no(id, 'annee-hors-forme', { set: p.slugSet }); continue; }
         const c = JT.lireWcdCm({ idProduct: id, name: p.name, slug: p.slug, slugSet: p.slugSet, codeSet: p.codeSet, idExpansion: p.idExpansion, numero: null });
-        if (c.annee == null || !c.numeroWcd) { no(id, 'slug-sans-annee-ou-numero'); continue; }
         const texte = texteDe(es), anneeLue = (/(?:19|20)\d{2}/.exec(texte) || [])[0];
-        if (c.annee !== anneeSet || (anneeLue && Number(anneeLue) !== anneeSet)) { no(id, 'annee-discordante', { set: anneeSet, slug: c.annee, etiquette: anneeLue ?? null }); continue; }
-        const cands = tW.filter(t => t.annee === anneeSet && t.faible === JT.faibleDe(c.numeroWcd) && t.nomCles[0] === c.nomCles[0]);
-        if (!cands.length) { no(id, 'carte-absente-du-marche'); continue; }
-        const lu = lettres(texte);
-        const joueurs = [...new Set(cands.filter(t => { const j = lettres(t.joueur); return j.length >= 5 && lu.includes(j); }).map(t => t.joueur))];
-        if (!joueurs.length) { no(id, 'joueur-non-lu', { etiquette: texte, joueurs: [...new Set(cands.map(t => t.joueur))] }); continue; }
-        if (joueurs.length > 1) { no(id, 'plusieurs-joueurs-lus', joueurs); continue; }
-        const wcd = { type: 'WCD', params: { annee: anneeSet, joueur: joueurs[0] } };
-        if (!valide(wcd)) { no(id, 'joueur-hors-forme', joueurs[0]); continue; }
-        const nonLegal = /not\s+tournament\s+legal/i.test(texte);
-        const deck = cands.find(t => t.joueur === joueurs[0]);
-        cibles.push({ idProduct: id, famille: 'WCD', marqueurs: [wcd, ...(nonLegal ? [{ type: 'NON_LEGAL', params: {} }] : [])],
-            preuve: `étiquette de la place de marché de référence sur la page du produit (relevé passif du ${releveLe}, lu par OCR) : « ${texte} » ; set ${p.slugSet} et code « WCD${String(anneeSet).slice(2)} » du produit ; même carte (année ${anneeSet}, n° d'origine ${deck.numeroBrut}, nom) chez une seconde place de marché : deck « ${deck.nomBrut} »` });
+        if ((c.annee != null && c.annee !== anneeSet) || (anneeLue && Number(anneeLue) !== anneeSet)) { no(id, 'annee-discordante', { set: anneeSet, slug: c.annee ?? null, etiquette: anneeLue ?? null }); continue; }
+        const nonLegal = /not\s+tournament\s+legal/i.test(texte) ? [{ type: 'NON_LEGAL', params: {} }] : [];
+        const lecture = `étiquette de la place de marché de référence sur la page du produit (relevé passif du ${releveLe}, lu par OCR) : « ${texte} »`;
+        // le joueur : les deux sources, ou rien
+        const joueur = (() => {
+            if (!c.numeroWcd) return { omis: 'slug-sans-numero-d-origine' };
+            const cands = tW.filter(t => t.annee === anneeSet && t.faible === JT.faibleDe(c.numeroWcd) && t.nomCles[0] === c.nomCles[0]);
+            if (!cands.length) return { omis: 'carte-absente-du-marche' };
+            const lu = lettres(texte);
+            const joueurs = [...new Set(cands.filter(t => { const j = lettres(t.joueur); return j.length >= 5 && lu.includes(j); }).map(t => t.joueur))];
+            if (!joueurs.length) return { omis: 'joueur-non-lu' };
+            if (joueurs.length > 1) return { omis: 'plusieurs-joueurs-lus' };
+            if (!FORME.joueur(joueurs[0])) return { omis: 'joueur-hors-forme' };
+            return { nom: joueurs[0], deck: cands.find(t => t.joueur === joueurs[0]) };
+        })();
+        if (joueur.nom) {
+            cibles.push({ idProduct: id, famille: 'WCD', marqueurs: [{ type: 'WCD', params: { annee: anneeSet, joueur: joueur.nom } }, ...nonLegal],
+                preuve: `${lecture} ; set ${p.slugSet} et code « WCD${String(anneeSet).slice(2)} » du produit ; même carte (année ${anneeSet}, n° d'origine ${joueur.deck.numeroBrut}, nom) chez une seconde place de marché : deck « ${joueur.deck.nomBrut} »` });
+        } else {
+            cibles.push({ idProduct: id, famille: 'WCD', marqueurs: [{ type: 'WCD', params: { annee: anneeSet } }, ...nonLegal], joueurOmis: joueur.omis,
+                preuve: `année ${anneeSet} : expansion du produit au catalogue de la place de marché de référence (${p.slugSet}, World Championships Decks ${anneeSet}) ; ${lecture} ; joueur omis (${joueur.omis})` });
+        }
     }
     return { cibles, refus };
 }
@@ -162,6 +176,8 @@ function planifierEcriture({ cibles, lignes, exportIds }) {
         const l = ls[0], marqueurs = ordonner(c.marqueurs);
         if (l._id === undefined || l._id === null) { refus.push({ idProduct: id, famille: c.famille, raison: 'ligne cartes_produits sans _id' }); continue; }
         if (!marqueurs.length || !marqueurs.every(valide) || new Set(marqueurs.map(m => m.type)).size !== marqueurs.length || marqueurs.length > 4) { refus.push({ idProduct: id, famille: c.famille, raison: `marqueurs invalides au contrat (${JSON.stringify(marqueurs)})` }); continue; }
+        // « aucun nom de source en public » : une preuve cite le texte OCR tel quel ; s'il nomme une source, rien n'est écrit (relecture du 27/10)
+        if (typeof c.preuve !== 'string' || SOURCES_NOMMEES.test(c.preuve)) { refus.push({ idProduct: id, famille: c.famille, raison: 'preuve absente ou qui nomme une source — rien n\'est écrit' }); continue; }
         if (l.marqueurs !== undefined) {
             if (stable(l.marqueurs) === stable(marqueurs)) deja.push({ idProduct: id, _id: l._id, famille: c.famille });
             else refus.push({ idProduct: id, famille: c.famille, raison: `marqueurs déjà présents (${JSON.stringify(l.marqueurs)}) — on n'écrase jamais` });
