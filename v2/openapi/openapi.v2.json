@@ -4255,6 +4255,10 @@
             },
             "description": "AJOUT FACULTATIF (lot TAMPONS), toujours servi : les marques de CETTE impression, d'après une donnée PROUVÉE du catalogue (jamais déduites du nom). Un ensemble de la liste fermée, dans l'ordre de la liste (`[\"staff\",\"prerelease\"]`) ; `[]` = prouvée sans tampon de la liste ; null = on ne sait pas. `variante` ne change pas."
           },
+          "marqueurs": {
+            "$ref": "#/components/schemas/Marqueurs",
+            "description": "AJOUT FACULTATIF (CONTRAT-MARQUEURS.md), les bandeaux d'affichage de CETTE impression (même règle que `Produit.marqueurs`)."
+          },
           "set": {
             "type": "object",
             "properties": {
@@ -4296,6 +4300,96 @@
         ],
         "additionalProperties": false,
         "description": "Une impression Cardmarket de la carte. `lien` est servi dès que le numéro est connu, vers la page exacte du produit (jamais une recherche) ; la rareté n'est pas exigée. Étiquette à afficher : set + numéro."
+      },
+      "Marqueur": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "JUMBO",
+              "WCD",
+              "NON_LEGAL",
+              "EDITION_1",
+              "SHADOWLESS",
+              "STAFF",
+              "PRERELEASE",
+              "LEAGUE",
+              "CHAMPIONSHIP",
+              "PLACE",
+              "PROFESSOR",
+              "PLAY_POKEMON",
+              "TRICK_OR_TRADE",
+              "BATTLE_ACADEMY",
+              "ANNIVERSAIRE_25",
+              "POKEMON_CENTER",
+              "GAMESTOP",
+              "TOYS_R_US",
+              "KFC",
+              "INDOMILK",
+              "ORIGINS",
+              "SNOWFLAKE",
+              "COSMO",
+              "MCDONALDS"
+            ]
+          },
+          "params": {
+            "type": "object",
+            "properties": {
+              "annee": {
+                "type": "integer",
+                "minimum": 1996,
+                "maximum": 2099
+              },
+              "joueur": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 24
+              },
+              "rang": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4
+              }
+            },
+            "additionalProperties": false
+          },
+          "libelle": {
+            "type": "object",
+            "properties": {
+              "fr": {
+                "type": "string",
+                "maxLength": 40
+              },
+              "en": {
+                "type": "string",
+                "maxLength": 40
+              }
+            },
+            "required": [
+              "fr",
+              "en"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "type",
+          "params",
+          "libelle"
+        ],
+        "additionalProperties": false,
+        "description": "Un bandeau d'affichage (CONTRAT-MARQUEURS.md §2) : un type de la liste fermée, ses seuls paramètres (`annee`, `joueur`?, `rang`), et son libellé FR / EN rendu par l'API."
+      },
+      "Marqueurs": {
+        "type": [
+          "array",
+          "null"
+        ],
+        "items": {
+          "$ref": "#/components/schemas/Marqueur"
+        },
+        "maxItems": 4
       },
       "Produit": {
         "type": "object",
@@ -4374,6 +4468,10 @@
               ]
             },
             "description": "AJOUT FACULTATIF (lot TAMPONS), toujours servi : les marques du produit (tampons, logos d'événement ou d'enseigne), d'après une donnée PROUVÉE du catalogue (jamais déduites du nom). Un ensemble de la liste fermée, dans l'ordre de la liste (`[\"staff\",\"prerelease\"]`, `[\"league\",\"place-2\"]`) ; `[]` = prouvé sans tampon de la liste (variante `normale` prouvée) ; null = on ne sait pas. `variante` ne change PAS (son énumération est lue par l'extension et le site) : lire `marques` pour les tampons."
+          },
+          "marqueurs": {
+            "$ref": "#/components/schemas/Marqueurs",
+            "description": "AJOUT FACULTATIF (CONTRAT-MARQUEURS.md), les bandeaux d'affichage du produit, à dessiner AU-DESSUS du visuel (les images stockées restent PROPRES). Liste fermée de 24 types, dans l'ordre d'affichage du contrat, sans doublon de type, 0 à 4 éléments ; chaque `libelle` (FR et EN, 40 caractères au plus) est rendu par l'API. `[]` = prouvé sans marqueur ; null = on ne sait pas (jamais « aucun marqueur »). Dérivés de ce qui est prouvé (variante, marques, famille de set) et des marqueurs écrits par le catalogue avec leur preuve ; `variante` et `marques` ne changent pas. Servi aussi sur `carte`, `candidats[]` et `impressions[]`."
           },
           "version": {
             "type": [

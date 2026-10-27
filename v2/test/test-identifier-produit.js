@@ -3,7 +3,7 @@
 const { v, vrai, bilan } = require('./_harnais');
 const { construireProduit, VARIANTES } = require('../identifier/produit');
 
-const CLES_PRODUIT = ['idProduct', 'nom', 'nomCardmarket', 'set', 'numero', 'total', 'langue', 'variante', 'marques', 'version', 'rarete', 'visuel', 'visuelMention', 'prixGuide', 'liens', 'impressions'];
+const CLES_PRODUIT = ['idProduct', 'nom', 'nomCardmarket', 'set', 'numero', 'total', 'langue', 'variante', 'marques', 'marqueurs', 'version', 'rarete', 'visuel', 'visuelMention', 'prixGuide', 'liens', 'impressions'];
 const BON = 'https://pub-7d992e666c3d4a2b870b680a920045b6.r2.dev/v/357044.webp';
 const base = (o = {}) => ({
     idProduct: 357044, nomCardmarket: 'Lapras', nomFr: 'Lokhlass',
@@ -134,7 +134,7 @@ const LIEN_IMP = 'https://www.cardmarket.com/fr/Pokemon/Products/Singles/Base-Se
 const imp = (o = {}) => ({ idProduct: 900002, numero: '4', total: '102', rarete: 'Holo Rare', variante: 'premiere-edition', set: { nom: 'Set de Base' },
     lien: LIEN_IMP, prixGuide: { trend: 1180, low: 950, avg30: 1000, guideDu: new Date('2026-10-05') }, ...o });
 const avecImp = P({ impressions: [imp(), imp({ idProduct: 900004, rarete: null, numero: '3', variante: 'V3' })] });
-v('impression complète', avecImp.impressions[0], { idProduct: 900002, numero: '4', total: '102', rarete: 'Holo Rare', variante: 'premiere-edition', marques: null, version: null, langue: null, set: { nom: 'Set de Base' },
+v('impression complète', avecImp.impressions[0], { idProduct: 900002, numero: '4', total: '102', rarete: 'Holo Rare', variante: 'premiere-edition', marques: null, marqueurs: [{ type: 'EDITION_1', params: {}, libelle: { fr: '1re édition', en: '1st Edition' } }], version: null, langue: null, set: { nom: 'Set de Base' },
     lien: LIEN_IMP, prixGuide: { tendance: 1180, de: 950, deBase: 'tous-etats', moyenne7: null, moyenne30: 1000, date: '2026-10-05', fiable: true, reserves: [] } });
 // F4 (b) le « ≈ 1,00 € » d'une impression est le « De » : l'offre la plus basse TOUS ÉTATS ; il le dit (deBase), jamais le prix de l'état retenu
 v('F4 (b) chaque prix d\'impression dit sa base : tous états', avecImp.impressions.map(i => i.prixGuide.deBase), ['tous-etats', 'tous-etats']);
@@ -151,7 +151,27 @@ v('F4 (c) impression : version hors forme -> null', P({ impressions: [imp({ vers
 v('impression sans rareté, numéro connu -> lien (la rareté n\'est plus exigée)', avecImp.impressions[1].lien, LIEN_IMP);
 v('impression sans numéro -> lien null', P({ impressions: [imp({ numero: null })] }).impressions[0].lien, null);
 v('impression variante hors liste -> null', avecImp.impressions[1].variante, null);
-v('impression : clés (LANGUE-DECISIVE : `langue` ajoutée, contrat 7a ; F4 : `version` ; LOT TAMPONS : `marques`)', Object.keys(avecImp.impressions[0]), ['idProduct', 'numero', 'total', 'rarete', 'variante', 'marques', 'version', 'langue', 'set', 'lien', 'prixGuide']);
+v('impression : clés (LANGUE-DECISIVE : `langue` ajoutée, contrat 7a ; F4 : `version` ; LOT TAMPONS : `marques`)', Object.keys(avecImp.impressions[0]), ['idProduct', 'numero', 'total', 'rarete', 'variante', 'marques', 'marqueurs', 'version', 'langue', 'set', 'lien', 'prixGuide']);
+// MARQUEURS (CONTRAT-MARQUEURS.md) : le champ ADDITIF `marqueurs`, dérivé du seul prouvé, fusionné avec l'écrit du catalogue (sa preuve exigée) ; `variante` et `marques` ne bougent pas
+const typesDe = p => (p.marqueurs === null ? null : p.marqueurs.map(m => m.type));
+v('marqueurs : rien de prouvé (ni marques, ni famille de set) -> null, JAMAIS [] ', [P({}).marqueurs, P({ marques: null }).marqueurs], [null, null]);
+v('marqueurs : la normale prouvée (marques []) -> [] (prouvé sans marqueur)', P({ marques: [] }).marqueurs, []);
+v('marqueurs : des marques prouvées -> leurs bandeaux, libellés rendus FR / EN', [typesDe(P({ marques: ['staff', 'prerelease'] })), P({ marques: ['league', 'place-2'] }).marqueurs.map(m => m.libelle.fr)], [['STAFF', 'PRERELEASE'], ['Tampon Ligue', 'Tampon 2e place']]);
+v('marqueurs : le jumbo prouvé -> JUMBO + NON_LEGAL ; `variante` et `marques` inchangés', (p => [typesDe(p), p.variante, p.marques])(P({ variante: 'jumbo', marques: null })), [['JUMBO', 'NON_LEGAL'], 'jumbo', null]);
+v('marqueurs : un produit d\'un set WCD-2018 -> WCD (année du slug) + NON_LEGAL, sans mention de visuel', (p => [typesDe(p), p.marqueurs[0].params, p.marqueurs[0].libelle.en])(P({ set: { slug: 'WCD-2018', nom: 'WCD 2018' } })), [['WCD', 'NON_LEGAL'], { annee: 2018 }, 'World Championships Deck 2018']);
+v('marqueurs : les clés d\'un élément sont type / params / libelle ; gelé en profondeur', (p => [Object.keys(p.marqueurs[0]), Object.isFrozen(p.marqueurs), Object.isFrozen(p.marqueurs[0]), Object.isFrozen(p.marqueurs[0].libelle)])(P({ marques: ['staff'] })), [['type', 'params', 'libelle'], true, true, true]);
+{
+    const SHADOW = [{ type: 'SHADOWLESS' }];
+    v('marqueurs écrits : servis SEULEMENT avec leur preuve (une phrase)', [typesDe(P({ marqueurs: SHADOW, marqueursPreuve: 'Bulbapedia : Base Set Shadowless' })), P({ marqueurs: SHADOW }).marqueurs, P({ marqueurs: SHADOW, marqueursPreuve: '  ' }).marqueurs], [['SHADOWLESS'], null, null]);
+    const compte = []; const ctx = { surMarqueurs: c => compte.push(c) };
+    const r = P({ set: { slug: 'WCD-2018', nom: 'x' }, marqueurs: [{ type: 'WCD', params: { annee: 2019 } }, { type: 'INVENTE' }, { type: 'SHADOWLESS' }], marqueursPreuve: 'catalogue' }, ctx);
+    v('marqueurs écrits : le dérivé l\'emporte (année 2018), l\'invalide est écarté, l\'écrit valide s\'ajoute dans l\'ordre ; les écarts sont COMPTÉS', [typesDe(r), r.marqueurs[0].params, compte],
+        [['WCD', 'NON_LEGAL', 'SHADOWLESS'], { annee: 2018 }, [{ idProduct: 357044, contradictions: 1, invalides: 1, doublons: 0, trop: 0 }]]);
+    v('marqueurs : un compteur qui lève ne casse jamais le produit', typesDe(P({ set: { slug: 'WCD-2018', nom: 'x' }, marqueurs: [{ type: 'INVENTE' }], marqueursPreuve: 'x' }, { surMarqueurs: () => { throw new Error('boum'); } })), ['WCD', 'NON_LEGAL']);
+}
+v('marqueurs d\'une impression : dérivés de sa variante, de ses marques et du set de son LIEN', [typesDe(P({ impressions: [imp({ variante: null, marques: ['staff'] })] }).impressions[0]),
+    typesDe(P({ impressions: [imp({ variante: null, marques: null, lien: 'https://www.cardmarket.com/fr/Pokemon/Products/Singles/WCD-2018/Pikachu-V1' })] }).impressions[0]), P({ impressions: [imp({ variante: null, marques: null })] }).impressions[0].marqueurs],
+    [['STAFF'], ['WCD', 'NON_LEGAL'], null]);
 // LOT TAMPONS : le champ ADDITIF `marques` (la liste fermée) ; `variante` ne change pas (son enum est lu par l'extension et le site)
 v('marques : un ensemble de la liste fermée est servi tel quel, dans l\'ordre canonique', [P({ marques: ['staff', 'prerelease'] }).marques, P({ marques: ['league'] }).marques], [['staff', 'prerelease'], ['league']]);
 v('marques : [] (prouvé sans tampon) est servi ; null / absent = on ne sait pas', [P({ marques: [] }).marques, P({ marques: null }).marques, P({}).marques], [[], null, null]);

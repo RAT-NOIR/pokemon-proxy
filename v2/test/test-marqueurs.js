@@ -93,4 +93,16 @@ H.v('5g. des écrits qui ne sont pas une liste (objet, chaîne) sont ignorés', 
 H.v('5h. plus de 4 éléments après fusion : null et `trop` = 1', f(derWcd, [{ type: 'SHADOWLESS' }, { type: 'ORIGINS' }, { type: 'POKEMON_CENTER' }]), [null, 0, 0, 0, 1]);
 H.v('5i. marqueursDe = le tableau fusionné seul', [MQ.marqueursDe({ set: { slug: 'WCD-2018' } }, [{ type: 'SHADOWLESS' }]).length, MQ.marqueursDe({}, undefined)], [3, null]);
 
+// ── 6. LA LECTURE de ce que le catalogue écrit (cartes_produits.marqueurs, marqueursPreuve) par le chargeur
+{
+    const { PROJECTIONS, compacterLigne, interneur } = require('../chargeur/source');
+    const I = interneur(), cl = x => compacterLigne({ carteId: 1, idProduct: 1, idExpansion: 1, ...x }, I);
+    H.v('6a. la projection de cartes_produits lit marqueurs et marqueursPreuve', [PROJECTIONS.cartes_produits.marqueurs, PROJECTIONS.cartes_produits.marqueursPreuve], [1, 1]);
+    H.v('6b. compacterLigne : la liste écrite et sa preuve sont gardées telles quelles (rien validé ni réparé) ; absent, pas une liste, preuve vide ou pas un texte : null', [
+        cl({ marqueurs: [{ type: 'SHADOWLESS', params: {}, libelle: { fr: 'ignoré' } }, null, 'x'], marqueursPreuve: '  Bulbapedia  ' }).marqueurs, cl({ marqueurs: [{ type: 'SHADOWLESS' }], marqueursPreuve: ' Bulbapedia ' }).marqueursPreuve,
+        cl({}).marqueurs, cl({ marqueurs: 'SHADOWLESS' }).marqueurs, cl({ marqueursPreuve: '  ' }).marqueursPreuve, cl({ marqueursPreuve: 5 }).marqueursPreuve],
+        [[{ type: 'SHADOWLESS', params: {} }, null, null], 'Bulbapedia', null, null, null, null]);
+    H.v('6c. les éléments mal formés lus ainsi sont ensuite COMPTÉS invalides par la fusion, jamais réparés', MQ.fusionner(null, cl({ marqueurs: [{ type: 'SHADOWLESS' }, null, 'x', { type: 'JUMBO', params: { a: 1 } }] }).marqueurs).invalides, 3);
+}
+
 H.bilan();

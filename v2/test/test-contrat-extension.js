@@ -18,7 +18,10 @@ const ANALYSES = ['identifiee.json', 'identifiee-impressions.json', 'a-trancher-
 const COUVERTS = [...ANALYSES, 'quota.json', 'reponses.json', 'lectures.json', 'reels.js'];
 // Les fichiers présents que ce banc NE REJOUE PAS, chacun avec sa raison écrite. Une déclaration périmée se voit : elle échoue le jour où le schéma publié connaît ce que le vecteur montre.
 //   probable.json (extension, 26/10) : le niveau « probable » (`niveau`, `probable: { idProduct, aConfirmer }`) ; contrat : DEMANDE-SERVEUR-EXTENSION.md, « API — 25/10 : CONTRAT DU NIVEAU « PROBABLE » ».
-const NON_COUVERTS = { 'probable.json': 'niveau probable pas encore servi : jeton `probable` absent de capacites, schéma sans `niveau`' };
+//   marqueurs.json (extension, 27/10) : la tolérance du client à un type de bandeau INCONNU (`FUTUR`, volontairement hors de la liste fermée de CONTRAT-MARQUEURS.md §3) : le schéma publié le REFUSE, donc le vecteur ne se rejoue pas tel quel ;
+//   ses éléments de types connus sont, eux, comparés à ce que l'API rend (plus bas).
+const NON_COUVERTS = { 'probable.json': 'niveau probable pas encore servi : jeton `probable` absent de capacites, schéma sans `niveau`',
+    'marqueurs.json': 'porte un type de bandeau FUTUR hors de la liste fermée (tolérance du client) : le schéma publié le refuse ; les types connus sont comparés à l\'API' };
 const cleDansSchema = (v, nom) => v !== null && typeof v === 'object' && (Object.prototype.hasOwnProperty.call(v, nom) || Object.values(v).some(x => cleDansSchema(x, nom)));
 const probableServi = () => cleDansSchema(SCHEMA, 'niveau') || cleDansSchema(SCHEMA, 'probable') || require('../capacites').CAPACITES.includes('probable');
 // Normalisation : les indices de tableau, l'identifiant de scan et le nom du choix des vecteurs ne sont pas des chemins du contrat.
@@ -48,7 +51,16 @@ const CLASSES = new Map([
     H.v('tous les fichiers couverts par ce banc sont là', COUVERTS.filter(f => !presents.includes(f)), []);
     H.v('« aucun fichier non couvert » dit la vérité sur le dossier : tout fichier présent est couvert (rejoué, ou déclaré non couvert avec sa raison)', presents.filter(f => !COUVERTS.includes(f) && !(f in NON_COUVERTS)), []);
     for (const f of Object.keys(NON_COUVERTS)) console.log(`   non couvert : ${f} — ${NON_COUVERTS[f]}`);
-    H.v('déclarations « non couvert » périmées : le fichier n\'est plus là, ou le niveau « probable » est servi (jeton `probable` dans capacites, ou `niveau` / `probable` dans le schéma publié) : il faut alors le REJOUER', Object.keys(NON_COUVERTS).filter(f => !presents.includes(f) || probableServi()), []);
+    H.v('déclarations « non couvert » périmées : le fichier n\'est plus là, ou le niveau « probable » est servi (jeton `probable` dans capacites, ou `niveau` / `probable` dans le schéma publié) : il faut alors le REJOUER', Object.keys(NON_COUVERTS).filter(f => f === 'probable.json' && (!presents.includes(f) || probableServi())), []);
+    // MARQUEURS : le vecteur de l'extension est lu ICI (avant la définition de `lire`) ; sa déclaration est périmée si le fichier a disparu ou s'il ne porte plus aucun type hors liste (alors il se REJOUE contre le schéma)
+    const MQ = require('../identifier/marqueurs');
+    const marqueursExt = presents.includes('marqueurs.json') ? (() => { try { return JSON.parse(fs.readFileSync(path.join(DOSSIER, 'marqueurs.json'), 'utf8')); } catch { return null; } })() : null;
+    const elementsExt = marqueursExt && marqueursExt.analyse && Array.isArray(marqueursExt.analyse.cartes) ? marqueursExt.analyse.cartes.flatMap(c => [c.carte, ...(c.candidats || [])]).filter(Boolean).flatMap(p => (Array.isArray(p.marqueurs) ? p.marqueurs : [])) : [];
+    const horsListe = elementsExt.filter(e => !MQ.NOMS_TYPES.includes(e && e.type));
+    H.v('marqueurs.json : la déclaration « non couvert » est vraie : le fichier est là ET porte au moins un type hors de la liste fermée (sinon il faut le REJOUER contre le schéma)', [presents.includes('marqueurs.json'), horsListe.length > 0], [true, true]);
+    const conforme = e => { const v = MQ.valider({ type: e.type, params: e.params }); return v !== null && JSON.stringify(v) === JSON.stringify({ type: e.type, params: e.params, libelle: e.libelle }); };
+    H.v('marqueurs.json : chaque élément de type CONNU est exactement celui que l\'API rend (type, paramètres, libellés FR et EN)', elementsExt.filter(e => MQ.NOMS_TYPES.includes(e && e.type)).filter(e => !conforme(e)).map(e => e.type), []);
+    H.vrai('   le détecteur sait dire NON : un libellé retouché ou un paramètre en trop est vu, l\'élément exact passe', !conforme({ type: 'JUMBO', params: {}, libelle: { fr: 'Carte jumbo', en: 'Jumbo card' } }) && !conforme({ type: 'JUMBO', params: { x: 1 }, libelle: { fr: 'Carte Jumbo', en: 'Jumbo card' } }) && conforme({ type: 'JUMBO', params: {}, libelle: { fr: 'Carte Jumbo', en: 'Jumbo card' } }));
     H.vrai('   le détecteur sait dire NON : une clé `niveau` dans un schéma est vue, une simple chaîne ne l\'est pas', cleDansSchema({ components: { schemas: { X: { properties: { niveau: {} } } } } }, 'niveau') && !cleDansSchema({ a: [{ b: 'niveau' }] }, 'niveau'));
     const lire = f => JSON.parse(fs.readFileSync(path.join(DOSSIER, f), 'utf8'));
     const observes = [];                                         // { fichier, route, statut, chemin, message }

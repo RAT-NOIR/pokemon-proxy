@@ -5,6 +5,7 @@ const { lireConfig } = require('../config');
 const { lienServi } = require('./lien-cardmarket');
 const { reservesDe, fiable, BASE_DE, badgeDe, versionDe } = require('./fiabilite-prix');
 const MT = require('./marques-tampon');
+const MQ = require('./marqueurs');
 
 const VARIANTES = Object.freeze(['normale', 'reverse', 'holo', 'premiere-edition', 'tampon', 'jumbo']);
 let CFG_DEFAUT = null;
@@ -59,6 +60,16 @@ const marquesDe = x => {
     const e = MT.ensembleDe(x);
     return e !== null && e.length === x.length && e.every((m, i) => m === x[i]) ? Object.freeze(e) : null;
 };
+// MARQUEURS (CONTRAT-MARQUEURS.md) : le champ ADDITIF `marqueurs` — les bandeaux d'affichage, DÉRIVÉS de ce qui est prouvé (variante, marques, famille de set : marqueurs.js) et fusionnés avec ceux que le
+// catalogue écrit (`marqueurs`), SEULEMENT si sa preuve (`marqueursPreuve`, une phrase) est là. [] = prouvé sans marqueur ; null = on ne sait pas. `variante` et `marques` ne bougent pas.
+// Les écarts (contradiction, élément invalide, doublon, trop d'éléments) sont COMPTÉS et rendus à ctx.surMarqueurs({ idProduct, ... }) quand il existe : jamais réparés, jamais perdus en silence.
+const marqueursServis = (idProduct, derive, ecrits, preuve, ctx) => {
+    const r = MQ.fusionner(MQ.deriver(derive), texte(preuve) ? ecrits : undefined);
+    if (typeof ctx.surMarqueurs === 'function' && (r.contradictions || r.invalides || r.doublons || r.trop)) {
+        try { ctx.surMarqueurs({ idProduct, contradictions: r.contradictions, invalides: r.invalides, doublons: r.doublons, trop: r.trop }); } catch { /* un compteur ne casse jamais le produit */ }
+    }
+    return r.marqueurs;
+};
 function mention(m, langue) {
     if (m && typeof m === 'object') return texte(langue === 'fr' ? m.fr : m.en);
     return texte(m);
@@ -73,6 +84,7 @@ function impression(i, ctx) {
     return Object.freeze({
         idProduct: i.idProduct, numero, total: chaineOuNull(i.total), rarete, variante: varianteDe(i.variante),
         marques: marquesDe(i.marques),                                                  // LOT TAMPONS (ajout additif) : les marques prouvées de CETTE impression, ou null
+        marqueurs: marqueursServis(i.idProduct, { variante: varianteDe(i.variante), marques: marquesDe(i.marques), slugSet: (i.set && texte(i.set.slug)) || MQ.slugSetDuLien(i.lien) }, i.marqueurs, i.marqueursPreuve, ctx),   // MARQUEURS : le set d'une impression se lit sur son lien Cardmarket
         version: versionDe(i.version),                                                 // F4 (c) : V1, V2… — ce qui sépare deux produits au même set et au même numéro chez Cardmarket ; null = rien ne les sépare dans nos données
         langue: langueFermee(i.langue),   // CONTRAT 7a (ajout) : le code fermé de la langue de CETTE impression, ou null (jamais devinée)
         set: Object.freeze({ nom: texte(i.set && i.set.nom) }),
@@ -100,7 +112,9 @@ function construireProduit(source, ctx = {}) {
         set: Object.freeze({ slug: s.slug, nom: s.nom, code: texte(s.code), tirage: texte(s.tirage), annee: Number.isInteger(s.annee) ? s.annee : null,
                              symbole: image(source.symbole, hotes, false), ...badgeDe(s) }),     // F4 (d) : badge + badgeSource (le code, sauf s'il se confond avec une série : alors le nom)
         numero, total: chaineOuNull(source.total), langue: texte(source.langue),
-        variante: varianteDe(source.variante), marques: marquesDe(source.marques), version: versionDe(source.version), rarete,
+        variante: varianteDe(source.variante), marques: marquesDe(source.marques),
+        marqueurs: marqueursServis(source.idProduct, { variante: varianteDe(source.variante), marques: marquesDe(source.marques), slugSet: s.slug }, source.marqueurs, source.marqueursPreuve, ctx),   // MARQUEURS (additif)
+        version: versionDe(source.version), rarete,
         visuel: visuel && Object.freeze(visuel),
         visuelMention: visuel ? mention(source.visuelMention, ctx.langueInterface) : null,   // une mention n'accompagne qu'un visuel servi
         prixGuide: prixGuideDe(source.prixGuide, source.prixMelangeTampon === true, source.nonLu === true, source.tamponLu === true),     // F1-TAMPON règle 2 : posé par la route SEULEMENT quand une marque de la liste est lue deux fois à l'identique
