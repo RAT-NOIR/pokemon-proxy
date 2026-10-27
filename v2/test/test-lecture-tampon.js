@@ -43,7 +43,7 @@ const MF = 'les variantes ne sont pas une paire marque/normale';
         H.v('2b. SEUL garde-marqueurs.js définit ou nomme la lecture du titre Jumbo (aucun autre fichier de v2/identifier)', lisent, ['garde-marqueurs.js']);
         const q = { issue: 'question', analyse: { cartes: [{ candidats: [{ idProduct: 1 }, { idProduct: 2 }] }] } };
         let affirme = 0;
-        const appel = cfg => GM.consulterMarqueurs({ cfg, titre: 'Pikachu jumbo', resultat: q, produits: new Map(), version: { entree: () => ({ vignette: { cle: 'a' }, idMetacard: 1, numero: '1', setNom: 's' }) }, affirmer: () => { affirme++; return null; }, marqueursDe: id => (id === 1 ? [] : [{ type: 'JUMBO', params: {} }]), questionDeGroupe: () => null });
+        const appel = cfg => GM.consulterMarqueurs({ cfg, titre: 'Pikachu jumbo', resultat: q, produits: new Map(), version: { entree: () => ({ vignette: { cle: 'a' }, idMetacard: 1, numero: '1', setNom: 's' }) }, affirmer: () => { affirme++; return null; }, marqueursDe: id => (id === 1 ? [] : [{ type: 'JUMBO', params: {} }]), motsDeProduit: () => ['pikachu'], questionDeGroupe: () => null });
         H.v('2c. drapeau éteint : le titre n\'est pas lu (rien d\'appelé) ; allumé : il l\'est (la fonction affirme)', [appel({ jumboTitre: false, gardeMarqueurs: false }), affirme, (appel({ jumboTitre: true, gardeMarqueurs: false }), affirme)], [null, 0, 1]);
     }
 

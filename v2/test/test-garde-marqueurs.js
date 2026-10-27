@@ -11,29 +11,17 @@ const M = {
     jumbo: [el('JUMBO'), el('NON_LEGAL')], staff: [el('STAFF')], normale: [], wcd: [el('WCD', { annee: 2018 }), el('NON_LEGAL')], league: [el('LEAGUE')], place2: [el('PLACE', { rang: 2 })]
 };
 
-// ── 1. LE TITRE : liste fermée, mot entier, casse et accents, négation dans les 3 mots qui précèdent
-const t = s => { const r = G.lireTitreJumbo(s); return r.oui ? `oui:${r.terme}` : `non:${r.motif}`; };
-H.v('1a. un terme de la liste fermée, sans négation : oui (casse et accents indifférents, mot entier)',
-    ['Pikachu jumbo', 'PIKACHU JUMBO promo', 'Dracaufeu Oversize', 'carte oversized holo', 'Pikachu XXL', 'Pikachu GÉANT', 'carte géante rare', 'Carte Geante', 'carte geant', 'Jumbo-Pikachu', 'jumbo.', '(jumbo)'].map(t),
+// ── 1. LE TITRE : la LISTE BLANCHE (JUMBO-LB, 27/10) — le détail (corpus de la sonde, langues, ponctuation) vit dans test-jumbo-lb.js ; ici, le contrat avec la garde
+const PIKA = G.motsDuProduit({ nomCardmarket: 'Pikachu', nomFr: 'Pikachu', numero: '25', total: '165', set: { slug: 'Banc-Set', nom: 'Banc Set', code: 'PMJ' } });
+const t = s => { const r = G.lireTitreJumbo(s, PIKA); return r.oui ? `oui:${r.terme}` : `non:${r.motif}`; };
+H.v('1a. un titre entièrement admis (termes jumbo, mots du produit, mots neutres) : oui (casse et accents indifférents, mot entier)',
+    ['Pikachu jumbo', 'PIKACHU JUMBO promo', 'Dracaufeu Oversize'.replace('Dracaufeu', 'Pikachu'), 'carte oversized holo', 'Pikachu XXL', 'Pikachu GÉANT', 'carte géante', 'Carte Geante', 'carte geant', 'Jumbo-Pikachu', 'jumbo.', '(jumbo)'].map(t),
     ['oui:jumbo', 'oui:jumbo', 'oui:oversize', 'oui:oversized', 'oui:xxl', 'oui:geant', 'oui:geante', 'oui:geante', 'oui:geant', 'oui:jumbo', 'oui:jumbo', 'oui:jumbo']);
 H.v('1b. aucun terme, pas un mot entier, pas un titre : non — l\'absence du mot ne prouve JAMAIS la version normale', ['Pikachu 025/165', 'jumbos', 'jumbo2', 'xxlarge', 'super jumboo', '', '   ', null, undefined, 5, {}].map(t),
     ['non:aucun terme', 'non:aucun terme', 'non:aucun terme', 'non:aucun terme', 'non:aucun terme', 'non:pas de titre', 'non:pas de titre', 'non:pas de titre', 'non:pas de titre', 'non:pas de titre', 'non:pas de titre']);
-H.v('1c. une négation dans les 3 mots qui précèdent : non (pas, non, not, no, sans, without, ni ; casse et accents indifférents)',
-    ['pas jumbo', 'pas de jumbo', 'non jumbo', 'not a jumbo', 'not oversized', 'no jumbo', 'sans version jumbo', 'without any xxl', 'ni jumbo ni oversize', 'PAS DE VRAIE jumbo'.toUpperCase(), 'Pas de géant'].map(t),
-    ['non:négation', 'non:négation', 'non:négation', 'non:négation', 'non:négation', 'non:négation', 'non:négation', 'non:négation', 'non:négation', 'non:négation', 'non:négation']);
-H.v('1d. TOUR 2 : une négation N\'IMPORTE OÙ dans le titre nie (plus de fenêtre : une liste de fenêtres s\'allonge toujours)', ['pas de la belle carte jumbo', 'jumbo en parfait état pas cher', 'jumbo rare holo non abîmée'].map(t), Array(3).fill('non:négation'));
-H.v('1d2. une négation APRÈS le terme nie aussi', ['jumbo pas cher', 'jumbo, pas abîmée', 'jumbo jamais joué', 'oversized sans défaut'].map(t), Array(4).fill('non:négation'));
-const nul = s => G.lireTitreJumbo(s).oui;
-H.v('1e. un mot de la version normale ou de sa taille (normal, normale, standard, regular, classique, classic, ordinaire, ordinary, petite, petit, mini, small, taille, size) n\'importe où : non', ['jumbo taille normale', 'normal size jumbo', 'jumbo normal size', 'standard jumbo', 'jumbo classique', 'classic jumbo', 'jumbo ordinaire', 'ordinary jumbo', 'jumbo petite taille', 'petit jumbo', 'mini jumbo', 'small jumbo', 'jumbo size'].map(t), Array(13).fill('non:version normale citée'));
-H.v('1e0. ponctuation de choix ou de comparaison (? / | + &) : non, quel que soit le reste', ['Taille Normale ou jumbo ?', 'Jumbo or regular size?', 'version normale / jumbo en vente', 'jumbo | holo', 'jumbo + holo', 'jumbo & holo', 'jumbo?', 'Pikachu jumbo? nein'].map(nul), Array(8).fill(false));
-H.v('1e00. mots de liaison ou de comparaison (ou, or, et, and, vs, versus, contre, nor, neither, either) : non', ['Pikachu jumbo ou petite', 'jumbo vs ordinaire', 'Lot Pikachu jumbo et normale', 'jumbo and holo', 'jumbo versus holo', 'jumbo contre holo', 'jumbo nor holo', 'neither jumbo', 'either jumbo', 'jumbo ou mini', 'Standard et jumbo'].map(nul), Array(11).fill(false));
-H.v('1g. TOUR 2 : les dix titres encore affirmés à tort se taisent', ['nope jumbo', 'Dracaufeu - nope jumbo', 'jumbo? nein', 'jumbo? neither', 'isnt jumbo', 'jumbo is false', 'jumbo ou petite', 'jumbo vs ordinaire', 'jumbo ordinaire', 'jumbo petite taille', 'jumbo ou mini'].map(nul), Array(11).fill(false));
-H.v('1g2. contractions sans apostrophe (isnt, arent, dont, doesnt, wasnt, werent, cant, wont, aint), nope, nein, false, faux : non', ['isnt jumbo', 'arent oversized', 'dont jumbo', 'doesnt look jumbo', 'wasnt jumbo', 'werent xxl', 'cant be jumbo', 'wont jumbo', 'aint jumbo', 'nein jumbo', 'jumbo faux', 'false jumbo'].map(nul), Array(12).fill(false));
-H.v('1g3. un titre de plus de 200 caractères : rien (même propre)', [nul('Pikachu jumbo ' + 'holo '.repeat(50)), nul('Pikachu jumbo ' + 'a'.repeat(250)), nul('Pikachu jumbo ' + 'holo '.repeat(30))], [false, false, true]);
-H.v('1g4. les positifs passent toujours', ['Carte JUMBO Pikachu', 'Oversized Charizard promo', 'carte géante Dracaufeu', 'Pikachu Jumbo 2016'].map(t), ['oui:jumbo', 'oui:oversized', 'oui:geante', 'oui:jumbo']);
-H.v('1e2. B1 (relecture) : les contractions et les négations hors de la première liste nient : isn\'t, aren\'t, doesn\'t, never, aucune, aucun, jamais', ['Dracaufeu isn\'t jumbo', 'these aren\'t oversized', 'it doesn’t look jumbo', 'Pikachu never oversized', 'Carte aucune version jumbo', 'aucun jumbo ici', 'jamais jumbo', 'ISN\'T JUMBO'].map(t), Array(8).fill('non:négation'));
-H.v('1e3. B1 : les sept titres de la relecture se taisent', ['Dracaufeu isn\'t jumbo', 'Pikachu never oversized', 'Carte standard, aucune version jumbo', 'Pikachu jumbo ? non', 'Jumbo or regular size?', 'Lot Pikachu jumbo et normale', 'version normale / jumbo en vente'].map(s => G.lireTitreJumbo(s).oui), Array(7).fill(false));
-H.v('1e4. un titre propre reste affirmé (la règle ne se tait pas partout) : une apostrophe française n\'est pas une contraction', ['Pikachu jumbo holo', 'l\'oversize de Dracaufeu', 'Carte jumbo promo, état neuf'].map(t), ['oui:jumbo', 'oui:oversize', 'oui:jumbo']);H.v('1f. UNE occurrence niée suffit à se taire (on ne tranche pas un titre qui se contredit)', ['jumbo mais pas jumbo', 'pas jumbo mais oversized'].map(t), ['non:négation', 'non:négation']);
+H.v('1c. un terme jumbo mais un mot hors de la liste blanche (négation, doute, liaison, version normale, accessoire, contrefaçon…) : non, motif unique', ['pas de jumbo', 'not a jumbo', 'Pikachu jumbo ou petite', 'jumbo taille normale', 'maybe jumbo', 'fake jumbo', 'sleeve pour jumbo', 'Dracaufeu isn\'t jumbo'].map(t), Array(8).fill('non:mot hors de la liste blanche'));
+H.v('1d. un titre de plus de 200 caractères ou de plus de 12 mots : rien (même fait de mots admis)', [t('Pikachu jumbo ' + 'holo '.repeat(11)), t('Pikachu jumbo ' + 'a'.repeat(250)), t('Pikachu jumbo ' + 'holo '.repeat(10))], ['non:titre trop long', 'non:titre trop long', 'oui:jumbo']);
+H.v('1e. la ponctuation de choix (? / | + &) : non, même avec des mots admis', ['Pikachu jumbo ?', 'Pikachu / jumbo', 'Pikachu | jumbo', 'jumbo + holo', 'jumbo & holo'].map(t), Array(5).fill('non:ponctuation hors de la liste blanche'));
 
 // ── fabriques
 const entrees = {}, version = (emprunts = {}, memeFiche = undefined) => ({ entree: id => entrees[id] || null, empruntDe: id => (id in emprunts ? emprunts[id] : null), ...(memeFiche ? { memeFiche } : {}) });
@@ -45,6 +33,7 @@ const outils = (marqueurs, extra = {}) => {
     return { appels, o: {
         affirmer: (id, surcharge, critere) => { appels.affirmer.push([id, critere]); return affirmee(id, critere); },
         marqueursDe: id => marqueurs[id],
+        motsDeProduit: () => PIKA,
         questionDeGroupe: ids => { appels.groupe.push(ids); return question(ids); },
         journal: (n, e) => appels.journal.push(n), ...extra } };
 };
@@ -85,14 +74,14 @@ H.v('3d. le critère du jumbo commence par « jumbo (titre) » (le contrat) et n
     const jouer = (cfg, titre, r = question([11, 12]), extra = {}, marqueurs = mq) => { const { appels, o } = outils(marqueurs, extra.outils); const x = G.consulterMarqueurs({ cfg, titre, resultat: r, produits: new Map(), version: extra.version || v, ...o, ...(extra.autres || {}) }); return { x, appels }; };
     const issue = ({ x }) => (x === null ? null : [x.resultat ? `${x.resultat.issue}:${x.resultat.analyse.cartes[0].carte && x.resultat.analyse.cartes[0].carte.idProduct}` : 'question-reste', x.trace && x.trace.issue, x.trace && x.trace.motif]);
     const r1 = jouer(CFG_JUMBO, 'Pikachu jumbo promo');
-    H.v('4a. le groupe, un titre « jumbo » sans négation : le produit JUMBO est affirmé, critère « jumbo (titre) », UNE affirmation', [issue(r1), r1.appels.affirmer.length, r1.appels.affirmer[0][0], r1.appels.affirmer[0][1].startsWith('jumbo (titre)'), r1.x.resultat.critere.startsWith('jumbo (titre)')], [['affirmee:12', 'sur', 'terme sans doute'], 1, 12, true, true]);
-    H.v('4b. le produit JUMBO est choisi quel que soit l\'ordre des candidats', issue(jouer(CFG_JUMBO, 'xxl', question([12, 11]))), ['affirmee:12', 'sur', 'terme sans doute']);
+    H.v('4a. le groupe, un titre « jumbo » sans négation : le produit JUMBO est affirmé, critère « jumbo (titre) », UNE affirmation', [issue(r1), r1.appels.affirmer.length, r1.appels.affirmer[0][0], r1.appels.affirmer[0][1].startsWith('jumbo (titre)'), r1.x.resultat.critere.startsWith('jumbo (titre)')], [['affirmee:12', 'sur', 'liste blanche'], 1, 12, true, true]);
+    H.v('4b. le produit JUMBO est choisi quel que soit l\'ordre des candidats', issue(jouer(CFG_JUMBO, 'xxl', question([12, 11]))), ['affirmee:12', 'sur', 'liste blanche']);
     H.v('4c. tout le reste LAISSE la question : aucun terme, négation, taille normale, pas de titre — jamais la version normale', ['Pikachu 025', 'pas de jumbo', 'not oversized', 'jumbo taille normale', null, '', 42].map(s => issue(jouer(CFG_JUMBO, s))),
-        [['question-reste', 'se-tait', 'aucun terme'], ['question-reste', 'se-tait', 'négation'], ['question-reste', 'se-tait', 'négation'], ['question-reste', 'se-tait', 'version normale citée'], ['question-reste', 'se-tait', 'pas de titre'], ['question-reste', 'se-tait', 'pas de titre'], ['question-reste', 'se-tait', 'pas de titre']]);
+        [['question-reste', 'se-tait', 'aucun terme'], ['question-reste', 'se-tait', 'mot hors de la liste blanche'], ['question-reste', 'se-tait', 'mot hors de la liste blanche'], ['question-reste', 'se-tait', 'mot hors de la liste blanche'], ['question-reste', 'se-tait', 'pas de titre'], ['question-reste', 'se-tait', 'pas de titre'], ['question-reste', 'se-tait', 'pas de titre']]);
     H.v('4d. et il n\'y a AUCUNE affirmation quand le titre se tait (0 appel à affirmer)', ['Pikachu 025', 'pas de jumbo'].map(s => jouer(CFG_JUMBO, s).appels.affirmer.length), [0, 0]);
     H.v('4e. un produit « sans Jumbo » dont les marqueurs sont inconnus (null) est admis dans le groupe ; deux Jumbo, deux sans, ou un Jumbo contre un tampon : pas le cas (rien d\'appelé)',
         [issue(jouer(CFG_JUMBO, 'jumbo', question([15, 16]))), jouer(CFG_JUMBO, 'jumbo', question([16, 18])).x, jouer(CFG_JUMBO, 'jumbo', question([11, 13])).x, jouer(CFG_JUMBO, 'jumbo', question([11, 15])).x],
-        [['affirmee:16', 'sur', 'terme sans doute'], null, null, null]);
+        [['affirmee:16', 'sur', 'liste blanche'], null, null, null]);
     H.v('4f. même visuel mais AUTRE fiche, ou autre visuel : le groupe n\'est pas prouvé, la question reste (trace du silence)', [issue(jouer(CFG_JUMBO, 'jumbo', question([12, 14]))), issue(jouer(CFG_JUMBO, 'jumbo', question([12, 13])))], [['question-reste', 'se-tait', 'pas le même dessin (fiche et visuel)'], ['question-reste', 'se-tait', 'pas le même dessin (fiche et visuel)']]);
     H.v('4g. EXACTEMENT deux : trois candidats, un seul, un candidat caché lu par la chaîne (corps.candidats) : rien d\'appelé', [jouer(CFG_JUMBO, 'jumbo', question([11, 12, 15])).x, jouer(CFG_JUMBO, 'jumbo', question([12])).x, jouer(CFG_JUMBO, 'jumbo', question([11, 12]), { autres: { corpsChaine: { candidats: [{ idProduct: 11 }, { idProduct: 12 }, { idProduct: 15 }] } } }).x],
         [null, null, null]);
@@ -168,7 +157,7 @@ H.v('3d. le critère du jumbo commence par « jumbo (titre) » (le contrat) et n
     const contrat = fs.readFileSync(path.join(__dirname, '..', '..', 'CONTRAT-MARQUEURS.md'), 'utf8');
     const section = contrat.split(/^## 5\./m)[1].split(/^## 6\./m)[0];
     H.v('6a. le §5 du contrat cite les termes du titre (jumbo, oversize, XXL, géant) et la négation', [/jumbo, oversize\(d\), XXL, géant\(e\)/.test(section), /pas jumbo/.test(section), /taille normale/.test(section)], [true, true, true]);
-    H.v('6b. la liste fermée du code : huit termes (le contrat), quinze négations (+ « n\'t » et neuf contractions), dix liaisons, quatorze mots de la version normale, 200 caractères au plus', [G.TERMES_JUMBO.length, G.NEGATIONS.length, G.CONTRACTIONS.length, G.LIAISONS.length, G.VERSION_NORMALE.length, G.TITRE_MAX], [8, 15, 9, 10, 14, 200]);
+    H.v('6b. la liste blanche du code : les termes du contrat présents (jumbo, oversize, oversized, xxl, geant, geante), 26 mots neutres au plus, les garde-fous (quinze négations, neuf contractions, dix liaisons, quatorze mots de la version normale), 200 caractères et 12 mots au plus', [['jumbo', 'oversize', 'oversized', 'xxl', 'geant', 'geante'].every(m => G.TERMES_JUMBO.includes(m)), G.MOTS_NEUTRES.length <= 30, G.NEGATIONS.length, G.CONTRACTIONS.length, G.LIAISONS.length, G.VERSION_NORMALE.length, G.TITRE_MAX, G.MOTS_MAX], [true, true, 15, 9, 10, 14, 200, 12]);
 }
 
 H.bilan();
