@@ -48,7 +48,10 @@ const { AsyncLocalStorage } = require('async_hooks');
 const contexteDuScan = new AsyncLocalStorage();
 
 /** Ouvre un contexte de scan. Tout ce qui s'y passe est retenu ici. */
-const dansUnScan = suite => contexteDuScan.run({ pannes: new Set(), raisonNonRembourse: null }, suite);
+const dansUnScan = (suite, trace) => contexteDuScan.run(Object.assign(trace && typeof trace === 'object' ? trace : {}, { pannes: new Set(), raisonNonRembourse: null }), suite);   // `trace` : un objet du demandeur, qui survit au scan (catalogueIndex y est noté par index-nom.js)
+// PERF-SCAN (tour 1, I1) : un fait de plus du même scan, écrit par index-nom.js (la recherche du catalogue a-t-elle été servie par l'index ?) et lu par la route pour la ligne `analyses.durees`. Hors scan : rien.
+const noterDansLeScan = (cle, valeur) => { const s = contexteDuScan.getStore(); if (s) s[cle] = valeur; };
+const lireDansLeScan = cle => { const s = contexteDuScan.getStore(); return s && s[cle] !== undefined ? s[cle] : null; };
 
 // ════════════════════════════════════════════════════════════════════════════
 // POURQUOI UN SCAN N'A PAS ÉTÉ REMBOURSÉ — énumération fermée, et c'est de l'argent
@@ -177,6 +180,6 @@ async function interrogerSource(quoi, requete) {
 }
 
 module.exports = {
-    interrogerSource, dansUnScan, sourcesTombees, pannesHorsContexte, REFUS_D_ABSENCE, absenceNonConstatee,
+    interrogerSource, dansUnScan, noterDansLeScan, lireDansLeScan, sourcesTombees, pannesHorsContexte, REFUS_D_ABSENCE, absenceNonConstatee,
     RAISONS_NON_REMBOURSE, noterNonRemboursement, raisonNonRemboursement
 };

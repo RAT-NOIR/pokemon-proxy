@@ -484,7 +484,7 @@ numeroCarteSchema.index({ slugSet: 1 });
 const NumeroCarte = mongoose.model('NumeroCarte', numeroCarteSchema, 'numeros_cartes');
 // PERF-SCAN P1 — les index de NOM (champs `nomCles` / `nomFrCle`) NE SONT PAS déclarés dans les schémas : `autoIndex` les créerait au démarrage de la production, qui n'a pas la place (457 Mo sur 512).
 // Ils sont posés par v2/migrations/poser-cles-nom.js sur la seule base de l'essai ; ici on ne fait que les UTILISER s'ils existent et couvrent TOUT (index-nom.js), sinon la requête d'avant.
-const DISPO_NOM_CATALOGUE = INDEX_NOM.creerDisponibilite({ col: CatalogueProduit.collection, champ: CLE_NOM.CHAMP_CATALOGUE, nomIndex: CLE_NOM.INDEX_CATALOGUE });
+const DISPO_NOM_CATALOGUE = INDEX_NOM.creerDisponibilite({ col: CatalogueProduit.collection, champ: CLE_NOM.CHAMP_CATALOGUE, nomIndex: CLE_NOM.INDEX_CATALOGUE, source: { champ: 'name', temoin: CLE_NOM.CHAMP_SOURCE_CATALOGUE } });
 
 // Événements Stripe déjà traités. Stripe REJOUE ses webhooks (retry sur timeout, ou
 // simple doublon réseau) : sans cette table, un même paiement créditerait plusieurs fois.
@@ -2206,7 +2206,7 @@ async function trouverProduitsLocaux(nomExact) {
             for (const variante of variantes) {
                 const regex = new RegExp(`^${echapperRegex(variante)}(\\s*\\[|$)`, 'i');
                 // PERF-SCAN P1 : par l'index de nom quand il couvre tout (même ensemble : la regex d'avant est réappliquée), sinon la requête d'avant
-                const r = (await INDEX_NOM.parNomCourt({ col: CatalogueProduit.collection, dispo: DISPO_NOM_CATALOGUE, variante, regex })) ?? await CatalogueProduit.find({ name: regex }).lean();
+                const r = (await INDEX_NOM.parNomCourt({ col: CatalogueProduit.collection, dispo: DISPO_NOM_CATALOGUE, variante, regex })) ?? await CatalogueProduit.find({ name: regex }).sort({ _id: 1 }).lean();
                 if (r.length > 0) return ecarterNonCartes(r, `nom court "${nomExact}"`);
             }
             return [];
@@ -2215,7 +2215,7 @@ async function trouverProduitsLocaux(nomExact) {
         // PERF-SCAN P1 : la présélection est un balayage complet du catalogue (regex sans ancre, 74 694 documents). Quand l'index de nom couvre tout, on cherche les CLÉS des cibles (même ensemble
         // que le filtre ci-dessous garde, dans le même ordre) et on réapplique la regex d'avant ; sinon la requête d'avant.
         const regexPremierMot = new RegExp(echapperRegex(premierMot), 'i');
-        const preselection = (await INDEX_NOM.preselection({ col: CatalogueProduit.collection, dispo: DISPO_NOM_CATALOGUE, cles: [...cibles], regexPremierMot })) ?? await CatalogueProduit.find({ name: regexPremierMot }).lean();
+        const preselection = (await INDEX_NOM.preselection({ col: CatalogueProduit.collection, dispo: DISPO_NOM_CATALOGUE, cles: [...cibles], regexPremierMot })) ?? await CatalogueProduit.find({ name: regexPremierMot }).sort({ _id: 1 }).lean();
 
         // Garde ceux dont le nom (partie avant "[") normalisé correspond à une de nos cibles
         const resultats = preselection.filter(p => {

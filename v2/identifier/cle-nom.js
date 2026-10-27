@@ -40,4 +40,9 @@ function cleNomFr(nomFr) {
 /** Le nom entier en minuscules (condition NÉCESSAIRE d'un « commence par … » insensible à la casse : le serveur réapplique la regex exacte au résultat). « » quand il n'y a pas de nom. */
 function cleNomMin(name) { return typeof name === 'string' ? name.toLowerCase() : ''; }
 
-module.exports = { normaliserNom, sansNiveau, sansDelta, clesDuProduit, cleNomFr, cleNomMin, CHAMP_CATALOGUE, INDEX_CATALOGUE, CHAMP_FR, INDEX_FR, CHAMP_NOM_MIN, INDEX_NOM_MIN };
+// LES TÉMOINS DE LA SOURCE (B1 du tour 1). Un import RENOMME un produit par `$set name` et laisse ses anciennes clés : le champ est « présent » mais PÉRIMÉ. L'outil de pose écrit, dans le même `$set` que les clés, la SOURCE
+// dont elles dérivent (`nomSrc` = le nom, `nomFrSrc` = le nom français, « » quand il n'y en a pas) ; le contrôle de disponibilité (index-nom.js) refuse l'index dès qu'un document a la source ≠ son témoin.
+const CHAMP_SOURCE_CATALOGUE = 'nomSrc', CHAMP_SOURCE_FR = 'nomFrSrc';
+const sourceDe = x => (typeof x === 'string' ? x : '');
+
+module.exports = { normaliserNom, sansNiveau, sansDelta, clesDuProduit, cleNomFr, cleNomMin, sourceDe, CHAMP_SOURCE_CATALOGUE, CHAMP_SOURCE_FR, CHAMP_CATALOGUE, INDEX_CATALOGUE, CHAMP_FR, INDEX_FR, CHAMP_NOM_MIN, INDEX_NOM_MIN };

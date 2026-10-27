@@ -27,7 +27,7 @@ const { normaliserNom, chiffresDuNumero, decomposerNomCardmarket } = require('./
 // PERF-SCAN P1 : l'index du nom en minuscules (champ `nomMin`, posé par v2/migrations/poser-cles-nom.js sur la base de l'essai) sert « le nom commence par … » ; absent ou incomplet : la requête d'avant (index-nom.js).
 const CLE_NOM = require('./v2/identifier/cle-nom');
 const INDEX_NOM = require('./v2/identifier/index-nom');
-const DISPO_DEBUT_DE_NOM = INDEX_NOM.creerDisponibilite({ col: () => (mongoose.connection.db ? mongoose.connection.db.collection('catalogue_produits') : null), champ: CLE_NOM.CHAMP_NOM_MIN, nomIndex: CLE_NOM.INDEX_NOM_MIN });
+const DISPO_DEBUT_DE_NOM = INDEX_NOM.creerDisponibilite({ col: () => (mongoose.connection.db ? mongoose.connection.db.collection('catalogue_produits') : null), champ: CLE_NOM.CHAMP_NOM_MIN, nomIndex: CLE_NOM.INDEX_NOM_MIN, source: { champ: 'name', temoin: CLE_NOM.CHAMP_SOURCE_CATALOGUE } });
 
 const NOMS_COUVERTS = new Set(TABLE.flatMap(l => [].concat(l.bulba.expansion)));
 const EXPANSIONS_COUVERTES = new Set(TABLE.map(l => l.exp));
@@ -147,7 +147,7 @@ async function interrogerPont(lu, garde) {
                 if (r === null) indexOk = false; else parIndex.push(...r);
             }
             if (indexOk) { const vus = new Set(); homonymes = parIndex.filter(d => { const k = String(d._id); if (vus.has(k)) return false; vus.add(k); return true; }); }
-            else homonymes = await CP.find({ name: { $in: regexDeBase } }, { projection: { idProduct: 1, idExpansion: 1 } }).toArray();            const expsHors = [...new Set(homonymes.map(p => p.idExpansion).filter(e => e != null && !EXPANSIONS_COUVERTES.has(e)))];
+            else homonymes = await CP.find({ name: { $in: regexDeBase } }, { projection: { idProduct: 1, idExpansion: 1 } }).sort({ _id: 1 }).toArray();            const expsHors = [...new Set(homonymes.map(p => p.idExpansion).filter(e => e != null && !EXPANSIONS_COUVERTES.has(e)))];
             if (expsHors.length) {
                 // Une expansion ne compte QUE si elle peut contenir la vérité : même région que la
                 // carte lue, ou région inconnue (229 expansions n'en ont pas — premier principe,
