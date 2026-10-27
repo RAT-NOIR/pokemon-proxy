@@ -24,6 +24,10 @@ const mongoose = require('mongoose');
 const { modeles } = require('./collecte-cartes/schemas');
 const { TABLE } = require('./collecte-cartes/table-sets');
 const { normaliserNom, chiffresDuNumero, decomposerNomCardmarket } = require('./collecte-cartes/jointure');
+// PERF-SCAN P1 : l'index du nom en minuscules (champ `nomMin`, posé par v2/migrations/poser-cles-nom.js sur la base de l'essai) sert « le nom commence par … » ; absent ou incomplet : la requête d'avant (index-nom.js).
+const CLE_NOM = require('./v2/identifier/cle-nom');
+const INDEX_NOM = require('./v2/identifier/index-nom');
+const DISPO_DEBUT_DE_NOM = INDEX_NOM.creerDisponibilite({ col: () => (mongoose.connection.db ? mongoose.connection.db.collection('catalogue_produits') : null), champ: CLE_NOM.CHAMP_NOM_MIN, nomIndex: CLE_NOM.INDEX_NOM_MIN });
 
 const NOMS_COUVERTS = new Set(TABLE.flatMap(l => [].concat(l.bulba.expansion)));
 const EXPANSIONS_COUVERTES = new Set(TABLE.map(l => l.exp));
@@ -133,8 +137,17 @@ async function interrogerPont(lu, garde) {
         const CS = mongoose.connection.db?.collection('codes_set');
         if (CP && CS) {
             const nomsDeBase = [...new Set(cartes.map(c => c.nomEn))];
-            const homonymes = await CP.find({ name: { $in: nomsDeBase.flatMap(n => [new RegExp('^' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\s|\\[|$)', 'i')]) } }, { projection: { idProduct: 1, idExpansion: 1 } }).toArray();
-            const expsHors = [...new Set(homonymes.map(p => p.idExpansion).filter(e => e != null && !EXPANSIONS_COUVERTES.has(e)))];
+            const regexDeBase = nomsDeBase.map(n => new RegExp('^' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\s|\\[|$)', 'i'));
+            // PERF-SCAN P1 : « le nom commence par … » par l'index du nom en minuscules quand il couvre tout (même ensemble : la regex d'avant est réappliquée à l'intervalle trouvé ; l'ordre n'a pas d'effet, seules les expansions
+            // distinctes servent) ; sinon, ou si une seule recherche n'a pas pu se faire par l'index, la requête d'avant — un balayage complet du catalogue.
+            let homonymes = null, indexOk = nomsDeBase.length > 0;
+            const parIndex = [];
+            for (let i = 0; indexOk && i < nomsDeBase.length; i++) {
+                const r = await INDEX_NOM.debutDeNom({ col: CP, dispo: DISPO_DEBUT_DE_NOM, nom: nomsDeBase[i], regex: regexDeBase[i] });
+                if (r === null) indexOk = false; else parIndex.push(...r);
+            }
+            if (indexOk) { const vus = new Set(); homonymes = parIndex.filter(d => { const k = String(d._id); if (vus.has(k)) return false; vus.add(k); return true; }); }
+            else homonymes = await CP.find({ name: { $in: regexDeBase } }, { projection: { idProduct: 1, idExpansion: 1 } }).toArray();            const expsHors = [...new Set(homonymes.map(p => p.idExpansion).filter(e => e != null && !EXPANSIONS_COUVERTES.has(e)))];
             if (expsHors.length) {
                 // Une expansion ne compte QUE si elle peut contenir la vérité : même région que la
                 // carte lue, ou région inconnue (229 expansions n'en ont pas — premier principe,
