@@ -118,6 +118,10 @@ function creerCatalogue(opts = {}) {
         const parId = l => new Map(l.map(d => [d.idProduct, d]));
         const C = parId(cats), N = parId(nums), G = parId(guides);
         const vis = visuels.instantane ? visuels.instantane() : visuels;                  // UNE version pour toute la requête : jamais un visuel d'une version et une impression d'une autre
+        // PERF-SCAN P3 : les produits d'une même question (V1, V2, reverse, promo) partagent leur métacarte : ses impressions (les entrées de l'archive + UNE requête guide_prix sur tous ses produits) se lisent UNE fois par
+        // métacarte et par appel (mesuré, série C : 150 requêtes guide_prix identiques à une autre du même scan, 3 par scan). Chaque produit reçoit SON tableau (les impressions sont gelées une à une).
+        const impressionsParMeta = new Map();
+        const impressionsDe = meta => { let p = impressionsParMeta.get(meta); if (!p) { p = vis.impressions(meta); impressionsParMeta.set(meta, p); } return p; };
         for (const id of ids) {
             const c = C.get(id), n = N.get(id) || {}, v = (vis.entree && vis.entree(id)) || {};     // le visuel et l'impression : la version EN MÉMOIRE du chargeur
             const nom = c && texte(c.name);
@@ -125,7 +129,7 @@ function creerCatalogue(opts = {}) {
             if (!nom || !slug) continue;
             const g = G.get(id);
             const visuel = await vis.resoudre(id);
-            const impressions = Number.isInteger(c.idMetacard) ? await vis.impressions(c.idMetacard) : [];
+            const impressions = Number.isInteger(c.idMetacard) ? [...await impressionsDe(c.idMetacard)] : [];
             table.set(id, {
                 idProduct: id, nomCardmarket: nom, nomFr: texte(n.nomFr), idExpansion: Number.isInteger(n.idExpansion) ? n.idExpansion : (Number.isInteger(c.idExpansion) ? c.idExpansion : null),   // R5 (non servi : construireProduit ne le lit pas)
                 set: { slug, nom: texte(v.setNom) || lisible(slug), code: texte(n.codeSet), tirage: null, annee: null, symbole: null },
