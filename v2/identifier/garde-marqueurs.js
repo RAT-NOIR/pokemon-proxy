@@ -123,7 +123,9 @@ function parGarde({ resultat, produits, version, marqueursDe, derniereQuestion, 
     if (!rivaux.length) return null;
     const critere = typeof resultat.critere === 'string' ? resultat.critere.slice(0, 80) : null;
     if (!bloquants.length) return { trace: { regle: 'garde-marqueurs', issue: 'sur-confirme', produit: p, rivaux, critere } };
-    const avant = derniereQuestion && derniereQuestion.issue === 'question';
+    // la question d'avant ne revient que si elle OFFRE le produit et tous ses rivaux (une étape tardive — tampon, règle G — a pu changer de produit) ; sinon la question du groupe
+    const offerts = derniereQuestion && derniereQuestion.issue === 'question' ? (idsDeLaQuestion(derniereQuestion, null) || []) : [];
+    const avant = [p, ...rivaux].every(id => offerts.includes(id));
     const q = avant ? derniereQuestion : questionDeGroupe([p, ...rivaux]);
     return { resultat: q, trace: { regle: 'garde-marqueurs', issue: 'question', produit: p, rivaux, bloquants, critere, retour: avant ? 'question-d-avant' : 'question-du-groupe', ...(q && q.issue !== 'question' ? { issueRendue: q.issue } : {}) } };
 }
