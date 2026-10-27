@@ -14,16 +14,19 @@ const { regleEmbarquee } = require('../chargeur/regle-site');
     const regle = await regleEmbarquee();
     const EL = require('../chargeur/edition-locale');
 
-    // --- la liste fermée : celle du site, au commit nommé ---
-    let siteListe = null, siteDit = '';
-    try {
-        const src = C.lecteurGit(C.REPO_SITE, C.COMMIT)('entreesDuSet.ts').toString('utf8');
-        const m = /export function editionLocaleDuSet[\s\S]*?\[([^\]]*)\]\.includes\(e\)/.exec(src);
-        siteListe = m ? m[1].split(',').map(x => x.trim().replace(/^["']|["']$/g, '')).filter(Boolean) : null;
-        siteDit = m ? '' : 'forme de editionLocaleDuSet non reconnue au commit nommé';
-    } catch (e) { siteDit = `site absent (${String(e.message).split('\n')[0]})`; }
-    if (siteListe) H.v('la liste fermée de l\'API est celle du site (editionLocaleDuSet au commit nommé)', [...EL.LANGUES_DES_EDITIONS_LOCALES], siteListe);
-    else console.log(`⚠️  liste du site NON comparée : ${siteDit}`);
+    // --- la liste fermée : celle du site, au commit nommé ET sur son main (relecture : une dérive du main ne doit pas passer en silence) ---
+    // Le site ABSENT (Render, un poste sans le dépôt) est le seul cas où le banc ne compare pas, et il le dit ; un site PRÉSENT dont la forme n'est pas reconnue ÉCHOUE (je ne sais pas ≠ tout va bien).
+    const listeDe = src => { const m = /export function editionLocaleDuSet[\s\S]*?\[([^\]]*)\]\.includes\(e\)/.exec(src); return m ? m[1].split(',').map(x => x.trim().replace(/^["']|["']$/g, '')).filter(Boolean) : null; };
+    // même lecture que `copier-regle-site.js --verifier` : `git show <commit>:lib/…` et `git show main:lib/…` (jamais l'arbre de travail du site)
+    const fs = require('fs');
+    if (!fs.existsSync(C.SITE_LIB)) console.log(`⚠️  liste du site NON comparée : site absent (${C.SITE_LIB})`);
+    else {
+        const lire = rev => { try { return listeDe(C.lecteurGit(C.REPO_SITE, rev)('entreesDuSet.ts').toString('utf8')); } catch { return null; } };
+        const auCommit = lire(C.COMMIT), surMain = lire('main');
+        H.vrai('site présent : la forme de editionLocaleDuSet est reconnue au commit nommé ET sur le main du site', Array.isArray(auCommit) && Array.isArray(surMain));
+        H.v('la liste fermée de l\'API est celle du site au commit nommé', [...EL.LANGUES_DES_EDITIONS_LOCALES], auCommit);
+        H.v('la liste fermée de l\'API est celle du main du site (une dérive du site fait échouer ce banc)', [...EL.LANGUES_DES_EDITIONS_LOCALES], surMain);
+    }
     H.v('la liste fermée n\'ouvre jamais ja ni une langue d\'Asie', ['ja', 'zh-hans', 'zh-hant', 'th', 'id', 'ko', 'en'].map(l => EL.editionLocaleDuSet(l)), Array(7).fill(null));
     H.v('editionLocaleDuSet : trim, minuscules, sinon null (identique au site pour ces vecteurs)',
         [' FR ', 'fr', 'De', 'zz', '', '   ', null, undefined, 12, {}].map(x => EL.editionLocaleDuSet(x)), ['fr', 'fr', 'de', null, null, null, null, null, null, null]);
