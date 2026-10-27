@@ -111,6 +111,16 @@ const { lireEntree } = require('../identifier/visuels');
     H.v('B9. sans numéro, mais la carte a une autre image dans le set : l\'emprunt n\'est pas désigné', e(6701)?.grande?.cle === 'cartes/w67.webp', false);
     H.v('B10. aucune entrée WCD empruntée ne porte de mention (3 produits : 6001, 6601, 6602)', [6001, 6601, 6602].map(id => e(id)?.mention), [null, null, null]);
     H.v('B11. un set WCD dont le nom affiché n\'est pas reconnu par la validation d\'entrée : AUCUNE entrée (jamais une entrée que la validation refuserait, qui ferait lever la colonne des emprunts), compté', [e(7001), r.emprunts.includes(7001), d.wcdSansSetReconnu], [undefined, false, 1]);
+    // I2 (relecture) : UNE définition du set WCD. Un set NON WCD dont le nom affiché est « WCD 2018 » : ni emprunt admis, ni bandeau WCD servi ; et chaque set de la liste fermée est reconnu par la définition unique
+    {
+        const { construireProduit } = require('../identifier/produit'); const MQ = require('../identifier/marqueurs'); const D = require('../chargeur/decision');
+        exps['Set-C'] = 300;
+        const sets2 = [...sets, set('Set-C', 300, 'WCD 2018')], docs2 = [...docs, carte(80, 'Set-C', '030', [emp('Set-C', '030', 'w80')])], lignes2 = [...lignes, ligne(8001, 80, 'Set-C', '030', 'X-WCD18-030')];
+        const r2 = await decider({ sets: sets2, docs: docs2, lignes: lignes2, metacarte: new Map(lignes2.map((l, i) => [l.idProduct, 9000 + i])), regle });
+        const p = construireProduit({ idProduct: 8001, nomCardmarket: 'X', set: { slug: 'Set-C', nom: 'WCD 2018' } }, { langueInterface: 'fr' });
+        H.v('B14. un set non WCD renommé « WCD 2018 » : aucune entrée (pas servi sans mention), jamais marqué empruntable, et son produit servi n\'a pas le bandeau WCD', [r2.entrees.find(x => x.idProduct === 8001), r2.emprunts.includes(8001), p.marqueurs], [undefined, false, null]);
+        H.v('B15. chaque set de la liste fermée WCD est reconnu par la définition unique (marqueurs.js::anneeDuSetWcd)', D.FAMILLES_SANS_REPLI.wcd.filter(s => MQ.anneeDuSetWcd(s) === null), []);
+    }
     // la validation d'entrée : l'exception est UNIQUE, écrite par ce qu'elle autorise (autre tirage, sans mention, set WCD-<aaaa> reconnu sur l'entrée elle-même)
     const base = JSON.parse(JSON.stringify(e(6001)));
     const lire = o => { const x = lireEntree({ ...base, ...o }); return x.ok ? 'ok' : x.motif; };

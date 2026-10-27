@@ -97,7 +97,7 @@ function admissionDuCatalogue({ ligne, set, carte, regle, positions }) {
         const c = images.filter(m => m.source === 'prv' && texte(m.preuveLueRegle) && m.imageEmprunteeTirage !== true && m.differenceEmprunt == null && m.numero === pos && regle.visuelAdmisPourLaRegion(m, tir));
         return c.length === 1 ? { im: c[0], visuel: 'du-set', mention: null, nature: 'prv-position' } : null;
     }
-    if (f === 'wcd') {
+    if (f === 'wcd' && MQ.anneeDuSetWcd(set._id) !== null) {        // MARQUEURS : UNE définition du set WCD — celle qui dérive le bandeau servi (marqueurs.js) ; la liste fermée ne suffit plus seule
         // désignée : au numéro de la fiche ; ou, fiche SANS numéro (les WCD de Cardmarket n'en portent pas), la SEULE entrée de la carte dans le set, elle-même sans numéro (l'image d'origine est la même
         // pour toutes les variantes V1…Vn d'un deck : affichage seulement, marquée empruntée)
         const voulu = ligne.numeroFiche == null ? null : regle.normaliserNumero(ligne.numeroFiche);
