@@ -19,6 +19,7 @@ const crypto = require('crypto');
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { LOGOS_COPIES } = require('./collecte-cartes/langue-logo');
 const { cleNumero } = require('./collecte-cartes/jointure');
+const { editionLocaleDuSet } = require('./v2/chargeur/edition-locale');
 
 // l'année LUE sur chaque logo (planche du 2026-10-07) — jamais déduite du numéro du fichier
 const WCD = [[2004, 76], [2005, 77], [2006, 78], [2007, 79], [2008, 80], [2009, 81], [2010, 82], [2011, 83], [2012, 84], [2013, 85], [2014, 86], [2015, 87], [2016, 88], [2017, 89], [2018, 90], [2019, 91], [2022, 92], [2023, 93], [2024, 94], [2025, 95]];
@@ -82,7 +83,9 @@ function visuelAutreTirage(images, set, setsBase) {
 function choisirVisuel({ ligne: l, carte: c, set: s, fiche, regle, setsBase, substitutSansMention }) {
     if (substitutSansMention !== 'repli' && substitutSansMention !== 'refus') throw new Error(`choisirVisuel : substitutSansMention doit valoir 'repli' ou 'refus' (lu : ${JSON.stringify(substitutSansMention)})`);
     if (!fiche || fiche.carteId !== l.carteId) return { sansFiche: true, im: null, visuel: null, mention: null, duSetNonDesigne: false };
-    const admis = m => regle.visuelAdmisPourLaRegion(m, s.tirage ?? s.region);
+    // EDITION-LOCALE : la garde de langue reçoit l'édition locale du set (McDonald's FR), comme le site (entreesDuSet.ts) ; liste fermée dans v2/chargeur/edition-locale.js
+    const edition = editionLocaleDuSet(s.editionLocale);
+    const admis = m => regle.visuelAdmisPourLaRegion(m, s.tirage ?? s.region, edition);
     // le visuel de la FICHE : celui de son numéro (une fiche « n° ? » ne contredit aucun visuel du set — visuelDuProduit), parmi les
     // visuels que le site ADMET pour la région du set
     let im = visuelDuProduit(c.images, s._id, fiche.numero, { admis, normaliser: regle.normaliserNumero }), visuel = 'du-set', mention = null;
