@@ -14,7 +14,7 @@ const CLES_FICHIER = Object.freeze(['decision', 'source', 'le', 'produits']);
 const objetSimple = x => x !== null && typeof x === 'object' && !Array.isArray(x) && Object.getPrototypeOf(x) === Object.prototype;
 const entierPositif = x => Number.isSafeInteger(x) && x > 0;
 const refus = raison => ({ ok: false, raison });
-const dateValide = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) === s;
+const dateValide = s => { if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false; const t = new Date(`${s}T00:00:00Z`).getTime(); return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === s; };      // `toISOString` LÈVE sur une date impossible (2026-13-40) : la garde ne lève jamais
 const parMotifVide = () => Object.fromEntries(MOTIFS.map(m => [m, 0]));
 
 /**
