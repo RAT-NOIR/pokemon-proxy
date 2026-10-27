@@ -136,8 +136,31 @@ async function charger(client, base, dossier, nom) {
         console.log(`\nDIFF (dénominateur : ${cas.length} noms dont ${vides} sans aucun produit ; ${nLocal} rejeux d'identifierEnLocal) :`);
         console.log(`   ensemble des produits différent : ${dIds} · même ensemble, autre ORDRE : ${dOrdre} · forme du document différente : ${dFormes} · décision d'identifierEnLocal différente : ${dLocal}`);
         for (const e of exemples) console.log('   ↳', JSON.stringify(e).slice(0, 300));
-        if (arg('sortie')) fs.writeFileSync(arg('sortie'), JSON.stringify({ noms: cas.length, parOrigine, serieC: serieC.length, avant: { ms: msAvant, serie: profAvantSerie }, apres: { ms: msApres, serie: profApresSerie }, diff: { dIds, dOrdre, dFormes, dLocal, nLocal, vides }, exemples }, null, 1));
-        code = dIds || dOrdre || dFormes || dLocal ? 1 : 0;
+        // ── les homonymes « commence par » de pont-cartes.js (nomMin) : la requête d'avant (regex ancrée, insensible à la casse) contre l'index, sur les noms anglais des cartes de la base de collecte
+        let nPont = 0, dPont = 0, videsPont = 0, ixscanPont = 0;
+        if (arg('cartes')) {
+            const { EJSON } = require(path.join(racine, 'node_modules', 'bson'));
+            const noms = new Set(); const rl = readline.createInterface({ input: fs.createReadStream(arg('cartes')), crlfDelay: Infinity });
+            for await (const l of rl) { if (!l) continue; const d = EJSON.parse(l, { relaxed: true }); if (typeof d.nomEn === 'string' && d.nomEn.trim()) noms.add(d.nomEn); }
+            const liste = [...noms]; const cp = dbm.collection('catalogue_produits');
+            const IN = require(path.join(racine, 'v2', 'identifier', 'index-nom.js')), CN = require(path.join(racine, 'v2', 'identifier', 'cle-nom.js'));
+            const dispo = IN.creerDisponibilite({ col: cp, champ: CN.CHAMP_NOM_MIN, nomIndex: CN.INDEX_NOM_MIN });
+            const pas2 = Math.max(1, Math.floor(liste.length / echant));
+            for (let i = 0; i < liste.length; i += pas2) {
+                for (const nom of [liste[i], liste[i].toUpperCase()]) {
+                    const rx = new RegExp('^' + nom.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\s|\\[|$)', 'i');
+                    const a = await cp.find({ name: { $in: [rx] } }, { projection: { idProduct: 1, idExpansion: 1 } }).toArray();
+                    const b = await IN.debutDeNom({ col: cp, dispo, nom, regex: rx });
+                    nPont++; if (!a.length) videsPont++;
+                    const cle = l => JSON.stringify(l.map(d => [String(d._id), d.idProduct, d.idExpansion]).sort());
+                    if (b === null || cle(a) !== cle(b)) { dPont++; if (dPont <= 5) console.log('   ↳ DIFFÉRENCE (pont, commence par)', JSON.stringify(nom), a.length, b && b.length); }
+                }
+            }
+            const ex = await cp.find({ nomMin: { $gte: 'pikachu', $lt: 'pikachu￿' } }).explain('queryPlanner'); ixscanPont = /IXSCAN/.test(JSON.stringify(ex.queryPlanner.winningPlan)) ? 1 : 0;
+            console.log(`PONT (homonymes « commence par ») : ${nPont} requêtes (${videsPont} sans aucun produit), différences (ensemble des { _id, idProduct, idExpansion }) : ${dPont} · plan de l'intervalle : ${ixscanPont ? 'IXSCAN' : 'PAS d\'IXSCAN'}`);
+        }
+        if (arg('sortie')) fs.writeFileSync(arg('sortie'), JSON.stringify({ noms: cas.length, parOrigine, serieC: serieC.length, avant: { ms: msAvant, serie: profAvantSerie }, apres: { ms: msApres, serie: profApresSerie }, diff: { dIds, dOrdre, dFormes, dLocal, nLocal, vides }, pont: { requetes: nPont, differences: dPont, vides: videsPont }, exemples }, null, 1));
+        code = dIds || dOrdre || dFormes || dLocal || dPont ? 1 : 0;
         console.log(code === 0 ? '\n✅ IDENTIQUE : mêmes produits, même ordre, mêmes documents, mêmes décisions.' : '\n🔴 DIFFÉRENCES (voir ci-dessus).');
     } finally { await client.close().catch(() => { }); await banc.arreter().catch(() => { }); }
     process.exit(code);
