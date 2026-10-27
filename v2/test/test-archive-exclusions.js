@@ -135,7 +135,8 @@ const ENV_ECR = { V2_VISUELS_HMAC: SECRET, V2_VISUELS_R2_COMPTE: 'c', V2_VISUELS
     // 1a1ab447 (le dernier commit AVANT ce lot) ; calculée une fois sous N24 et N22, identique. Si un autre lot change légitimement le format ou la décision, elle se recalcule sur ce commit-là, sciemment.
     // MARQUE-EMPRUNT : recalculée sciemment — le seul changement de ce jeu fixe est la colonne des emprunts (format 3, vide ici : aucun emprunt) et son compte emprunts: 0 dans l'en-tête ; les 31 visuels sont les mêmes.
     // ARCHIVE-4 : recalculée sciemment — le seul changement de ce jeu fixe est le FORMAT 4 : la colonne des marqueurs écrits (vide ici : aucun marqueur écrit), son compte ecrits dans l'en-tête et le numéro de format ; les 31 visuels sont les mêmes.
-    const EMPREINTE_AVANT_LE_LOT = '505c7fc19ad96c62a19ec463b34d4c3e6d3e2d2fbb49b3ee2cbb5145e690f8d6';
+    // JUMBO-VISUEL : recalculée sciemment — le seul changement de ce jeu fixe est le FORMAT 5 : la colonne des masqués (vide ici : aucun masqué), son compte masques dans l'en-tête et le numéro de format ; les 31 visuels sont les mêmes.
+    const EMPREINTE_AVANT_LE_LOT = '8feff7244a7d7494b10d57c0d18c1e1d41e0414c8e78318b8b94570fe971ce0f';
     const fige = () => {
         const docs = [], lignes = [];
         for (let i = 1; i <= 30; i++) { const num = String(i).padStart(3, '0'); docs.push({ _id: i, nomEn: `Carte ${i}`, sets: ['Set-A'], impressions: [imp(num)], images: [im('Set-A', num, `c${i}`)] }); lignes.push({ idProduct: 1000 + i, carteId: i, idExpansion: 100, numeroFiche: num, slug: `P${i}-SA${i}`, slugSet: 'Set-A' }); }

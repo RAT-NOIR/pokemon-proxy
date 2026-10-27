@@ -82,6 +82,11 @@ const MEL_COLS = Object.freeze(['produits']);
 // MARQUE-EMPRUNT (format 3) — la COLONNE DES EMPRUNTS : la liste TRIÉE des idProduct qui ONT une entrée d'archive et dont le visuel est EMPRUNTÉ à un autre tirage (la décision `choisirVisuel` : 'autre-tirage', ou un substitut d'un autre
 // set). Elle vient de la décision, jamais du texte de la mention. « Aucun emprunt » s'écrit par une colonne VIDE ; une archive d'avant n'a pas la colonne : empruntDe rend null (inconnu), jamais false.
 const EMP_COLS = Object.freeze(['produits']);
+// JUMBO-VISUEL (format 5) — la COLONNE DES MASQUÉS : la liste TRIÉE des idProduct qui ONT une entrée d'archive et dont AUCUN visuel n'est servi (leur scan, celui de la carte normale, n'est pas le leur : un JUMBO
+// différent ou illisible). Ils restent des entrées COMPLÈTES — marqueurs, partages, groupe { JUMBO, normale }, fiche liée — et sont EMPRUNTÉS (donc exclus des règles d'image) : la colonne est un SOUS-ENSEMBLE de celle
+// des emprunts. Ce n'est PAS une exclusion (une exclusion retire le produit des partages : la carte normale redeviendrait affirmable sur la photo d'un Jumbo). « Aucun masqué » s'écrit par une colonne VIDE ;
+// une archive d'avant n'a pas la colonne : masqueDe rend null (inconnu), jamais false.
+const MSQ_COLS = Object.freeze(['produits']);
 // ARCHIVE-4 (format 4) — la COLONNE DES MARQUEURS ÉCRITS : ce que le catalogue a écrit dans cartes_produits.marqueurs, validé par la table du contrat (marqueurs.js) et accompagné de sa preuve. Une valeur par ligne
 // de visuel (alignée sur cols.id) pour les bornes et la preuve ; les éléments sont à plat (un type et ses params, en JSON canonique, dans la réserve de textes). « Aucun marqueur écrit » s'écrit par une colonne
 // VIDE (bornes égales) ; une archive d'avant n'a pas la colonne : entree().marqueurs vaut null, jamais « aucun ».
@@ -115,10 +120,10 @@ function compterMarquees(mar) {
 
 /** Assemble la VERSION (gelée) autour de colonnes déjà construites — par le constructeur ou reçues d'un autre fil. */
 function assembler(d) {
-    const { cols, texte, liens, meta, fiches, comptes, chargeLe, jum, mar, mel, emp, ecr } = d;
+    const { cols, texte, liens, meta, fiches, comptes, chargeLe, jum, mar, mel, emp, ecr, msq } = d;
     const ids = cols.id;
     const octets = { colonnes: 0, chaines: texte.octets.byteLength + liens.octets.byteLength + texte.off.byteLength + liens.off.byteLength };
-    for (const k of [...Object.values(cols), meta.cle, meta.produit, fiches.carte, fiches.num, fiches.debut, fiches.fin, fiches.produits, ...(jum ? JUM_COLS.map(k => jum[k]) : []), ...(mar ? MAR_COLS.map(k => mar[k]) : []), ...(mel ? MEL_COLS.map(k => mel[k]) : []), ...(emp ? EMP_COLS.map(k => emp[k]) : []), ...(ecr ? ECR_COLS.map(k => ecr[k]) : [])]) octets.colonnes += k.byteLength;
+    for (const k of [...Object.values(cols), meta.cle, meta.produit, fiches.carte, fiches.num, fiches.debut, fiches.fin, fiches.produits, ...(jum ? JUM_COLS.map(k => jum[k]) : []), ...(mar ? MAR_COLS.map(k => mar[k]) : []), ...(mel ? MEL_COLS.map(k => mel[k]) : []), ...(emp ? EMP_COLS.map(k => emp[k]) : []), ...(ecr ? ECR_COLS.map(k => ecr[k]) : []), ...(msq ? MSQ_COLS.map(k => msq[k]) : [])]) octets.colonnes += k.byteLength;
     octets.total = octets.colonnes + octets.chaines;
     const parSet = new Map(fiches.sets);                                        // slug → [premier, dernier+1] dans les colonnes de fiches
     const marquagesDe = r => {                                                  // les cinq champs d'une ligne ; null partout sans colonne (le même jeu de clés dans les deux cas)
@@ -280,6 +285,16 @@ function assembler(d) {
             if (!emp || !Number.isInteger(id) || chercher(ids, id) < 0) return null;       // pas de colonne, ou produit SANS entrée (aucun visuel servi) : inconnu
             return chercher(emp.produits, id) >= 0;
         },
+        /** JUMBO-VISUEL : la colonne des masqués est-elle chargée ? (une archive d'avant le format 5 : non — aucun visuel n'est alors masqué.) */
+        colonneMasques: Boolean(msq),
+        /**
+         * Aucun visuel n'est SERVI à ce produit (son scan est celui d'une autre carte : un JUMBO différent ou illisible) ? true / false d'après la colonne pour un produit qui a une entrée ;
+         * null sans colonne (archive d'avant), pour un produit SANS entrée ou pour un identifiant non entier : on ne sait pas — jamais « non masqué » en silence.
+         */
+        masqueDe(id) {
+            if (!msq || !Number.isInteger(id) || chercher(ids, id) < 0) return null;
+            return chercher(msq.produits, id) >= 0;
+        },
         /** Ce produit est-il marqué `prixMelangeTampon` par cartes_produits ? true / false d'après la colonne (qu'il ait une entrée d'archive ou non) ; null sans colonne : on ne sait pas. */
         prixMelange(id) {
             if (!mel || !Number.isInteger(id)) return null;
@@ -336,8 +351,8 @@ function assembler(d) {
         produitsDeLaFiche(slug, cle) { const f = V.fichesDuSet(slug).find(x => x.cle === cle); return f ? f.produits : []; },
         /** Le paquet à transmettre à un autre fil : des tampons à TRANSFÉRER (aucune copie) et le reste en données simples. */
         paquet() {
-            const tous = [...Object.values(cols), meta.cle, meta.produit, fiches.carte, fiches.num, fiches.debut, fiches.fin, fiches.produits, texte.off, texte.octets, liens.off, liens.octets, ...(jum ? JUM_COLS.map(k => jum[k]) : []), ...(mar ? MAR_COLS.map(k => mar[k]) : []), ...(mel ? MEL_COLS.map(k => mel[k]) : []), ...(emp ? EMP_COLS.map(k => emp[k]) : []), ...(ecr ? ECR_COLS.map(k => ecr[k]) : [])];
-            return { donnees: { cols, texte, liens, meta, fiches: { ...fiches, sets: [...parSet] }, comptes, chargeLe, ...(jum ? { jum } : {}), ...(mar ? { mar } : {}), ...(mel ? { mel } : {}), ...(emp ? { emp } : {}), ...(ecr ? { ecr } : {}) }, tampons: [...new Set(tous.map(t => t.buffer))] };
+            const tous = [...Object.values(cols), meta.cle, meta.produit, fiches.carte, fiches.num, fiches.debut, fiches.fin, fiches.produits, texte.off, texte.octets, liens.off, liens.octets, ...(jum ? JUM_COLS.map(k => jum[k]) : []), ...(mar ? MAR_COLS.map(k => mar[k]) : []), ...(mel ? MEL_COLS.map(k => mel[k]) : []), ...(emp ? EMP_COLS.map(k => emp[k]) : []), ...(ecr ? ECR_COLS.map(k => ecr[k]) : []), ...(msq ? MSQ_COLS.map(k => msq[k]) : [])];
+            return { donnees: { cols, texte, liens, meta, fiches: { ...fiches, sets: [...parSet] }, comptes, chargeLe, ...(jum ? { jum } : {}), ...(mar ? { mar } : {}), ...(mel ? { mel } : {}), ...(emp ? { emp } : {}), ...(ecr ? { ecr } : {}), ...(msq ? { msq } : {}) }, tampons: [...new Set(tous.map(t => t.buffer))] };
         }
     };
     return Object.freeze(V);
@@ -346,7 +361,8 @@ function assembler(d) {
 const unionBool = (a, b) => (a === true || b === true ? true : a === false || b === false ? false : null);
 const AVEC_MARQUES = d => d.partageeHoloNonHolo !== null || d.partageeTamponNonSepare !== null || d.produitsPartages !== null || d.tamponNonRepresente !== null || d.basseDefinition !== null;
 /** @param opts.marquages  vrai : le constructeur écrit la colonne des marquages (format 2). Faux (défaut) : une entrée qui porte un marquage LÈVE — jamais perdu en silence. */
-function creerConstructeur({ marquages = false, emprunts = false, ecrits = false } = {}) {
+function creerConstructeur({ marquages = false, emprunts = false, ecrits = false, masques = false } = {}) {
+    if (masques && !emprunts) throw new Error('constructeur : l\'option `masques` exige l\'option `emprunts` (un masqué est toujours un produit emprunté)');
     const c = {}; for (const k of COLS) c[k] = colonne();
     const ecritsParRang = [];                                                        // ARCHIVE-4 : par rang { marqueurs, preuve } ou null — seulement si `ecrits`
     const ecritsAbandonnes = new Set();                                              // les rangs dont les marqueurs écrits se contredisent
@@ -361,6 +377,7 @@ function creerConstructeur({ marquages = false, emprunts = false, ecrits = false
     const jumeaux = new Map();                                                       // idProduct → { meta, exp, num, tir } (-1 = inconnu) : UNE ligne par produit du catalogue
     const melanges = new Set();                                                      // LOT TAMPONS (B) : les idProduct marqués prixMelangeTampon (indépendants de tout visuel)
     const empruntes = new Set();                                                     // MARQUE-EMPRUNT : les idProduct dont le visuel est emprunté (seuls ceux qui ont une entrée gardée entrent dans la colonne)
+    const masquesSet = new Set();                                                    // JUMBO-VISUEL : les idProduct dont aucun visuel n'est servi (seuls ceux qui ont une entrée gardée entrent dans la colonne)
     let exclusions = null;                                                           // ARCHIVE-EXCLUSIONS : { exclus, exclusParMotif } posés par calculer ; null = aucune liste (aucun champ dans les comptes)
     return {
         /** ARCHIVE-EXCLUSIONS : les compteurs de l'exclusion, écrits dans les comptes de la version. Jugés ici par la définition du format (exclusions.js) : des compteurs incohérents ne s'écrivent pas. */
@@ -393,6 +410,15 @@ function creerConstructeur({ marquages = false, emprunts = false, ecrits = false
             if (!emprunts) throw new Error('constructeur sans colonne des emprunts : un emprunt ne peut pas être écrit (jamais perdu en silence)');
             if (!Number.isInteger(idProduct) || idProduct <= 0) throw new Error('emprunt : idProduct entier positif attendu');
             empruntes.add(idProduct);
+        },
+        /**
+         * JUMBO-VISUEL : aucun visuel n'est servi à ce produit (il garde son entrée complète : marqueurs, partages, groupe). Seulement avec l'option `masques` (format 5). Comme `emprunt`, la marque suit l'ENTRÉE gardée :
+         * un produit sans entrée (refusée, exclue, doublon contradictoire) n'entre pas dans la colonne. Un masqué doit aussi être déclaré emprunté (finir le vérifie).
+         */
+        masque(idProduct) {
+            if (!masques) throw new Error('constructeur sans colonne des masqués : un masqué ne peut pas être écrit (jamais perdu en silence)');
+            if (!Number.isInteger(idProduct) || idProduct <= 0) throw new Error('masque : idProduct entier positif attendu');
+            masquesSet.add(idProduct);
         },
         /** LOT TAMPONS (B) : un produit que cartes_produits marque `prixMelangeTampon`, avec ou sans entrée d'archive. Seulement avec la colonne des marquages (format 2). */
         melange(idProduct) {
@@ -510,7 +536,14 @@ function creerConstructeur({ marquages = false, emprunts = false, ecrits = false
             const mel = marquages ? { produits: Int32Array.from([...melanges].sort((a, b) => a - b)) } : undefined;
             // la colonne des emprunts : les produits marqués QUI ONT une entrée gardée (cols.id est trié), triés ; écrite même vide (« aucun » est une réponse)
             const emp = emprunts ? { produits: Int32Array.from([...empruntes].filter(p => chercher(cols.id, p) >= 0).sort((a, b) => a - b)) } : undefined;
-            const comptes = Object.freeze({ lues, visuels: n, refusees, doublons, doublonsContradictoires: contradictoires.size, motifs, setsAvecLiens: groupes.size, fichesLiees: m, produitsLies: fiches.produits.length, ...(jumeaux.size ? { jumeaux: jumeaux.size } : {}), ...(mar ? { marquees: compterMarquees(mar) } : {}), ...(mel ? { melange: mel.produits.length } : {}), ...(emp ? { emprunts: emp.produits.length } : {}), ...(ecr ? { ecrits: compterEcrits(ecr, i => texte.liste[i]) } : {}), ...(exclusions ? { exclus: exclusions.exclus, exclusParMotif: exclusions.exclusParMotif, partagesPerdus: exclusions.partagesPerdus } : {}) });
+            // la colonne des masqués (JUMBO-VISUEL) : les masqués QUI ONT une entrée gardée, triés ; chacun est AUSSI un emprunté (un scan qui n'est pas le sien est un visuel emprunté) ; écrite même vide
+            let msq;
+            if (masques) {
+                const liste = [...masquesSet].filter(p => chercher(cols.id, p) >= 0).sort((a, b) => a - b);
+                for (const p of liste) if (chercher(emp.produits, p) < 0) throw new Error(`masqué ${p} : un masqué doit être déclaré emprunté (colonne des emprunts) — aucune version construite`);
+                msq = { produits: Int32Array.from(liste) };
+            }
+            const comptes = Object.freeze({ lues, visuels: n, refusees, doublons, doublonsContradictoires: contradictoires.size, motifs, setsAvecLiens: groupes.size, fichesLiees: m, produitsLies: fiches.produits.length, ...(jumeaux.size ? { jumeaux: jumeaux.size } : {}), ...(mar ? { marquees: compterMarquees(mar) } : {}), ...(mel ? { melange: mel.produits.length } : {}), ...(emp ? { emprunts: emp.produits.length } : {}), ...(msq ? { masques: msq.produits.length } : {}), ...(ecr ? { ecrits: compterEcrits(ecr, i => texte.liste[i]) } : {}), ...(exclusions ? { exclus: exclusions.exclus, exclusParMotif: exclusions.exclusParMotif, partagesPerdus: exclusions.partagesPerdus } : {}) });
             // la colonne des jumeaux : paires (métacarte, produit) triées, plus la permutation triée par produit (recherche d'un produit seul)
             let jum;
             if (jumeaux.size) {
@@ -519,7 +552,7 @@ function creerConstructeur({ marquages = false, emprunts = false, ecrits = false
                 lignes.forEach((l, i) => { jum.meta[i] = l.meta; jum.id[i] = l.id; jum.exp[i] = l.exp; jum.num[i] = l.num; jum.tir[i] = l.tir; jum.ordre[i] = i; });
                 jum.ordre.sort((a, b) => jum.id[a] - jum.id[b]);
             }
-            return assembler({ cols, texte: t, liens, meta, fiches, comptes, chargeLe, jum, mar, mel, emp, ecr });
+            return assembler({ cols, texte: t, liens, meta, fiches, comptes, chargeLe, jum, mar, mel, emp, ecr, msq });
         }
     };
 }
@@ -604,6 +637,17 @@ function verifierStructure(d) {
         }
         if (!d.comptes || d.comptes.emprunts !== x.produits.length) refuser('emprunts : compte de l\'en-tête différent de celui de la colonne');
     } else if (d.comptes && d.comptes.emprunts !== undefined) refuser('emprunts : un compte sans colonne');
+    if (d.msq !== undefined) {                                                  // JUMBO-VISUEL : la colonne des masqués (format 5) : triée, stricte, positive, chaque produit a une entrée ET est emprunté (sous-ensemble des emprunts), comptée
+        const x = d.msq;
+        if (d.emp === undefined) refuser('masqués : colonne sans colonne des emprunts');
+        if (!x || typeof x !== 'object' || !(x.produits instanceof Int32Array)) refuser('masqués : colonne illisible');
+        for (let i = 0; i < x.produits.length; i++) {
+            if (x.produits[i] <= 0 || (i > 0 && x.produits[i] <= x.produits[i - 1])) refuser('masqués : identifiants non strictement croissants ou non positifs');
+            if (chercher(d.cols.id, x.produits[i]) < 0) refuser('masqués : un produit marqué n\'a pas d\'entrée dans l\'archive');
+            if (chercher(d.emp.produits, x.produits[i]) < 0) refuser('masqués : un produit masqué n\'est pas dans la colonne des emprunts');
+        }
+        if (!d.comptes || d.comptes.masques !== x.produits.length) refuser('masqués : compte de l\'en-tête différent de celui de la colonne');
+    } else if (d.comptes && d.comptes.masques !== undefined) refuser('masqués : un compte sans colonne');
     if (d.ecr !== undefined) {                                                  // ARCHIVE-4 : la colonne des marqueurs écrits (format 4) : bornes contiguës, textes dans la réserve, chaque élément ACCEPTÉ PAR LA TABLE du contrat, forme canonique, comptée
         const x = d.ecr;
         if (!x || typeof x !== 'object') refuser('marqueurs écrits : colonne illisible');

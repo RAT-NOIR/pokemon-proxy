@@ -2,6 +2,8 @@
 // COTES-VISUELS, tours 1-2 — le SCRIPT AUTONOME qui précalcule l'archive des visuels et du lien fiche → produits, HORS de l'API (destiné au worker de l'agent catalogue : l'API, sur une offre gratuite qui
 // se met en veille ~11 fois par jour, ne recalcule pas 380 s de lecture à chaque réveil — elle lit l'objet R2 et le charge en ~0,1 s).
 //   node v2/migrations/construire-fichier-visuels.js --deposer [--vers=<archive.rmv>] [--catalogue=<products_singles_6.json>] [--ignorer-precedente] [--exclure=<liste.json>]
+//   --jumbos-visuel=<liste.json> : JUMBO-VISUEL — la liste du catalogue des JUMBO lus contre le scan de leur fiche (forme jugée par v2/chargeur/jumbos-visuel.js ; toute autre forme refuse la construction, code 1) : un JUMBO identique est un
+//   EMPRUNT sous le bandeau JUMBO (sans mention), un JUMBO différent ou illisible reste candidat (marqueurs, partages, groupe) mais AUCUN visuel ne lui est servi (colonne des masqués, format 5). Jamais une exclusion.
 //   --exclure : ARCHIVE-EXCLUSIONS — une liste NOMMÉE d'idProduct exclus de l'identification (4 motifs fermés ; forme jugée par v2/chargeur/exclusions.js, toute autre forme refuse la construction, code 1). Un produit exclu n'a
 //   aucune entrée de visuel dans l'archive (il reste servi pour l'affichage, ses fiches liées et ses jumeaux ne bougent pas) ; l'exclusion s'applique dans v2/chargeur/calcul.js, à UN seul endroit. Sans --exclure, la sortie est celle d'avant.
 // ENTRÉES (variables, des NOMS ici, jamais une valeur) :
@@ -40,6 +42,25 @@ async function principal(argv = process.argv, env = process.env, deps = {}) {
         if (!lecture.ok) return stop('--verdicts-emprunts : fichier refusé, aucune construction : ' + lecture.raison);
         verdicts = lecture;
     }
+    // JUMBO-VISUEL : la liste du catalogue (JUMBO lus contre le scan de leur fiche) est lue et jugée AVANT toute lecture de source ; illisible, mal formée ou hors de la liste fermée : la construction REFUSE (code 1)
+    let jumbos = null;
+    if (argv.some(x => x === '--jumbos-visuel')) return stop('--jumbos-visuel : la forme est --jumbos-visuel=<fichier.json> (un fichier est requis)');
+    const nomJumbos = arg('jumbos-visuel');
+    // I1 (relecture) : la copie de la liste est ÉPINGLÉE par son empreinte (--jumbos-visuel-sha256=<64 hexadécimaux>, OBLIGATOIRE avec la liste) : la construction recalcule l'empreinte des octets lus et la compare ; un écart refuse.
+    // Le sha256Source de la liste (celui du fichier du catalogue) est comparé au fichier source quand il est lisible, sinon DIT « non comparé ».
+    if (argv.some(x => x === '--jumbos-visuel-sha256')) return stop('--jumbos-visuel-sha256 : la forme est --jumbos-visuel-sha256=<empreinte SHA-256 de la copie> (64 hexadécimaux minuscules)');
+    const pinJumbos = arg('jumbos-visuel-sha256');
+    if (nomJumbos === null && pinJumbos !== null) return stop('--jumbos-visuel-sha256 sans --jumbos-visuel : aucune liste à épingler');
+    let comparaisonSource = null;
+    if (nomJumbos !== null) {
+        if (pinJumbos === null) return stop('--jumbos-visuel : l\'empreinte de la copie doit être épinglée (--jumbos-visuel-sha256=<64 hexadécimaux>) — une liste dont on ne connaît pas l\'empreinte n\'est pas reconnue, aucune construction');
+        const JV = require('../chargeur/jumbos-visuel');
+        const lecture = JV.lireFichierJumbos(nomJumbos, { sha256Attendu: pinJumbos });
+        if (!lecture.ok) return stop(`--jumbos-visuel : liste refusée, aucune construction : ${lecture.raison}`);
+        comparaisonSource = JV.comparerSource(lecture);
+        if (comparaisonSource.etat === 'ecart') return stop(`--jumbos-visuel : le sha256Source de la liste (${lecture.sha256Source}) n'est pas l'empreinte de son fichier source « ${lecture.source} » (${comparaisonSource.sha256}) : la liste est périmée ou modifiée, aucune construction`);
+        jumbos = lecture;
+    }
     const LS = require('../chargeur/lecture-seule'); const S = require('../chargeur/scellement'); const R2 = require('../chargeur/r2-prive'); const F = require('../chargeur/format'); const DEPOT = require('./depot-r2');
     if (!S.secretValide(env.V2_VISUELS_HMAC)) return stop(`V2_VISUELS_HMAC absent ou trop court (${S.SECRET_MIN} caractères au moins) : une archive non scellée n'est jamais produite`);
     let ecriture = null;
@@ -62,7 +83,7 @@ async function principal(argv = process.argv, env = process.env, deps = {}) {
         } finally { await cx.close(); }
     }
     let f;
-    try { f = await fabriquerFichier({ source: deps.source || (() => sourceCartes({ env })), catalogue, secret: env.V2_VISUELS_HMAC, exclusions: exclure ? exclure.exclusions : null, verdictsEmprunts: verdicts ? verdicts.verdicts : null, ...(deps.decider ? { decider: deps.decider } : {}) }); }       // deps.decider : un moyen de banc (jamais fourni par la ligne de commande)
+    try { f = await fabriquerFichier({ source: deps.source || (() => sourceCartes({ env })), catalogue, secret: env.V2_VISUELS_HMAC, exclusions: exclure ? exclure.exclusions : null, verdictsEmprunts: verdicts ? verdicts.verdicts : null, jumbosVisuel: jumbos ? jumbos.classes : null, ...(deps.decider ? { decider: deps.decider } : {}) }); }       // deps.decider : un moyen de banc (jamais fourni par la ligne de commande)
     catch (e) { return stop(e && e.motif ? e.motif : `calcul impossible (${(e && (e.name || e.code)) || 'erreur'})`); }
     const c = f.comptes;
     console.log(`   calculé en ${(f.dureeMs / 1000).toFixed(0)} s : sets ${c.sets} · cartes ${c.cartes} · cartes_produits ${c.produits} · catalogue ${c.catalogue} · entrées ${c.visuels} · refusées ${c.refusees} · doublons d'idProduct identiques ${c.doublons || 0} (une seule entrée gardée) · contradictoires ${c.doublonsContradictoires || 0} (visuels différents : AUCUN visuel pour ces produits) · fiches liées ${c.fichesLiees} (produits ${c.produitsLies}, sets ${c.setsAvecLiens})`);
@@ -75,6 +96,13 @@ async function principal(argv = process.argv, env = process.env, deps = {}) {
         else console.log('   exclusions : tous les produits de la liste avaient un visuel dans l\'archive (aucun déjà sans visuel)');
     }
     console.log('   emprunts : ' + c.empruntsColonne + ' (colonne) · décidés non vérifiés ' + c.empruntsProduits + ' · verdicts : ' + (verdicts ? 'juste ' + verdicts.comptes.juste + ' (vérifiés ' + c.empruntsVerifies + ', sans emprunt ' + c.verdictsSansEmprunt + ') · exclu ' + verdicts.comptes.exclu + ' (retirés ' + c.empruntsExclusParVerdict + ') · sans verdict ' + verdicts.comptes.sansVerdict : 'aucun fichier (tous les emprunts restent non vérifiés)'));
+    // JUMBO-VISUEL : ce que la liste a fait (masqués = aucun visuel servi, emprunts = visuel de la fiche sous le bandeau JUMBO, sans mention), ce qu'elle nomme sans entrée, les JUMBO qu'elle ne nomme pas ; et Base Set
+    if (jumbos) {
+        const j = c.jumbosVisuel;
+        console.log(`   jumbos (${jumbos.decision} · du ${jumbos.le} · liste source du ${jumbos.listeLe} · empreinte de la liste source ${jumbos.sha256Source} (${comparaisonSource.etat === 'compare' ? 'sha256Source comparé au fichier source : égal' : 'sha256Source non comparé : fichier source non lisible'}) · empreinte de la copie ÉPINGLÉE vérifiée ${jumbos.sha256}) : ${c.masquesColonne} produit(s) masqué(s) dans l'archive (aucun visuel servi, entrée gardée) — décidés ${j.sansVisuel}, dont ${j.sansVisuel - c.masquesColonne} retiré(s) par --exclure ou sans entrée gardée · ${j.emprunt} emprunt(s) décidés (visuel de la fiche, bandeau JUMBO, sans mention) · déjà empruntés ${j.dejaEmprunte} · liste ${j.liste}`);
+        console.log(`   jumbos : nommés sans entrée d'archive (${j.sansEntree.length}) : ${j.sansEntree.map(x => `${x.idProduct} [${x.classe}]`).join(' ; ') || 'aucun'} · JUMBO que la liste ne nomme pas, sans verdict, servis comme avant (${j.sansVerdict.length}) : ${j.sansVerdict.join(', ') || 'aucun'}`);
+    } else console.log('   jumbos : aucune liste (--jumbos-visuel) : aucun JUMBO n\'est emprunté ni masqué');
+    if (c.baseSet) console.log(`   Base Set : ${c.baseSet.avecMention} produit(s) des fiches 1 à 69 au scan Édition 1 portent la mention « ${require('../identifier/emprunt').MENTION_EDITION_1} » · ${c.baseSet.prouvesSansMention} prouvé(s) 1re édition, sans mention`);
     // ARCHIVE-4 : les marqueurs ÉCRITS par le catalogue — ce que l'archive porte (par type) et chaque écart COMPTÉ (éléments refusés par la table du contrat, doublons de type, listes de plus de 4, éléments sans preuve,
     // contradictions avec le dérivé, lignes à marqueurs sans entrée d'archive) : un refus s'imprime, il ne se perd pas
     if (c.marqueursEcrits) {

@@ -5,6 +5,18 @@
 // DÉFAUT FERMÉ, écrit par ce qu'il AUTORISE : seul un `false` de la colonne dit « pas emprunté ». Une archive d'avant (null), une version absente ou illisible : emprunté (la règle se tait).
 const etat = require('../chargeur/etat');
 
+// JUMBO-VISUEL — la mention d'AFFICHAGE des fiches Pokémon de Base Set (n° 1 à 69) : leur scan est celui de la 1re édition (TCGdex), servi à TOUS les produits de la fiche (Cardmarket ne dit pas lequel des V1…Vn est la
+// 1re édition). Ce n'est PAS un emprunt pour les règles d'image (le dessin est le même : l'identification ne change pas) : c'est une mention qui DIT que le scan est d'un autre tirage. UNE définition du texte ;
+// la ceinture de SUR-PAR-IMAGE (sur-par-image-route.js::emprunteDe) la reconnaît pour ne pas la lire comme une marque d'emprunt oubliée.
+const MENTION_EDITION_1 = 'Visuel d\'un autre tirage';
+// I4 (relecture) : l'exemption est bornée à l'ENTRÉE, jamais au texte seul — le lien Cardmarket de l'entrée est du set Base-Set ET son numéro de fiche va de 1 à 69 (la même borne que decision.js::baseSetEdition1).
+const estMentionDAffichage = entree => {
+    if (!entree || typeof entree !== 'object' || entree.mention !== MENTION_EDITION_1) return false;
+    if (require('./marqueurs').slugSetDuLien(entree.lien) !== 'Base-Set') return false;
+    const m = /^0*(\d{1,2})$/.exec(String(entree.numero ?? '').trim());
+    return m !== null && Number(m[1]) >= 1 && Number(m[1]) <= 69;
+};
+
 /** Vrai sauf si la version dit explicitement « pas emprunté » (false). null, version absente, fonction absente : vrai. */
 function empruntOuInconnu(version, idProduct) {
     if (!version || typeof version.empruntDe !== 'function') return true;
@@ -54,4 +66,4 @@ function contexteDeLaRegle(ctx, emprunte) {
     return version ? contexteDeLaVersion(ctx, version) : contexteSansEmprunts(ctx, () => null);
 }
 
-module.exports = { empruntOuInconnu, contexteSansEmprunts, contexteDeLaRegle };
+module.exports = { empruntOuInconnu, contexteSansEmprunts, contexteDeLaRegle, MENTION_EDITION_1, estMentionDAffichage };

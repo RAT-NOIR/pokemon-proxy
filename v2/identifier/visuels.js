@@ -121,7 +121,8 @@ function lireEntree(e) {
     const mention = texte(e.mention);
     // MARQUEURS (CONTRAT-MARQUEURS.md §6) : l'UNIQUE exception — un visuel `autre-tirage` (l'emprunt marqué du catalogue) d'un produit d'un set WCD-<aaaa>, reconnu sur l'entrée elle-même (lien Cardmarket ou nom affiché),
     // s'affiche sans mention : le bandeau WCD / NON_LEGAL la remplace. Un substitut, et tout autre set, gardent l'exigence.
-    if (nature !== 'du-set' && !mention && !(nature === 'autre-tirage' && setWcdDeLEntree(e))) return { ok: false, motif: 'visuel de substitution sans mention' };
+    // JUMBO-VISUEL : la MÊME exception pour un JUMBO (marqueur JUMBO de la fusion, écrit avec sa preuve ou dérivé de la variante prouvée) : le visuel de sa carte, emprunté, s'affiche sans mention, sous le bandeau JUMBO.
+    if (nature !== 'du-set' && !mention && !(nature === 'autre-tirage' && (setWcdDeLEntree(e) || MQ.jumboDeLEntree(e)))) return { ok: false, motif: 'visuel de substitution sans mention' };
     for (const c of CHAMPS_IMPRESSION) if (e[c] === undefined) return { ok: false, motif: `champ "${c}" absent (null admis, absent non)` };
     if (e.idMetacard !== null && !(Number.isInteger(e.idMetacard) && e.idMetacard > 0)) return { ok: false, motif: 'idMetacard ni entier ni null' };
     if (e.lien !== undefined && e.lien !== null && !lienCardmarket(e.lien)) return { ok: false, motif: 'lien hors Cardmarket (https://www.cardmarket.com/…)' };
@@ -163,6 +164,7 @@ function creerVisuels(opts = {}) {
         if (!Number.isInteger(idProduct)) return null;
         const d = entree(idProduct);
         if (!d) return null;
+        if (masqueDe(idProduct) === true) return null;                         // JUMBO-VISUEL : le scan de cette entrée est celui d'une AUTRE carte (un JUMBO différent ou illisible) : aucun visuel n'est servi, l'entrée reste lue (marqueurs, groupe)
         const v = fichier(d.vignette, 'vignette').fichier;
         if (!v) return null;                                                   // une clé interdite n'est jamais servie (défense en profondeur : le chargement l'a déjà refusée)
         const g = d.grande ? fichier(d.grande, 'grande').fichier : null;
@@ -203,7 +205,9 @@ function creerVisuels(opts = {}) {
      * identifiant non entier) — jamais « non emprunté » en silence. Les règles d'image lisent null comme emprunté : identifier/emprunt.js (`empruntOuInconnu`).
      */
     function empruntDe(idProduct) { const v = version(); return v && typeof v.empruntDe === 'function' ? v.empruntDe(idProduct) : null; }
-    return { resoudre, impressions, entree, instantane, tirage, prixMelange, empruntDe };
+    /** JUMBO-VISUEL : aucun visuel n'est servi à ce produit (colonne des masqués de la version en place) ? true / false ; null = on ne sait pas (archive d'avant le format 5, produit sans entrée) — le service d'avant, jamais « masqué » en silence. */
+    function masqueDe(idProduct) { const v = version(); return v && typeof v.masqueDe === 'function' ? v.masqueDe(idProduct) : null; }
+    return { resoudre, impressions, entree, instantane, tirage, prixMelange, empruntDe, masqueDe };
 }
 
 module.exports = { creerVisuels, lireEntree, cleMotif, colLue, COLLECTIONS_LUES, CHAMPS_IMPRESSION, prix, dateGuide };

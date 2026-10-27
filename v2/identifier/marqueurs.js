@@ -264,4 +264,13 @@ function marqueursDeLEntree(entree) {
     return fusionner(derive, textePreuve(e.marqueursPreuve) ? e.marqueurs : undefined);
 }
 
-module.exports = { TYPES, NOMS_TYPES, LIBELLE_MAX, MARQUEURS_MAX, WCD_GABARITS, TYPE_DE_MARQUE, FORMES_PARAMS, valider, rendre, deriver, fusionner, marqueursDe, marqueursDuSet, slugSetDuLien, anneeDuSetWcd, setWcdDeLEntree, PREUVE_MAX, ecritsDeLaLigne, marqueursDeLEntree };
+/**
+ * JUMBO-VISUEL : une entrée d'archive est-elle celle d'un JUMBO ? Le marqueur JUMBO de sa FUSION (marqueursDeLEntree : écrit avec sa preuve, ou dérivé de la variante prouvée `jumbo`) — jamais une lecture d'image,
+ * jamais le nom. C'est la seule preuve qui autorise un visuel `autre-tirage` SANS mention (le bandeau JUMBO dit ce qu'est le produit : CONTRAT-MARQUEURS.md §6).
+ */
+function jumboDeLEntree(entree) {
+    const m = marqueursDeLEntree(entree).marqueurs;
+    return Array.isArray(m) && m.some(x => x.type === 'JUMBO');
+}
+
+module.exports = { TYPES, NOMS_TYPES, LIBELLE_MAX, MARQUEURS_MAX, WCD_GABARITS, TYPE_DE_MARQUE, FORMES_PARAMS, valider, rendre, deriver, fusionner, marqueursDe, marqueursDuSet, slugSetDuLien, anneeDuSetWcd, setWcdDeLEntree, PREUVE_MAX, ecritsDeLaLigne, marqueursDeLEntree, jumboDeLEntree };
