@@ -8,7 +8,8 @@
 const L = () => require('../../exporter-donnees-logos-site');      // paresseux : ce module charge dotenv à l'import
 const REGLE_REQUISE = ['fichesDuDocument', 'setParImpression', 'impressionDuSet', 'produitsDeLaFiche', 'visuelAdmisPourLaRegion', 'normaliserNumero', 'cardmarketUrl'];
 
-const { lienServi } = require('../identifier/lien-cardmarket');       // LIEN-CARDMARKET : la garde unique, partagée avec la relecture (visuels.js) et le Produit
+const { editionLocaleDuSet } = require('./edition-locale');            // EDITION-LOCALE : sets.editionLocale (liste fermée du site), passée à CHAQUE appel de la garde de langue
+const { lienServi } = require('../identifier/lien-cardmarket');      // LIEN-CARDMARKET : la garde unique, partagée avec la relecture (visuels.js) et le Produit
 const { separeeParVariante } = require('../identifier/partage-variante');   // PARTAGES-VARIANTE : la forme « paire séparée par la variante », UNE définition (décision, validation d'entrée, structure, F1)
 const entier = x => Number.isInteger(x) && x > 0;
 const texte = x => (typeof x === 'string' && x.trim() ? x.trim() : null);
@@ -90,11 +91,12 @@ const estScanDePosition = (im, setId) => Boolean(im && im.source === 'prv' && AN
 /** @returns { im, visuel, mention, nature } | null — `positions` : Map « carteId|set|position » → nombre de produits qui la portent. */
 function admissionDuCatalogue({ ligne, set, carte, regle, positions }) {
     const f = familleDuSet(set._id), tir = set.tirage ?? set.region;
+    const edition = editionLocaleDuSet(set.editionLocale);          // EDITION-LOCALE : la même garde de langue que choisirVisuel (liste fermée du site)
     const images = (carte.images || []).filter(m => m && m.set === set._id && m.cleR2);
     if (f === 'tamponnees-nommees') {
         const pos = positionDuSlug(ligne.slug, set._id);
         if (!pos || positions.get(`${ligne.carteId}|${set._id}|${pos}`) !== 1) return null;
-        const c = images.filter(m => m.source === 'prv' && texte(m.preuveLueRegle) && m.imageEmprunteeTirage !== true && m.differenceEmprunt == null && m.numero === pos && regle.visuelAdmisPourLaRegion(m, tir));
+        const c = images.filter(m => m.source === 'prv' && texte(m.preuveLueRegle) && m.imageEmprunteeTirage !== true && m.differenceEmprunt == null && m.numero === pos && regle.visuelAdmisPourLaRegion(m, tir, edition));
         return c.length === 1 ? { im: c[0], visuel: 'du-set', mention: null, nature: 'prv-position' } : null;
     }
     if (f === 'wcd' && MQ.anneeDuSetWcd(set._id) !== null) {        // MARQUEURS : UNE définition du set WCD — celle qui dérive le bandeau servi (marqueurs.js) ; la liste fermée ne suffit plus seule
@@ -102,7 +104,7 @@ function admissionDuCatalogue({ ligne, set, carte, regle, positions }) {
         // pour toutes les variantes V1…Vn d'un deck : affichage seulement, marquée empruntée)
         const voulu = ligne.numeroFiche == null ? null : regle.normaliserNumero(ligne.numeroFiche);
         // la langue : celle que la règle du SITE admet pour la région du set (écrite par ce qu'elle autorise ; relecture CAT I2), comme pour la voie A
-        const c = images.filter(m => m.source === 'emprunt' && m.imageEmprunteeTirage === true && m.differenceEmprunt === 'autre-tirage' && regle.visuelAdmisPourLaRegion(m, tir)
+        const c = images.filter(m => m.source === 'emprunt' && m.imageEmprunteeTirage === true && m.differenceEmprunt === 'autre-tirage' && regle.visuelAdmisPourLaRegion(m, tir, edition)
             && (voulu === null ? m.numero == null : m.numero != null && regle.normaliserNumero(m.numero) === voulu));
         const seule = voulu === null ? images.length === 1 : true;
         return c.length === 1 && seule ? { im: c[0], visuel: 'autre-tirage', mention: null, nature: 'wcd-emprunt' } : null;

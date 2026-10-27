@@ -14,6 +14,7 @@ async function fabriquerFichier({ source, catalogue, regle = () => require('./re
     const t0 = Date.now();
     const src = await source();
     if (!src.ok) throw echec(src.raison);
+    const comptesSource = src.comptes || null;            // EDITION-LOCALE : ce que la lecture a rejeté (imprimé par l'outil, jamais écrit dans l'archive)
     let r;
     try { r = await calculer({ sets: src.sets, docs: src.docs, lignes: src.lignes, metacarte: catalogue, regle: await regle(), decider, exclusions, verdictsEmprunts }); } finally { try { await src.fermer(); } catch { /* déjà fermée */ } }
     if (!r.version) throw echec('0 visuel sur une base non vide : aucun fichier écrit');
@@ -38,6 +39,6 @@ async function fabriquerFichier({ source, catalogue, regle = () => require('./re
     if (!relu.colonneEmprunts || relu.comptes.emprunts !== r.version.comptes.emprunts) throw echec('aller-retour : la colonne des emprunts relue diffère de celle calculée : aucun fichier écrit');
     // ARCHIVE-EXCLUSIONS : les compteurs relus sont ceux qui ont été calculés (et sans liste, aucun compteur d'exclusion n'a le droit d'exister)
     if (relu.comptes.exclus !== (exclusions ? r.comptes.exclus : undefined) || JSON.stringify(relu.comptes.exclusParMotif) !== JSON.stringify(exclusions ? r.comptes.exclusParMotif : undefined) || relu.comptes.partagesPerdus !== (exclusions ? 0 : undefined)) throw echec('aller-retour : les compteurs d\'exclusion relus diffèrent de ceux calculés : aucun fichier écrit');
-    return { brut, gz, scelle: secret ? sceller(gz, secret) : null, comptes: r.comptes, entree, dureeMs: Date.now() - t0 };
+    return { brut, gz, scelle: secret ? sceller(gz, secret) : null, comptes: r.comptes, comptesSource, entree, dureeMs: Date.now() - t0 };
 }
 module.exports = { fabriquerFichier };

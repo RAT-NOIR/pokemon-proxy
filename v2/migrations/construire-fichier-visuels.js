@@ -66,6 +66,8 @@ async function principal(argv = process.argv, env = process.env, deps = {}) {
     catch (e) { return stop(e && e.motif ? e.motif : `calcul impossible (${(e && (e.name || e.code)) || 'erreur'})`); }
     const c = f.comptes;
     console.log(`   calculé en ${(f.dureeMs / 1000).toFixed(0)} s : sets ${c.sets} · cartes ${c.cartes} · cartes_produits ${c.produits} · catalogue ${c.catalogue} · entrées ${c.visuels} · refusées ${c.refusees} · doublons d'idProduct identiques ${c.doublons || 0} (une seule entrée gardée) · contradictoires ${c.doublonsContradictoires || 0} (visuels différents : AUCUN visuel pour ces produits) · fiches liées ${c.fichesLiees} (produits ${c.produitsLies}, sets ${c.setsAvecLiens})`);
+    // EDITION-LOCALE : les sets dont l'édition locale est hors de la liste fermée du site (rejetée, jamais appliquée) ; dénominateur imprimé
+    if (f.comptesSource && f.comptesSource.editionLocale) console.log(`   édition locale : ${f.comptesSource.editionLocale.horsListe} set(s) hors liste fermée, rejeté(s)${f.comptesSource.editionLocale.horsListe ? ' ' + JSON.stringify(f.comptesSource.editionLocale.valeurs) : ''} (sets lus : ${c.sets})`);
     // ARCHIVE-EXCLUSIONS : ce qui a été retiré, par motif, et ce que la liste nomme sans que l'archive l'ait servi (une liste périmée se dit, elle ne passe pas en silence)
     if (exclure) {
         console.log(`   exclusions (${exclure.decision} · du ${exclure.le} · ${exclure.produits.length} produit(s) nommé(s)) : ${c.exclus} produit(s) exclu(s) retiré(s) de l'archive (${Object.entries(c.exclusParMotif).map(([k, n]) => `${k} ${n}`).join(' · ')}) · partages perdus ${c.partagesPerdus} (marques des produits non exclus comparées à la construction sans exclusion)`);
