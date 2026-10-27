@@ -17,9 +17,11 @@ async function charger(client, base, dossier, nom) {
     const { EJSON } = require(path.join(racine, 'node_modules', 'bson'));
     const coll = client.db(base).collection(nom);
     const rl = readline.createInterface({ input: fs.createReadStream(path.join(dossier, `test.${nom}.ejson`)), crlfDelay: Infinity });
-    let lot = [], n = 0;
-    for await (const l of rl) { if (!l) continue; lot.push(EJSON.parse(l, { relaxed: false })); n++; if (lot.length >= 2000) { await coll.insertMany(lot, { ordered: false }); lot = []; } }
-    if (lot.length) await coll.insertMany(lot, { ordered: false });
+    // COMME L'AMORÇAGE de rm_essai (amorcer-essai.js) : copie en _id CROISSANT, donc l'ordre naturel de la collection est l'ordre des _id (précondition de l'identité des ordres : voir poser-cles-nom.js::verifierOrdreNaturel)
+    const tous = []; let n = 0;
+    for await (const l of rl) { if (!l) continue; tous.push(EJSON.parse(l, { relaxed: false })); n++; }
+    tous.sort((x, y) => (x._id.toHexString() < y._id.toHexString() ? -1 : 1));
+    for (let i = 0; i < tous.length; i += 2000) await coll.insertMany(tous.slice(i, i + 2000), { ordered: true });
     const idx = JSON.parse(fs.readFileSync(path.join(dossier, `test.${nom}.indexes.json`), 'utf8'));
     for (const i of idx) { if (i.expireAfterSeconds !== undefined) continue; const { key, name, ...opts } = i; try { await coll.createIndex(key, { name, ...opts }); } catch { /* index non recréé */ } }
     return n;

@@ -52,6 +52,38 @@ const sansChamp = (d, ...champs) => { const reste = { ...d }; for (const c of ch
     }
     H.v('…aucune collection n\'a été lue ni écrite', lectures, 0);
 
+    // ── 4 bis. L'ORDRE : la recherche par l'index rend les candidats dans l'ordre des _id ; le balayage d'aujourd'hui, dans l'ORDRE NATUREL de la collection. Les deux ne sont le même ordre que si la collection a été
+    //    écrite en _id croissant (l'amorçage de rm_essai le fait). Un ordre différent change le gagnant d'une égalité de score (mesuré : 56 décisions sur 4 506 au rejeu) : l'outil REFUSE une collection dont l'ordre naturel
+    //    n'est pas l'ordre des _id, avant toute écriture.
+    {
+        const { ObjectId } = require('mongodb');
+        const ids3 = [new ObjectId('0000000000000000000000b3'), new ObjectId('0000000000000000000000b1'), new ObjectId('0000000000000000000000b2')];
+        const mauvaise = base.collection('catalogue_produits_desordre');       // une autre collection : le plan ne la connaît pas, on la prouve par la fonction exportée
+        await mauvaise.insertMany(ids3.map((_id, i) => ({ _id, idProduct: i })));
+        const bonne = base.collection('catalogue_produits_ordre');
+        await bonne.insertMany([...ids3].sort((x, y) => (x.toHexString() < y.toHexString() ? -1 : 1)).map((_id, i) => ({ _id, idProduct: i })));
+        const vide = base.collection('catalogue_produits_vide');
+        await base.createCollection('catalogue_produits_vide');
+        const r1 = await M.verifierOrdreNaturel(mauvaise), r2 = await M.verifierOrdreNaturel(bonne), r3 = await M.verifierOrdreNaturel(vide);
+        H.v('ordre naturel ≠ ordre des _id : refusé, avec le rang du premier écart', [r1.ok, r1.rang], [false, 1]);
+        H.v('ordre naturel = ordre des _id : accepté ; collection vide : acceptée', [r2.ok, r3.ok], [true, true]);
+        // la pose elle-même : refus AVANT toute écriture quand une des deux collections est dans le désordre
+        await base.collection('catalogue_produits').drop(); await base.collection('numeros_cartes').drop();
+        const desordre = [new ObjectId('0000000000000000000000c2'), new ObjectId('0000000000000000000000c1')];
+        await base.collection('catalogue_produits').insertMany(desordre.map((_id, i) => ({ _id, idProduct: 10 + i, name: `Carte ${i}`, idMetacard: 1 })));
+        await base.collection('numeros_cartes').insertMany([{ idProduct: 10, nomFr: 'Carte' }]);
+        const cD = await taire(() => M.principal(['--base=rm_essai', '--appliquer'], {}, profil));
+        H.v('catalogue_produits écrit dans le désordre : la pose est REFUSÉE (code 1), aucun champ écrit', [cD, await base.collection('catalogue_produits').countDocuments({ nomCles: { $exists: true } }), await base.collection('numeros_cartes').countDocuments({ nomFrCle: { $exists: true } })], [1, 0, 0]);
+        const cS = await taire(() => M.principal(['--base=rm_essai'], {}, profil));
+        H.v('…la simulation le dit aussi (code 1) : on ne découvre pas le refus à la pose', cS, 1);
+        await base.collection('catalogue_produits').drop(); await base.collection('numeros_cartes').drop();
+        for (const n of ['catalogue_produits_desordre', 'catalogue_produits_ordre', 'catalogue_produits_vide']) await base.collection(n).drop();
+        // on rétablit le jeu de la suite du banc (écrit en _id croissant par insertMany)
+        await cat.insertMany(NOMS.map(([idProduct, name]) => ({ idProduct, name, idExpansion: 7, idMetacard: 700 + idProduct, extra: { a: idProduct } })));
+        await num.insertMany([[1, 'Pikachu'], [2, 'Éveil'], [3, null], [4, 'Carabaffe'], [5, 'Flabébé'], [6, '']].map(([idProduct, nomFr]) => ({ idProduct, nomFr, numero: String(idProduct), slug: `s${idProduct}` })));
+        avant.cat = await cat.find({}).sort({ _id: 1 }).toArray(); avant.num = await num.find({}).sort({ _id: 1 }).toArray(); avant.idxCat = (await cat.indexes()).length; avant.idxNum = (await num.indexes()).length;
+    }
+
     // ── 5. la SIMULATION n'écrit rien
     let ecritures = 0;
     const espionEcritures = { ...profil, apresLot: async () => { ecritures++; } };

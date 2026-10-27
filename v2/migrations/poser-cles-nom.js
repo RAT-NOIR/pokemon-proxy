@@ -65,6 +65,22 @@ function journalParDefaut(ligne) { fs.mkdirSync(path.dirname(JOURNAL_PAR_DEFAUT)
 
 const memes = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
+/**
+ * L'ORDRE NATUREL de la collection est-il celui des _id ? La recherche par l'index rend les candidats dans l'ordre des _id ; le balayage d'aujourd'hui les rend dans l'ordre NATUREL. Une égalité de score se tranche à l'ordre
+ * des candidats (mesuré au rejeu d'identité : 56 décisions sur 4 506 changent si les deux ordres diffèrent) : l'index n'est donc « le même ensemble, dans le même ordre » que sur une collection écrite en _id croissant — ce
+ * que fait l'amorçage de rm_essai (amorcer-essai.js copie par lots triés par _id). Rend { ok, n } ou { ok: false, rang, raison } au premier écart.
+ */
+async function verifierOrdreNaturel(col) {
+    let precedent = null, rang = 0;
+    for await (const d of col.find({}, { projection: { _id: 1 } }).sort({ $natural: 1 })) {
+        const h = d && d._id && typeof d._id.toHexString === 'function' ? d._id.toHexString() : null;
+        if (h === null) return { ok: false, rang, raison: 'un _id qui n\'est pas un ObjectId : je ne sais pas comparer les deux ordres' };
+        if (precedent !== null && h < precedent) return { ok: false, rang, raison: `le document de rang ${rang} (dans l'ordre naturel) a un _id plus petit que celui qui le précède` };
+        precedent = h; rang++;
+    }
+    return { ok: true, n: rang };
+}
+
 /** Lit la collection ENTIÈRE par curseur et rend ce qui reste à poser : { total, aPoser, octets } — `octets` : la taille BSON des valeurs à écrire (le champ seul). `ecrire(lot)` est appelée par lots d'`_id` à poser. */
 async function parcourir(col, spec, { lot, ecrire = null }) {
     const { BSON } = require('mongoose').mongo;
@@ -108,6 +124,12 @@ async function principal(args = process.argv.slice(2), env = process.env, deps =
         say(`🗄️  Cible : "${BASE_CIBLE}"  ·  ${A.appliquer ? '▶️  POSE' : '🔎 SIMULATION — rien n\'est écrit (--appliquer pour poser)'}`);
         for (const spec of PLAN) if (!(await db.listCollections({ name: spec.collection }, { nameOnly: true }).toArray()).length) return stop(`la collection « ${spec.collection} » est absente de la cible : rien à poser, refusé.`);
 
+        // L'ORDRE avant tout : sans lui, l'index change le gagnant d'une égalité de score (voir verifierOrdreNaturel). Refus en simulation comme à la pose.
+        for (const nom of [...new Set(PLAN.map(s => s.collection))]) {
+            const o = await verifierOrdreNaturel(db.collection(nom));
+            if (!o.ok) return stop(`« ${nom} » : ${o.raison}. La recherche par l'index rendrait les candidats dans l'ordre des _id, le balayage d'aujourd'hui dans l'ordre naturel : une égalité de score se tranche à cet ordre. Rien n'est écrit. Remède : recopier la collection en _id croissant (amorcer-essai.js le fait).`);
+            say(`   ordre naturel de « ${nom} » = ordre des _id (${o.n} documents)`);
+        }
         const poids0 = await poidsCible(db);
         say(`   poids de la cible : ${mo(poids0)} Mo (données + index) · ARRÊT DUR ${mo(seuil)} Mo`);
         // ── le plan : une lecture complète par collection (la même que fera la pose), RIEN d'écrit
@@ -172,7 +194,7 @@ async function principal(args = process.argv.slice(2), env = process.env, deps =
     } finally { await co.fermer(); }
 }
 
-module.exports = { principal, lireArguments, PLAN, BASE_CIBLE, ARRET_DUR_MO };
+module.exports = { principal, lireArguments, verifierOrdreNaturel, PLAN, BASE_CIBLE, ARRET_DUR_MO };
 
 if (require.main === module) {
     require('dotenv').config();
