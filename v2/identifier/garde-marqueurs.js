@@ -81,6 +81,14 @@ function signalReel(critere, ecart) {
     if (critere.startsWith(CRITERE_JUMBO)) return ecart.types.every(t => TYPES_JUMBO.has(t));
     return false;
 }
+/**
+ * TOUR 1 (e) : « jumbo (titre) » EST le signal réel d'un groupe { JUMBO, sans JUMBO } même quand le jumeau normal porte `null` (on ne sait pas) ou `[]` : le titre nomme la version, c'est le seul signal qui sépare ce groupe.
+ * Écrit par ce qu'il AUTORISE : le critère est celui du titre ; le sûr `mp` est la version JUMBO et ne porte que JUMBO / NON_LEGAL ; le rival `mr` est null ou vide. Aucun autre critère, aucun autre groupe.
+ */
+function jumboParTitre(critere, mp, mr) {
+    if (typeof critere !== 'string' || !critere.startsWith(CRITERE_JUMBO)) return false;
+    return Array.isArray(mp) && estJumbo(mp) && mp.every(e => TYPES_JUMBO.has(e.type)) && (mr === null || mr === undefined || (Array.isArray(mr) && mr.length === 0));
+}
 
 const carteDe = r => (r && r.analyse && Array.isArray(r.analyse.cartes) && r.analyse.cartes.length === 1 ? r.analyse.cartes[0] : null);
 /** Les candidats de la question, plus ceux que la chaîne a lus sans les montrer (un candidat caché reste un rival) ; null si ce n'est pas une question. */
@@ -125,7 +133,7 @@ function parGarde({ resultat, produits, version, marqueursDe, derniereQuestion, 
         const e = ecartMarqueurs(mp, mr);
         if (!e.different) continue;
         rivaux.push(id);
-        if (!signalReel(resultat.critere, e)) bloquants.push(id);
+        if (!signalReel(resultat.critere, e) && !jumboParTitre(resultat.critere, mp, mr)) bloquants.push(id);
     }
     if (!rivaux.length) return null;
     const critere = typeof resultat.critere === 'string' ? resultat.critere.slice(0, 80) : null;

@@ -202,7 +202,7 @@ function fusionner(derives, ecrits) {
     const compte = { contradictions: 0, invalides: 0, doublons: 0, trop: 0 };
     const base = Array.isArray(derives) ? derives : null;
     const parType = new Map((base || []).map(e => [e.type, e]));
-    const ajouts = [];
+    const ajouts = [], remplaces = new Set();
     if (Array.isArray(ecrits)) {
         const vusEcrits = new Set();
         for (const brut of ecrits) {
@@ -211,12 +211,17 @@ function fusionner(derives, ecrits) {
             if (vusEcrits.has(v.type)) { compte.doublons++; continue; }
             vusEcrits.add(v.type);
             const d = parType.get(v.type);
-            if (d) { if (JSON.stringify(d.params) !== JSON.stringify(v.params)) compte.contradictions++; continue; }       // le dérivé l'emporte
+            if (d) {
+                if (JSON.stringify(d.params) === JSON.stringify(v.params)) continue;
+                // TOUR 1 (d) : un écrit qui garde tous les paramètres du dérivé et n'AJOUTE que des paramètres (le `joueur` facultatif d'un WCD) ne le contredit pas : l'élément écrit est gardé
+                if (Object.keys(d.params).every(k => JSON.stringify(d.params[k]) === JSON.stringify(v.params[k]))) { parType.set(v.type, v); remplaces.add(v.type); continue; }
+                compte.contradictions++; continue;                                  // une autre valeur : le dérivé l'emporte
+            }
             ajouts.push(v);
         }
     }
     if (base === null && ajouts.length === 0) return { marqueurs: null, ...compte };
-    const tous = dansOrdre([...(base || []), ...ajouts]);
+    const tous = dansOrdre([...(base || []).map(e => (remplaces.has(e.type) ? parType.get(e.type) : e)), ...ajouts]);
     if (tous.length > MARQUEURS_MAX) return { marqueurs: null, ...compte, trop: 1 };
     return { marqueurs: Object.freeze(tous), ...compte };
 }
@@ -224,4 +229,39 @@ function fusionner(derives, ecrits) {
 /** Raccourci pour le produit servi : le tableau fusionné seul (les comptes se lisent par fusionner). */
 const marqueursDe = (produit, ecrits) => fusionner(deriver(produit), ecrits).marqueurs;
 
-module.exports = { TYPES, NOMS_TYPES, LIBELLE_MAX, MARQUEURS_MAX, WCD_GABARITS, TYPE_DE_MARQUE, FORMES_PARAMS, valider, rendre, deriver, fusionner, marqueursDe, marqueursDuSet, slugSetDuLien, anneeDuSetWcd, setWcdDeLEntree };
+// ARCHIVE-4 — le TRANSPORT des marqueurs ÉCRITS jusqu'au service. La phrase de preuve (`marqueursPreuve`) est exigée (produit.js ne fusionne un écrit que si elle est là) et RÉDUITE à PREUVE_MAX caractères dans
+// l'archive : elle dit d'où vient le marqueur, rien de plus. UNE fonction lit la ligne du catalogue (la décision, les bancs, la mesure) ; UNE autre rend la fusion d'une ENTRÉE d'archive (même calcul que le produit servi).
+const PREUVE_MAX = 120;
+const textePreuve = x => (typeof x === 'string' && x.trim() ? x.trim() : null);
+const sansLibelle = e => ({ type: e.type, params: { ...e.params } });
+/**
+ * Ce que le catalogue a ÉCRIT sur une ligne (`marqueurs` + `marqueursPreuve`), validé, prêt à être porté par l'archive.
+ * @returns { elements: [{ type, params}] | null, preuve: string | null, invalides, doublons, trop, sansPreuve } — `elements` est null quand rien ne peut être porté : pas de liste (ou liste vide : elle ne prouve rien),
+ * pas de preuve (les éléments sont comptés `sansPreuve`), plus de MARQUEURS_MAX éléments (`trop`), ou aucun élément valide. Les invalides et les doublons sont COMPTÉS, jamais réparés.
+ */
+function ecritsDeLaLigne(ligne) {
+    const l = ligne && typeof ligne === 'object' ? ligne : {};
+    const sortie = { elements: null, preuve: null, invalides: 0, doublons: 0, trop: 0, sansPreuve: 0 };
+    if (!Array.isArray(l.marqueurs) || l.marqueurs.length === 0) return sortie;
+    const preuve = textePreuve(l.marqueursPreuve);
+    const r = fusionner(null, l.marqueurs);
+    sortie.invalides = r.invalides; sortie.doublons = r.doublons; sortie.trop = r.trop;
+    if (!preuve) { sortie.sansPreuve = l.marqueurs.length - r.invalides - r.doublons; return sortie; }
+    if (r.marqueurs === null) return sortie;
+    sortie.elements = r.marqueurs.map(sansLibelle);
+    let coupee = '';                                                                     // TOUR 1 : coupe aux POINTS DE CODE (jamais au milieu d'une paire de substitution), dans la borne en unités UTF-16 que la structure vérifie
+    for (const c of preuve) { if (coupee.length + c.length > PREUVE_MAX) break; coupee += c; }
+    sortie.preuve = coupee.trim();                                // rognée APRÈS la coupe : une coupe sur une espace laisserait une preuve que l'archive refuserait (et le produit disparaîtrait)
+    return sortie;
+}
+/**
+ * La fusion (dérivé + écrit) d'une ENTRÉE d'archive : le même calcul que le produit servi (produit.js::marqueursServis). Le dérivé vient de la variante prouvée de l'entrée et du set de son lien Cardmarket.
+ * @returns le retour de fusionner : { marqueurs, contradictions, invalides, doublons, trop }.
+ */
+function marqueursDeLEntree(entree) {
+    const e = entree && typeof entree === 'object' ? entree : {};
+    const derive = deriver({ variante: e.variante === 'jumbo' || e.variante === 'premiere-edition' ? e.variante : null, marques: MT.marquesProuvees(e.variante), slugSet: slugSetDuLien(e.lien) });
+    return fusionner(derive, textePreuve(e.marqueursPreuve) ? e.marqueurs : undefined);
+}
+
+module.exports = { TYPES, NOMS_TYPES, LIBELLE_MAX, MARQUEURS_MAX, WCD_GABARITS, TYPE_DE_MARQUE, FORMES_PARAMS, valider, rendre, deriver, fusionner, marqueursDe, marqueursDuSet, slugSetDuLien, anneeDuSetWcd, setWcdDeLEntree, PREUVE_MAX, ecritsDeLaLigne, marqueursDeLEntree };

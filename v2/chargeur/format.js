@@ -7,7 +7,7 @@
 const crypto = require('crypto'); const zlib = require('zlib'); const os = require('os');
 const { depuisPaquet } = require('./version');
 
-const MAGIE = Buffer.from('RMV1'), FORMAT = 1, FORMAT_MARQUES = 2, FORMAT_EMPRUNTS = 3;
+const MAGIE = Buffer.from('RMV1'), FORMAT = 1, FORMAT_MARQUES = 2, FORMAT_EMPRUNTS = 3, FORMAT_ECRITS = 4;
 const SECTIONS_BASE = Object.freeze([
     ...['id', 'vig', 'vw', 'vh', 'gra', 'gw', 'gh', 'men', 'meta', 'num', 'rar', 'tot', 'variante', 'set', 'lien'].map(n => ({ nom: n, t: 'i32' })),
     { nom: 'meta.cle', t: 'i32' }, { nom: 'meta.produit', t: 'i32' },
@@ -26,6 +26,9 @@ const SECTIONS_MEL = Object.freeze([{ nom: 'mel.produits', t: 'i32' }]);
 // MARQUE-EMPRUNT : la colonne des EMPRUNTS (`emp.produits`, la liste triée des idProduct dont le visuel est emprunté à un autre tirage) est le FORMAT 3 : le numéro de format ne ment pas (un lecteur
 // d'avant refuse ce fichier au lieu d'ignorer une marque qu'il ne connaît pas). Elle est indépendante des autres colonnes facultatives : format 3 = (BASE | BASE+JUM) + [MAR [+ MEL]] + EMP.
 const SECTIONS_EMP = Object.freeze([{ nom: 'emp.produits', t: 'i32' }]);
+// ARCHIVE-4 : la colonne des MARQUEURS ÉCRITS par le catalogue (`ecr.*`) est le FORMAT 4 : le numéro de format ne ment pas (un lecteur de format 3 refuse ce fichier — FormatInvalide, la version en place est gardée —
+// au lieu d'ignorer des marqueurs qu'il ne connaît pas). Un lecteur de format 4 lit encore les formats 1 à 3 (marqueurs écrits = null). Format 4 = (BASE | BASE+JUM) + [MAR [+ MEL]] + [EMP] + ECR.
+const SECTIONS_ECR = Object.freeze(['deb', 'fin', 'preuve', 'type', 'params'].map(n => ({ nom: `ecr.${n}`, t: 'i32' })));
 const LISTES_ANCIENNES = [
     { format: 1, sections: SECTIONS_BASE, jum: false, mar: false, mel: false },
     { format: 1, sections: SECTIONS, jum: true, mar: false, mel: false },
@@ -36,8 +39,9 @@ const LISTES_ANCIENNES = [
 ];
 // les listes du format 3 sont DÉRIVÉES des anciennes (+ leur colonne des emprunts) puis énumérées : l'ancienne liste « marquages sans prix mélangés » devient aussi une forme du format 3 (les bancs la fabriquent)
 const LISTES = Object.freeze([...LISTES_ANCIENNES,
-    ...LISTES_ANCIENNES.map(l => ({ ...l, format: 3, emp: true, sections: Object.freeze([...l.sections, ...SECTIONS_EMP]) }))
-].map(l => Object.freeze({ emp: false, ...l })));
+    ...LISTES_ANCIENNES.map(l => ({ ...l, format: 3, emp: true, sections: Object.freeze([...l.sections, ...SECTIONS_EMP]) })),
+    ...LISTES_ANCIENNES.flatMap(l => [false, true].map(emp => ({ ...l, format: 4, emp, ecr: true, sections: Object.freeze([...l.sections, ...(emp ? SECTIONS_EMP : []), ...SECTIONS_ECR]) })))
+].map(l => Object.freeze({ emp: false, ecr: false, ...l })));
 const TAILLE = { i32: 4, u32: 4, u8: 1 }, CLASSE = { i32: Int32Array, u32: Uint32Array, u8: Uint8Array };
 // PLAFONDS, écrits par ce qu'ils protègent : la mémoire de l'instance (512 Mio dont ~110 à 150 Mo de base de serveur, offre gratuite, ~11 réveils par jour sans version en mémoire : un dépassement
 // serait un redémarrage en boucle). L'archive réelle fait 2,8 Mo compressée et 11 Mo décompressée : 16 Mo (×5,7) et 48 Mo (×4,4). Dépassement = échec de chargement, jamais un redémarrage.
@@ -63,7 +67,7 @@ function serialiser(version, { entree = null } = {}) {
     if (os.endianness() !== 'LE') refuser('plate-forme big-endian non prise en charge');
     const { donnees } = version.paquet();
     const regions = [], descr = [];
-    const liste = LISTES.find(l => l.jum === Boolean(donnees.jum) && l.mar === Boolean(donnees.mar) && l.mel === Boolean(donnees.mel) && l.emp === Boolean(donnees.emp));
+    const liste = LISTES.find(l => l.jum === Boolean(donnees.jum) && l.mar === Boolean(donnees.mar) && l.mel === Boolean(donnees.mel) && l.emp === Boolean(donnees.emp) && l.ecr === Boolean(donnees.ecr));
     if (!liste) refuser('combinaison de colonnes non prise en charge (la colonne des prix mélangés exige celle des marquages)');
     for (const s of liste.sections) {
         const a = cible(donnees, s.nom), oct = Buffer.from(a.buffer, a.byteOffset, a.byteLength);
@@ -97,14 +101,14 @@ function deserialiser(buf) {
     if (os.endianness() !== 'LE') refuser('plate-forme big-endian non prise en charge');
     const { entete, debut } = ouvrirEntete(buf);
     if (!hache(buf.subarray(0, buf.length - 32)).equals(buf.subarray(buf.length - 32))) refuser('hachage faux : fichier abîmé ou tronqué');
-    if (entete.format !== FORMAT && entete.format !== FORMAT_MARQUES && entete.format !== FORMAT_EMPRUNTS) refuser(`numéro de format inconnu (${String(entete.format).slice(0, 10)})`);
+    if (entete.format !== FORMAT && entete.format !== FORMAT_MARQUES && entete.format !== FORMAT_EMPRUNTS && entete.format !== FORMAT_ECRITS) refuser(`numéro de format inconnu (${String(entete.format).slice(0, 10)})`);
     // le numéro de format DIT quelles sections suivent (1 : sans marquages, 2 : avec) ; une liste qui n'est pas l'une des quatre énumérées est refusée
     const candidates = LISTES.filter(l => l.format === entete.format);
     if (!Array.isArray(entete.sections)) refuser('liste de sections incomplète');
     const liste = candidates.find(l => l.sections.length === entete.sections.length && l.sections.every((s, i) => entete.sections[i] && entete.sections[i].nom === s.nom));
     if (!liste) refuser('liste de sections incomplète');
     const attendues = liste.sections;       // sans la colonne des jumeaux : un fichier d'avant elle ; sans celle des marquages : un fichier du format 1
-    let o = debut; const d = { cols: {}, texte: {}, liens: {}, meta: {}, fiches: {}, ...(liste.jum ? { jum: {} } : {}), ...(liste.mar ? { mar: {} } : {}), ...(liste.mel ? { mel: {} } : {}), ...(liste.emp ? { emp: {} } : {}) };
+    let o = debut; const d = { cols: {}, texte: {}, liens: {}, meta: {}, fiches: {}, ...(liste.jum ? { jum: {} } : {}), ...(liste.mar ? { mar: {} } : {}), ...(liste.mel ? { mel: {} } : {}), ...(liste.emp ? { emp: {} } : {}), ...(liste.ecr ? { ecr: {} } : {}) };
     attendues.forEach((s, i) => {
         const x = entete.sections[i];
         if (!x || x.nom !== s.nom || x.t !== s.t || !Number.isInteger(x.n) || x.n < 0) refuser(`section « ${s.nom} » absente ou mal décrite`);
@@ -113,7 +117,7 @@ function deserialiser(buf) {
         const copie = buf.buffer.slice(buf.byteOffset + o, buf.byteOffset + o + octets);           // COPIE alignée : le tampon du fichier est libéré ensuite
         const a = new CLASSE[s.t](copie);
         const [p, q] = s.nom.split('.');
-        if (q === undefined) d.cols[p] = a; else if (p === 'meta') d.meta[q] = a; else if (p === 'fiches') d.fiches[q] = a; else if (p === 'jum') d.jum[q] = a; else if (p === 'mar') d.mar[q] = a; else if (p === 'mel') d.mel[q] = a; else if (p === 'emp') d.emp[q] = a; else d[p][q === 'off' ? 'off' : 'octets'] = a;
+        if (q === undefined) d.cols[p] = a; else if (p === 'meta') d.meta[q] = a; else if (p === 'fiches') d.fiches[q] = a; else if (p === 'jum') d.jum[q] = a; else if (p === 'mar') d.mar[q] = a; else if (p === 'mel') d.mel[q] = a; else if (p === 'emp') d.emp[q] = a; else if (p === 'ecr') d.ecr[q] = a; else d[p][q === 'off' ? 'off' : 'octets'] = a;
         o += aligner(octets);
     });
     if (o !== buf.length - 32) refuser('octets en trop entre la dernière section et le hachage');
@@ -133,4 +137,4 @@ async function decompresser(buf, { max = PLAT_MAX, maxArchive = ARCHIVE_MAX } = 
     return new Promise((ok, ko) => zlib.gunzip(buf, { maxOutputLength: max }, (e, r) => (e ? ko(new FormatInvalide(e.code === 'ERR_BUFFER_TOO_LARGE' ? 'archive plus grande que la taille permise' : 'archive gzip illisible')) : ok(r))));
 }
 
-module.exports = { serialiser, deserialiser, lireEntete, reecrireEntete, sections, sceller, compresser, decompresser, FormatInvalide, FORMAT, FORMAT_MARQUES, FORMAT_EMPRUNTS, SECTIONS, PLAFONDS };
+module.exports = { serialiser, deserialiser, lireEntete, reecrireEntete, sections, sceller, compresser, decompresser, FormatInvalide, FORMAT, FORMAT_MARQUES, FORMAT_EMPRUNTS, FORMAT_ECRITS, SECTIONS, PLAFONDS };

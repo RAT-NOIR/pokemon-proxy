@@ -11,7 +11,8 @@ const { VARIANTES } = require('./produit');
 const { lienServi } = require('./lien-cardmarket');
 const { langueDeTirage } = require('./langue-decisive');
 const { separeeParVariante } = require('./partage-variante');
-const { setWcdDeLEntree } = require('./marqueurs');
+const MQ = require('./marqueurs');
+const { setWcdDeLEntree } = MQ;
 const { marquesProuvees, estVariante } = require('./marques-tampon');
 
 // LISTE FERMÉE des collections que ce module lit. Tout autre nom est refusé AVANT la lecture ; un test échoue si ce fichier en nomme une autre.
@@ -83,6 +84,25 @@ function lireMarquages(e) {
     return { marquages: { partageeHoloNonHolo: holo, partageeTamponNonSepare: tampon, produitsPartages: liste, tamponNonRepresente: tn, basseDefinition: basse } };
 }
 
+// ARCHIVE-4 — les MARQUEURS ÉCRITS par le catalogue, tels que l'archive les porte : absents = null/null ; sinon une liste NON VIDE (au plus MARQUEURS_MAX), chaque élément { type, params } validé par la table du
+// contrat (marqueurs.js::valider), dans l'ORDRE de la table, sans type en double, et LEUR PREUVE (une phrase, au plus PREUVE_MAX caractères). Une preuve sans marqueurs est refusée. Écrit par ce qu'il AUTORISE.
+function lireMarqueursEcrits(e) {
+    const vide = x => x === undefined || x === null;
+    if (vide(e.marqueurs) && vide(e.marqueursPreuve)) return { marqueurs: null, preuve: null };
+    if (vide(e.marqueurs)) return { motif: 'marqueurs écrits : une preuve sans marqueurs' };
+    if (!Array.isArray(e.marqueurs) || e.marqueurs.length === 0 || e.marqueurs.length > MQ.MARQUEURS_MAX) return { motif: `marqueurs écrits : une liste de 1 à ${MQ.MARQUEURS_MAX} éléments attendue` };
+    if (typeof e.marqueursPreuve !== 'string' || !e.marqueursPreuve.trim() || e.marqueursPreuve.trim() !== e.marqueursPreuve || e.marqueursPreuve.length > MQ.PREUVE_MAX) return { motif: `marqueurs écrits : une preuve (phrase non vide, ${MQ.PREUVE_MAX} caractères au plus) est exigée` };
+    const sortie = []; let rang = -1;
+    for (const el of e.marqueurs) {
+        const v = MQ.valider(el);
+        if (v === null) return { motif: 'marqueurs écrits : un élément que la table refuse' };
+        const r = MQ.NOMS_TYPES.indexOf(v.type);
+        if (r <= rang) return { motif: 'marqueurs écrits : un type en double ou hors de l\'ordre de la table' };
+        rang = r; sortie.push({ type: v.type, params: { ...v.params } });
+    }
+    return { marqueurs: sortie, preuve: e.marqueursPreuve };
+}
+
 /**
  * Une entrée d'export -> le document `visuels`, ou un refus MOTIVÉ. Entrée : { idProduct, vignette:{cle,w,h}, grande:{cle,w,h}|null,
  * visuel?:'du-set'|'substitut'|'autre-tirage', mention?, idMetacard:int|null, numero, rarete, total, variante?, setNom?, lien?,
@@ -107,12 +127,15 @@ function lireEntree(e) {
     if (e.lien !== undefined && e.lien !== null && !lienCardmarket(e.lien)) return { ok: false, motif: 'lien hors Cardmarket (https://www.cardmarket.com/…)' };
     const m = lireMarquages(e);
     if (!m.marquages) return { ok: false, motif: m.motif };
+    const me = lireMarqueursEcrits(e);
+    if (me.motif) return { ok: false, motif: me.motif };
     return { ok: true, doc: {
         idProduct: e.idProduct, vignette: v.fichier, grande: g, mention,
         idMetacard: e.idMetacard, numero: chaineOuNull(e.numero), rarete: texte(e.rarete), total: chaineOuNull(e.total),
         variante: estVariante(texte(e.variante)) ? texte(e.variante) : null,                     // LOT TAMPONS (M3) : la liste fermée (marques-tampon.js) s'applique AUSSI à la lecture : hors liste = null, comme le producteur
         setNom: texte(e.setNom), lien: e.lien ? e.lien : null,
-        ...m.marquages
+        ...m.marquages,
+        marqueurs: me.marqueurs, marqueursPreuve: me.preuve                                  // ARCHIVE-4 : ce que le catalogue a ÉCRIT (validé), ou null/null
     } };
 }
 
@@ -163,6 +186,7 @@ function creerVisuels(opts = {}) {
                 marques: marquesProuvees(d.variante),                                                  // LOT TAMPONS (ajout additif) : les marques prouvées de CETTE impression
                 prixMelangeTampon: typeof v.prixMelange === 'function' && v.prixMelange(d.idProduct) === true,   // LOT TAMPONS (B) : la colonne PROPRE de l'archive (=== true seulement) ; le catalogue la réunit à numeros_cartes
                 langue: langueDeTirage(typeof v.tirageJumeaux === 'function' ? v.tirageJumeaux(d.idProduct) : null),   // CONTRAT 7a : la langue du TIRAGE de CETTE impression (jp -> ja, zh-hans, zh-hant, ko) ; intl, id, th, idth : null, jamais devinée
+                marqueurs: d.marqueurs || null, marqueursPreuve: d.marqueursPreuve || null,           // ARCHIVE-4 : les marqueurs ÉCRITS de CETTE impression (produit.js les fusionne avec le dérivé)
                 set: Object.freeze({ nom: texte(d.setNom) }), lien, prixGuide: prixGuide(guides.get(d.idProduct))
             });
         });

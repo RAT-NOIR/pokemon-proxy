@@ -109,6 +109,7 @@ function creerCatalogue(opts = {}) {
                 numero: texte(n.numero) || texte(n.numeroUrl), total: v.total ?? null, langue: null, setTcgdex: texte(n.setTcgdex), tirageSource: texte(typeof vis.tirage === 'function' ? vis.tirage(id) : null),   // GARDE-CONTRADICTION : le set TCGdex appris de l'expansion (non servi : construireProduit ne le lit pas)
                 variante: VARIANTES.includes(v.variante) ? v.variante : null, rarete: texte(v.rarete),
                 marques: MT.marquesProuvees(v.variante),                         // LOT TAMPONS (ajout additif du contrat) : les marques PROUVÉES du produit (variante de l'archive), [] pour la normale, null sinon
+                marqueurs: v.marqueurs ?? null, marqueursPreuve: v.marqueursPreuve ?? null,      // ARCHIVE-4 : les marqueurs ÉCRITS par le catalogue (validés à la construction de l'archive), avec leur preuve ; produit.js les fusionne avec le dérivé
                 visuel: visuel ? { url: visuel.url, w: visuel.w, h: visuel.h, grande: visuel.grande } : null, visuelMention: visuel ? visuel.mention : null,
                 prixGuide: g ? { trend: g.trend, low: g.low, avg7: g.avg7, avg30: g.avg30, guideDu: g.guideDu } : null,   // la date du GUIDE (jamais celle de l'import) ; avg7 : F4-PRIX, l'écart de la tendance
                 // F4-PRIX : la version Cardmarket (V1, V2… : numeros_cartes.variante, ce qui sépare deux produits au même set et au même numéro) et le prix MÉLANGÉ (la fiche réunit la version normale et une
