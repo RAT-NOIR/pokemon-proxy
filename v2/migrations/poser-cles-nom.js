@@ -138,8 +138,9 @@ async function principal(args = process.argv.slice(2), env = process.env, deps =
             const col = db.collection(spec.collection);
             const p = await parcourir(col, spec, { lot: A.lot });
             const indexes = await col.indexes(); const aIndex = indexes.some(i => i.name === spec.nomIndex);
-            // l'estimation : les valeurs écrites + un index de la même taille (clé + pointeur, majorée de moitié)
-            const estimation = Math.ceil(p.octets * 2.5) + (aIndex ? 0 : Math.ceil(p.total * 24));
+            // l'estimation : les valeurs écrites × 1,6 (MESURÉ sur l'instantané complet du 12/10 — 74 694 / 73 756 documents, collStats après la pose : valeurs 7,6 Mo, index 2,4 Mo, soit × 1,31 ; majoré d'un cinquième).
+            // Sur la base du service de test (≈ 456 Mo pour 480 d'arrêt dur) une estimation à × 2,5 aurait REFUSÉ une pose qui n'ajoute que ≈ 10 Mo : le chiffre de l'arrêt se calibre sur la mesure, pas sur la peur.
+            const estimation = Math.ceil(p.octets * 1.6);
             plans.push({ spec, ...p, aIndex, estimation });
             say(`   ${spec.collection.padEnd(20)} ${String(p.total).padStart(7)} documents · à poser ${String(p.aPoser).padStart(7)} · valeurs ${String(mo(p.octets)).padStart(5)} Mo · index ${aIndex ? 'présent' : 'À CRÉER'} · estimation +${mo(estimation)} Mo`);
         }
