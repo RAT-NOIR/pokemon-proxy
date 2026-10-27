@@ -48,24 +48,30 @@ const motsDe = t => normaliser(t).match(/[a-z0-9]+/g) || [];
 const composesDe = t => (normaliser(t).match(/[a-z0-9]+(?:-[a-z0-9]+)+/g) || []);        // « ho-oh », « s-p » : un tiret À L'INTÉRIEUR d'un mot
 const PONCTUATION_ADMISE = /^[a-z0-9\s\-'.,()#]*$/;                                       // après avoir retiré les « 025/165 » : le « / » n'est admis qu'entre deux nombres
 const TIRET_HORS_MOT = /(^|[^a-z0-9])-|-($|[^a-z0-9])/;                                   // un tiret en tête ou en fin de mot, ou isolé : « -jumbo », « jumbo- », « - »
-/** Les mots que le produit JUMBO candidat permet d'admettre : son nom (Cardmarket et français, SANS les crochets d'attaques), le nom, le slug et le code de son set, son numéro (avec et sans zéros de tête) et son total ; les mots composés (« ho-oh », « s-p ») en entier. @returns string[] */
+/**
+ * Les mots que le produit JUMBO candidat permet d'admettre : son nom (Cardmarket et français, SANS les crochets d'attaques), le nom, le slug et le code de son set, son numéro (avec et sans zéros de tête) ; les mots composés
+ * (« ho-oh », « s-p ») en entier ; « n/total » seulement s'il est le numéro ET le total du produit. TOUR 2 : aucune lettre seule (« v », « x », « s ») ni aucun nombre autre que le numéro n'est un mot ; les suites de mots du NOM
+ * (« pikachu v », « team rocket s dragonite ») sont rendues en entrées « ~mot mot » : une lettre seule ne passe qu'à l'intérieur d'une suite exacte du nom lue dans le titre. @returns string[]
+ */
 function motsDuProduit(ligne) {
     if (!ligne || typeof ligne !== 'object') return [];
     const s = ligne.set && typeof ligne.set === 'object' ? ligne.set : {};
     const sortie = new Set();
-    const ajouter = (brut, { crochets = false } = {}) => {
+    const ajouter = (brut, { crochets = false, nombres = false, nom = false } = {}) => {
         if (typeof brut !== 'string' && typeof brut !== 'number') return;
         const texte = crochets ? String(brut).replace(/\[[^\]]*\]/g, ' ') : String(brut);            // les attaques (« [Gnaw | Thunder Jolt] ») ne sont pas des mots du produit
-        if (/['’‘`]s(?![a-z0-9])/i.test(texte)) sortie.add('s');                                      // le possessif (« Rocket's »)
-        for (const m of motsDe(texte)) {
+        const jetons = motsDe(texte);
+        for (const m of jetons) {
             if (INTERDITS.has(m)) continue;
-            if (m.length >= 2 || /\d/.test(m) || m === 'v' || m === 'x') sortie.add(m);
-            if (/^0+\d/.test(m)) sortie.add(m.replace(/^0+/, ''));
+            if (/^\d+$/.test(m)) { if (nombres) { sortie.add(m); if (/^0+\d/.test(m)) sortie.add(m.replace(/^0+/, '')); } continue; }          // un nombre n'est un mot que s'il est le NUMÉRO du produit
+            if (m.length >= 2) sortie.add(m);
         }
         for (const c of composesDe(texte)) if (!c.split('-').some(p => INTERDITS.has(p))) sortie.add(c);
+        if (nom && jetons.length >= 2 && !jetons.some(m => INTERDITS.has(m))) sortie.add('~' + jetons.join(' '));
     };
-    for (const nom of [ligne.nomCardmarket, ligne.nomFr, ligne.nom]) ajouter(nom, { crochets: true });
-    for (const autre of [s.nom, s.slug, s.code, ligne.numero, ligne.total]) ajouter(autre);
+    for (const nom of [ligne.nomCardmarket, ligne.nomFr, ligne.nom]) ajouter(nom, { crochets: true, nom: true });
+    for (const autre of [s.nom, s.slug, s.code, ligne.total]) ajouter(autre);
+    ajouter(ligne.numero, { nombres: true });
     if (typeof ligne.numero === 'string' || typeof ligne.numero === 'number') {
         const n = String(ligne.numero).replace(/^0+(?=\d)/, ''), t = ligne.total === null || ligne.total === undefined ? '' : String(ligne.total).replace(/^0+(?=\d)/, '');
         if (/^\d+$/.test(n) && /^\d+$/.test(t)) sortie.add(`${n}/${t}`);          // « 025/165 » n'est admis que s'il est le numéro ET le total de CE produit (jamais « 50/50 » deux mots admis séparément)
@@ -75,6 +81,7 @@ function motsDuProduit(ligne) {
 /**
  * @param titre le titre de l'annonce ; @param produit les mots du produit JUMBO candidat (motsDuProduit) — un tableau, ou { mots } ; absent : seuls le vocabulaire jumbo et les mots neutres sont admis
  * @returns { oui, terme?, motif, ambigu } — oui SEULEMENT si le titre nomme un terme jumbo ET que chacun de ses mots est admis ; `ambigu` : le titre nomme un terme jumbo sans être admis (la question { normale, jumbo } reste, jamais un sûr).
+ * TOUR 2 : chaque mot du produit (nom, numéro, code, set) ne figure qu'UNE fois, et le nom du produit qu'une fois ; un mot répété : pas de sûr.
  */
 function lireTitreJumbo(titre, produit) {
     if (typeof titre !== 'string' || !titre.trim()) return { oui: false, ambigu: false, motif: 'pas de titre' };
@@ -85,16 +92,39 @@ function lireTitreJumbo(titre, produit) {
     if (titre.length > TITRE_MAX || t.length > MOTS_MAX) return { oui: false, ambigu, motif: 'titre trop long' };
     if (!ambigu) return { oui: false, ambigu: false, motif: 'aucun terme' };
     const propre = normal.replace(/\d+\/\d+/g, ' ');
-    if (!PONCTUATION_ADMISE.test(propre)) return { oui: false, ambigu: true, terme: trouves[0], motif: 'ponctuation hors de la liste blanche' };
-    if (TIRET_HORS_MOT.test(propre)) return { oui: false, ambigu: true, terme: trouves[0], motif: 'tiret hors d\'un mot admis' };
+    const refus = motif => ({ oui: false, ambigu: true, terme: trouves[0], motif });
+    if (!PONCTUATION_ADMISE.test(propre)) return refus('ponctuation hors de la liste blanche');
+    if (TIRET_HORS_MOT.test(propre)) return refus('tiret hors d\'un mot admis');
     const mots = Array.isArray(produit) ? produit : produit && Array.isArray(produit.mots) ? produit.mots : [];
-    const duProduit = new Set(mots.filter(m => typeof m === 'string').map(sansAccent).filter(m => m && !INTERDITS.has(m)));
+    const propres = mots.filter(m => typeof m === 'string').map(sansAccent).filter(m => m && !INTERDITS.has(m.replace(/^~/, '')));
+    const duProduit = new Set(propres.filter(m => !m.startsWith('~'))), noms = propres.filter(m => m.startsWith('~')).map(m => m.slice(1).split(' '));
     const sansZeros = m => (/^0+\d/.test(m) ? m.replace(/^0+/, '') : m);
-    const fractions = (normal.match(/\d+\/\d+/g) || []).map(x => x.split('/').map(y => y.replace(/^0+(?=\d)/, '')).join('/')).filter(x => !duProduit.has(x));
+    const utilises = [];          // les mots du produit lus dans le titre : chacun UNE fois
+    // la suite exacte du nom : une lettre seule ne passe qu'à l'intérieur d'une sous-suite (au moins 2 mots, dans l'ordre) du nom du produit lue dans le titre
+    const plats = propre.match(/[a-z0-9]+/g) || [], couverts = new Set();
+    for (const nom of noms) for (let i = 0; i < nom.length; i++) for (let j = i + 2; j <= nom.length; j++) {
+        const suite = nom.slice(i, j);
+        for (let k = 0; k + suite.length <= plats.length; k++) if (suite.every((m, d) => plats[k + d] === m)) for (let d = 0; d < suite.length; d++) couverts.add(k + d);
+    }
+    let nomEntier = 0;
+    for (const nom of noms) for (let k = 0; k + nom.length <= plats.length; k++) if (nom.every((m, d) => plats[k + d] === m)) nomEntier++;
+    if (nomEntier > 1) return refus('mot répété');
+    const fractions = (normal.match(/\d+\/\d+/g) || []).map(x => x.split('/').map(y => y.replace(/^0+(?=\d)/, '')).join('/'));
+    const horsFraction = fractions.find(x => !duProduit.has(x));
+    if (horsFraction !== undefined) return { ...refus('mot hors de la liste blanche'), mot: horsFraction };
+    for (const x of fractions) utilises.push('n:' + x.split('/')[0]);
     // les mots du titre, un mot composé (« ho-oh ») restant ENTIER : il n'est admis que s'il est tel quel un mot du produit
-    const admis = w => (w.includes('-') ? duProduit.has(w) : VOCABULAIRE.has(w) || NEUTRES.has(w) || duProduit.has(w) || duProduit.has(sansZeros(w)));
-    const hors = fractions.length ? fractions[0] : (propre.match(/[a-z0-9]+(?:-[a-z0-9]+)*/g) || []).find(w => !admis(w));
-    if (hors !== undefined) return { oui: false, ambigu: true, terme: trouves[0], motif: 'mot hors de la liste blanche', mot: hors };
+    let pos = 0;
+    for (const w of propre.match(/[a-z0-9]+(?:-[a-z0-9]+)*/g) || []) {
+        const n = w.split('-').length, debut = pos; pos += n;
+        if (w.includes('-')) { if (!duProduit.has(w)) return { ...refus('mot hors de la liste blanche'), mot: w }; utilises.push(w); continue; }
+        if (VOCABULAIRE.has(w) || NEUTRES.has(w)) continue;
+        if (w.length === 1 && !/\d/.test(w)) { if (!couverts.has(debut)) return { ...refus('mot hors de la liste blanche'), mot: w }; continue; }
+        if (/^\d+$/.test(w)) { if (!duProduit.has(w) && !duProduit.has(sansZeros(w))) return { ...refus('mot hors de la liste blanche'), mot: w }; utilises.push('n:' + sansZeros(w)); continue; }
+        if (!duProduit.has(w)) return { ...refus('mot hors de la liste blanche'), mot: w };
+        utilises.push(w);
+    }
+    if (new Set(utilises).size !== utilises.length) return refus('mot répété');
     return { oui: true, terme: trouves[0], motif: 'liste blanche', ambigu: false };
 }
 /** Le critère journalisé de l'affirmation par le titre : il COMMENCE par CRITERE_JUMBO (la garde des marqueurs le reconnaît). */
