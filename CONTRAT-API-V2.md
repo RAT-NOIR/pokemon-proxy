@@ -19,7 +19,7 @@ Deux adresses pour le même serveur, même base, mêmes réponses : `https://api
 | `POST /api/installation` | extension | aucune | facultative (§5 : un rejeu rend la MÊME installation et le MÊME jeton) | `RequeteInstallation` → `201 ReponseInstallation` (le jeton n'est rendu qu'ICI) |
 | `POST /api/identifier` (avec `contrat: 2`) | extension | Bearer | **oui** | `RequeteIdentifier` → `ReponseAnalyse` |
 | `POST /api/identifier/reponse` | extension | Bearer | facultative | `RequeteReponse` → `ReponseQuestion` |
-| `POST /api/identifier/mesures` | extension | Bearer | facultative | `RequeteMesures` → `ReponseMesures` (CALCUL-CLIENT, le second envoi : les mesures d'image calculées par le client ; derrière `V2_MESURES_CLIENT=1` et `V2_EMPREINTE_EXTENSION=1`, sinon 404 ; annoncée par le jeton `mesures-client` de `/ping`) |
+| `POST /api/identifier/mesures` | extension | Bearer | facultative | `RequeteMesures` → `ReponseMesures` (CALCUL-CLIENT, le second envoi : les mesures d'image calculées par le client ; derrière `V2_MESURES_CLIENT=1` et `V2_EMPREINTE_EXTENSION=1`, sinon 404 ; le jeton `mesures-client` de `/ping` exige en plus `V2_ORB_SERVEUR=0` et l'index d'empreintes chargé — ses quatre conditions sont au tableau des capacités : la route peut exister sans être annoncée, n'envoyez des mesures que si le jeton est là) |
 | `POST /api/retour-live` (avec Bearer) | extension | Bearer | facultative | `RequeteRetourLive` → `ReponseRetourLive` |
 | `POST /api/solde` (avec Bearer) | extension | Bearer | non | rien → `ReponseSolde` |
 | `POST /api/compte/lier` | extension | Bearer | facultative (§5 : un rejeu, même avec l'ANCIEN jeton, rend le MÊME nouveau jeton) | `RequeteLier` → `ReponseLier` |
