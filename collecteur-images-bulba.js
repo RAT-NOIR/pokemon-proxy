@@ -135,6 +135,11 @@ function relevedeCeCollecteur(L) {
     return { ok: true, tirage: L.bulba.tirage || 'intl' };
 }
 
+/** L'entrée de `cartes.images` d'un document `images` de cette source — UNE définition, lue par la jointure ci-dessous ET par servir-scans-base-set.js (§21 bis). */
+function entreeBulba(slug, im, maintenant = new Date()) {
+    return { set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: `page de la carte + ${im.preuve}`, numero: im.numero, attribution: 'Bulbapedia', page: im.page, ...langueDeLEntree(im), ...marqueDe(im), ...champsDeLEntree(im), ...(im.wOriginal ? { wOriginal: im.wOriginal } : {}), jointeLe: maintenant };
+}
+
 /** La jointure image -> carte de Bulbapedia (exportée : le banc de bout en bout `test-jointure-basse-definition.js` exécute CE chemin, pas une copie). */
 async function joindreImagesBulba(M, slug, images) {
     const parCarte = new Map();
@@ -152,7 +157,7 @@ async function joindreImagesBulba(M, slug, images) {
         const servisParTcgdex = numerosServisParRemplacement(avant?.images, slug);
         // ➕ 2026-10-12 (I1) : l'entrée reprend la MARQUE `basseDefinition` du document (`marqueDe`) — un rejeu fait $pull puis $push d'une entrée neuve,
         // et sans elle la marque posée par le rattrapage serait effacée (le site agrandirait l'image)
-        const entrees = ims.filter(im => !servisParTcgdex.has(im.numero)).map(im => ({ set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: `page de la carte + ${im.preuve}`, numero: im.numero, attribution: 'Bulbapedia', page: im.page, ...langueDeLEntree(im), ...marqueDe(im), ...champsDeLEntree(im), ...(im.wOriginal ? { wOriginal: im.wOriginal } : {}), jointeLe: new Date() }));
+        const entrees = ims.filter(im => !servisParTcgdex.has(im.numero)).map(im => entreeBulba(slug, im));
         // ➕ 2026-10-12 : une entrée « basseDefinition » (TPC, PikaQian) de même (set, numéro, langue) cède la place — règle du module, langue connue exigée
         for (const e of entrees) await remplacerBasseDefinition(M, carteId, e);
         await M.Carte.updateOne({ _id: carteId }, { $pull: { images: { set: slug, source: SOURCE } } });
@@ -280,7 +285,7 @@ async function collecterSet(code, M, { mesurerSeulement }) {
     }
 }
 
-module.exports = { collecterSet, joindreImagesBulba, resoudreSet, relevedeCeCollecteur, SOURCE, VERROU_GLOBAL, VERROU_GLOBAL_MS };
+module.exports = { collecterSet, joindreImagesBulba, entreeBulba, resoudreSet, relevedeCeCollecteur, SOURCE, VERROU_GLOBAL, VERROU_GLOBAL_MS };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE (2026-09-19). Le worker Render `collecteur-images.js --boucle`
 // importe `collecterSet` et prend LUI-MÊME le verrou global de cette source : sans cette garde, un simple
