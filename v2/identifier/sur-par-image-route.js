@@ -34,19 +34,25 @@ function fichiersDe(version) {
 /** @returns (idProduct) => { basse, partageAutreDessin } | null — null quand la version ne sait pas les dire */
 function signauxDe(version) {
     if (!version || typeof version.entree !== 'function' || typeof version.identifiants !== 'function') return () => null;
+    // PERF-SCAN P2 : une version qui sait dire le partage sur ses colonnes (version.js::partageAutreDessin, le même verdict, prouvé produit par produit) n'a plus besoin de l'index fichier → produits (+27,6 Mo, 67 000 entrées relues) ;
+    // une version qui ne l'expose pas (banc, ancienne forme) garde la définition d'avant.
+    const surColonnes = typeof version.partageAutreDessin === 'function';
     return id => {
         const e = version.entree(id);
         if (!e) return null;
-        const fichiers = fichiersDe(version);
         let partage = false;
-        for (const f of [e.vignette && e.vignette.cle, e.grande && e.grande.cle]) {
-            if (!f) continue;
-            for (const [autre, mc] of fichiers.get(f) || []) {
-                if (autre === id) continue;
-                if (e.idMetacard === null || e.idMetacard === undefined || mc === null || mc === undefined) { if (partage === false) partage = null; }
-                else if (mc !== e.idMetacard) { partage = true; break; }
+        if (surColonnes) partage = version.partageAutreDessin(id);
+        else {
+            const fichiers = fichiersDe(version);
+            for (const f of [e.vignette && e.vignette.cle, e.grande && e.grande.cle]) {
+                if (!f) continue;
+                for (const [autre, mc] of fichiers.get(f) || []) {
+                    if (autre === id) continue;
+                    if (e.idMetacard === null || e.idMetacard === undefined || mc === null || mc === undefined) { if (partage === false) partage = null; }
+                    else if (mc !== e.idMetacard) { partage = true; break; }
+                }
+                if (partage === true) break;
             }
-            if (partage === true) break;
         }
         // basseDefinition : seul `false` (largeur connue et ≥ 350 px) passe. `null` ne veut PAS dire « non signalé » : decision.js:75 écrit aussi null pour « non mesuré » (relecture 1, I1). Archive du 25/10 : true 11 124, null 56 081, jamais false —
         // tant que le producteur (lot MARQUE-EMPRUNT) n'écrit pas `false`, la règle se tait sur toute question dont un candidat est `null`.
