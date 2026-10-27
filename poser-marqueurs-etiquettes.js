@@ -81,6 +81,7 @@ if (require.main === module) {
         if (!gW) throw new Error(`le groupe des decks (${JT.GROUPE_WCD}) est absent du relevé — on ne devine pas`);
         return { etiquettes: I.produits, releveLe: String(I.date).slice(0, 10), cm, groupesDeExp, lusDe: new Map(groupes.map(g => [g.groupId, g.produits.map(JT.lireTcg)])),
             tcgWcd: gW.produits.map(JT.lireWcdTcg).filter(Boolean),
+            lusYellowA: (() => { const gs = groupes.filter(g => g.categoryId === rel.categories.pokemon && MQ.GROUPES_YELLOW_A.includes(g.name)); if (gs.length !== MQ.GROUPES_YELLOW_A.length) throw new Error(`groupes des cartes tamponnées : ${gs.length} trouvé(s) pour ${MQ.GROUPES_YELLOW_A.length} attendu(s) — on ne devine pas`); return gs.flatMap(g => g.produits.map(JT.lireTcg)); })(),
             yellowA: ya.map(y => ({ idProduct: y.idProduct, carte: y.carte, numero: y.numero, tamponProduit: y.tamponProduit })), luLe: '2026-10-27', exportIds: catalogue };
     };
     const ouvrirLecture = async () => {

@@ -57,20 +57,21 @@ const tous = [JT.lireTcg({ productId: 41, name: 'Max Potion - 128a/145 (Pokemon 
     JT.lireTcg({ productId: 61, name: 'Lillie - 125a/156 (Regional Championships)', number: '125a/156' }), JT.lireTcg({ productId: 62, name: 'Cherish Ball - 191a/236 (League Cup)', number: '191a/236' }),
     JT.lireTcg({ productId: 63, name: 'Pokemon Communication - 152a/152 (Oceania Championships) [Staff]', number: '152a/181' }), JT.lireTcg({ productId: 64, name: 'Volkner - 135a/156 (League Challenge) [1st Place]', number: '135a/156' })];
 const ya = (idProduct, carte, numero, tamponProduit) => ({ idProduct, carte, numero, tamponProduit });
-// relecture du 27/10 : la carte du second marché se cherche dans les groupes APPARIÉS à l'expansion du produit (comme STAFF), jamais dans tout le catalogue
-const cmYA = { produits: new Map([100, 101, 102, 103, 104, 105, 106, 107].map(id => [id, { idProduct: id, idExpansion: id === 107 ? 71 : 70 }])) };
+// relecture du 27/10 : la carte du second marché (groupe fermé des cartes tamponnées) doit porter le TOTAL d'une impression de NOTRE fiche au même numéro (le set), jamais le seul nom + numéro
+const fiche = (numero, total) => ({ nomEn: 'x', impressions: [{ numero, total }] });
+const cmYA = { produits: new Map([[100, { fiche: fiche('128', 145) }], [101, { fiche: fiche('112', 147) }], [102, { fiche: fiche('125', 156) }], [103, { fiche: fiche('191', 236) }], [104, { fiche: fiche('152', 181) }], [105, { fiche: fiche('135', 156) }], [106, { fiche: fiche('206', 236) }], [107, { fiche: fiche('128', 999) }], [108, { fiche: fiche('128', null) }]]) };
 const baseYA = () => ({ produits: [ya(100, 'Max Potion', '128a', 'pokemon-league'), ya(101, 'Acerola', '112a', 'league-challenge-2'), ya(102, 'Lillie', '125a', 'championship-regional'), ya(103, 'Cherish Ball', '191a', 'league-cup'), ya(104, 'Pokemon Communication', '152a', 'championship-latam'), ya(105, 'Volkner', '135a', 'league-challenge-3'), ya(106, 'Reset Stamp', '206a', null)],
-    cm: cmYA, groupesDeExp: new Map([[70, [700]], [71, [701]]]), lusDe: new Map([[700, tous], [701, []]]), luLe: '2026-10-27' });
+    cm: cmYA, lusYellowA: tous, luLe: '2026-10-27' });
 r = M.planYellowA(baseYA());
 verifier('Yellow A : « Pokémon League » lu + « (Pokemon League) » au second marché → [LEAGUE] ; League Challenge 2e + « [2nd Place] » → [LEAGUE, PLACE{2}]', r.cibles.map(c => [c.idProduct, c.marqueurs]), [[100, [{ type: 'LEAGUE', params: {} }]], [101, [{ type: 'LEAGUE', params: {} }, { type: 'PLACE', params: { rang: 2 } }]]]);
 verifier('Yellow A : Regional et League Cup attendent le contrat v2 ; Latin America contredit (« Oceania ») ; 3e place absente du second marché ; sans tampon : hors périmètre', r.refus.map(x => [x.idProduct, x.raison]), [[102, 'type-en-attente-du-contrat'], [103, 'type-en-attente-du-contrat'], [104, 'tampon-discordant'], [105, 'place-absente-du-marche']]);
 
-verifier('Yellow A : la même carte dans un groupe NON apparié à l\'expansion du produit ne compte pas → refus (relecture)', raisons(M.planYellowA({ ...baseYA(), produits: [ya(107, 'Max Potion', '128a', 'pokemon-league')] })), ['carte-absente-du-marche']);
-verifier('Yellow A : un produit dont l\'expansion n\'est appariée à aucun groupe → refus', raisons(M.planYellowA({ ...baseYA(), produits: [ya(107, 'Max Potion', '128a', 'pokemon-league')], groupesDeExp: new Map([[70, [700]]]) })), ['expansion-non-appariee']);
-const avecStaff = new Map([[700, [JT.lireTcg({ productId: 81, name: 'Max Potion - 128a/145 (Pokemon League) [Staff]', number: '128a/145' })]]]);
-verifier('Yellow A : seul un produit « [Staff] » porte le tampon au second marché → refus (la vignette ne montre pas Staff)', raisons(M.planYellowA({ ...baseYA(), produits: [ya(100, 'Max Potion', '128a', 'pokemon-league')], lusDe: avecStaff })), ['tampon-discordant']);
-const deuxPL = new Map([[700, [...tous, JT.lireTcg({ productId: 82, name: 'Max Potion - 128a/145 (Pokemon League)', number: '128a/145' })]]]);
-verifier('Yellow A : deux produits du second marché concordent → refus (ambigu)', raisons(M.planYellowA({ ...baseYA(), produits: [ya(100, 'Max Potion', '128a', 'pokemon-league')], lusDe: deuxPL })), ['plusieurs-produits-marche']);
+verifier('Yellow A : même nom, même numéro, mais le TOTAL du second marché (145) n\'est pas celui de notre fiche (999 : un autre set) → refus (relecture)', raisons(M.planYellowA({ ...baseYA(), produits: [ya(107, 'Max Potion', '128a', 'pokemon-league')] })), ['total-discordant']);
+verifier('Yellow A : notre fiche ne porte aucun total à ce numéro → refus', raisons(M.planYellowA({ ...baseYA(), produits: [ya(108, 'Max Potion', '128a', 'pokemon-league')] })), ['fiche-sans-total']);
+const avecStaff = [JT.lireTcg({ productId: 81, name: 'Max Potion - 128a/145 (Pokemon League) [Staff]', number: '128a/145' })];
+verifier('Yellow A : seul un produit « [Staff] » porte le tampon au second marché → refus (la vignette ne montre pas Staff)', raisons(M.planYellowA({ ...baseYA(), produits: [ya(100, 'Max Potion', '128a', 'pokemon-league')], lusYellowA: avecStaff })), ['tampon-discordant']);
+const deuxPL = [...tous, JT.lireTcg({ productId: 82, name: 'Max Potion - 128a/145 (Pokemon League)', number: '128a/145' })];
+verifier('Yellow A : deux produits du second marché concordent → refus (ambigu)', raisons(M.planYellowA({ ...baseYA(), produits: [ya(100, 'Max Potion', '128a', 'pokemon-league')], lusYellowA: deuxPL })), ['plusieurs-produits-marche']);
 
 // ── LE PLAN D'ÉCRITURE (une ligne, champ absent, jamais écrasé ; un produit dans deux familles est refusé)
 const cible = (idProduct, marqueurs, famille = 'STAFF') => ({ idProduct, marqueurs, preuve: 'p', famille });

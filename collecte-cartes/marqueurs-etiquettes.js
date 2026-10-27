@@ -108,11 +108,15 @@ function regleYa(tampon) {
     return TAMPONS_YA[tampon] ?? null;
 }
 const numeroSansZero = s => String(s ?? '').split('/')[0].toLowerCase().replace(/^0+(?=\d)/, '');
+// Le second marché range ces cartes tamponnées dans UN groupe à part (mesuré le 27/10 : 81 des 109 noms concordants), qu'aucune expansion n'apparie : liste FERMÉE, par nom de groupe.
+const GROUPES_YELLOW_A = Object.freeze(['League & Championship Cards']);
+const chiffres = s => String(s ?? '').replace(/\D/g, '').replace(/^0+(?=\d)/, '');
 /**
- * @param {{produits: {idProduct, carte, numero, tamponProduit}[], cm, groupesDeExp: Map, lusDe: Map, luLe: string}} e
- * La carte du second marché se cherche dans les SEULS groupes appariés à l'expansion du produit (la table mesurée, comme STAFF) : un même nom au même numéro dans un autre set ne témoigne pas (relecture du 27/10).
+ * @param {{produits: {idProduct, carte, numero, tamponProduit}[], cm, lusYellowA: object[], luLe: string}} e  `lusYellowA` : produits lus (lireTcg) des groupes de GROUPES_YELLOW_A
+ * La carte du second marché se cherche dans ce groupe fermé, par nom + numéro À LETTRE, et son TOTAL imprimé (« 182a/214 ») doit être celui d'une impression de NOTRE fiche au même numéro :
+ * un même nom au même numéro dans un autre set ne témoigne pas (relecture du 27/10). Une fiche sans total à ce numéro : refus.
  */
-function planYellowA({ produits, cm, groupesDeExp, lusDe, luLe }) {
+function planYellowA({ produits, cm, lusYellowA, luLe }) {
     const cibles = [], refus = [];
     const no = (idProduct, raison, detail) => refus.push({ idProduct, famille: 'YELLOW_A', raison, ...(detail ? { detail } : {}) });
     for (const y of produits || []) {
@@ -122,11 +126,13 @@ function planYellowA({ produits, cm, groupesDeExp, lusDe, luLe }) {
         if (r.enAttente) { no(y.idProduct, 'type-en-attente-du-contrat', y.tamponProduit); continue; }
         const p = cm?.produits?.get(y.idProduct);
         if (!p) { no(y.idProduct, 'produit-inconnu'); continue; }
-        const gs = groupesDeExp?.get(p.idExpansion) || [];
-        if (!gs.length) { no(y.idProduct, 'expansion-non-appariee'); continue; }
+        const totaux = new Set((p.fiche?.impressions || []).filter(i => i && chiffres(i.numero) === chiffres(y.numero) && /^\d+$/.test(String(i.total ?? ''))).map(i => Number(i.total)));
+        if (!totaux.size) { no(y.idProduct, 'fiche-sans-total'); continue; }
         const cles = JT.clesDeNom(y.carte), num = numeroSansZero(y.numero);
-        const cands = gs.flatMap(g => lusDe?.get(g) || []).filter(t => t.nomCles.some(n => cles.includes(n)) && numeroSansZero(t.numeroBrut) === num);
-        if (!cands.length) { no(y.idProduct, 'carte-absente-du-marche'); continue; }
+        const memes = (lusYellowA || []).filter(t => t.nomCles.some(n => cles.includes(n)) && numeroSansZero(t.numeroBrut) === num);
+        if (!memes.length) { no(y.idProduct, 'carte-absente-du-marche'); continue; }
+        const cands = memes.filter(t => totaux.has(t.total));
+        if (!cands.length) { no(y.idProduct, 'total-discordant', { fiche: [...totaux], marche: memes.map(t => t.numeroBrut) }); continue; }
         // le second marché ne nomme pas toujours le staff : un produit « [Staff] » est un AUTRE produit (la vignette lue ne porte pas « Staff »)
         const bons = cands.filter(t => !t.marqueurs.some(x => /\bstaff\b/.test(x)) && r.accepte(t.marqueurs));
         if (!bons.length) { no(y.idProduct, r.place && cands.some(t => r.place(t.marqueurs)) ? 'place-absente-du-marche' : 'tampon-discordant', cands.map(t => t.nomBrut)); continue; }
@@ -166,4 +172,4 @@ function planifierEcriture({ cibles, lignes, exportIds }) {
     return { ecrire, refus, deja };
 }
 
-module.exports = { ORDRE, valide, ordonner, planStaff, planWcd, planYellowA, planifierEcriture, lettres };
+module.exports = { ORDRE, GROUPES_YELLOW_A, valide, ordonner, planStaff, planWcd, planYellowA, planifierEcriture, lettres };
