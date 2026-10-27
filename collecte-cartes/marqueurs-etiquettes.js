@@ -108,8 +108,11 @@ function regleYa(tampon) {
     return TAMPONS_YA[tampon] ?? null;
 }
 const numeroSansZero = s => String(s ?? '').split('/')[0].toLowerCase().replace(/^0+(?=\d)/, '');
-/** @param {{produits: {idProduct, carte, numero, tamponProduit}[], tcgTous: object[], luLe: string}} e  `tcgTous` : produits du second marché lus (lireTcg), catégorie occidentale */
-function planYellowA({ produits, tcgTous, luLe }) {
+/**
+ * @param {{produits: {idProduct, carte, numero, tamponProduit}[], cm, groupesDeExp: Map, lusDe: Map, luLe: string}} e
+ * La carte du second marché se cherche dans les SEULS groupes appariés à l'expansion du produit (la table mesurée, comme STAFF) : un même nom au même numéro dans un autre set ne témoigne pas (relecture du 27/10).
+ */
+function planYellowA({ produits, cm, groupesDeExp, lusDe, luLe }) {
     const cibles = [], refus = [];
     const no = (idProduct, raison, detail) => refus.push({ idProduct, famille: 'YELLOW_A', raison, ...(detail ? { detail } : {}) });
     for (const y of produits || []) {
@@ -117,8 +120,12 @@ function planYellowA({ produits, tcgTous, luLe }) {
         const r = regleYa(y.tamponProduit);
         if (!r) { no(y.idProduct, 'tampon-inconnu', y.tamponProduit); continue; }
         if (r.enAttente) { no(y.idProduct, 'type-en-attente-du-contrat', y.tamponProduit); continue; }
+        const p = cm?.produits?.get(y.idProduct);
+        if (!p) { no(y.idProduct, 'produit-inconnu'); continue; }
+        const gs = groupesDeExp?.get(p.idExpansion) || [];
+        if (!gs.length) { no(y.idProduct, 'expansion-non-appariee'); continue; }
         const cles = JT.clesDeNom(y.carte), num = numeroSansZero(y.numero);
-        const cands = (tcgTous || []).filter(t => t.nomCles.some(n => cles.includes(n)) && numeroSansZero(t.numeroBrut) === num);
+        const cands = gs.flatMap(g => lusDe?.get(g) || []).filter(t => t.nomCles.some(n => cles.includes(n)) && numeroSansZero(t.numeroBrut) === num);
         if (!cands.length) { no(y.idProduct, 'carte-absente-du-marche'); continue; }
         // le second marché ne nomme pas toujours le staff : un produit « [Staff] » est un AUTRE produit (la vignette lue ne porte pas « Staff »)
         const bons = cands.filter(t => !t.marqueurs.some(x => /\bstaff\b/.test(x)) && r.accepte(t.marqueurs));

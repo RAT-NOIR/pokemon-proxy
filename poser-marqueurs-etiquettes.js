@@ -12,7 +12,7 @@ const MQ = require('./collecte-cartes/marqueurs-etiquettes');
 const J = require('./poser-marqueurs-jumbo');
 
 function planifier(d, lignes) {
-    const s = MQ.planStaff(d), w = MQ.planWcd(d), y = MQ.planYellowA({ produits: d.yellowA, tcgTous: d.tcgTous, luLe: d.luLe });
+    const s = MQ.planStaff(d), w = MQ.planWcd(d), y = MQ.planYellowA({ ...d, produits: d.yellowA });
     const cibles = [...s.cibles, ...w.cibles, ...y.cibles], preuve = [...s.refus, ...w.refus, ...y.refus];
     return { cibles, refusPreuve: preuve, ...MQ.planifierEcriture({ cibles, lignes, exportIds: d.exportIds }) };
 }
@@ -32,7 +32,7 @@ async function executer({ argv, ouvrirLecture, ouvrirEcriture, donnees, log = co
     try {
         const d = typeof donnees === 'function' ? await donnees(cx) : donnees;
         const db = cx.cartes.db;
-        const ids = [...new Set([...MQ.planStaff(d).cibles, ...MQ.planWcd(d).cibles, ...MQ.planYellowA({ produits: d.yellowA, tcgTous: d.tcgTous, luLe: d.luLe }).cibles].map(c => c.idProduct))];
+        const ids = [...new Set([...MQ.planStaff(d).cibles, ...MQ.planWcd(d).cibles, ...MQ.planYellowA({ ...d, produits: d.yellowA }).cibles].map(c => c.idProduct))];
         const lignes = await db.collection('cartes_produits').find({ idProduct: { $in: ids } }).toArray();
         const plan = planifier(d, lignes);
         log(`   CIBLES PROUVÉES (deux sources) : ${plan.cibles.length} ${JSON.stringify(compter(plan.cibles, c => c.famille))} · lignes lues : ${lignes.length}`);
@@ -80,7 +80,7 @@ if (require.main === module) {
         const gW = groupes.find(g => g.groupId === JT.GROUPE_WCD);
         if (!gW) throw new Error(`le groupe des decks (${JT.GROUPE_WCD}) est absent du relevé — on ne devine pas`);
         return { etiquettes: I.produits, releveLe: String(I.date).slice(0, 10), cm, groupesDeExp, lusDe: new Map(groupes.map(g => [g.groupId, g.produits.map(JT.lireTcg)])),
-            tcgWcd: gW.produits.map(JT.lireWcdTcg).filter(Boolean), tcgTous: groupes.filter(g => g.categoryId === rel.categories.pokemon).flatMap(g => g.produits.map(JT.lireTcg)),
+            tcgWcd: gW.produits.map(JT.lireWcdTcg).filter(Boolean),
             yellowA: ya.map(y => ({ idProduct: y.idProduct, carte: y.carte, numero: y.numero, tamponProduit: y.tamponProduit })), luLe: '2026-10-27', exportIds: catalogue };
     };
     const ouvrirLecture = async () => {

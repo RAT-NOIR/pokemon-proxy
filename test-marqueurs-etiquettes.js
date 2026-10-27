@@ -57,9 +57,20 @@ const tous = [JT.lireTcg({ productId: 41, name: 'Max Potion - 128a/145 (Pokemon 
     JT.lireTcg({ productId: 61, name: 'Lillie - 125a/156 (Regional Championships)', number: '125a/156' }), JT.lireTcg({ productId: 62, name: 'Cherish Ball - 191a/236 (League Cup)', number: '191a/236' }),
     JT.lireTcg({ productId: 63, name: 'Pokemon Communication - 152a/152 (Oceania Championships) [Staff]', number: '152a/181' }), JT.lireTcg({ productId: 64, name: 'Volkner - 135a/156 (League Challenge) [1st Place]', number: '135a/156' })];
 const ya = (idProduct, carte, numero, tamponProduit) => ({ idProduct, carte, numero, tamponProduit });
-r = M.planYellowA({ produits: [ya(100, 'Max Potion', '128a', 'pokemon-league'), ya(101, 'Acerola', '112a', 'league-challenge-2'), ya(102, 'Lillie', '125a', 'championship-regional'), ya(103, 'Cherish Ball', '191a', 'league-cup'), ya(104, 'Pokemon Communication', '152a', 'championship-latam'), ya(105, 'Volkner', '135a', 'league-challenge-3'), ya(106, 'Reset Stamp', '206a', null)], tcgTous: tous, luLe: '2026-10-27' });
+// relecture du 27/10 : la carte du second marché se cherche dans les groupes APPARIÉS à l'expansion du produit (comme STAFF), jamais dans tout le catalogue
+const cmYA = { produits: new Map([100, 101, 102, 103, 104, 105, 106, 107].map(id => [id, { idProduct: id, idExpansion: id === 107 ? 71 : 70 }])) };
+const baseYA = () => ({ produits: [ya(100, 'Max Potion', '128a', 'pokemon-league'), ya(101, 'Acerola', '112a', 'league-challenge-2'), ya(102, 'Lillie', '125a', 'championship-regional'), ya(103, 'Cherish Ball', '191a', 'league-cup'), ya(104, 'Pokemon Communication', '152a', 'championship-latam'), ya(105, 'Volkner', '135a', 'league-challenge-3'), ya(106, 'Reset Stamp', '206a', null)],
+    cm: cmYA, groupesDeExp: new Map([[70, [700]], [71, [701]]]), lusDe: new Map([[700, tous], [701, []]]), luLe: '2026-10-27' });
+r = M.planYellowA(baseYA());
 verifier('Yellow A : « Pokémon League » lu + « (Pokemon League) » au second marché → [LEAGUE] ; League Challenge 2e + « [2nd Place] » → [LEAGUE, PLACE{2}]', r.cibles.map(c => [c.idProduct, c.marqueurs]), [[100, [{ type: 'LEAGUE', params: {} }]], [101, [{ type: 'LEAGUE', params: {} }, { type: 'PLACE', params: { rang: 2 } }]]]);
 verifier('Yellow A : Regional et League Cup attendent le contrat v2 ; Latin America contredit (« Oceania ») ; 3e place absente du second marché ; sans tampon : hors périmètre', r.refus.map(x => [x.idProduct, x.raison]), [[102, 'type-en-attente-du-contrat'], [103, 'type-en-attente-du-contrat'], [104, 'tampon-discordant'], [105, 'place-absente-du-marche']]);
+
+verifier('Yellow A : la même carte dans un groupe NON apparié à l\'expansion du produit ne compte pas → refus (relecture)', raisons(M.planYellowA({ ...baseYA(), produits: [ya(107, 'Max Potion', '128a', 'pokemon-league')] })), ['carte-absente-du-marche']);
+verifier('Yellow A : un produit dont l\'expansion n\'est appariée à aucun groupe → refus', raisons(M.planYellowA({ ...baseYA(), produits: [ya(107, 'Max Potion', '128a', 'pokemon-league')], groupesDeExp: new Map([[70, [700]]]) })), ['expansion-non-appariee']);
+const avecStaff = new Map([[700, [JT.lireTcg({ productId: 81, name: 'Max Potion - 128a/145 (Pokemon League) [Staff]', number: '128a/145' })]]]);
+verifier('Yellow A : seul un produit « [Staff] » porte le tampon au second marché → refus (la vignette ne montre pas Staff)', raisons(M.planYellowA({ ...baseYA(), produits: [ya(100, 'Max Potion', '128a', 'pokemon-league')], lusDe: avecStaff })), ['tampon-discordant']);
+const deuxPL = new Map([[700, [...tous, JT.lireTcg({ productId: 82, name: 'Max Potion - 128a/145 (Pokemon League)', number: '128a/145' })]]]);
+verifier('Yellow A : deux produits du second marché concordent → refus (ambigu)', raisons(M.planYellowA({ ...baseYA(), produits: [ya(100, 'Max Potion', '128a', 'pokemon-league')], lusDe: deuxPL })), ['plusieurs-produits-marche']);
 
 // ── LE PLAN D'ÉCRITURE (une ligne, champ absent, jamais écrasé ; un produit dans deux familles est refusé)
 const cible = (idProduct, marqueurs, famille = 'STAFF') => ({ idProduct, marqueurs, preuve: 'p', famille });
@@ -68,6 +79,10 @@ const p = M.planifierEcriture({ cibles: [cible(2, [{ type: 'STAFF', params: {} }
 verifier('écriture : une ligne sans marqueurs → écrite', p.ecrire.map(c => [c._id, c.marqueursPreuve]), [['a|2', 'p']]);
 verifier('écriture : déjà posé à l\'identique → « déjà »', p.deja.map(c => c._id), ['b|20']);
 verifier('écriture : refus nommés (déjà présent et différent, deux lignes, absent de l\'export, deux familles)', p.refus.map(x => [x.idProduct, x.raison.split(' ')[0]]), [[21, 'marqueurs'], [22, '2'], [24, 'absent'], [25, 'deux']]);
+
+const lg = [{ _id: 'g|30', idProduct: 30 }, { _id: 'g|31', idProduct: 31 }, { _id: 'g|32', idProduct: 32 }, { _id: 'g|33', idProduct: 33 }];
+const p2 = M.planifierEcriture({ cibles: [cible(30, [{ type: 'WCD', params: { annee: 1990 } }], 'WCD'), cible(31, [{ type: 'STAFF', params: {} }, { type: 'STAFF', params: {} }]), cible(32, ['JUMBO', 'WCD', 'NON_LEGAL', 'STAFF', 'LEAGUE'].map(type => ({ type, params: type === 'WCD' ? { annee: 2020 } : {} }))), cible(33, [{ type: 'PLACE', params: { rang: 2 } }, { type: 'LEAGUE', params: {} }], 'YELLOW_A')], lignes: lg, exportIds: new Set([30, 31, 32, 33]) });
+verifier('écriture (relecture) : invalide au contrat, type en double, plus de 4 éléments → refus ; l\'ordre du contrat est appliqué à l\'écriture', [p2.refus.map(x => [x.idProduct, x.raison.split(' ')[0]]), p2.ecrire.map(c => [c.idProduct, c.marqueurs.map(m => m.type)])], [[[30, 'marqueurs'], [31, 'marqueurs'], [32, 'marqueurs']], [[33, ['LEAGUE', 'PLACE']]]]);
 
 // ── LA FORME DU CONTRAT : ordre de la table, paramètres
 verifier('ordre du contrat : WCD avant NON_LEGAL, LEAGUE avant PLACE (tri appliqué)', M.ordonner([{ type: 'PLACE', params: { rang: 1 } }, { type: 'LEAGUE', params: {} }, { type: 'NON_LEGAL', params: {} }, { type: 'WCD', params: { annee: 2020 } }]).map(m => m.type), ['WCD', 'NON_LEGAL', 'LEAGUE', 'PLACE']);
