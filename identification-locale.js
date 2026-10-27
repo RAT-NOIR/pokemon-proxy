@@ -45,7 +45,12 @@ const GuidePrix = mongoose.models.GuidePrix || mongoose.model('GuidePrixIL', lib
 // Même normalisation de nom que index.js (trouverProduitsLocaux) : le format Cardmarket
 // est très irrégulier. Toute divergence entre les deux ferait que le chemin de repli et
 // le chemin nominal ne verraient pas les mêmes candidats.
-const normaliserNom = n => String(n || '').toLowerCase().replace(/[\s\-'.&]/g, '');
+// PERF-SCAN P1 : la normalisation, les clés de nom et la recherche par l'index de nom (champ posé par v2/migrations/poser-cles-nom.js ; absent ou incomplet : la requête d'avant) ont UNE définition (v2/identifier/).
+const CLE_NOM = require('./v2/identifier/cle-nom');
+const INDEX_NOM = require('./v2/identifier/index-nom');
+const normaliserNom = n => CLE_NOM.normaliserNom(String(n || ''));
+const DISPO_NOM_CATALOGUE = INDEX_NOM.creerDisponibilite({ col: CatalogueProduit.collection, champ: CLE_NOM.CHAMP_CATALOGUE, nomIndex: CLE_NOM.INDEX_CATALOGUE, source: { champ: 'name', temoin: CLE_NOM.CHAMP_SOURCE_CATALOGUE } });
+const DISPO_NOM_FR = INDEX_NOM.creerDisponibilite({ col: NumeroCarte.collection, champ: CLE_NOM.CHAMP_FR, nomIndex: CLE_NOM.INDEX_FR, source: { champ: 'nomFr', temoin: CLE_NOM.CHAMP_SOURCE_FR } });
 const echapperRegex = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // Le filtre des cartes-code : sa SEULE définition (collecte-cartes/jointure.js). Seconde relecture du 2026-09-26 : `/code\s*card/i`
 // recopié ici ; mesuré avant de remplacer sur les 74 188 noms de catalogue_produits, 0 produit divergent.
@@ -83,16 +88,18 @@ async function identifierEnLocal({
     // (a) nom ANGLAIS du catalogue. Pré-filtre sur le premier mot significatif, comme
     //     trouverProduitsLocaux, puis égalité normalisée sur la partie avant "[".
     const premierMot = String(nomLu).replace(/^(M|Mega)[\s-]*/i, '').split(/[\s&-]/)[0];
-    const parAnglais = premierMot && premierMot.length >= 3
-        ? (await CatalogueProduit.find({ name: new RegExp(echapperRegex(premierMot), 'i') }).lean())
-            .filter(p => normaliserNom(String(p.name).split('[')[0]) === cible)
-        : [];
+    let parAnglais = [];
+    if (premierMot && premierMot.length >= 3) {
+        const regexPremierMot = new RegExp(echapperRegex(premierMot), 'i');
+        // PERF-SCAN P1 : par la clé de nom quand l'index couvre tout (la regex d'avant est réappliquée, le filtre ci-dessous est inchangé), sinon le balayage d'avant
+        const presel = (await INDEX_NOM.preselection({ col: CatalogueProduit.collection, dispo: DISPO_NOM_CATALOGUE, cles: [cible], regexPremierMot })) ?? await CatalogueProduit.find({ name: regexPremierMot }).sort({ _id: 1 }).lean();
+        parAnglais = presel.filter(p => normaliserNom(String(p.name).split('[')[0]) === cible);
+    }
 
     // (b) nom FRANÇAIS appris de Cardmarket. C'est ce qui rattrape « Carabaffe ».
-    const docsFr = await NumeroCarte.find(
-        { nomFr: new RegExp(`^${echapperRegex(nomLu)}$`, 'i') },
-        { idProduct: 1 }
-    ).lean();
+    const regexFr = new RegExp(`^${echapperRegex(nomLu)}$`, 'i');
+    const docsFr = (await INDEX_NOM.parNomFrancais({ col: NumeroCarte.collection, dispo: DISPO_NOM_FR, nomLu, regex: regexFr }))
+        ?? await NumeroCarte.find({ nomFr: regexFr }, { idProduct: 1 }).sort({ _id: 1 }).lean();
     const parFrancais = docsFr.length
         ? await CatalogueProduit.find({ idProduct: { $in: docsFr.map(d => d.idProduct) } }).lean()
         : [];
@@ -227,4 +234,4 @@ async function identifierEnLocal({
     };
 }
 
-module.exports = { identifierEnLocal, normaliserNom };
+module.exports = { identifierEnLocal, normaliserNom, oublierIndexNom: () => { DISPO_NOM_CATALOGUE.oublier(); DISPO_NOM_FR.oublier(); }, controlerIndexNom: () => Promise.all([DISPO_NOM_CATALOGUE.controle(), DISPO_NOM_FR.controle()]) };

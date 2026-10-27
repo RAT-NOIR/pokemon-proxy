@@ -165,7 +165,8 @@ const { idsDeLaGarde } = require('./garde-contradiction');
 const { preparer: preparerLD } = require('./langue-decisive-charge');
 const etatChargeur = require('../chargeur/etat');
 const { creerCatalogue } = require('./catalogue');
-const { regleVerdict } = require('./taux');
+const { regleVerdict: regleVerdictBrute, cacheDuModule: cacheTaux } = require('./taux');
+const regleVerdict = devise => regleVerdictBrute(devise, { cache: cacheTaux });        // PERF-SCAN P3 : le taux du jour, gardé 120 s par (devise, jour de Paris), vidé par l'écriture des taux (taux.js)
 const { avecRepliAnalyse, analyseAvecRepli } = require('./prix-repli');
 const { preparerAnnonce } = require('../annonce/verifier');
 const { conserverAnnonce } = require('../annonce/conservation');
@@ -419,6 +420,9 @@ const PG = require('./promotion-g');
 
 function traiterIdentifier(cfg, deps = {}) {
     const catalogue = deps.catalogue || creerCatalogue({ cfg });
+    // PERF-SCAN P2 : V2_INDEX_AU_DEMARRAGE=1 construit les index du catalogue (code × numéro, familles) dès la connexion à la base, avant le trafic, au lieu de pendant les premiers scans. Éteint par défaut : la route est celle d'avant.
+    // ⚠️ Allumé, R4 et la désignation sont OUVERTES dès le premier scan (avant : fermées tant que l'index se construisait en arrière-plan) — c'est l'état de régime, pas un changement de règle.
+    if (!deps.catalogue && typeof catalogue.prechaufferSiDemande === 'function') catalogue.prechaufferSiDemande().catch(() => { });
     // MODELE-VISUEL-API : le fournisseur du vecteur de l'extension — celui du banc (deps.voisinsEmpreinte) ou celui de la production (index en place ; les PIXELS sont la carte redressée jointe par l'extension, les scans
     // viennent de NOTRE bucket public de visuels ou de deps.scanEmpreinte en banc). Le serveur ne télécharge jamais la photo.
     const fournisseurEmpreinte = cfg.empreinteExtension === true
@@ -479,6 +483,7 @@ function traiterIdentifier(cfg, deps = {}) {
         const poche = () => PS.pocheDuScan(porteur, scanId, credit, typeof deps.identifierLot === 'function');
         // 4. la chaîne héritée, avec le DOUBLE de res ; tout ce qui suit se décide dans le contexte de CE scan (la cause d'un non-remboursement s'y note)
         // 🔑 TOUT ce qui suit le débit est sous UN filet : une exception, d'où qu'elle vienne, rend le crédit (voir le catch).
+        const traceScan = {};   // I1 : ce que les recherches du scan notent d'elles-mêmes (index-nom.js : catalogueIndex)
         let reqH = null, rembourserOrigine = null, sortie, lecture = null, desaccordG = null, traceSeconde = null, traceTampon = null, empreinteInfo = null, traceImage = null, complement = null, traceMarqueurs = null;
         // `parLaGarde` : le refus est celui de la garde des jumeaux (le NÔTRE) → nature `jumeaux`, une unité (une carte), constatée par le serveur et rendue SANS plafond (PLAFOND-DECLARE)
         // FREIN-CONSTATES : la nature vient du MOTIF, par l'unique fonction `natureDuMotif` : une panne de NOTRE côté (`panne-*`, INDISPONIBLE compris) est hors plafond, un introuvable est un constat plafonné
@@ -692,7 +697,7 @@ function traiterIdentifier(cfg, deps = {}) {
                 if (entree.arret && entree.arret.signal.aborted && resultat.issue !== 'panne') throw Object.assign(new Error('borne du scan atteinte'), { code: 'BORNE_PHOTOS' });
                 return { resultat, facturation: facturationDe(resultat.issue, faits), lecture, desaccord: desaccordG, motif: resultat.motif ?? null, ...(traceSeconde ? { secondeLecture: traceSeconde } : {}), ...(traceTampon ? { lectureTampon: traceTampon } : {}), ...(empreinteInfo ? { empreinte: empreinteInfo } : {}), ...(traceImage ? { surParImage: traceImage } : {}), ...(traceMarqueurs ? { regleMarqueurs: traceMarqueurs } : {}),
                     ...(complement && resultat.issue === 'question' ? { complement } : {}) };     // CALCUL-CLIENT : seulement si la question a TENU jusqu'ici (une question non écrite est devenue une panne : pas de complément)
-            });
+            }, traceScan);          // I1 : la trace du scan survit à la chaîne (catalogueIndex)
             }
         } catch (e) {
             // I1 : une exception hors de tout try interne (adaptateur, facturation, creditPourReq…). Le débit est pris : il est RENDU ici (idempotent : une seule fois par scan,
@@ -776,7 +781,7 @@ function traiterIdentifier(cfg, deps = {}) {
                 // MODELE-VISUEL-API : ce que le VECTEUR de l'extension a fait de ce scan (interne, jamais servi tel quel) — de quoi EXCLURE des statistiques et des bancs les résultats qu'il a changés sans lecture concordante
                 ...(sortie.empreinte ? { empreinteExtension: { utilisee: sortie.empreinte.public.utilisee, code: sortie.empreinte.public.code, influence: sortie.empreinte.influence, promotion: sortie.empreinte.promotion, lectureConcordante: sortie.empreinte.lectureConcordante, modele: cfg.modeleEmpreinte ? cfg.modeleEmpreinte.id : null } } : {}),
                 ...(sortie.complement ? { complementMesures: sortie.complement.stocke } : {}),     // CALCUL-CLIENT : ce que le second envoi relit (mesures demandées, ligne, références, échéance) — interne, jamais servi
-                durees: T.exporter(),                                                       // TEMPS-ETAPES : les durées par étape (ms, entiers), additif et interne — jamais servi ; `total` court jusqu'à CETTE écriture
+                durees: { ...T.exporter(), ...(typeof traceScan.catalogueIndex === 'boolean' ? { catalogueIndex: traceScan.catalogueIndex } : {}) },                                                       // TEMPS-ETAPES : les durées par étape (ms, entiers), additif et interne — jamais servi ; `total` court jusqu'à CETTE écriture
                 creeLe: maintenant, expireLe: new Date(maintenant.getTime() + cfg.retention.analysesMois * 30.5 * 86400e3)
             });
         } catch (e) { journalErreur('analyses', e); } };

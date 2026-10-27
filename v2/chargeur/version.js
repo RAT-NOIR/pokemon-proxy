@@ -174,10 +174,86 @@ function assembler(d) {
         }
         return variantes;
     };
+    // PERF-SCAN P2 — le PARTAGE DE FICHIERS entre métacartes, lu sur les COLONNES (SUR-PAR-IMAGE, sur-par-image-route.js::signauxDe). Avant : un index fichier → [[id, métacarte]] bâti au premier scan par
+    // 67 000 reconstructions d'entrée et 134 000 petits tableaux (+27,6 Mo vivants). Maintenant : seuls les fichiers portés par PLUSIEURS produits sont gardés, en rangs de colonne (Int32Array de quelques ko).
+    // L'identité d'un fichier est celle de ses OCTETS, pas de son indice dans la réserve : une réserve qui porterait deux fois la même chaîne (un fichier étranger au constructeur, qui déduplique) ne cache aucun partage.
+    // Construit une fois, à la demande (la version est gelée) ; la table transitoire (un nombre par fichier distinct) est libérée à la sortie.
+    let fichiersPartages = null;
+    const construireFichiersPartages = () => {
+        const nTexte = texte.off.length - 1, n = ids.length;
+        const canon = new Int32Array(nTexte).fill(-1);                                // indice de chaîne → indice de la première chaîne aux mêmes octets (−1 : pas un fichier utilisé)
+        const octetsEgaux = (a, b) => {
+            const da = texte.off[a], db = texte.off[b], la = texte.off[a + 1] - da;
+            if (la !== texte.off[b + 1] - db) return false;
+            for (let k = 0; k < la; k++) if (texte.octets[da + k] !== texte.octets[db + k]) return false;
+            return true;
+        };
+        const parHachage = new Map();                                                // hachage 53 bits → indice (ou liste d'indices, en cas de collision réelle)
+        const empreinte = i => {
+            let h1 = 0x811c9dc5, h2 = 5381;
+            for (let k = texte.off[i], f = texte.off[i + 1]; k < f; k++) { const o = texte.octets[k]; h1 = Math.imul(h1 ^ o, 16777619); h2 = (Math.imul(h2, 33) + o) | 0; }
+            return (h1 >>> 0) * 2097152 + ((h2 >>> 0) & 0x1fffff);
+        };
+        const reconnaitre = i => {                                                   // l'indice canonique de la chaîne i (−1 : chaîne vide ou absente, qui n'est pas un fichier : « if (!f) continue » d'avant)
+            if (i < 0 || texte.off[i + 1] === texte.off[i]) return -1;
+            if (canon[i] >= 0) return canon[i];
+            const h = empreinte(i), vu = parHachage.get(h);
+            let c = i;
+            if (vu === undefined) parHachage.set(h, i);
+            else if (typeof vu === 'number') { if (octetsEgaux(vu, i)) c = vu; else parHachage.set(h, [vu, i]); }
+            else { const t = vu.find(j => octetsEgaux(j, i)); if (t !== undefined) c = t; else vu.push(i); }
+            canon[i] = c;
+            return c;
+        };
+        const nb = new Int32Array(nTexte);                                           // nombre de produits DISTINCTS par fichier canonique
+        const fichiersDuRang = new Int32Array(2 * n);
+        for (let r = 0; r < n; r++) {
+            const a = reconnaitre(cols.vig[r]), b = reconnaitre(cols.gra[r]);
+            fichiersDuRang[2 * r] = a; fichiersDuRang[2 * r + 1] = b;
+            if (a >= 0) nb[a]++;
+            if (b >= 0 && b !== a) nb[b]++;
+        }
+        const partages = new Map();                                                  // fichier canonique → les rangs qui le portent, en ordre croissant (l'ordre d'insertion d'avant)
+        for (let r = 0; r < n; r++) {
+            const a = fichiersDuRang[2 * r], b = fichiersDuRang[2 * r + 1];
+            for (const c of (b >= 0 && b !== a ? [a, b] : [a])) {
+                if (c < 0 || nb[c] < 2) continue;
+                const l = partages.get(c); if (l) l.push(r); else partages.set(c, [r]);
+            }
+        }
+        return { partages, fichiersDuRang };
+    };
     const V = {
         chargeLe, comptes, octets,
         /** Les identifiants de produit, triés (une vue de la colonne : à ne pas modifier). */
         identifiants: () => ids,
+        /**
+         * PERF-SCAN P2 — un AUTRE produit de l'archive porte-t-il le même fichier (vignette ou grande) avec une AUTRE métacarte ? true : oui, une autre carte est un autre dessin ; false : aucun produit à métacarte connue
+         * ne diffère ; null : on ne peut pas conclure (une métacarte inconnue d'un côté ou de l'autre, tant qu'aucun partage prouvé n'existe). null aussi pour un produit sans entrée.
+         * Le MÊME verdict que la boucle d'avant (index fichier → [[id, métacarte]], parcours dans l'ordre des identifiants) — prouvé produit par produit sur l'archive entière (v2/mesures/rejouer-identite-perf-scan.js).
+         */
+        partageAutreDessin(id) {
+            if (!Number.isInteger(id)) return null;
+            const r = chercher(ids, id);
+            if (r < 0) return null;
+            if (!fichiersPartages) fichiersPartages = construireFichiersPartages();
+            const mc = cols.meta[r] < 0 ? null : cols.meta[r];
+            let partage = false;
+            const { partages, fichiersDuRang } = fichiersPartages;
+            const a = fichiersDuRang[2 * r], b = fichiersDuRang[2 * r + 1];
+            for (const c of (b >= 0 && b !== a ? [a, b] : [a])) {
+                const l = c >= 0 ? partages.get(c) : undefined;
+                if (!l) continue;
+                for (const rk of l) {
+                    if (rk === r) continue;
+                    const autre = cols.meta[rk] < 0 ? null : cols.meta[rk];
+                    if (mc === null || autre === null) { if (partage === false) partage = null; }
+                    else if (autre !== mc) { partage = true; break; }
+                }
+                if (partage === true) break;
+            }
+            return partage;
+        },
         entree(id) {
             if (!Number.isInteger(id)) return null;
             const r = chercher(ids, id);

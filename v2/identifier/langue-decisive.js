@@ -95,18 +95,30 @@ function codeDesigne(luCode, ligneCode, chiffres) {
     return !comparer({ numero: chiffres, setCode: luCode }, { numero: chiffres, set: { code: ligneCode } }).contredit.includes('code');
 }
 
-function creerIndexCodeNumero(lignes) {
+// PERF-SCAN P2 : la construction est INCRÉMENTALE (une ligne à la fois) pour qu'un curseur puisse l'alimenter sans que les 74 000 documents de numeros_cartes existent ensemble en mémoire ;
+// `creerIndexCodeNumero(lignes)` (un tableau) l'appelle ligne par ligne : UNE seule définition de ce qu'une ligne ajoute.
+function constructeurIndexCodeNumero() {
     const parChiffres = new Map();
     let taille = 0;
-    for (const l of (lignes || [])) {
-        const code = l && texte(l.codeSet) ? S.normaliserCodeSet(l.codeSet) : null;
-        const num = l ? (texte(l.numero == null ? null : String(l.numero)) || texte(l.numeroUrl == null ? null : String(l.numeroUrl))) : null;
-        const k = num ? S.chiffresDuNumero(num) : null;
-        if (!code || !k) continue;
-        if (!parChiffres.has(k)) parChiffres.set(k, new Set());
-        const codes = parChiffres.get(k);
-        if (!codes.has(code)) { codes.add(code); taille++; }
-    }
+    return {
+        ajouter(l) {
+            const code = l && texte(l.codeSet) ? S.normaliserCodeSet(l.codeSet) : null;
+            const num = l ? (texte(l.numero == null ? null : String(l.numero)) || texte(l.numeroUrl == null ? null : String(l.numeroUrl))) : null;
+            const k = num ? S.chiffresDuNumero(num) : null;
+            if (!code || !k) return;
+            if (!parChiffres.has(k)) parChiffres.set(k, new Set());
+            const codes = parChiffres.get(k);
+            if (!codes.has(code)) { codes.add(code); taille++; }
+        },
+        finir: () => indexDe(parChiffres, taille)
+    };
+}
+function creerIndexCodeNumero(lignes) {
+    const c = constructeurIndexCodeNumero();
+    for (const l of (lignes || [])) c.ajouter(l);
+    return c.finir();
+}
+function indexDe(parChiffres, taille) {
     return {
         taille,
         /**
@@ -134,19 +146,35 @@ function creerIndexCodeNumero(lignes) {
 // c'est un instrument en panne (un zéro sur une population censée non vide). Sous le plancher : LÈVE (l'appelant ferme R4), compté et journalisé sans aucune valeur lue.
 const INDEX_CODE_NUMERO_MIN = 10000;
 // Tronquée : le plancher ne vaut que ~16 % des couples attendus ; l'appelant lit donc `countDocuments` de la même collection, avec le même filtre, AVANT la lecture (`attendu`) : moins de documents LUS que comptés = refus.
-function construireIndexVerifie(lignes, plancher = INDEX_CODE_NUMERO_MIN, attendu = null) {
-    if (Number.isInteger(attendu) && (lignes || []).length < attendu) {
+function refuserSiTronque(lus, attendu) {
+    if (Number.isInteger(attendu) && lus < attendu) {
         compte.indexTronques++;
-        console.warn(`⚠️ [langue-decisive-v2] lecture tronquée de l'index code × numéro (${(lignes || []).length} documents lus pour ${attendu} comptés) : R4 fermée`);
+        console.warn(`⚠️ [langue-decisive-v2] lecture tronquée de l'index code × numéro (${lus} documents lus pour ${attendu} comptés) : R4 fermée`);
         throw new Error('index code × numéro : lecture tronquée');
     }
-    const idx = creerIndexCodeNumero(lignes);
+}
+function refuserSiSousLePlancher(idx, plancher) {
     if (idx.taille < plancher) {
         compte.indexFermes++;
         console.warn(`⚠️ [langue-decisive-v2] index code × numéro sous le plancher (${idx.taille} couples pour ${plancher} attendus au moins) : R4 fermée`);
         throw new Error(`index code × numéro sous le plancher (${plancher})`);
     }
     return idx;
+}
+function construireIndexVerifie(lignes, plancher = INDEX_CODE_NUMERO_MIN, attendu = null) {
+    refuserSiTronque((lignes || []).length, attendu);
+    return refuserSiSousLePlancher(creerIndexCodeNumero(lignes), plancher);
+}
+/**
+ * PERF-SCAN P2 — la MÊME construction vérifiée, alimentée par un CURSEUR (itérable asynchrone) : les documents passent par lots, aucun tableau de 74 000 lignes n'existe jamais. Les deux gardes d'avant sont
+ * conservées telles quelles : moins de documents LUS que COMPTÉS (`attendu`) = lecture tronquée, refus ; sous le plancher = refus (R4 fermée). Un curseur qui lève propage l'erreur (jamais un index partiel).
+ */
+async function construireIndexVerifieDepuisCurseur(curseur, plancher = INDEX_CODE_NUMERO_MIN, attendu = null) {
+    const c = constructeurIndexCodeNumero();
+    let lus = 0;
+    for await (const l of curseur) { lus++; c.ajouter(l); }
+    refuserSiTronque(lus, attendu);
+    return refuserSiSousLePlancher(c.finir(), plancher);
 }
 
 // ── R4 : le code lu ne désigne AUCUN produit — ni du vivier (« s8a-P » pris pour le logo des 25 ans), ni du CATALOGUE ENTIER avec ce numéro (M2 : un code bien lu qui désigne la vraie carte hors du vivier BLOQUE).
@@ -242,5 +270,5 @@ function affirmableSeul({ corps, id, produits, regles = REGLES, groupe = null, c
     }
 }
 
-module.exports = { langueCertaine, langueDeTirage, codeSansDesignation, creerIndexCodeNumero, construireIndexVerifie, survivantUnique, reduire, affirmableSeul, compteurs, noterPreparation: ok => { compte[ok ? 'preparations' : 'preparationsRefusees']++; },
+module.exports = { langueCertaine, langueDeTirage, codeSansDesignation, creerIndexCodeNumero, construireIndexVerifie, construireIndexVerifieDepuisCurseur, survivantUnique, reduire, affirmableSeul, compteurs, noterPreparation: ok => { compte[ok ? 'preparations' : 'preparationsRefusees']++; },
     REGLES, SEUIL_IMAGE, SANS_NUMEROTATION, INDEX_CODE_NUMERO_MIN, PLAFOND_CHARGE, DELAI_PREPARATION_MS };

@@ -10,9 +10,11 @@ const db = require('../db');
 const { lireConfig } = require('../config');
 const { creerVisuels } = require('./visuels');
 const { VARIANTES } = require('./produit');
-const { construireIndexVerifie, INDEX_CODE_NUMERO_MIN } = require('./langue-decisive');
+const { construireIndexVerifieDepuisCurseur, INDEX_CODE_NUMERO_MIN } = require('./langue-decisive');
 const { versionDe } = require('./fiabilite-prix');
-const { creerIndexFamilles } = require('./designation');
+const DES = require('./designation');
+const { creerIndexFamillesDepuisFlux } = DES;
+const mongoose = require('mongoose');
 const MT = require('./marques-tampon');
 
 const COLLECTIONS_LUES = Object.freeze(['numeros_cartes', 'catalogue_produits', 'guide_prix']);
@@ -49,8 +51,8 @@ function creerCatalogue(opts = {}) {
         const p = (async () => {
             const col = colLue('numeros_cartes');
             const attendu = await col.countDocuments({});
-            const docs = await col.find({}, { projection: { codeSet: 1, numero: 1, numeroUrl: 1 } }).toArray();
-            return construireIndexVerifie(docs, INDEX_CODE_NUMERO_MIN, attendu);               // sous le plancher ou tronqué : LÈVE (R4 fermée)
+            // PERF-SCAN P2 : lu par CURSEUR (par lots) et construit ligne à ligne — plus de tableau de 73 756 documents (le transitoire du pic de mémoire des premiers scans). Mêmes gardes (tronqué, plancher), mêmes lignes.
+            return await construireIndexVerifieDepuisCurseur(col.find({}, { projection: { codeSet: 1, numero: 1, numeroUrl: 1 } }), INDEX_CODE_NUMERO_MIN, attendu);               // sous le plancher ou tronqué : LÈVE (R4 fermée)
         })();
         indexEnCours = p; indexLe = Date.now();
         p.then(idx => { if (indexEnCours === p) indexPret = idx; }, () => { if (indexEnCours === p) { indexEnCours = null; indexLe = 0; } });      // un échec n'est pas gardé
@@ -70,9 +72,11 @@ function creerCatalogue(opts = {}) {
         const p = (async () => {
             const colN = colLue('numeros_cartes'), colC = colLue('catalogue_produits');
             const [attN, attC] = await Promise.all([colN.countDocuments({}), colC.countDocuments({})]);
-            const [numeros, produits] = await Promise.all([colN.find({}, { projection: { idProduct: 1, codeSet: 1, numero: 1, numeroUrl: 1, setTcgdex: 1 } }).toArray(), colC.find({}, { projection: { idProduct: 1, idMetacard: 1, name: 1 } }).toArray()]);
-            if (numeros.length < attN || produits.length < attC) throw new Error('index des familles : lecture tronquée');
-            const idx = creerIndexFamilles(numeros, produits, () => { const vis = visuels.instantane ? visuels.instantane() : visuels; return id => ({ total: (vis.entree && (vis.entree(id) || {}).total) ?? null, tirage: texte(typeof vis.tirage === 'function' ? vis.tirage(id) : null) }); });
+            // PERF-SCAN P2 : deux CURSEURS lus l'un après l'autre et un index en colonnes compactes (designation.js::creerIndexFamillesDepuisFlux) — plus de deux tableaux de ~74 000 documents, plus de 74 000 objets-lignes.
+            // Même garde : moins de documents LUS que COMPTÉS = lecture tronquée, refus.
+            const idx = await creerIndexFamillesDepuisFlux(colN.find({}, { projection: { idProduct: 1, codeSet: 1, numero: 1, numeroUrl: 1, setTcgdex: 1 } }), colC.find({}, { projection: { idProduct: 1, idMetacard: 1, name: 1 } }),
+                () => { const vis = visuels.instantane ? visuels.instantane() : visuels; return id => ({ total: (vis.entree && (vis.entree(id) || {}).total) ?? null, tirage: texte(typeof vis.tirage === 'function' ? vis.tirage(id) : null) }); },
+                { numerosAttendus: attN, produitsAttendus: attC });
             if (idx.taille < INDEX_CODE_NUMERO_MIN) throw new Error(`index des familles sous le plancher (${INDEX_CODE_NUMERO_MIN})`);
             return idx;
         })();
@@ -85,6 +89,28 @@ function creerCatalogue(opts = {}) {
         return famPret;
     }
 
+    /**
+     * PERF-SCAN P2 — construit les deux index MAINTENANT (au démarrage, avant le trafic) au lieu de les laisser naître pendant les premiers scans : leur construction (≈ 150 000 lignes lues, du CALCUL étiré ~7 fois sur
+     * 0,15 vCPU) sortait des premiers scans, qui portaient le p95. Attend la connexion à la base (au plus `delaiMs`), puis construit le code × numéro et, si une règle de désignation est allumée, les familles ; une
+     * construction qui échoue n'est pas gardée (la demande suivante réessaie, comme avant). Ne lève jamais. @returns {Promise<{ codeNumero: boolean, familles: boolean|null }>}
+     */
+    async function prechauffer({ delaiMs = 120000, pasMs = 500 } = {}) {
+        const fin = Date.now() + delaiMs;
+        while (mongoose.connection.readyState !== 1) {
+            if (Date.now() > fin) { console.warn('⚠️ [catalogue] préchauffage abandonné : pas de connexion à la base'); return { codeNumero: false, familles: null }; }
+            await new Promise(r => setTimeout(r, pasMs));
+        }
+        const r = { codeNumero: false, familles: null };
+        try { await indexCodeNumero(); r.codeNumero = true; } catch (e) { console.warn(`⚠️ [catalogue] préchauffage : index code × numéro non construit (${(e && (e.code || e.name)) || 'erreur'})`); }
+        if (DES.actives(DES.reglesDe(DES.REGLES_DESIGNATION)).length > 0) {
+            try { await indexFamilles(); r.familles = true; } catch (e) { r.familles = false; console.warn(`⚠️ [catalogue] préchauffage : index des familles non construit (${(e && (e.code || e.name)) || 'erreur'})`); }
+        }
+        return r;
+    }
+
+    /** Le préchauffage SEULEMENT si V2_INDEX_AU_DEMARRAGE vaut exactement « 1 » (éteint par défaut : la route est celle d'avant). null si éteint. Lecture stricte, une valeur inconnue n'allume rien. */
+    function prechaufferSiDemande() { return process.env.V2_INDEX_AU_DEMARRAGE === '1' ? prechauffer() : Promise.resolve(null); }
+
     /** @returns Promise<Map<idProduct, ProduitSource>> — les produits introuvables ou innommables sont ABSENTS de la table. */
     async function lire(idProducts) {
         const ids = [...new Set((Array.isArray(idProducts) ? idProducts : []).filter(Number.isInteger))];
@@ -95,6 +121,10 @@ function creerCatalogue(opts = {}) {
         const parId = l => new Map(l.map(d => [d.idProduct, d]));
         const C = parId(cats), N = parId(nums), G = parId(guides);
         const vis = visuels.instantane ? visuels.instantane() : visuels;                  // UNE version pour toute la requête : jamais un visuel d'une version et une impression d'une autre
+        // PERF-SCAN P3 : les produits d'une même question (V1, V2, reverse, promo) partagent leur métacarte : ses impressions (les entrées de l'archive + UNE requête guide_prix sur tous ses produits) se lisent UNE fois par
+        // métacarte et par appel (mesuré, série C : 150 requêtes guide_prix identiques à une autre du même scan, 3 par scan). Chaque produit reçoit SON tableau (les impressions sont gelées une à une).
+        const impressionsParMeta = new Map();
+        const impressionsDe = meta => { let p = impressionsParMeta.get(meta); if (!p) { p = vis.impressions(meta); impressionsParMeta.set(meta, p); } return p; };
         for (const id of ids) {
             const c = C.get(id), n = N.get(id) || {}, v = (vis.entree && vis.entree(id)) || {};     // le visuel et l'impression : la version EN MÉMOIRE du chargeur
             const nom = c && texte(c.name);
@@ -102,7 +132,7 @@ function creerCatalogue(opts = {}) {
             if (!nom || !slug) continue;
             const g = G.get(id);
             const visuel = await vis.resoudre(id);
-            const impressions = Number.isInteger(c.idMetacard) ? await vis.impressions(c.idMetacard) : [];
+            const impressions = Number.isInteger(c.idMetacard) ? [...await impressionsDe(c.idMetacard)] : [];
             table.set(id, {
                 idProduct: id, nomCardmarket: nom, nomFr: texte(n.nomFr), idExpansion: Number.isInteger(n.idExpansion) ? n.idExpansion : (Number.isInteger(c.idExpansion) ? c.idExpansion : null),   // R5 (non servi : construireProduit ne le lit pas)
                 set: { slug, nom: texte(v.setNom) || lisible(slug), code: texte(n.codeSet), tirage: null, annee: null, symbole: null },
@@ -150,6 +180,6 @@ function creerCatalogue(opts = {}) {
                 return Object.freeze(d ? { ...i, version: versionDe(d.variante), prixMelangeTampon: d.prixMelangeTampon === true || i.prixMelangeTampon === true, nonLu: false } : { ...i, version: null, prixMelangeTampon: i.prixMelangeTampon === true, nonLu: true });
             });
     }
-    return { lire, plusRecentDansMetacarte, indexCodeNumero, indexSansAttente, indexFamilles, indexFamillesSansAttente };
+    return { lire, plusRecentDansMetacarte, indexCodeNumero, indexSansAttente, indexFamilles, indexFamillesSansAttente, prechauffer, prechaufferSiDemande };
 }
 module.exports = { creerCatalogue, COLLECTIONS_LUES, colLue, IMPRESSIONS_MAX_TIME_MS, IMPRESSIONS_DELAI_MS };

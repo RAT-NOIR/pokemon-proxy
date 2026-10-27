@@ -105,6 +105,9 @@ const { blocGuidePrix, iso } = require('./guide-prix-date');
 // carte (les e-Series japonaises en sont absentes) ou quand le nom n'est pas fiable.
 // Testée en bac à sable par test-identification-locale.js.
 const { identifierEnLocal } = require('./identification-locale');
+// PERF-SCAN P1 — les clés de nom (normalisation, niveau, δ Delta Species : leur SEULE définition) et la recherche du catalogue par un index de nom quand il couvre tout (sinon la requête d'avant).
+const CLE_NOM = require('./v2/identifier/cle-nom');
+const INDEX_NOM = require('./v2/identifier/index-nom');
 
 const V2 = process.env.RM_API_V2 === '1' ? require('./v2') : null;   // API v2 : éteinte = production inchangée
 const app = express();
@@ -479,6 +482,9 @@ numeroCarteSchema.index({ setTcgdex: 1 });
 // — sans index, un parcours de toute la collection à chaque lot (relecture par sous-agent). Recréé au démarrage par `autoIndex`.
 numeroCarteSchema.index({ slugSet: 1 });
 const NumeroCarte = mongoose.model('NumeroCarte', numeroCarteSchema, 'numeros_cartes');
+// PERF-SCAN P1 — les index de NOM (champs `nomCles` / `nomFrCle`) NE SONT PAS déclarés dans les schémas : `autoIndex` les créerait au démarrage de la production, qui n'a pas la place (457 Mo sur 512).
+// Ils sont posés par v2/migrations/poser-cles-nom.js sur la seule base de l'essai ; ici on ne fait que les UTILISER s'ils existent et couvrent TOUT (index-nom.js), sinon la requête d'avant.
+const DISPO_NOM_CATALOGUE = INDEX_NOM.creerDisponibilite({ col: CatalogueProduit.collection, champ: CLE_NOM.CHAMP_CATALOGUE, nomIndex: CLE_NOM.INDEX_CATALOGUE, source: { champ: 'name', temoin: CLE_NOM.CHAMP_SOURCE_CATALOGUE } });
 
 // Événements Stripe déjà traités. Stripe REJOUE ses webhooks (retry sur timeout, ou
 // simple doublon réseau) : sans cette table, un même paiement créditerait plusieurs fois.
@@ -1950,9 +1956,8 @@ function regionAttendue(cardInfo) {
 
 // Normalise un nom pour comparaison : minuscules, sans espaces/tirets/ponctuation.
 // "M Kangaskhan EX" et "MKangaskhan EX" -> "mkangaskhanex" (identiques).
-function normaliserNom(nom) {
-    return nom.toLowerCase().replace(/[\s\-'.&]/g, '');
-}
+// PERF-SCAN P1 : la règle vit dans v2/identifier/cle-nom.js (la migration des clés d'index et la recherche par l'index la partagent — une seule définition).
+const normaliserNom = CLE_NOM.normaliserNom;
 
 // ============================================================
 // ÉCARTE LES NON-CARTES du vivier de candidats
@@ -2200,13 +2205,17 @@ async function trouverProduitsLocaux(nomExact) {
             const variantes = genererVariantesNom(nomExact);
             for (const variante of variantes) {
                 const regex = new RegExp(`^${echapperRegex(variante)}(\\s*\\[|$)`, 'i');
-                const r = await CatalogueProduit.find({ name: regex }).lean();
+                // PERF-SCAN P1 : par l'index de nom quand il couvre tout (même ensemble : la regex d'avant est réappliquée), sinon la requête d'avant
+                const r = (await INDEX_NOM.parNomCourt({ col: CatalogueProduit.collection, dispo: DISPO_NOM_CATALOGUE, variante, regex })) ?? await CatalogueProduit.find({ name: regex }).sort({ _id: 1 }).lean();
                 if (r.length > 0) return ecarterNonCartes(r, `nom court "${nomExact}"`);
             }
             return [];
         }
 
-        const preselection = await CatalogueProduit.find({ name: new RegExp(echapperRegex(premierMot), 'i') }).lean();
+        // PERF-SCAN P1 : la présélection est un balayage complet du catalogue (regex sans ancre, 74 694 documents). Quand l'index de nom couvre tout, on cherche les CLÉS des cibles (même ensemble
+        // que le filtre ci-dessous garde, dans le même ordre) et on réapplique la regex d'avant ; sinon la requête d'avant.
+        const regexPremierMot = new RegExp(echapperRegex(premierMot), 'i');
+        const preselection = (await INDEX_NOM.preselection({ col: CatalogueProduit.collection, dispo: DISPO_NOM_CATALOGUE, cles: [...cibles], regexPremierMot })) ?? await CatalogueProduit.find({ name: regexPremierMot }).sort({ _id: 1 }).lean();
 
         // Garde ceux dont le nom (partie avant "[") normalisé correspond à une de nos cibles
         const resultats = preselection.filter(p => {
@@ -2233,7 +2242,7 @@ async function trouverProduitsLocaux(nomExact) {
             // parce que c'est écrit dans le bandeau du nom. Le niveau est une petite
             // mention qu'elle ne reprend pas : même Pokémon, pas autre carte. δ et
             // Prime/LEGEND/BREAK restent dehors pour la même raison qu'« ex ».
-            const sansNiveau = nomProduit.replace(/[\s-]*Lv\.?\s?(X|\d+)\b/i, '').trim();
+            const sansNiveau = CLE_NOM.sansNiveau(nomProduit);
             if (sansNiveau !== nomProduit && cibles.has(normaliserNom(sansNiveau))) return true;
             // ── LA QUEUE « δ Delta Species » — 2026-09-06, MÊME RÈGLE QUE LE NIVEAU ──
             // 388 produits du catalogue portent cette queue, et AUCUN n'était atteignable
@@ -2247,7 +2256,7 @@ async function trouverProduitsLocaux(nomExact) {
             // 1 ligne change de gagnant sans vérité (Altaria ex JP, 784363 -> 761858).
             // ⚠️ Côté PRODUIT seulement. Le nom LU n'est pas touché : « Meganium δ » rejoint
             // « Meganium » par le premier mot que genererVariantesNom ajoute déjà.
-            const sansDelta = nomProduit.replace(/\s*δ\s*Delta\s*Species\s*$/i, '').trim();
+            const sansDelta = CLE_NOM.sansDelta(nomProduit);
             return sansDelta !== nomProduit && cibles.has(normaliserNom(sansDelta));
         });
 
@@ -7214,6 +7223,9 @@ if (require.main === module) {
 // Exporté pour les tests UNIQUEMENT. Le serveur, lui, ne lit jamais ces exports.
 module.exports = {
     app, gererIdentifier, gererRetourLive, trouverParSetCodeEtNumero, nomOpposeUnVeto, trouverProduitsLocaux,
+    // PERF-SCAN P1 : oublie le verdict de couverture de l'index de nom (le rejeu d'identité pose les clés puis veut l'utiliser sans attendre la fenêtre).
+    oublierIndexNom: () => { DISPO_NOM_CATALOGUE.oublier(); },
+    controlerIndexNom: () => DISPO_NOM_CATALOGUE.controle(),
     // Exportés pour que le re-classement du veto soit rejouable À L'IDENTIQUE dans les
     // tests. Les rejouer avec une réimplémentation ne prouverait rien : c'est précisément
     // l'erreur qui a produit « la simulation dit 12, la production dit 0 ».
