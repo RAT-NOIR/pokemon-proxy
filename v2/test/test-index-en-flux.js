@@ -18,7 +18,8 @@ function catalogueAuHasard(graine, n, { plage = 0.9, suffixes = 0 } = {}) {
         produits.push({ idProduct: id, idMetacard: r() < 0.15 ? null : Math.floor(r() * n * 0.3), name: r() < 0.03 ? null : (suffixes && nom.trim() ? `${nom} #${Math.floor(r() * suffixes)}` : nom) });
         if (r() < 0.9) numeros.push({ idProduct: r() < 0.97 ? id : id + 7, codeSet: r() < 0.1 ? null : pick(['SV1', 'sv2', ' M6A ', 'PRE', 'TG', '']), numero: r() < 0.1 ? null : r() < 0.3 ? Math.floor(r() * 300) : String(Math.floor(r() * 300)).padStart(3, '0'), numeroUrl: r() < 0.3 ? `TG${Math.floor(r() * 30)}` : null, setTcgdex: r() < 0.5 ? pick(['sv01', 'swsh12', null, '  ']) : null });
     }
-    for (const d of [{ idProduct: 5, name: 'x' }, { name: 'sans id' }, null, { idProduct: 'texte', name: 'faux id' }]) produits.push(d);   // des lignes que l'ancienne construction écarte
+    for (const d of [{ idProduct: 5, name: 'x' }, { name: 'sans id' }, null, { idProduct: 'texte', name: 'faux id' },
+        { idProduct: 2 ** 40, name: 'Gros identifiant', idMetacard: -5 }, { idProduct: 2 ** 40 + 1, name: 'Gros identifiant', idMetacard: -5 }]) produits.push(d);   // + hors du domaine du tri natif (identifiant ≥ 2^35, métacarte négative) : le tri par comparateur donne le même ordre   // des lignes que l'ancienne construction écarte
     return { numeros, produits };
 }
 const visuelBanc = id => (id % 5 === 0 ? null : { total: id % 3 === 0 ? '064' : null, tirage: id % 4 === 0 ? 'intl' : null });

@@ -171,6 +171,20 @@ function reserveDeChaines() {
     const index = new Map(), liste = [];
     return { id(s) { if (s === null || s === undefined) return -1; let i = index.get(s); if (i === undefined) { i = liste.length; index.set(s, i); liste.push(s); } return i; }, get: i => (i < 0 ? null : liste[i]), vider() { index.clear(); } };
 }
+// Les rangs `rangs` (ou 0..n-1), triés par (valeur, rang) : la clé composée valeur × 2^18 + rang trie en NATIF (Float64Array.sort, sans comparateur : ~10 ms pour 74 000 entrées contre ~60 ms au comparateur) ; hors du domaine
+// où la clé est exacte (valeur négative ou non entière, plus de 2^18 rangs, produit ≥ 2^53), le tri par comparateur — le même ordre.
+const ordreParValeur = (valeurs, rangs) => {
+    const n = rangs.length, FACTEUR = 262144;
+    let sur = n < FACTEUR;
+    for (let i = 0; sur && i < n; i++) { const v = valeurs[rangs[i]]; if (!(Number.isInteger(v) && v >= 0 && v < 2 ** 53 / FACTEUR)) sur = false; }
+    if (!sur) return Int32Array.from(Array.from(rangs).sort((a, b) => valeurs[a] - valeurs[b] || a - b));
+    const cles = new Float64Array(n);
+    for (let i = 0; i < n; i++) cles[i] = valeurs[rangs[i]] * FACTEUR + rangs[i];
+    cles.sort();
+    const ordre = new Int32Array(n);
+    for (let i = 0; i < n; i++) ordre[i] = cles[i] % FACTEUR;
+    return ordre;
+};
 const premierPlusGrand = (tab, v, n = tab.length) => { let lo = 0, hi = n; while (lo < hi) { const m = (lo + hi) >>> 1; if (tab[m] <= v) lo = m + 1; else hi = m; } return lo; };      // première position où tab[i] > v
 const premierNonInferieur = (tab, v, n = tab.length) => { let lo = 0, hi = n; while (lo < hi) { const m = (lo + hi) >>> 1; if (tab[m] < v) lo = m + 1; else hi = m; } return lo; };   // première position où tab[i] >= v
 async function creerIndexFamillesDepuisFlux(fluxNumeros, fluxProduits, lecteur = () => () => null, { numerosAttendus = null, produitsAttendus = null } = {}) {
@@ -188,7 +202,7 @@ async function creerIndexFamillesDepuisFlux(fluxNumeros, fluxProduits, lecteur =
         nTcg.push(chaines.id(texte(n.setTcgdex)));
     }
     if (Number.isInteger(numerosAttendus) && nLus < numerosAttendus) tronque();
-    const idsN = nId.vue(), ordreN = Int32Array.from(Array.from({ length: idsN.length }, (_, i) => i).sort((a, b) => idsN[a] - idsN[b] || a - b));
+    const idsN = nId.vue(), ordreN = ordreParValeur(idsN, Int32Array.from({ length: idsN.length }, (_, i) => i));
     const idsNTries = Float64Array.from(ordreN, i => idsN[i]);
     const dernierNumero = id => { const p = premierPlusGrand(idsNTries, id) - 1; return p >= 0 && idsNTries[p] === id ? ordreN[p] : -1; };   // la dernière arrivée pour cet identifiant
     // 2. les PRODUITS : une rangée par produit lisible, jointe à sa dernière ligne de numéros
@@ -217,14 +231,14 @@ async function creerIndexFamillesDepuisFlux(fluxNumeros, fluxProduits, lecteur =
     const octetsNoms = tas.slice(0, fin);
     const nomDe = r => decodeur.decode(octetsNoms.subarray(deb[r], deb[r + 1]));
     // 3. les accès : le dernier rang d'un identifiant, les rangs d'une métacarte, les rangs d'un groupe de nom — tous triés, tous cherchés par dichotomie
-    const ordreId = Int32Array.from(Array.from({ length: n }, (_, i) => i).sort((a, b) => ids[a] - ids[b] || a - b));
+    const ordreId = ordreParValeur(ids, Int32Array.from({ length: n }, (_, i) => i));
     const idsTries = Float64Array.from(ordreId, i => ids[i]);
     const dernierRang = id => { const p = premierPlusGrand(idsTries, id) - 1; return p >= 0 && idsTries[p] === id ? ordreId[p] : -1; };
     let distincts = 0; for (let i = 0; i < n; i++) if (i === 0 || idsTries[i] !== idsTries[i - 1]) distincts++;
     const rangsMeta = []; for (let i = 0; i < n; i++) if (!Number.isNaN(metas[i])) rangsMeta.push(i);
-    const ordreMeta = Int32Array.from(rangsMeta.sort((a, b) => metas[a] - metas[b] || a - b)), metasTriees = Float64Array.from(ordreMeta, i => metas[i]);
+    const ordreMeta = ordreParValeur(metas, Int32Array.from(rangsMeta)), metasTriees = Float64Array.from(ordreMeta, i => metas[i]);
     const rangsNom = []; for (let i = 0; i < n; i++) if (groupes[i] >= 0) rangsNom.push(i);
-    const ordreNom = Int32Array.from(rangsNom.sort((a, b) => groupes[a] - groupes[b] || a - b)), groupesTries = Int32Array.from(ordreNom, i => groupes[i]);
+    const ordreNom = ordreParValeur(groupes, Int32Array.from(rangsNom)), groupesTries = Int32Array.from(ordreNom, i => groupes[i]);
     const plage = (tries, ordre, v) => { const a = premierNonInferieur(tries, v), b = premierPlusGrand(tries, v); return ordre.subarray(a, b); };
     const ligneDe = (r, vis) => ({ idProduct: ids[r], nomCardmarket: nomDe(r), nomFr: null, numero: chaines.get(vNum[r]), total: vis.total ?? null, set: { code: chaines.get(vCode[r]) }, setTcgdex: chaines.get(vTcg[r]), tirageSource: vis.tirage ?? null,
         meta: Number.isNaN(metas[r]) ? null : metas[r], base: nomBase(nomDe(r)) });
