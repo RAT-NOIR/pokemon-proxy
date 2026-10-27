@@ -150,6 +150,8 @@ function creerChargeur(opts = {}) {
             // JUMBO-VISUEL : même règle pour la colonne des masqués (format 5) : une version qui ne sait pas quels produits n'ont AUCUN visuel à servir ne remplace jamais une version qui le sait (le JUMBO différent retrouverait le scan de la
             // carte normale) ; sans version en place, elle s'installe (le service d'avant) et le journal le dit une fois
             if (prev && prev.colonneMasques && !v.colonneMasques) throw new Echec(`la version chargée n'a pas la colonne des masqués alors que celle en place l'a — ${dit}`);
+            // I3 (relecture) : la garde porte sur le CONTENU, pas seulement sur la présence — le calcul dans l'API (fil.js) écrit une colonne VIDE faute de liste : elle ne remplace jamais une version qui masque davantage de produits
+            if (prev && prev.colonneMasques && v.colonneMasques && v.comptes.masques < prev.comptes.masques) throw new Echec(`la colonne des masqués de la version chargée (${v.comptes.masques}) a moins de produits que celle de la version en place (${prev.comptes.masques}) : un JUMBO différent retrouverait le scan de la carte normale (la version en place est gardée) — ${dit}`);
             if (!v.colonneMasques && !avertiSansMasques) { avertiSansMasques = true; journal('⚠️ [v2 chargeur] la version chargée n\'a PAS la colonne des masqués (archive d\'avant le format 5) : aucun visuel n\'est masqué, un JUMBO différent de sa carte garde le scan de la carte normale tant qu\'une archive récente ne l\'aura pas apportée'); }
             if (prev) {
                 // une archive plus ANCIENNE que celle en place (rejouée à l'envers) est refusée ; sa date et son âge sont journalisés au chargement

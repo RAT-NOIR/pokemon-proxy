@@ -72,7 +72,7 @@ function emprunteDe(version) {
         const e = version.entree(id);
         if (!e) return null;
         // JUMBO-VISUEL : la mention d'AFFICHAGE de Base Set (scan Édition 1 d'une fiche Pokémon) dit que le scan est d'un autre tirage SANS que le dessin change : ce n'est pas une marque d'emprunt oubliée, l'image peut servir
-        if (estMentionDAffichage(e.mention)) return false;
+        if (estMentionDAffichage(e)) return false;
         return typeof e.mention === 'string' && e.mention.length > 0 ? true : e.mention === null ? false : null;
     };
 }

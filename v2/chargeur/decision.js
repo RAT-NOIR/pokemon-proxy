@@ -388,6 +388,7 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         if (e.partageeTamponNonSepare !== null) d.marquees.tampon++;
         if (e.basseDefinition === true) d.marquees.basse++;
         // MARQUE-EMPRUNT : posée AVEC l'entrée (le sink la range si l'entrée est admise) ; la nature vient de la décision, pas de la mention
+        if (jumbosEmpruntes.has(l.idProduct) && sink && typeof sink.jumbo === 'function') sink.jumbo(l.idProduct);       // JUMBO-VISUEL : un JUMBO classé par la liste (emprunt ou masqué) : son emprunt n'est jamais « vérifié » par un autre audit
         if (masques.has(l.idProduct) && sink && typeof sink.masque === 'function') sink.masque(l.idProduct);       // JUMBO-VISUEL : avant la marque d'emprunt (un masqué est toujours emprunté)
         if (estEmprunt({ im, set: s, visuel })) {
             if (!empruntes.has(l.idProduct)) { empruntes.add(l.idProduct); d.emprunts++; d.empruntsParNature[visuel]++; }

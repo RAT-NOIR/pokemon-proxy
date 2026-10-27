@@ -44,11 +44,21 @@ async function principal(argv = process.argv, env = process.env, deps = {}) {
     }
     // JUMBO-VISUEL : la liste du catalogue (JUMBO lus contre le scan de leur fiche) est lue et jugée AVANT toute lecture de source ; illisible, mal formée ou hors de la liste fermée : la construction REFUSE (code 1)
     let jumbos = null;
-    if (argv.some(x => x === '--jumbos-visuel' || (x.startsWith('--jumbos-visuel') && !x.startsWith('--jumbos-visuel=')))) return stop('--jumbos-visuel : la forme est --jumbos-visuel=<fichier.json> (un fichier est requis)');
+    if (argv.some(x => x === '--jumbos-visuel')) return stop('--jumbos-visuel : la forme est --jumbos-visuel=<fichier.json> (un fichier est requis)');
     const nomJumbos = arg('jumbos-visuel');
+    // I1 (relecture) : la copie de la liste est ÉPINGLÉE par son empreinte (--jumbos-visuel-sha256=<64 hexadécimaux>, OBLIGATOIRE avec la liste) : la construction recalcule l'empreinte des octets lus et la compare ; un écart refuse.
+    // Le sha256Source de la liste (celui du fichier du catalogue) est comparé au fichier source quand il est lisible, sinon DIT « non comparé ».
+    if (argv.some(x => x === '--jumbos-visuel-sha256')) return stop('--jumbos-visuel-sha256 : la forme est --jumbos-visuel-sha256=<empreinte SHA-256 de la copie> (64 hexadécimaux minuscules)');
+    const pinJumbos = arg('jumbos-visuel-sha256');
+    if (nomJumbos === null && pinJumbos !== null) return stop('--jumbos-visuel-sha256 sans --jumbos-visuel : aucune liste à épingler');
+    let comparaisonSource = null;
     if (nomJumbos !== null) {
-        const lecture = require('../chargeur/jumbos-visuel').lireFichierJumbos(nomJumbos);
+        if (pinJumbos === null) return stop('--jumbos-visuel : l\'empreinte de la copie doit être épinglée (--jumbos-visuel-sha256=<64 hexadécimaux>) — une liste dont on ne connaît pas l\'empreinte n\'est pas reconnue, aucune construction');
+        const JV = require('../chargeur/jumbos-visuel');
+        const lecture = JV.lireFichierJumbos(nomJumbos, { sha256Attendu: pinJumbos });
         if (!lecture.ok) return stop(`--jumbos-visuel : liste refusée, aucune construction : ${lecture.raison}`);
+        comparaisonSource = JV.comparerSource(lecture);
+        if (comparaisonSource.etat === 'ecart') return stop(`--jumbos-visuel : le sha256Source de la liste (${lecture.sha256Source}) n'est pas l'empreinte de son fichier source « ${lecture.source} » (${comparaisonSource.sha256}) : la liste est périmée ou modifiée, aucune construction`);
         jumbos = lecture;
     }
     const LS = require('../chargeur/lecture-seule'); const S = require('../chargeur/scellement'); const R2 = require('../chargeur/r2-prive'); const F = require('../chargeur/format'); const DEPOT = require('./depot-r2');
@@ -89,7 +99,7 @@ async function principal(argv = process.argv, env = process.env, deps = {}) {
     // JUMBO-VISUEL : ce que la liste a fait (masqués = aucun visuel servi, emprunts = visuel de la fiche sous le bandeau JUMBO, sans mention), ce qu'elle nomme sans entrée, les JUMBO qu'elle ne nomme pas ; et Base Set
     if (jumbos) {
         const j = c.jumbosVisuel;
-        console.log(`   jumbos (${jumbos.decision} · du ${jumbos.le} · liste source du ${jumbos.listeLe} · empreinte de la liste source ${jumbos.sha256Source} · copie ${jumbos.sha256.slice(0, 12)}) : ${c.masquesColonne} produit(s) masqué(s) dans l'archive (aucun visuel servi, entrée gardée) — décidés ${j.sansVisuel}, dont ${j.sansVisuel - c.masquesColonne} retiré(s) par --exclure ou sans entrée gardée · ${j.emprunt} emprunt(s) décidés (visuel de la fiche, bandeau JUMBO, sans mention) · déjà empruntés ${j.dejaEmprunte} · liste ${j.liste}`);
+        console.log(`   jumbos (${jumbos.decision} · du ${jumbos.le} · liste source du ${jumbos.listeLe} · empreinte de la liste source ${jumbos.sha256Source} (${comparaisonSource.etat === 'compare' ? 'sha256Source comparé au fichier source : égal' : 'sha256Source non comparé : fichier source non lisible'}) · empreinte de la copie ÉPINGLÉE vérifiée ${jumbos.sha256}) : ${c.masquesColonne} produit(s) masqué(s) dans l'archive (aucun visuel servi, entrée gardée) — décidés ${j.sansVisuel}, dont ${j.sansVisuel - c.masquesColonne} retiré(s) par --exclure ou sans entrée gardée · ${j.emprunt} emprunt(s) décidés (visuel de la fiche, bandeau JUMBO, sans mention) · déjà empruntés ${j.dejaEmprunte} · liste ${j.liste}`);
         console.log(`   jumbos : nommés sans entrée d'archive (${j.sansEntree.length}) : ${j.sansEntree.map(x => `${x.idProduct} [${x.classe}]`).join(' ; ') || 'aucun'} · JUMBO que la liste ne nomme pas, sans verdict, servis comme avant (${j.sansVerdict.length}) : ${j.sansVerdict.join(', ') || 'aucun'}`);
     } else console.log('   jumbos : aucune liste (--jumbos-visuel) : aucun JUMBO n\'est emprunté ni masqué');
     if (c.baseSet) console.log(`   Base Set : ${c.baseSet.avecMention} produit(s) des fiches 1 à 69 au scan Édition 1 portent la mention « ${require('../identifier/emprunt').MENTION_EDITION_1} » · ${c.baseSet.prouvesSansMention} prouvé(s) 1re édition, sans mention`);

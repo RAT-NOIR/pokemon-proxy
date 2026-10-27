@@ -24,18 +24,19 @@ async function calculer({ sets, docs, lignes, metacarte, regle, decider = a => r
         if (m.size) exclusions = m;
     }
     const suivi = exclusions === null || exclusions === undefined ? null : X.suivre(exclusions);
-    const masquesDecides = new Set();                                                                  // JUMBO-VISUEL : un masqué n'est jamais « vérifié » par un verdict d'emprunt (son scan n'est pas le sien)
+    const masquesDecides = new Set(), jumbosClasses = new Set();                                       // JUMBO-VISUEL : un JUMBO classé par la liste (emprunt) ou un masqué n'est jamais « vérifié » par un verdict d'emprunt (leur classe vient de la liste du catalogue)
     const b = creerConstructeur({ marquages: true, emprunts: true, ecrits: true, masques: true });       // JUMBO-VISUEL : la colonne des masqués (format 5) est toujours écrite, vide s'il n'y en a pas ; MARQUE-EMPRUNT : la colonne des emprunts (format 3) est toujours écrite, vide s'il n'y en a pas ; REPLI-REIMPRESSIONS : la colonne des marquages (format 2) est toujours écrite, même quand aucun produit n'est marqué (« aucun » est une réponse, l'absence de colonne n'en est pas une)
     const complet = suivi ? creerConstructeur({ marquages: true, emprunts: true, ecrits: true, masques: true }) : null;
     const r = await decider({ sets, docs, lignes, metacarte, regle, cederLaMain: true, ...(jumbosVisuel ? { jumbosVisuel } : {}), sink: {
         // JUMBO-VISUEL : la marque d'un masqué exclu ne va pas dans l'archive (plus d'entrée) ; le constructeur complet la garde (comparerMarques)
+        jumbo: id => { jumbosClasses.add(id); },
         masque: id => { masquesDecides.add(id); if (complet) complet.masque(id); if (!(exclusions && exclusions.has(id))) b.masque(id); },
         entree: e => { if (complet) complet.entree(e); return suivi && suivi.retenir(e) ? undefined : b.entree(e); },
         lien: (s, c, i) => { if (complet) complet.lien(s, c, i); return b.lien(s, c, i); },
         jumeau: j => { if (complet) complet.jumeau(j); return b.jumeau(j); },
         melange: id => { if (complet) complet.melange(id); return b.melange(id); },
         // MARQUE-EMPRUNT : la marque d'un produit exclu ne va pas dans l'archive (il n'y a plus d'entrée) ; le constructeur complet la garde (comparerMarques)
-        emprunt: id => { if (verdicts && verdicts.get(id) === 'juste' && !masquesDecides.has(id)) { verifies.add(id); return; } if (complet) complet.emprunt(id); if (!(exclusions && exclusions.has(id))) b.emprunt(id); } } });
+        emprunt: id => { if (verdicts && verdicts.get(id) === 'juste' && !jumbosClasses.has(id) && !masquesDecides.has(id)) { verifies.add(id); return; } if (complet) complet.emprunt(id); if (!(exclusions && exclusions.has(id))) b.emprunt(id); } } });
     // JUMBO-VISUEL : une liste incohérente avec le catalogue (un nommé sans marqueur JUMBO) ne se sert pas en silence — la validation d'entrée refuserait son entrée sans mention, et un autre repli servirait le scan d'une autre carte
     const jv = r.denominateurs.jumbosVisuel;
     if (jv && jv.sansMarqueur.length) throw Object.assign(new Error('archive refusée'), { motif: `jumbos : ${jv.sansMarqueur.length} produit(s) nommé(s) par la liste sans marqueur JUMBO dans le catalogue (${jv.sansMarqueur.slice(0, 20).join(', ')}) : aucune construction` });

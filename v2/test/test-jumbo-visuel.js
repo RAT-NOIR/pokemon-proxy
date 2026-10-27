@@ -21,11 +21,11 @@ const refus = f => { const r = J.lireFichierJumbos(typeof f === 'string' ? f : e
     // ── 1. la GARDE du fichier : écrite par ce qu'elle AUTORISE
     const bon = J.lireFichierJumbos(ecrire(liste()));
     H.v('1a. une liste conforme est lue : 5 produits, deux classes (2 emprunts, 3 sans visuel), la décision, la date, la date et l\'empreinte de la liste source',
-        [bon.ok, bon.produits.length, bon.comptes, bon.decision, bon.le, bon.listeLe, bon.sha256Source], [true, 5, { emprunt: 2, sansVisuel: 3, parVerdict: { identique: 2, different: 1, illisible: 1, 'fiche-fausse': 1 } }, 'décision de banc (liste fabriquée)', '2026-10-27', '2026-10-27T07:24:27.126Z', SHA]);
+        [bon.ok, bon.produits.length, bon.comptes, bon.decision, bon.le, bon.listeLe, bon.sha256Source], [true, 5, { emprunt: 2, sansVisuel: 3, parVerdict: { identique: 2, different: 1, illisible: 1, 'fiche-fausse': 1, 'decision-api': 0 } }, 'décision de banc (liste fabriquée)', '2026-10-27', '2026-10-27T07:24:27.126Z', SHA]);
     H.v('1b. la classe vient du verdict, et d\'eux seuls : identique -> emprunt ; différent, illisible, fiche-fausse -> sans-visuel (un doute n\'est jamais un emprunt)',
         [...bon.classes].sort((a, b) => a[0] - b[0]), [[101, 'emprunt'], [102, 'emprunt'], [201, 'sans-visuel'], [202, 'sans-visuel'], [203, 'sans-visuel']]);
     H.v('1c. l\'empreinte du fichier lu est celle de ses octets', bon.sha256, crypto.createHash('sha256').update(fs.readFileSync(ecrire(liste()))).digest('hex'));
-    H.v('1d. les verdicts fermés sont exactement quatre', J.VERDICTS, ['identique', 'different', 'illisible', 'fiche-fausse']);
+    H.v('1d. les verdicts fermés sont exactement cinq (decision-api : une décision de l\'API, écrite avec sa raison)', J.VERDICTS, ['identique', 'different', 'illisible', 'fiche-fausse', 'decision-api']);
     const REFUS = [
         ['aucun fichier nommé', null], ['fichier introuvable', path.join(dossier, 'absent.json')], ['fichier vide', ecrire('')], ['JSON illisible', ecrire('{')],
         ['pas un objet', ecrire('[]')], ['clé inconnue à la racine', liste({ extra: 1 })], ['decision absente', (() => { const l = liste(); delete l.decision; return l; })()], ['decision vide', liste({ decision: '  ' })],
@@ -223,7 +223,7 @@ const refus = f => { const r = J.lireFichierJumbos(typeof f === 'string' ? f : e
     const calX = await calculer({ sets: [SET_A, SET_BS], docs, lignes, metacarte, regle, jumbosVisuel: ssMarqueur, exclusions: new Map([[4003, 'visuel-faux']]) });
     H.v('7d. un masqué EXCLU par la liste d\'exclusions n\'a plus d\'entrée : ni masqué ni emprunté ; les partages de ses voisins sont prouvés intacts (partagesPerdus 0)', [calX.version.entree(4003), calX.version.comptes.masques, calX.version.comptes.emprunts, calX.comptes.partagesPerdus], [null, 0, 2, 0]);
     const calV = await calculer({ sets: [SET_A, SET_BS], docs, lignes, metacarte, regle, jumbosVisuel: ssMarqueur, verdictsEmprunts: new Map([[4002, 'juste'], [4003, 'juste']]) });
-    H.v('7e. un verdict « juste » rend l\'emprunt 4002 VÉRIFIÉ (hors de la colonne) mais NE LIBÈRE PAS un masqué (4003 : son scan n\'est pas le sien, le verdict d\'un autre audit n\'y change rien)', [calV.version.empruntDe(4002), calV.version.empruntDe(4003), calV.version.masqueDe(4003)], [false, true, true]);
+    H.v('7e. un verdict « juste » du fichier des verdicts NE LIBÈRE NI un JUMBO emprunté (4002) NI un masqué (4003) : leur classe vient de la liste du catalogue (relecture, mineur M2)', [calV.version.empruntDe(4002), calV.version.empruntDe(4003), calV.version.masqueDe(4003)], [true, true, true]);
     const calS = await calculer({ sets: [SET_A, SET_BS], docs, lignes, metacarte, regle });
     H.v('7f. SANS liste : la colonne des masqués est écrite VIDE (« aucun » est une réponse), aucun JUMBO ne change ; les mentions Base Set, elles, sont posées', [calS.version.colonneMasques, calS.version.comptes.masques, calS.version.empruntDe(4002), calS.version.entree(4101).mention], [true, 0, false, MENTION_EDITION_1]);
     const trompeur = async x => { const y = await decider(x); return { ...y, denominateurs: { ...y.denominateurs, jumbosVisuel: { ...y.denominateurs.jumbosVisuel, sansVisuel: y.denominateurs.jumbosVisuel.sansVisuel + 1 } } }; };
@@ -243,20 +243,21 @@ const refus = f => { const r = J.lireFichierJumbos(typeof f === 'string' ? f : e
     };
     const bonne = ecrire(liste({}, [{ idProduct: 4002, verdict: 'identique' }, { idProduct: 4003, verdict: 'different' }, { idProduct: 4006, verdict: 'illisible' }, { idProduct: 9999, verdict: 'fiche-fausse' }, { idProduct: 4107, verdict: 'identique' }]));
     const cible = path.join(dossier, 'archive-jumbo.rmv'), compteur = { n: 0 };
-    const rOk = await lancer([`--vers=${cible}`, `--jumbos-visuel=${bonne}`], { V2_VISUELS_HMAC: SECRET }, { source: jeuSource(compteur), catalogue: metacarte });
+    const sha = p => crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex'), epingle = p => [`--jumbos-visuel=${p}`, `--jumbos-visuel-sha256=${sha(p)}`], ZERO = `--jumbos-visuel-sha256=${'0'.repeat(64)}`;
+    const rOk = await lancer([`--vers=${cible}`, ...epingle(bonne)], { V2_VISUELS_HMAC: SECRET }, { source: jeuSource(compteur), catalogue: metacarte });
     const archive = F.deserialiser(await F.decompresser(SC.ouvrir(fs.readFileSync(cible), SECRET)));
     H.v('8b. la ligne de commande : --jumbos-visuel=<fichier> -> code 0, l\'archive porte 1 masqué (4003) et les emprunts 4002, 4003, 4107 ; le journal dit la décision, les deux dates, l\'empreinte et les comptes', [rOk.code, archive.comptes.masques, [4002, 4003, 4107].map(id => archive.empruntDe(id)),
         /jumbos \(décision de banc \(liste fabriquée\)/.test(rOk.texte), /liste source du 2026-10-27T07:24:27\.126Z/.test(rOk.texte), new RegExp('empreinte de la liste source ' + SHA).test(rOk.texte), /1 produit\(s\) masqué\(s\)/.test(rOk.texte), /2 emprunt\(s\)/.test(rOk.texte)], [0, 1, [true, true, true], true, true, true, true, true]);
     H.v('8c. le journal nomme ce que la liste cite SANS entrée (4006 sans image, 9999 absent) et les JUMBO que la liste ne nomme pas (4004)', [/4006 \[sans-visuel\]/.test(rOk.texte), /9999 \[sans-visuel\]/.test(rOk.texte), /sans verdict.*4004/.test(rOk.texte)], [true, true, true]);
     const avantRefus = compteur.n, cibleRefus = path.join(dossier, 'refus.rmv');
     const refusCli = [];
-    for (const [nom, argv] of [['fichier introuvable', [`--jumbos-visuel=${path.join(dossier, 'absent.json')}`]], ['forme sans =', ['--jumbos-visuel']], ['valeur vide', ['--jumbos-visuel=']],
-        ['liste invalide', [`--jumbos-visuel=${ecrire(liste({ le: 'hier' }))}`]], ['verdict inconnu', [`--jumbos-visuel=${ecrire(liste({}, [{ idProduct: 4002, verdict: 'peut-etre' }]))}`]]]) {
+    for (const [nom, argv] of [['fichier introuvable', [`--jumbos-visuel=${path.join(dossier, 'absent.json')}`, ZERO]], ['forme sans =', ['--jumbos-visuel', ZERO]], ['valeur vide', ['--jumbos-visuel=', ZERO]],
+        ['liste invalide', [`--jumbos-visuel=${ecrire(liste({ le: 'hier' }))}`, ZERO]], ['verdict inconnu', [`--jumbos-visuel=${ecrire(liste({}, [{ idProduct: 4002, verdict: 'peut-etre' }]))}`, ZERO]]]) {
         const r = await lancer([`--vers=${cibleRefus}`, ...argv], { V2_VISUELS_HMAC: SECRET }, { source: jeuSource(compteur), catalogue: metacarte });
         refusCli.push([nom, r.code, /--jumbos-visuel/.test(r.texte)]);
     }
     H.v('8d. une liste invalide, absente ou mal formée REFUSE la construction (code 1) AVANT toute lecture de la source, et rien n\'est écrit', [refusCli, compteur.n === avantRefus, fs.existsSync(cibleRefus)], [refusCli.map(([nom]) => [nom, 1, true]), true, false]);
-    const rIncoh = await lancer([`--vers=${cibleRefus}`, `--jumbos-visuel=${ecrire(liste({}, [{ idProduct: 4001, verdict: 'identique' }]))}`], { V2_VISUELS_HMAC: SECRET }, { source: jeuSource(), catalogue: metacarte });
+    const rIncoh = await lancer([`--vers=${cibleRefus}`, ...epingle(ecrire(liste({}, [{ idProduct: 4001, verdict: 'identique' }])))], { V2_VISUELS_HMAC: SECRET }, { source: jeuSource(), catalogue: metacarte });
     H.v('8e. une liste qui nomme un produit SANS marqueur JUMBO (4001, la carte normale) : la construction s\'arrête (code 1), rien n\'est écrit', [rIncoh.code, /sans marqueur JUMBO/.test(rIncoh.texte), fs.existsSync(cibleRefus)], [1, true, false]);
     const rSans = await lancer([`--vers=${path.join(dossier, 'sans.rmv')}`], { V2_VISUELS_HMAC: SECRET }, { source: jeuSource(), catalogue: metacarte });
     const arcSans = F.deserialiser(await F.decompresser(SC.ouvrir(fs.readFileSync(path.join(dossier, 'sans.rmv')), SECRET)));
@@ -282,10 +283,14 @@ const refus = f => { const r = J.lireFichierJumbos(typeof f === 'string' ? f : e
     // ── 9. l'identification ne change pas : la CEINTURE de SUR-PAR-IMAGE ne lit pas la mention de Base Set comme un emprunt oublié ; le GROUPE { JUMBO, normale } tient pour la normale, l'emprunt et le masqué
     const { emprunteDe } = require('../identifier/sur-par-image-route'); const GM = require('../identifier/garde-marqueurs');
     const cBase = V.creerConstructeur({ marquages: true, emprunts: true, ecrits: true, masques: true });
-    cBase.entree(brut(8001, { mention: MENTION_EDITION_1 })); cBase.entree(brut(8002, { mention: 'Visuel de la même carte dans un autre tirage (Set B n°1) — pas celui de ce set' })); cBase.entree(brut(8003)); cBase.entree(brut(8004, { mention: 'Une mention quelconque' }));
+    const lienBS = 'https://www.cardmarket.com/en/Pokemon/Products/Singles/Base-Set/Bulbasaur-V1-BS44', lienA = 'https://www.cardmarket.com/en/Pokemon/Products/Singles/Set-A/Bulbasaur-V1-SA44';
+    cBase.entree(brut(8005, { mention: MENTION_EDITION_1, lien: lienA, numero: '4' })); cBase.entree(brut(8006, { mention: MENTION_EDITION_1, lien: lienBS, numero: '70' })); cBase.entree(brut(8007, { mention: MENTION_EDITION_1 })); cBase.entree(brut(8008, { mention: MENTION_EDITION_1, lien: lienBS, numero: '04' }));
+    cBase.entree(brut(8001, { mention: MENTION_EDITION_1, lien: lienBS, numero: '4' })); cBase.entree(brut(8002, { mention: 'Visuel de la même carte dans un autre tirage (Set B n°1) — pas celui de ce set' })); cBase.entree(brut(8003)); cBase.entree(brut(8004, { mention: 'Une mention quelconque' }));
     const vBase = cBase.finir(D), ceinture = emprunteDe(vBase);
     H.v('9a. la ceinture : une mention d\'affichage (Base Set) sur une entrée NON empruntée ne la rend pas suspecte (false : l\'image peut encore servir) ; toute AUTRE mention sur une entrée dite propre la rend suspecte (true, comme avant) ; sans mention : false',
         [ceinture(8001), ceinture(8002), ceinture(8004), ceinture(8003)], [false, true, true, false]);
+    H.v('9a2. I4 : l\'exemption est bornée à l\'ENTRÉE (lien du set Base-Set ET numéro 1 à 69), jamais au texte : la même chaîne sur un autre set (8005), au n° 70 (8006) ou sans lien (8007) reste suspecte ; n° « 04 » (8008) exempté',
+        [ceinture(8005), ceinture(8006), ceinture(8007), ceinture(8008)], [true, true, true, false]);
     const grp = V.creerConstructeur({ marquages: true, emprunts: true, ecrits: true, masques: true });
     const tout = { vignette: { cle: 'vignettes/n.webp', w: 200, h: 279 }, grande: { cle: 'cartes/n.webp', w: 600, h: 838 }, idMetacard: 321, numero: '20', setNom: 'Set A' };
     grp.entree(brut(9001, tout));                                                                                                                      // la normale
@@ -309,6 +314,55 @@ const refus = f => { const r = J.lireFichierJumbos(typeof f === 'string' ? f : e
     H.v('9f. garde ÉTEINTE : rien ne change (le comportement d\'avant)', [9001, 9002, 9003].map(p => jouer(p, 'image (inliers)', { jumboTitre: false, gardeMarqueurs: false })), ['sûr', 'sûr', 'sûr']);
 
     H.v('6l. une Map invalide (vide, classe inconnue) REFUSE la décision, avec la raison de la garde', [await refusDecision(new Map()), await refusDecision(new Map([[1, 'autre']])), await refusDecision([[1, 'emprunt']])].map(m => /^jumbos : /.test(m || '')), [true, true, true]);
+
+    // ── 10. TOUR 1 (relecture) — I1 la liste est reconnue (épinglée, datée au calendrier, sans clé dupliquée) ; I2 decision-api ; I3 le chargeur compare le CONTENU de la colonne
+    const octetsListe = JSON.stringify(liste());
+    const cheminB = ecrire(octetsListe), shaB = sha(cheminB);
+    H.v('10a. I1 : l\'empreinte attendue est comparée à celle des octets lus — la bonne passe, une autre (une copie éditée) REFUSE, avec les deux empreintes', [
+        J.lireFichierJumbos(cheminB, { sha256Attendu: shaB }).ok, (r => [r.ok, /empreinte.*attendue/.test(r.raison || ''), (r.raison || '').includes(shaB)])(J.lireFichierJumbos(cheminB, { sha256Attendu: '0'.repeat(64) })),
+        (r => [r.ok, /sha256Attendu/.test(r.raison || '')])(J.lireFichierJumbos(cheminB, { sha256Attendu: 'ABC' }))], [true, [false, true, true], [false, true]]);
+    const editee = octetsListe.replace('"verdict":"different"', '"verdict":"identique"');
+    H.v('10b. I1 : une copie ÉDITÉE (un different devenu identique, forme intacte) est refusée par l\'empreinte consignée', [J.lireFichierJumbos(ecrire(editee)).ok, J.lireFichierJumbos(ecrire(editee), { sha256Attendu: shaB }).ok], [true, false]);
+    const cSrc = ecrire('contenu du catalogue'), shaSrc = sha(cSrc);
+    H.v('10c. I1 : sha256Source comparé au fichier source quand il est présent (égal : « compare » ; différent : « ecart », refus) ; source absente ou illisible : « non-compare »', [
+        J.comparerSource(J.lireFichierJumbos(ecrire(liste({ source: cSrc, sha256Source: shaSrc })))).etat, J.comparerSource(J.lireFichierJumbos(ecrire(liste({ source: cSrc, sha256Source: SHA })))).etat,
+        J.comparerSource(J.lireFichierJumbos(ecrire(liste({ source: path.join(dossier, 'nexiste-pas.json') })))).etat, J.comparerSource(J.lireFichierJumbos(ecrire((() => { const l = liste(); delete l.source; return l; })()))).etat], ['compare', 'ecart', 'non-compare', 'non-compare']);
+    const DATES = [['listeLe 2026-02-30', { listeLe: '2026-02-30T00:00:00Z' }], ['listeLe 24:00', { listeLe: '2026-10-27T24:00:00Z' }], ['listeLe 2031', { listeLe: '2031-01-01T00:00:00Z' }], ['listeLe 2025', { listeLe: '2025-12-31T23:59:59Z' }],
+        ['listeLe mois 13', { listeLe: '2026-13-01T00:00:00Z' }], ['listeLe 60 s', { listeLe: '2026-10-27T10:00:60Z' }], ['le 2026-02-30', { le: '2026-02-30' }], ['le 2031', { le: '2031-01-01' }], ['le 2025', { le: '2025-12-31' }]];
+    H.v('10d. I1 : les dates sont validées AU CALENDRIER et bornées 2026-2030 (9 formes refusées) ; 2028-02-29 et un instant sans millisecondes passent', [DATES.filter(([, x]) => refus(liste(x)) === null).map(([nom]) => nom),
+        refus(liste({ le: '2028-02-29', listeLe: '2028-02-29T10:00:00Z' }))], [[], null]);
+    const dup = '{"decision":"d","decision":"autre","le":"2026-10-27","listeLe":"2026-10-27T07:24:27.126Z","sha256Source":"' + SHA + '","produits":[{"idProduct":1,"verdict":"identique"}]}';
+    const dupImbriquee = '{"decision":"d","le":"2026-10-27","listeLe":"2026-10-27T07:24:27.126Z","sha256Source":"' + SHA + '","produits":[{"idProduct":1,"verdict":"identique","verdict":"different"}]}';
+    H.v('10e. I1 : une clé JSON dupliquée (racine ou dans un produit) est REFUSÉE (le dernier ne gagne pas en silence) ; le même contenu sans doublon passe', [refus(ecrire(dup)), refus(ecrire(dupImbriquee))].map(r => /dupliquée/.test(r || '')), [true, true]);
+    H.v('10f. I2 : le verdict `decision-api` est un masqué (sans-visuel) ET exige sa raison (texte non vide, 200 caractères au plus) ; une raison sur un autre verdict est admise, jamais un non-texte', [
+        J.lireFichierJumbos(ecrire(liste({}, [{ idProduct: 5, verdict: 'decision-api', raison: 'V-UNION, pièce assemblée' }]))).classes.get(5),
+        refus(liste({}, [{ idProduct: 5, verdict: 'decision-api' }])) !== null, refus(liste({}, [{ idProduct: 5, verdict: 'decision-api', raison: '  ' }])) !== null, refus(liste({}, [{ idProduct: 5, verdict: 'decision-api', raison: 'x'.repeat(201) }])) !== null,
+        refus(liste({}, [{ idProduct: 5, verdict: 'different', raison: 4 }])) !== null, refus(liste({}, [{ idProduct: 5, verdict: 'different', raison: 'vu' }]))], ['sans-visuel', true, true, true, true, null]);
+    // I3 : une version dont la colonne des masqués a MOINS de produits que celle en place ne la remplace JAMAIS (le chargeur calculé dans l'API n'a pas la liste)
+    {
+        const ch3 = creerChargeur({ catalogue: async () => new Map([[1, 1]]), executer: async () => ({ ok: true, version: aCharger, comptes: comptesDe(aCharger) }), journal: m => journal.push(m) });
+        ETAT.vider();
+        try {
+            aCharger = avecLien({ emprunts: true, ecrits: true, masques: true }, '2026-10-29T09:00:00.000Z', [emprunteJumbo(1), emprunteJumbo(2)], [1, 2]); const enPlace = aCharger; await ch3.charger();
+            journal.length = 0; aCharger = avecLien({ emprunts: true, ecrits: true, masques: true }, '2026-10-29T10:00:00.000Z', [emprunteJumbo(1), emprunteJumbo(2)], []); const r1 = await ch3.charger();
+            H.v('10g. I3 : une version à colonne des masqués VIDE (le calcul dans l\'API, sans la liste) ne remplace pas une version à 2 masqués : la version en place est gardée, le journal dit les deux comptes', [r1.ok, ETAT.version() === enPlace, journal.some(m => /masqués de la version chargée \(0\) a moins de produits que celle de la version en place \(2\)/.test(m))], [false, true, true]);
+            journal.length = 0; aCharger = avecLien({ emprunts: true, ecrits: true, masques: true }, '2026-10-29T11:00:00.000Z', [emprunteJumbo(1), emprunteJumbo(2)], [1]); const r2 = await ch3.charger();
+            H.v('10h. I3 : une version à 1 masqué (< 2) est refusée aussi ; à 2 masqués (égale), elle remplace', [r2.ok, ETAT.version() === enPlace], [false, true]);
+            aCharger = avecLien({ emprunts: true, ecrits: true, masques: true }, '2026-10-29T12:00:00.000Z', [emprunteJumbo(1), emprunteJumbo(2)], [1, 2]); const r3 = await ch3.charger();
+            H.v('10i. I3 : à nombre égal de masqués la version plus récente s\'installe', [r3.ok, ETAT.version() === aCharger], [true, true]);
+        } finally { ETAT.vider(); }
+    }
+    // CLI : la liste est épinglée (--jumbos-visuel-sha256 obligatoire), recalculée, comparée ; la source est comparée ou dite « non comparée »
+    {
+        const cV = path.join(dossier, 'epingle.rmv'), nb = compteur.n;
+        const sansPin = await lancer([`--vers=${cV}`, `--jumbos-visuel=${bonne}`], { V2_VISUELS_HMAC: SECRET }, { source: jeuSource(compteur), catalogue: metacarte });
+        const mauvaisPin = await lancer([`--vers=${cV}`, `--jumbos-visuel=${bonne}`, ZERO], { V2_VISUELS_HMAC: SECRET }, { source: jeuSource(compteur), catalogue: metacarte });
+        const pinMalForme = await lancer([`--vers=${cV}`, `--jumbos-visuel=${bonne}`, '--jumbos-visuel-sha256=abc'], { V2_VISUELS_HMAC: SECRET }, { source: jeuSource(compteur), catalogue: metacarte });
+        const sourceEcart = await lancer([`--vers=${cV}`, ...epingle(ecrire(liste({ source: cSrc, sha256Source: SHA })))], { V2_VISUELS_HMAC: SECRET }, { source: jeuSource(compteur), catalogue: metacarte });
+        H.v('10j. I1 CLI : sans empreinte, avec une mauvaise empreinte, avec une empreinte mal formée, avec un sha256Source qui ne correspond pas au fichier source : code 1, AVANT toute lecture de la source, rien d\'écrit',
+            [[sansPin, mauvaisPin, pinMalForme, sourceEcart].map(r => r.code), compteur.n === nb, fs.existsSync(cV), [sansPin, mauvaisPin, pinMalForme, sourceEcart].map(r => /--jumbos-visuel/.test(r.texte))], [[1, 1, 1, 1], true, false, [true, true, true, true]]);
+        H.v('10k. I1 CLI : le journal dit l\'empreinte épinglée vérifiée, et « non comparé » quand la source n\'est pas lisible (ici le chemin de documentation)', [/empreinte de la copie ÉPINGLÉE vérifiée/.test(rOk.texte), /sha256Source non comparé/.test(rOk.texte)], [true, true]);
+    }
 
     H.bilan();
 })().catch(x => { console.error('❌', x); process.exit(1); });
