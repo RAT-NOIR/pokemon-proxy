@@ -75,6 +75,14 @@ async function principal(argv = process.argv, env = process.env, deps = {}) {
         else console.log('   exclusions : tous les produits de la liste avaient un visuel dans l\'archive (aucun déjà sans visuel)');
     }
     console.log('   emprunts : ' + c.empruntsColonne + ' (colonne) · décidés non vérifiés ' + c.empruntsProduits + ' · verdicts : ' + (verdicts ? 'juste ' + verdicts.comptes.juste + ' (vérifiés ' + c.empruntsVerifies + ', sans emprunt ' + c.verdictsSansEmprunt + ') · exclu ' + verdicts.comptes.exclu + ' (retirés ' + c.empruntsExclusParVerdict + ') · sans verdict ' + verdicts.comptes.sansVerdict : 'aucun fichier (tous les emprunts restent non vérifiés)'));
+    // ARCHIVE-4 : les marqueurs ÉCRITS par le catalogue — ce que l'archive porte (par type) et chaque écart COMPTÉ (éléments refusés par la table du contrat, doublons de type, listes de plus de 4, éléments sans preuve,
+    // contradictions avec le dérivé, lignes à marqueurs sans entrée d'archive) : un refus s'imprime, il ne se perd pas
+    if (c.marqueursEcrits) {
+        const m = c.marqueursEcrits;
+        console.log(`   marqueurs écrits : lignes du catalogue ${m.lignes} · portés par l'archive : ${m.colonne ? m.colonne.entrees : 0} produit(s), ${m.colonne ? m.colonne.elements : 0} élément(s) (${Object.entries(m.colonne ? m.colonne.parType : {}).map(([k, n]) => `${k} ${n}`).join(' · ') || 'aucun'})`
+            + ` · REFUSÉS : éléments invalides ${m.invalides} · doublons de type ${m.doublons} · listes de plus de ${require('../identifier/marqueurs').MARQUEURS_MAX} ${m.trop} · éléments sans preuve ${m.sansPreuve} · contradictions avec le dérivé ${m.contradictions} · produits aux marqueurs contradictoires ${m.contradictoires || 0}`
+            + ` · lignes à marqueurs SANS entrée d'archive (aucun visuel servi) ${m.sansEntree}`);
+    }
     // m1 : les compteurs du lot REPLI-REIMPRESSIONS, lisibles dans la sortie (jamais seulement dans un banc)
     if (c.repliRefuse) console.log('   repli : produits sans image d\'un autre tirage ' + c.repliRefuse.total + ' (' + Object.entries(c.repliRefuse.parFamille).map(([k, n]) => k + ' ' + n).join(' · ') + ') · basse définition exclue ' + (c.basseDefinitionExclue || 0)
         + ' · partage incohérent écarté ' + (c.partageIncoherent || 0) + ' · variante sans preuve ' + (c.varianteSansPreuve || 0) + ' · marquages ' + JSON.stringify(c.marquees || null)

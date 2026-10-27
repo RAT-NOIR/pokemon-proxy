@@ -89,7 +89,8 @@ function executerDepuisFichier({ lireFichier, secret, nonScelleBanc = false }) {
 }
 
 let avertiSansEmprunts = false;           // MARQUE-EMPRUNT : idem pour l'absence de la colonne des emprunts
-let avertiSansMarquages = false;          // m5 : l'avertissement « archive sans la colonne des marquages » n'est écrit qu'une fois par processus
+let avertiSansEcrits = false;             // ARCHIVE-4 : idem pour l'absence de la colonne des marqueurs écrits
+let avertiSansMarquages = false;         // m5 : l'avertissement « archive sans la colonne des marquages » n'est écrit qu'une fois par processus
 
 function creerChargeur(opts = {}) {
     const catalogue = opts.catalogue || catalogueApi;
@@ -118,6 +119,8 @@ function creerChargeur(opts = {}) {
             if (v && v.comptes && v.comptes.melange !== undefined) repli.push(`prix mélangés : produits marqués dans cartes_produits : ${comptes.melangeProduits ?? v.comptes.melange} · dans la colonne : ${v.comptes.melange}`);
             // MARQUE-EMPRUNT : les visuels empruntés à un autre tirage, par nature, ou l'absence de la colonne (les règles d'image les traitent alors TOUS comme empruntés)
             if (v && v.comptes && v.comptes.emprunts !== undefined) repli.push(`visuels empruntés ${v.comptes.emprunts}${comptes.empruntsParNature ? ` (autre tirage ${comptes.empruntsParNature['autre-tirage']}, substitut d'un autre set ${comptes.empruntsParNature.substitut})` : ''}`);
+            // ARCHIVE-4 : les marqueurs ÉCRITS par le catalogue, portés par l'archive (par type), ou l'absence de la colonne (les marqueurs écrits ne sont alors pas servis)
+            if (v && v.comptes && v.comptes.ecrits) repli.push(`marqueurs écrits ${v.comptes.ecrits.entrees} produit(s), ${v.comptes.ecrits.elements} élément(s) (${Object.entries(v.comptes.ecrits.parType).map(([k, n]) => `${k} ${n}`).join(', ') || 'aucun'})`);
             if (comptes.repliRefuse) repli.push(`sans image d'un autre tirage ${comptes.repliRefuse.total} (${Object.entries(comptes.repliRefuse.parFamille).filter(([, n]) => n).map(([k, n]) => `${k} ${n}`).join(', ') || 'aucune'})`);
             if (comptes.exclus !== undefined) repli.push(`exclus de l'identification ${comptes.exclus} (${Object.entries(comptes.exclusParMotif || {}).map(([k, n]) => `${k} ${n}`).join(', ')}) · partages perdus ${comptes.partagesPerdus}`);
             if (Array.isArray(comptes.familleHorsListe) && comptes.familleHorsListe.length) repli.push(`FAMILLES HORS LISTE FERMÉE ${comptes.familleHorsListe.join(', ')}`);
@@ -137,6 +140,10 @@ function creerChargeur(opts = {}) {
             // MARQUE-EMPRUNT : même règle pour la colonne des emprunts (format 3) ; sans elle, `estEmprunte` rend null et les règles d'image (G, départage, zone clé) lisent « emprunté » partout : elles se taisent (défaut fermé)
             if (prev && prev.colonneEmprunts && !v.colonneEmprunts) throw new Echec(`la version chargée n'a pas la colonne des emprunts alors que celle en place l'a — ${dit}`);
             if (!v.colonneEmprunts && !avertiSansEmprunts) { avertiSansEmprunts = true; journal('⚠️ [v2 chargeur] la version chargée n\'a PAS la colonne des emprunts (archive d\'avant le format 3) : les règles d\'image (règle G, départage par l\'image) traitent TOUT visuel comme emprunté à un autre tirage, donc se taisent, tant qu\'une archive récente ne l\'aura pas apportée'); }
+            // ARCHIVE-4 : même règle pour la colonne des marqueurs écrits (format 4) : une version qui ne les porte pas ne remplace jamais une version qui les porte ; sans version en place, elle s'installe (les marqueurs dérivés
+            // restent servis ; ceux que le catalogue écrit, dont les Jumbo, ne le sont pas) et le journal le dit une fois
+            if (prev && prev.colonneEcrits && !v.colonneEcrits) throw new Echec(`la version chargée n'a pas la colonne des marqueurs écrits alors que celle en place l'a — ${dit}`);
+            if (!v.colonneEcrits && !avertiSansEcrits) { avertiSansEcrits = true; journal('⚠️ [v2 chargeur] la version chargée n\'a PAS la colonne des marqueurs écrits (archive d\'avant le format 4) : les marqueurs que le catalogue écrit (Jumbo…) ne sont pas servis, seuls les marqueurs dérivés le sont'); }
             if (prev) {
                 // une archive plus ANCIENNE que celle en place (rejouée à l'envers) est refusée ; sa date et son âge sont journalisés au chargement
                 if (v.chargeLe < prev.chargeLe) throw new Echec(`archive plus ancienne que celle en place (${v.chargeLe.toISOString()} < ${prev.chargeLe.toISOString()})`);

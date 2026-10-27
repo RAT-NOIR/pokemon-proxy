@@ -224,4 +224,37 @@ function fusionner(derives, ecrits) {
 /** Raccourci pour le produit servi : le tableau fusionné seul (les comptes se lisent par fusionner). */
 const marqueursDe = (produit, ecrits) => fusionner(deriver(produit), ecrits).marqueurs;
 
-module.exports = { TYPES, NOMS_TYPES, LIBELLE_MAX, MARQUEURS_MAX, WCD_GABARITS, TYPE_DE_MARQUE, FORMES_PARAMS, valider, rendre, deriver, fusionner, marqueursDe, marqueursDuSet, slugSetDuLien, anneeDuSetWcd, setWcdDeLEntree };
+// ARCHIVE-4 — le TRANSPORT des marqueurs ÉCRITS jusqu'au service. La phrase de preuve (`marqueursPreuve`) est exigée (produit.js ne fusionne un écrit que si elle est là) et RÉDUITE à PREUVE_MAX caractères dans
+// l'archive : elle dit d'où vient le marqueur, rien de plus. UNE fonction lit la ligne du catalogue (la décision, les bancs, la mesure) ; UNE autre rend la fusion d'une ENTRÉE d'archive (même calcul que le produit servi).
+const PREUVE_MAX = 120;
+const textePreuve = x => (typeof x === 'string' && x.trim() ? x.trim() : null);
+const sansLibelle = e => ({ type: e.type, params: { ...e.params } });
+/**
+ * Ce que le catalogue a ÉCRIT sur une ligne (`marqueurs` + `marqueursPreuve`), validé, prêt à être porté par l'archive.
+ * @returns { elements: [{ type, params}] | null, preuve: string | null, invalides, doublons, trop, sansPreuve } — `elements` est null quand rien ne peut être porté : pas de liste (ou liste vide : elle ne prouve rien),
+ * pas de preuve (les éléments sont comptés `sansPreuve`), plus de MARQUEURS_MAX éléments (`trop`), ou aucun élément valide. Les invalides et les doublons sont COMPTÉS, jamais réparés.
+ */
+function ecritsDeLaLigne(ligne) {
+    const l = ligne && typeof ligne === 'object' ? ligne : {};
+    const sortie = { elements: null, preuve: null, invalides: 0, doublons: 0, trop: 0, sansPreuve: 0 };
+    if (!Array.isArray(l.marqueurs) || l.marqueurs.length === 0) return sortie;
+    const preuve = textePreuve(l.marqueursPreuve);
+    const r = fusionner(null, l.marqueurs);
+    sortie.invalides = r.invalides; sortie.doublons = r.doublons; sortie.trop = r.trop;
+    if (!preuve) { sortie.sansPreuve = l.marqueurs.length - r.invalides - r.doublons; return sortie; }
+    if (r.marqueurs === null) return sortie;
+    sortie.elements = r.marqueurs.map(sansLibelle);
+    sortie.preuve = preuve.slice(0, PREUVE_MAX).trim();                                  // rognée APRÈS la coupe : une coupe sur une espace laisserait une preuve que l'archive refuserait (et le produit disparaîtrait)
+    return sortie;
+}
+/**
+ * La fusion (dérivé + écrit) d'une ENTRÉE d'archive : le même calcul que le produit servi (produit.js::marqueursServis). Le dérivé vient de la variante prouvée de l'entrée et du set de son lien Cardmarket.
+ * @returns le retour de fusionner : { marqueurs, contradictions, invalides, doublons, trop }.
+ */
+function marqueursDeLEntree(entree) {
+    const e = entree && typeof entree === 'object' ? entree : {};
+    const derive = deriver({ variante: e.variante === 'jumbo' || e.variante === 'premiere-edition' ? e.variante : null, marques: MT.marquesProuvees(e.variante), slugSet: slugSetDuLien(e.lien) });
+    return fusionner(derive, textePreuve(e.marqueursPreuve) ? e.marqueurs : undefined);
+}
+
+module.exports = { TYPES, NOMS_TYPES, LIBELLE_MAX, MARQUEURS_MAX, WCD_GABARITS, TYPE_DE_MARQUE, FORMES_PARAMS, valider, rendre, deriver, fusionner, marqueursDe, marqueursDuSet, slugSetDuLien, anneeDuSetWcd, setWcdDeLEntree, PREUVE_MAX, ecritsDeLaLigne, marqueursDeLEntree };

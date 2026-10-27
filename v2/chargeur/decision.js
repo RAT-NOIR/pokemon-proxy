@@ -241,7 +241,19 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         // ADMISSION-CATALOGUE : les entrées admises par la règle fermée (à part du repli refusé), et les scans de position retirés d'un autre produit (somme : avecLigne compte aussi positionContredite)
         admisCatalogue: { 'prv-position': 0, 'wcd-emprunt': 0 }, positionContredite: 0,
         // MARQUEURS : un emprunt WCD admis par la règle dont le set n'est pas reconnu SUR L'ENTRÉE (lien Cardmarket ou nom « WCD <année> ») : pas d'entrée (la validation d'entrée la refuserait sans mention) — somme : avecLigne le compte aussi
-        wcdSansSetReconnu: 0 };
+        wcdSansSetReconnu: 0,
+        // ARCHIVE-4 — les marqueurs ÉCRITS par le catalogue (cartes_produits.marqueurs + marqueursPreuve), lus par UNE fonction (marqueurs.js::ecritsDeLaLigne) pour TOUTES les lignes, avant tout écartement :
+        // lignes (liste non vide), invalides / doublons / trop / sansPreuve (les écarts, comptés et jamais réparés) ; puis ce qui est PORTÉ par les entrées écrites : entrees (produits distincts), elements, parType,
+        // contradictions (avec le dérivé, qui l'emporte) ; sansEntree : les lignes à marqueurs qui n'ont pas atteint l'émission (aucun visuel servi : le marqueur ne voyage que sur l'entrée de son produit)
+        marqueursEcrits: { lignes: 0, invalides: 0, doublons: 0, trop: 0, sansPreuve: 0, entrees: 0, elements: 0, parType: {}, contradictions: 0, sansEntree: 0 } };
+    const ecritsDe = new Map(), produitsEcrits = new Set();
+    let ecritsTraitees = 0;
+    for (const l of lignes) {
+        if (!Array.isArray(l.marqueurs) || l.marqueurs.length === 0) continue;
+        const w = MQ.ecritsDeLaLigne(l), m = d.marqueursEcrits;
+        m.lignes++; m.invalides += w.invalides; m.doublons += w.doublons; m.trop += w.trop; m.sansPreuve += w.sansPreuve;
+        ecritsDe.set(l, w);
+    }
     const empruntes = new Set();
     const positions = new Map();
     for (const l of lignes) { const p = positionDuSlug(l.slug, l.slugSet); if (p) { const k = `${l.carteId}|${l.slugSet}|${p}`; positions.set(k, (positions.get(k) || 0) + 1); } }
@@ -315,6 +327,17 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
             lien: lienE,
             grande: entier(im.w) && entier(im.h) ? fichierDe(im.cleR2, im.w, im.h) : null };
         Object.assign(e, marquagesDe(im, l.idProduct, e.variante));
+        // ARCHIVE-4 : les marqueurs écrits validés de la LIGNE voyagent sur l'entrée de son produit (la fusion avec le dérivé se fait au service, par la même fonction que le produit servi)
+        const w = ecritsDe.get(l);
+        if (w) {
+            ecritsTraitees++;
+            if (w.elements) {
+                e.marqueurs = w.elements; e.marqueursPreuve = w.preuve;
+                const m = d.marqueursEcrits;
+                if (!produitsEcrits.has(l.idProduct)) { produitsEcrits.add(l.idProduct); m.entrees++; m.elements += w.elements.length; for (const x of w.elements) m.parType[x.type] = (m.parType[x.type] || 0) + 1; }
+                m.contradictions += MQ.marqueursDeLEntree({ ...e, marqueurs: w.elements, marqueursPreuve: w.preuve }).contradictions;
+            }
+        }
         const vs = im.vignette ?? vignetteDuFichier.get(im.cleR2);
         const v = vs && fichierDe(vs.cleR2, vs.w, vs.h);
         if (v) e.vignette = v;
@@ -333,6 +356,8 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
     }
     for (const id of metacarte.keys()) if (!emis.has(id)) emettre({ idProduct: id, idMetacard: metaDe(id), idExpansion: null, numero: null, tirage: null });
     entrees.sort((a, b) => a.idProduct - b.idProduct);
+    d.marqueursEcrits.sansEntree = d.marqueursEcrits.lignes - ecritsTraitees;
+    d.marqueursEcrits.parType = Object.fromEntries(MQ.NOMS_TYPES.filter(t => d.marqueursEcrits.parType[t]).map(t => [t, d.marqueursEcrits.parType[t]]));      // dans l'ordre de la table
     d.melangeProduits = melanges.size;
     return { entrees, denominateurs: d, liens, ...(sink ? {} : { jumeaux, melanges: [...melanges].sort((a, b) => a - b), emprunts: [...empruntes].sort((a, b) => a - b) }) };
 }

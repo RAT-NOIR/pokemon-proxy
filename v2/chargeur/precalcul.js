@@ -37,6 +37,9 @@ async function fabriquerFichier({ source, catalogue, regle = () => require('./re
     // MARQUE-EMPRUNT : la colonne des emprunts relue est celle qui a été calculée (la route ne saurait pas, sinon, quel visuel est emprunté)
     if (!r.version.colonneEmprunts) throw echec('MARQUE-EMPRUNT : la version calculée n\'a pas la colonne des emprunts (les règles d\'image ne sauraient pas qu\'un visuel est emprunté) : aucun fichier écrit');
     if (!relu.colonneEmprunts || relu.comptes.emprunts !== r.version.comptes.emprunts) throw echec('aller-retour : la colonne des emprunts relue diffère de celle calculée : aucun fichier écrit');
+    // ARCHIVE-4 : la colonne des marqueurs écrits relue est celle qui a été calculée (la route ne saurait pas, sinon, ce que le catalogue a écrit)
+    if (!r.version.colonneEcrits) throw echec('ARCHIVE-4 : la version calculée n\'a pas la colonne des marqueurs écrits (le service ne verrait pas les marqueurs du catalogue) : aucun fichier écrit');
+    if (!relu.colonneEcrits || JSON.stringify(relu.comptes.ecrits) !== JSON.stringify(r.version.comptes.ecrits)) throw echec('aller-retour : la colonne des marqueurs écrits relue diffère de celle calculée : aucun fichier écrit');
     // ARCHIVE-EXCLUSIONS : les compteurs relus sont ceux qui ont été calculés (et sans liste, aucun compteur d'exclusion n'a le droit d'exister)
     if (relu.comptes.exclus !== (exclusions ? r.comptes.exclus : undefined) || JSON.stringify(relu.comptes.exclusParMotif) !== JSON.stringify(exclusions ? r.comptes.exclusParMotif : undefined) || relu.comptes.partagesPerdus !== (exclusions ? 0 : undefined)) throw echec('aller-retour : les compteurs d\'exclusion relus diffèrent de ceux calculés : aucun fichier écrit');
     return { brut, gz, scelle: secret ? sceller(gz, secret) : null, comptes: r.comptes, comptesSource, entree, dureeMs: Date.now() - t0 };

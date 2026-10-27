@@ -82,6 +82,25 @@ const MEL_COLS = Object.freeze(['produits']);
 // MARQUE-EMPRUNT (format 3) — la COLONNE DES EMPRUNTS : la liste TRIÉE des idProduct qui ONT une entrée d'archive et dont le visuel est EMPRUNTÉ à un autre tirage (la décision `choisirVisuel` : 'autre-tirage', ou un substitut d'un autre
 // set). Elle vient de la décision, jamais du texte de la mention. « Aucun emprunt » s'écrit par une colonne VIDE ; une archive d'avant n'a pas la colonne : empruntDe rend null (inconnu), jamais false.
 const EMP_COLS = Object.freeze(['produits']);
+// ARCHIVE-4 (format 4) — la COLONNE DES MARQUEURS ÉCRITS : ce que le catalogue a écrit dans cartes_produits.marqueurs, validé par la table du contrat (marqueurs.js) et accompagné de sa preuve. Une valeur par ligne
+// de visuel (alignée sur cols.id) pour les bornes et la preuve ; les éléments sont à plat (un type et ses params, en JSON canonique, dans la réserve de textes). « Aucun marqueur écrit » s'écrit par une colonne
+// VIDE (bornes égales) ; une archive d'avant n'a pas la colonne : entree().marqueurs vaut null, jamais « aucun ».
+//   deb, fin  les bornes des éléments de la ligne dans type/params ; preuve  l'indice du texte de la preuve (-1 = aucun marqueur) ; type, params  les indices de texte de chaque élément.
+const ECR_COLS = Object.freeze(['deb', 'fin', 'preuve', 'type', 'params']);
+const MQ = require('../identifier/marqueurs');
+const memeElements = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+/** Les comptes des marqueurs écrits, calculés sur les colonnes (le constructeur les écrit, la structure les revérifie) : { entrees, elements, parType } — parType dans l'ORDRE de la table. */
+function compterEcrits(ecr, lireTexte) {
+    const n = ecr.deb.length, parTexte = new Map();
+    let entrees = 0;
+    for (let i = 0; i < n; i++) {
+        if (ecr.fin[i] > ecr.deb[i]) entrees++;
+        for (let k = ecr.deb[i]; k < ecr.fin[i]; k++) { const t = lireTexte(ecr.type[k]); parTexte.set(t, (parTexte.get(t) || 0) + 1); }
+    }
+    const parType = {};
+    for (const t of MQ.NOMS_TYPES) if (parTexte.has(t)) parType[t] = parTexte.get(t);
+    return { entrees, elements: ecr.type.length, parType };
+}
 /** Les comptes de marquage, calculés sur les colonnes (le constructeur les écrit, la structure les revérifie). */
 function compterMarquees(mar) {
     const c = { holo: 0, tampon: 0, partages: 0, basse: 0 };
@@ -96,10 +115,10 @@ function compterMarquees(mar) {
 
 /** Assemble la VERSION (gelée) autour de colonnes déjà construites — par le constructeur ou reçues d'un autre fil. */
 function assembler(d) {
-    const { cols, texte, liens, meta, fiches, comptes, chargeLe, jum, mar, mel, emp } = d;
+    const { cols, texte, liens, meta, fiches, comptes, chargeLe, jum, mar, mel, emp, ecr } = d;
     const ids = cols.id;
     const octets = { colonnes: 0, chaines: texte.octets.byteLength + liens.octets.byteLength + texte.off.byteLength + liens.off.byteLength };
-    for (const k of [...Object.values(cols), meta.cle, meta.produit, fiches.carte, fiches.num, fiches.debut, fiches.fin, fiches.produits, ...(jum ? JUM_COLS.map(k => jum[k]) : []), ...(mar ? MAR_COLS.map(k => mar[k]) : []), ...(mel ? MEL_COLS.map(k => mel[k]) : []), ...(emp ? EMP_COLS.map(k => emp[k]) : [])]) octets.colonnes += k.byteLength;
+    for (const k of [...Object.values(cols), meta.cle, meta.produit, fiches.carte, fiches.num, fiches.debut, fiches.fin, fiches.produits, ...(jum ? JUM_COLS.map(k => jum[k]) : []), ...(mar ? MAR_COLS.map(k => mar[k]) : []), ...(mel ? MEL_COLS.map(k => mel[k]) : []), ...(emp ? EMP_COLS.map(k => emp[k]) : []), ...(ecr ? ECR_COLS.map(k => ecr[k]) : [])]) octets.colonnes += k.byteLength;
     octets.total = octets.colonnes + octets.chaines;
     const parSet = new Map(fiches.sets);                                        // slug → [premier, dernier+1] dans les colonnes de fiches
     const marquagesDe = r => {                                                  // les cinq champs d'une ligne ; null partout sans colonne (le même jeu de clés dans les deux cas)
@@ -108,6 +127,13 @@ function assembler(d) {
         return { partageeHoloNonHolo: boolDeCode(champDe(f, 0)), partageeTamponNonSepare: boolDeCode(champDe(f, 2)),
             produitsPartages: mar.pfin[r] > mar.pdeb[r] ? Array.from(mar.produits.subarray(mar.pdeb[r], mar.pfin[r])) : null,
             tamponNonRepresente: lire(texte, mar.tampon[r]), basseDefinition: boolDeCode(champDe(f, 4)) };
+    };
+    // ARCHIVE-4 : les marqueurs ÉCRITS d'une ligne ({ type, params } et leur preuve), ou null/null (aucun, ou archive d'avant la colonne)
+    const ecritsDe = r => {
+        if (!ecr || ecr.fin[r] <= ecr.deb[r]) return { marqueurs: null, marqueursPreuve: null };
+        const liste = [];
+        for (let k = ecr.deb[r]; k < ecr.fin[r]; k++) liste.push({ type: lire(texte, ecr.type[k]), params: JSON.parse(lire(texte, ecr.params[k])) });
+        return { marqueurs: liste, marqueursPreuve: lire(texte, ecr.preuve[r]) };
     };
     // produit → les autres membres de son groupe de partage (l'union des listes qui le nomment), construit une fois, à la demande (quelques centaines de lignes marquées)
     let groupes = null;
@@ -160,8 +186,10 @@ function assembler(d) {
             return { idProduct: id, vignette: { cle: lire(texte, cols.vig[r]), w: cols.vw[r], h: cols.vh[r] },
                 grande: g < 0 ? null : { cle: lire(texte, g), w: cols.gw[r], h: cols.gh[r] }, mention: lire(texte, cols.men[r]),
                 idMetacard: cols.meta[r] < 0 ? null : cols.meta[r], numero: lire(texte, cols.num[r]), rarete: lire(texte, cols.rar[r]), total: lire(texte, cols.tot[r]),
-                variante: lire(texte, cols.variante[r]), setNom: lire(texte, cols.set[r]), lien: l < 0 ? null : liens.prefixe + lire(liens, l), ...marquagesDe(r) };
+                variante: lire(texte, cols.variante[r]), setNom: lire(texte, cols.set[r]), lien: l < 0 ? null : liens.prefixe + lire(liens, l), ...marquagesDe(r), ...ecritsDe(r) };
         },
+        /** ARCHIVE-4 : la colonne des marqueurs écrits est-elle chargée ? (une archive d'avant le format 4 : non — entree().marqueurs vaut alors null, « on ne sait pas ».) */
+        colonneEcrits: Boolean(ecr),
         /** La colonne des marquages est-elle chargée ? (une archive d'avant : non — aucun partage ne peut alors être conclu.) */
         colonneMarquages: Boolean(mar),
         /** La colonne des prix mélangés est-elle chargée ? (une archive d'avant : non — rien ne peut alors être conclu.) */
@@ -232,8 +260,8 @@ function assembler(d) {
         produitsDeLaFiche(slug, cle) { const f = V.fichesDuSet(slug).find(x => x.cle === cle); return f ? f.produits : []; },
         /** Le paquet à transmettre à un autre fil : des tampons à TRANSFÉRER (aucune copie) et le reste en données simples. */
         paquet() {
-            const tous = [...Object.values(cols), meta.cle, meta.produit, fiches.carte, fiches.num, fiches.debut, fiches.fin, fiches.produits, texte.off, texte.octets, liens.off, liens.octets, ...(jum ? JUM_COLS.map(k => jum[k]) : []), ...(mar ? MAR_COLS.map(k => mar[k]) : []), ...(mel ? MEL_COLS.map(k => mel[k]) : []), ...(emp ? EMP_COLS.map(k => emp[k]) : [])];
-            return { donnees: { cols, texte, liens, meta, fiches: { ...fiches, sets: [...parSet] }, comptes, chargeLe, ...(jum ? { jum } : {}), ...(mar ? { mar } : {}), ...(mel ? { mel } : {}), ...(emp ? { emp } : {}) }, tampons: [...new Set(tous.map(t => t.buffer))] };
+            const tous = [...Object.values(cols), meta.cle, meta.produit, fiches.carte, fiches.num, fiches.debut, fiches.fin, fiches.produits, texte.off, texte.octets, liens.off, liens.octets, ...(jum ? JUM_COLS.map(k => jum[k]) : []), ...(mar ? MAR_COLS.map(k => mar[k]) : []), ...(mel ? MEL_COLS.map(k => mel[k]) : []), ...(emp ? EMP_COLS.map(k => emp[k]) : []), ...(ecr ? ECR_COLS.map(k => ecr[k]) : [])];
+            return { donnees: { cols, texte, liens, meta, fiches: { ...fiches, sets: [...parSet] }, comptes, chargeLe, ...(jum ? { jum } : {}), ...(mar ? { mar } : {}), ...(mel ? { mel } : {}), ...(emp ? { emp } : {}), ...(ecr ? { ecr } : {}) }, tampons: [...new Set(tous.map(t => t.buffer))] };
         }
     };
     return Object.freeze(V);
@@ -242,8 +270,11 @@ function assembler(d) {
 const unionBool = (a, b) => (a === true || b === true ? true : a === false || b === false ? false : null);
 const AVEC_MARQUES = d => d.partageeHoloNonHolo !== null || d.partageeTamponNonSepare !== null || d.produitsPartages !== null || d.tamponNonRepresente !== null || d.basseDefinition !== null;
 /** @param opts.marquages  vrai : le constructeur écrit la colonne des marquages (format 2). Faux (défaut) : une entrée qui porte un marquage LÈVE — jamais perdu en silence. */
-function creerConstructeur({ marquages = false, emprunts = false } = {}) {
+function creerConstructeur({ marquages = false, emprunts = false, ecrits = false } = {}) {
     const c = {}; for (const k of COLS) c[k] = colonne();
+    const ecritsParRang = [];                                                        // ARCHIVE-4 : par rang { marqueurs, preuve } ou null — seulement si `ecrits`
+    const ecritsAbandonnes = new Set();                                              // les rangs dont les marqueurs écrits se contredisent
+    let ecritsContradictoires = 0;                                                 // deux entrées du MÊME produit au même visuel dont les marqueurs écrits diffèrent : aucun marqueur écrit pour lui
     const marques = [];                                                              // par rang : { holo, tampon, basse, tn (indice de texte), liste } — seulement si `marquages`
     const texte = reserve(), liensR = reserve();
     const fSet = [], fCarte = colonne(), fNum = colonne(), fDebut = colonne(), fFin = colonne(), prods = colonne();
@@ -309,13 +340,15 @@ function creerConstructeur({ marquages = false, emprunts = false } = {}) {
             if (p.exp !== exp || p.num !== num) { p.exp = -1; p.num = -1; }          // le créneau est un COUPLE : il devient inconnu en entier
             if (p.tir !== tir) p.tir = -1;
         },
-        etat: () => ({ lues, admises: c.id.n - contradictoires.size, refusees, doublons, doublonsContradictoires: contradictoires.size, motifs, fiches: fSet.length }),
+        etat: () => ({ lues, admises: c.id.n - contradictoires.size, refusees, doublons, doublonsContradictoires: contradictoires.size, motifs, fiches: fSet.length, ecritsContradictoires }),
         entree(e) {
             lues++;
             const r = lireEntree(e);                                                // la validation d'entrée s'applique à CHAQUE entrée chargée
             if (!r.ok) { refusees++; motifs[r.motif] = (motifs[r.motif] || 0) + 1; return false; }
             const d = r.doc;
             if (!marquages && AVEC_MARQUES(d)) throw new Error('constructeur sans colonne de marquages : une entrée porte un marquage (jamais perdu en silence)');
+            if (!ecrits && d.marqueurs !== null) throw new Error('constructeur sans colonne des marqueurs écrits : une entrée porte des marqueurs (jamais perdu en silence)');
+            const ec = d.marqueurs === null ? null : { marqueurs: d.marqueurs, preuve: d.marqueursPreuve };
             const m = { holo: d.partageeHoloNonHolo, tampon: d.partageeTamponNonSepare, basse: d.basseDefinition, tn: d.tamponNonRepresente === null ? -1 : texte.id(d.tamponNonRepresente), liste: d.produitsPartages };
             // les valeurs, dans l'ordre de COLS
             const v = [d.idProduct, texte.id(d.vignette.cle), d.vignette.w, d.vignette.h, d.grande ? texte.id(d.grande.cle) : -1, d.grande ? d.grande.w : 0, d.grande ? d.grande.h : 0,
@@ -333,9 +366,15 @@ function creerConstructeur({ marquages = false, emprunts = false } = {}) {
                     marques[r0] = { holo: unionBool(p.holo, m.holo), tampon: unionBool(p.tampon, m.tampon), basse: unionBool(p.basse, m.basse), tn: m.tn >= 0 ? m.tn : p.tn,
                         liste: p.liste || m.liste ? [...new Set([...(p.liste || []), ...(m.liste || [])])].sort((a, b) => a - b) : null };
                 }
+                if (ecrits) {                                                       // les marqueurs écrits ne s'additionnent pas : identiques -> gardés ; différents -> AUCUN (jamais « le dernier gagne »), compté
+                    const p = ecritsParRang[r0];
+                    if (ecritsAbandonnes.has(r0)) { /* déjà contradictoire : rien ne revient */ }
+                    else if (!memeElements(p && p.marqueurs, ec && ec.marqueurs)) { ecritsContradictoires++; ecritsAbandonnes.add(r0); ecritsParRang[r0] = null; }
+                }
                 return true;
             }
             rang.set(d.idProduct, c.id.n);
+            if (ecrits) ecritsParRang[c.id.n] = ec;
             if (marquages) marques[c.id.n] = m;
             COLS.forEach((k, i) => c[k].push(v[i]));
             return true;
@@ -367,6 +406,18 @@ function creerConstructeur({ marquages = false, emprunts = false } = {}) {
             for (const [slug, lignes] of groupes) { const a = k; for (const i of lignes) { fiches.carte[k] = fCarte.get(i); fiches.num[k] = fNum.get(i); fiches.debut[k] = fDebut.get(i); fiches.fin[k] = fFin.get(i); k++; } fiches.sets.push([slug, [a, k]]); }
             const prefixe = plusLongPrefixe(liensR.liste);
             const liens = { ...encoder(liensR.liste, s => s.slice(prefixe.length)), prefixe };
+            // la colonne des marqueurs écrits (ARCHIVE-4), réécrite dans l'ordre trié ; ses textes entrent dans la réserve AVANT son encodage ; écrite même vide (« aucun » est une réponse)
+            let ecr;
+            if (ecrits) {
+                const deb = new Int32Array(n), fin = new Int32Array(n), preuve = new Int32Array(n), types = [], params = [];
+                for (let i = 0; i < n; i++) {
+                    const x = ecritsParRang[ordre[i]];
+                    deb[i] = types.length;
+                    if (x) { preuve[i] = texte.id(x.preuve); for (const el of x.marqueurs) { types.push(texte.id(el.type)); params.push(texte.id(JSON.stringify(el.params))); } } else preuve[i] = -1;
+                    fin[i] = types.length;
+                }
+                ecr = { deb, fin, preuve, type: Int32Array.from(types), params: Int32Array.from(params) };
+            }
             const t = encoder(texte.liste);
             // la colonne des marquages, réécrite dans l'ordre trié (comme les autres colonnes) ; ses comptes sont calculés SUR les colonnes
             let mar;
@@ -383,7 +434,7 @@ function creerConstructeur({ marquages = false, emprunts = false } = {}) {
             const mel = marquages ? { produits: Int32Array.from([...melanges].sort((a, b) => a - b)) } : undefined;
             // la colonne des emprunts : les produits marqués QUI ONT une entrée gardée (cols.id est trié), triés ; écrite même vide (« aucun » est une réponse)
             const emp = emprunts ? { produits: Int32Array.from([...empruntes].filter(p => chercher(cols.id, p) >= 0).sort((a, b) => a - b)) } : undefined;
-            const comptes = Object.freeze({ lues, visuels: n, refusees, doublons, doublonsContradictoires: contradictoires.size, motifs, setsAvecLiens: groupes.size, fichesLiees: m, produitsLies: fiches.produits.length, ...(jumeaux.size ? { jumeaux: jumeaux.size } : {}), ...(mar ? { marquees: compterMarquees(mar) } : {}), ...(mel ? { melange: mel.produits.length } : {}), ...(emp ? { emprunts: emp.produits.length } : {}), ...(exclusions ? { exclus: exclusions.exclus, exclusParMotif: exclusions.exclusParMotif, partagesPerdus: exclusions.partagesPerdus } : {}) });
+            const comptes = Object.freeze({ lues, visuels: n, refusees, doublons, doublonsContradictoires: contradictoires.size, motifs, setsAvecLiens: groupes.size, fichesLiees: m, produitsLies: fiches.produits.length, ...(jumeaux.size ? { jumeaux: jumeaux.size } : {}), ...(mar ? { marquees: compterMarquees(mar) } : {}), ...(mel ? { melange: mel.produits.length } : {}), ...(emp ? { emprunts: emp.produits.length } : {}), ...(ecr ? { ecrits: compterEcrits(ecr, i => texte.liste[i]) } : {}), ...(exclusions ? { exclus: exclusions.exclus, exclusParMotif: exclusions.exclusParMotif, partagesPerdus: exclusions.partagesPerdus } : {}) });
             // la colonne des jumeaux : paires (métacarte, produit) triées, plus la permutation triée par produit (recherche d'un produit seul)
             let jum;
             if (jumeaux.size) {
@@ -392,7 +443,7 @@ function creerConstructeur({ marquages = false, emprunts = false } = {}) {
                 lignes.forEach((l, i) => { jum.meta[i] = l.meta; jum.id[i] = l.id; jum.exp[i] = l.exp; jum.num[i] = l.num; jum.tir[i] = l.tir; jum.ordre[i] = i; });
                 jum.ordre.sort((a, b) => jum.id[a] - jum.id[b]);
             }
-            return assembler({ cols, texte: t, liens, meta, fiches, comptes, chargeLe, jum, mar, mel, emp });
+            return assembler({ cols, texte: t, liens, meta, fiches, comptes, chargeLe, jum, mar, mel, emp, ecr });
         }
     };
 }
@@ -477,6 +528,44 @@ function verifierStructure(d) {
         }
         if (!d.comptes || d.comptes.emprunts !== x.produits.length) refuser('emprunts : compte de l\'en-tête différent de celui de la colonne');
     } else if (d.comptes && d.comptes.emprunts !== undefined) refuser('emprunts : un compte sans colonne');
+    if (d.ecr !== undefined) {                                                  // ARCHIVE-4 : la colonne des marqueurs écrits (format 4) : bornes contiguës, textes dans la réserve, chaque élément ACCEPTÉ PAR LA TABLE du contrat, forme canonique, comptée
+        const x = d.ecr;
+        if (!x || typeof x !== 'object') refuser('marqueurs écrits : colonne illisible');
+        for (const nom of ECR_COLS) if (!(x[nom] instanceof Int32Array)) refuser(`marqueurs écrits : colonne « ${nom} » absente ou mal typée`);
+        for (const nom of ['deb', 'fin', 'preuve']) if (x[nom].length !== n) refuser(`marqueurs écrits : colonne « ${nom} » de longueur différente de celle des entrées`);
+        const k = x.type.length;
+        if (x.params.length !== k) refuser('marqueurs écrits : colonnes « type » et « params » de longueur différente');
+        const texteDe = i => lire(d.texte, i), jugés = new Map();
+        let curseur = 0;
+        for (let i = 0; i < n; i++) {
+            if (x.deb[i] !== curseur || x.fin[i] < x.deb[i] || x.fin[i] > k) refuser('marqueurs écrits : bornes des éléments hors de la liste ou non contiguës');
+            const taille = x.fin[i] - x.deb[i];
+            curseur = x.fin[i];
+            if (taille === 0) { if (x.preuve[i] !== -1) refuser('marqueurs écrits : une preuve sans marqueurs'); continue; }
+            if (taille > MQ.MARQUEURS_MAX) refuser(`marqueurs écrits : plus de ${MQ.MARQUEURS_MAX} éléments pour une ligne`);
+            if (x.preuve[i] < 0 || x.preuve[i] >= nT) refuser('marqueurs écrits : indice de preuve hors de la réserve');
+            const preuve = texteDe(x.preuve[i]);
+            if (!preuve.trim() || preuve.trim() !== preuve || preuve.length > MQ.PREUVE_MAX) refuser('marqueurs écrits : une preuve (phrase non vide, bornée) est exigée');
+            let rang = -1;
+            for (let j = x.deb[i]; j < x.fin[i]; j++) {
+                if (x.type[j] < 0 || x.type[j] >= nT || x.params[j] < 0 || x.params[j] >= nT) refuser('marqueurs écrits : indice de texte hors de la réserve');
+                const cle = `${x.type[j]}|${x.params[j]}`;
+                let v = jugés.get(cle);
+                if (v === undefined) {
+                    let params; try { params = JSON.parse(texteDe(x.params[j])); } catch { params = undefined; }
+                    const valide = params === undefined ? null : MQ.valider({ type: texteDe(x.type[j]), params });
+                    v = valide && JSON.stringify(valide.params) === texteDe(x.params[j]) ? MQ.NOMS_TYPES.indexOf(valide.type) : null;
+                    jugés.set(cle, v);
+                }
+                if (v === null) refuser('marqueurs écrits : un élément que la table refuse');
+                if (v <= rang) refuser('marqueurs écrits : un type en double ou hors de l\'ordre de la table');
+                rang = v;
+            }
+        }
+        if (curseur !== k) refuser('marqueurs écrits : des éléments hors de toute ligne');
+        const calc = compterEcrits(x, texteDe), dit = d.comptes && d.comptes.ecrits;
+        if (!dit || typeof dit !== 'object' || JSON.stringify(dit) !== JSON.stringify(calc)) refuser('marqueurs écrits : compte de l\'en-tête différent de celui de la colonne');
+    } else if (d.comptes && d.comptes.ecrits !== undefined) refuser('marqueurs écrits : un compte sans colonne');
     const refusExclusions = verifierComptesExclusions(d.comptes);               // ARCHIVE-EXCLUSIONS : les compteurs d'exclusion, absents ou cohérents (la définition est celle d'exclusions.js)
     if (refusExclusions) refuser(refusExclusions);
     const c = d.comptes;
