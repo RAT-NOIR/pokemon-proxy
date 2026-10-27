@@ -345,11 +345,21 @@ const refus = f => { const r = J.lireFichierJumbos(typeof f === 'string' ? f : e
         try {
             aCharger = avecLien({ emprunts: true, ecrits: true, masques: true }, '2026-10-29T09:00:00.000Z', [emprunteJumbo(1), emprunteJumbo(2)], [1, 2]); const enPlace = aCharger; await ch3.charger();
             journal.length = 0; aCharger = avecLien({ emprunts: true, ecrits: true, masques: true }, '2026-10-29T10:00:00.000Z', [emprunteJumbo(1), emprunteJumbo(2)], []); const r1 = await ch3.charger();
-            H.v('10g. I3 : une version à colonne des masqués VIDE (le calcul dans l\'API, sans la liste) ne remplace pas une version à 2 masqués : la version en place est gardée, le journal dit les deux comptes', [r1.ok, ETAT.version() === enPlace, journal.some(m => /masqués de la version chargée \(0\) a moins de produits que celle de la version en place \(2\)/.test(m))], [false, true, true]);
+            H.v('10g. I3 : une version à colonne des masqués VIDE (le calcul dans l\'API, sans la liste) ne remplace pas une version à 2 masqués : la version en place est gardée, le journal dit les deux comptes', [r1.ok, ETAT.version() === enPlace, journal.some(m => /produit 1 masqué dans la version en place n'est plus masqué/.test(m))], [false, true, true]);
             journal.length = 0; aCharger = avecLien({ emprunts: true, ecrits: true, masques: true }, '2026-10-29T11:00:00.000Z', [emprunteJumbo(1), emprunteJumbo(2)], [1]); const r2 = await ch3.charger();
             H.v('10h. I3 : une version à 1 masqué (< 2) est refusée aussi ; à 2 masqués (égale), elle remplace', [r2.ok, ETAT.version() === enPlace], [false, true]);
             aCharger = avecLien({ emprunts: true, ecrits: true, masques: true }, '2026-10-29T12:00:00.000Z', [emprunteJumbo(1), emprunteJumbo(2)], [1, 2]); const r3 = await ch3.charger();
-            H.v('10i. I3 : à nombre égal de masqués la version plus récente s\'installe', [r3.ok, ETAT.version() === aCharger], [true, true]);
+            H.v('10i. I3 : aux MÊMES masqués la version plus récente s\'installe', [r3.ok, ETAT.version() === aCharger], [true, true]);
+            // TOUR 2 : les ENSEMBLES, pas le nombre. En place : 1, 2 masqués (3 existe, non masqué).
+            const E3 = [emprunteJumbo(1), emprunteJumbo(2), emprunteJumbo(3)];
+            aCharger = avecLien({ emprunts: true, ecrits: true, masques: true }, '2026-10-29T13:00:00.000Z', E3, [1, 2]); const enPlace2 = aCharger; await ch3.charger();
+            journal.length = 0; aCharger = avecLien({ emprunts: true, ecrits: true, masques: true }, '2026-10-29T14:00:00.000Z', E3, [1, 3]); const r4 = await ch3.charger();
+            H.v('10l. I3 tour 2 : le MÊME nombre de masqués sur d\'AUTRES produits (2 démasqué, 3 masqué) est refusé ; la version en place est gardée et le journal nomme le premier produit démasqué (2)', [r4.ok, ETAT.version() === enPlace2, journal.some(m => /produit 2 masqué dans la version en place n'est plus masqué/.test(m))], [false, true, true]);
+            aCharger = avecLien({ emprunts: true, ecrits: true, masques: true }, '2026-10-29T15:00:00.000Z', E3, [1, 2, 3]); const r5 = await ch3.charger();
+            H.v('10m. I3 tour 2 : un masqué EN PLUS (1, 2 et 3) est admis', [r5.ok, ETAT.version() === aCharger], [true, true]);
+            const enPlace3 = aCharger;
+            aCharger = avecLien({ emprunts: true, ecrits: true, masques: true }, '2026-10-29T16:00:00.000Z', [emprunteJumbo(1), emprunteJumbo(3), emprunteJumbo(4)], [1, 3]); const r6 = await ch3.charger();
+            H.v('10n. I3 tour 2 : un produit masqué en place qui n\'a plus d\'entrée (2 absent) n\'est pas un démasqué : admis', [r6.ok, ETAT.version() === aCharger && ETAT.version() !== enPlace3], [true, true]);
         } finally { ETAT.vider(); }
     }
     // CLI : la liste est épinglée (--jumbos-visuel-sha256 obligatoire), recalculée, comparée ; la source est comparée ou dite « non comparée »
