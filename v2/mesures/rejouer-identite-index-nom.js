@@ -131,18 +131,19 @@ async function charger(client, base, dossier, nom) {
         console.log(`APRÈS : ${apres.length} noms en ${Math.round(msApres / 1000)} s · série C (${serieC.length}) : ${JSON.stringify(profApresSerie)}`);
 
         // ── le DIFF
-        let dIds = 0, dOrdre = 0, dFormes = 0, dLocal = 0, nLocal = 0, vides = 0; const exemples = [];
+        let dIds = 0, dOrdre = 0, dFormes = 0, dLocal = 0, dGagnant = 0, nLocal = 0, vides = 0; const exemples = [], exemplesLocal = [];
         for (let i = 0; i < cas.length; i++) {
             const a = avant[i], b = apres[i];
             if (!a.ids.length) vides++;
             if (!egal([...a.ids].sort((x, y) => x - y), [...b.ids].sort((x, y) => x - y))) { dIds++; if (exemples.length < 8) exemples.push({ nom: a.nom, genre: 'ensemble', avant: a.ids, apres: b.ids }); }
             else if (!egal(a.ids, b.ids)) { dOrdre++; if (exemples.length < 8) exemples.push({ nom: a.nom, genre: 'ordre', avant: a.ids, apres: b.ids }); }
             if (!egal(a.formes, b.formes)) { dFormes++; if (exemples.length < 8) exemples.push({ nom: a.nom, genre: 'forme du document', avant: a.formes[0], apres: b.formes[0] }); }
-            if (a.local !== undefined) { nLocal++; if (!egal(a.local, b.local)) { dLocal++; if (exemples.length < 8) exemples.push({ nom: a.nom, genre: 'identifierEnLocal', avant: a.local, apres: b.local }); } }
+            if (a.local !== undefined) { nLocal++; if (!egal(a.local, b.local)) { dLocal++; if (a.local && b.local && a.local.gagnant !== b.local.gagnant) dGagnant++; if (exemplesLocal.length < 6) exemplesLocal.push({ nom: a.nom, genre: 'identifierEnLocal', avant: a.local, apres: b.local }); } }
         }
         console.log(`\nDIFF (dénominateur : ${cas.length} noms dont ${vides} sans aucun produit ; ${nLocal} rejeux d'identifierEnLocal) :`);
         console.log(`   ensemble des produits différent : ${dIds} · même ensemble, autre ORDRE : ${dOrdre} · forme du document différente : ${dFormes} · décision d'identifierEnLocal différente : ${dLocal}`);
-        for (const e of exemples) console.log('   ↳', JSON.stringify(e).slice(0, 300));
+        console.log(`   dont le GAGNANT change : ${dGagnant} sur ${dLocal}`);
+        for (const e of [...exemples, ...exemplesLocal]) console.log('   ↳', JSON.stringify(e).slice(0, 420));
         // ── les homonymes « commence par » de pont-cartes.js (nomMin) : la requête d'avant (regex ancrée, insensible à la casse) contre l'index, sur les noms anglais des cartes de la base de collecte
         let nPont = 0, dPont = 0, videsPont = 0, ixscanPont = 0;
         if (arg('cartes')) {
