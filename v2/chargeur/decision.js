@@ -47,6 +47,8 @@ const NOMS_REFUS = Object.freeze([...Object.keys(FAMILLES_SANS_REPLI), 'staff-pr
 // `variantePreuve`. La forme ancienne `staff-prerelease` se lit `staff+prerelease`. Une valeur hors de la liste est null ET comptée (varianteHorsListe) : jamais devinée, jamais perdue en silence.
 const MT = require('../identifier/marques-tampon');
 const MQ = require('../identifier/marqueurs');             // MARQUEURS : la reconnaissance d'un set WCD sur une entrée (une seule définition, partagée avec la validation d'entrée)
+const JV = require('./jumbos-visuel');                      // JUMBO-VISUEL : la garde de la Map idProduct → classe (emprunt | sans-visuel) que le fichier du catalogue donne
+const { MENTION_EDITION_1 } = require('../identifier/emprunt');   // JUMBO-VISUEL : la mention d'affichage de Base Set (une seule définition du texte, lue aussi par la ceinture de SUR-PAR-IMAGE)
 // basseDefinition (original sous 350 px) : le coordinateur MESURE puis tranche. false = les entrées sont GARDÉES (et portent le champ) ; true = une entrée basseDefinition n'est pas servie à l'identification
 // (compteur d.basseDefinitionExclue). Le site, lui, continue d'afficher ces images ; le choix ne concerne que l'archive.
 const EXCLURE_BASSE_DEFINITION = false;
@@ -111,6 +113,18 @@ function admissionDuCatalogue({ ligne, set, carte, regle, positions }) {
     }
     return null;
 }
+// JUMBO-VISUEL (décision du coordinateur, 27/10) — BASE SET : les 69 fiches Pokémon (n° 1 à 69) de la page « Base Set » portent le scan « Édition 1 » de TCGdex, servi à TOUS les produits de la fiche ; Cardmarket ne dit pas lequel
+// des V1…Vn est la 1re édition. Ces produits affichent la mention « Visuel d'un autre tirage », SAUF un produit PROUVÉ 1re édition (marqueur EDITION_1, écrit avec sa preuve ou dérivé). Aucune exclusion : le visuel reste `du-set`,
+// l'identification ne change pas (la colonne des emprunts ne le porte pas ; la ceinture de SUR-PAR-IMAGE reconnaît cette mention). Écrit par ce qu'il AUTORISE : le set `Base-Set`, un scan TCGdex de CE set, un numéro de fiche de 1 à 69.
+const BASE_SET = Object.freeze({ set: 'Base-Set', source: 'tcgdex', dernierNumero: 69 });
+function baseSetEdition1({ set, im, numeroFiche }) {
+    if (!set || set._id !== BASE_SET.set || !im || im.source !== BASE_SET.source || im.set !== BASE_SET.set) return false;
+    const m = /^0*(\d{1,2})$/.exec(String(numeroFiche ?? '').trim());
+    return m !== null && Number(m[1]) >= 1 && Number(m[1]) <= BASE_SET.dernierNumero;
+}
+/** Le produit de cette entrée est-il un JUMBO ? Le marqueur JUMBO de sa fusion (écrit avec preuve, ou dérivé de la variante prouvée) : marqueurs.js::jumboDeLEntree, jamais le nom ni l'image. */
+const estJumbo = e => (e.marqueurs != null || e.variante === 'jumbo') && MQ.jumboDeLEntree(e);
+
 /**
  * basseDefinition à TROIS valeurs (la règle d'image exige `=== false`, défaut fermé : un `null` la fait taire) : le drapeau du catalogue s'il est booléen ; sinon la largeur de l'ORIGINAL (`im.w`, la même que
  * celle de la grande image) comparée au seuil de collecte (collecte-cartes/seuils-images.js::LARGEUR_MIN) — true dessous, false au seuil ou au-dessus ; null SEULEMENT quand la largeur est inconnue.
@@ -169,10 +183,13 @@ function verifierRegle(regle) {
  * @param regle     la règle du site (sept fonctions, dont impressionDuSet) ; @param journal fonction(texte)
  * @returns {Promise<{ entrees: object[], denominateurs: object, liens: Map<string, Map<string, number[]>> }>} — n'écrit rien nulle part.
  */
-async function decider({ sets, docs, lignes, metacarte, regle, journal = () => { }, cederLaMain = true, sink = null, exclureBasseDefinition = EXCLURE_BASSE_DEFINITION }) {
+async function decider({ sets, docs, lignes, metacarte, regle, journal = () => { }, cederLaMain = true, sink = null, exclureBasseDefinition = EXCLURE_BASSE_DEFINITION, jumbosVisuel = null }) {
+    // `jumbosVisuel` (JUMBO-VISUEL) : null, ou la Map idProduct → 'emprunt' | 'sans-visuel' du fichier du catalogue (jumbos-visuel.js, jugée ici par la MÊME garde). 'emprunt' : le JUMBO est identique à sa carte, son visuel est
+    // EMPRUNTÉ (entrée `autre-tirage` sans mention, bandeau JUMBO). 'sans-visuel' : le scan de la carte normale n'est pas le sien, l'entrée reste (marqueurs, partages, groupe) mais aucun visuel ne sera servi (sink.masque).
     // `sink` { entree(e), lien(setId, cle, idProducts) } : les résultats sortent UN À UN (le chargeur les range en colonnes sans jamais tenir le tableau des entrées ni la Map des liens) ;
     // sans sink, ils sont rendus en tableau et en Map (les bancs, l'exporteur de comparaison).
     verifierRegle(regle);
+    if (jumbosVisuel !== null && jumbosVisuel !== undefined) { const refusJumbos = JV.jugerClasses(jumbosVisuel); if (refusJumbos) throw new Error(refusJumbos); } else jumbosVisuel = null;
     const Lg = L();
     if (!sets.length) throw new Error('aucun document dans `sets` : base fausse (un vide parfait n\'est pas « zéro visuel »)');
     if (!docs.length) throw new Error('aucun document dans `cartes` : base fausse');
@@ -245,7 +262,13 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         // ARCHIVE-4 — les marqueurs ÉCRITS par le catalogue (cartes_produits.marqueurs + marqueursPreuve), lus par UNE fonction (marqueurs.js::ecritsDeLaLigne) pour TOUTES les lignes, avant tout écartement :
         // lignes (liste non vide), invalides / doublons / trop / sansPreuve (les écarts, comptés et jamais réparés) ; puis ce qui est PORTÉ par les entrées écrites : entrees (produits distincts), elements, parType,
         // contradictions (avec le dérivé, qui l'emporte) ; sansEntree : les lignes à marqueurs qui n'ont pas atteint l'émission (aucun visuel servi : le marqueur ne voyage que sur l'entrée de son produit)
-        marqueursEcrits: { lignes: 0, invalides: 0, doublons: 0, trop: 0, sansPreuve: 0, entrees: 0, elements: 0, parType: {}, contradictions: 0, sansEntree: 0 } };
+        marqueursEcrits: { lignes: 0, invalides: 0, doublons: 0, trop: 0, sansPreuve: 0, entrees: 0, elements: 0, parType: {}, contradictions: 0, sansEntree: 0 },
+        // JUMBO-VISUEL — la liste du catalogue face à ce que la décision a ÉMIS (produits distincts) : liste (taille de la Map), emprunt / sansVisuel (classes appliquées), dejaEmprunte (le visuel était déjà un emprunt à mention : gardé),
+        // sansMarqueur (nommés par la liste mais SANS marqueur JUMBO : incohérence, jamais touchés — calculer refuse la construction), sansVerdict (JUMBO que la liste ne nomme pas : servis comme avant), sansEntree (nommés, sans entrée émise)
+        jumbosVisuel: { liste: jumbosVisuel ? jumbosVisuel.size : 0, emprunt: 0, sansVisuel: 0, dejaEmprunte: 0, sansMarqueur: [], sansVerdict: [], sansEntree: [] },
+        // BASE SET : les produits des fiches Pokémon au scan Édition 1 — avecMention (mention posée), prouvesSansMention (marqueur EDITION_1 : aucune mention)
+        baseSet: { avecMention: 0, prouvesSansMention: 0 } };
+    const classesVues = new Map(), masques = new Set(), jumbosEmpruntes = new Set(), sansVerdictVus = new Set(), baseSetVus = new Set();
     const ecritsDe = new Map(), produitsEcrits = new Set();
     let ecritsTraitees = 0;
     for (const l of lignes) {
@@ -310,7 +333,7 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         if (admise === 'wcd-emprunt' && !MQ.setWcdDeLEntree({ lien: lienE, setNom: texte(s.nomAffichage) })) { d.wcdSansSetReconnu++; continue; }
         // m2 (relecture r1) : une image marquée partagée dont le produit n'est PAS dans sa liste (ou dont la liste n'a pas de marquage) n'est pas servie à l'identification : fermé par défaut, compté
         if (partageIncoherent(im, l.idProduct, varianteProuvee(l))) { d.partageIncoherent++; if (varianteHorsListe(l)) d.varianteHorsListe++; continue; }
-        if (visuel === 'du-set') d.duSet++; else if (visuel === 'substitut') d.substitut++; else d.autreTirage++;
+        // (le compte du-set / substitut / autre-tirage se fait plus bas : JUMBO-VISUEL peut changer la nature du visuel d'un JUMBO nommé par la liste)
 
         // rareté et total : les impressions de la carte, dans le tirage et l'expansion du set, AU numéro de la fiche
         const cle = x => regle.normaliserNumero(x) ?? '';
@@ -338,6 +361,25 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
                 m.contradictions += MQ.marqueursDeLEntree({ ...e, marqueurs: w.elements, marqueursPreuve: w.preuve }).contradictions;
             }
         }
+        // JUMBO-VISUEL — la liste du catalogue d'abord, puis Base Set. Le JUMBO nommé change de CLASSE de visuel, jamais de produit : même entrée (marqueurs, partages, groupe), jamais exclu.
+        //   · 'emprunt' / 'sans-visuel' : le scan de la fiche (celui de la carte normale) devient un visuel EMPRUNTÉ, sans mention (le bandeau JUMBO la remplace : CONTRAT-MARQUEURS.md §6) ; 'sans-visuel' est de plus MASQUÉ au service.
+        //     Une entrée DÉJÀ empruntée (substitut, autre tirage, avec sa mention) la garde ; un nommé sans marqueur JUMBO n'est pas touché (la validation d'entrée refuserait l'entrée sans mention) : il est NOMMÉ, la construction s'arrêtera.
+        //   · un JUMBO que la liste ne nomme pas est servi comme avant et COMPTÉ ; Base Set : la mention, sauf un produit prouvé 1re édition.
+        const classe = jumbosVisuel ? jumbosVisuel.get(l.idProduct) : undefined, jumbo = estJumbo(e);
+        if (classe !== undefined) {
+            classesVues.set(l.idProduct, classe);
+            if (!jumbo) { if (!d.jumbosVisuel.sansMarqueur.includes(l.idProduct)) d.jumbosVisuel.sansMarqueur.push(l.idProduct); }
+            else {
+                if (visuel === 'du-set') { visuel = 'autre-tirage'; mention = null; e.visuel = visuel; e.mention = null; } else d.jumbosVisuel.dejaEmprunte++;
+                if (classe === 'sans-visuel') masques.add(l.idProduct);
+                jumbosEmpruntes.add(l.idProduct);
+            }
+        } else if (jumbo) { if (!sansVerdictVus.has(l.idProduct)) { sansVerdictVus.add(l.idProduct); d.jumbosVisuel.sansVerdict.push(l.idProduct); } }
+        if (classe === undefined && visuel === 'du-set' && mention === null && baseSetEdition1({ set: s, im, numeroFiche: l.numeroFiche })) {
+            if (MQ.marqueursDeLEntree(e).marqueurs?.some(x => x.type === 'EDITION_1')) { if (!baseSetVus.has(l.idProduct)) d.baseSet.prouvesSansMention++; } else { mention = MENTION_EDITION_1; e.mention = mention; if (!baseSetVus.has(l.idProduct)) d.baseSet.avecMention++; }
+            baseSetVus.add(l.idProduct);
+        }
+        if (visuel === 'du-set') d.duSet++; else if (visuel === 'substitut') d.substitut++; else d.autreTirage++;
         const vs = im.vignette ?? vignetteDuFichier.get(im.cleR2);
         const v = vs && fichierDe(vs.cleR2, vs.w, vs.h);
         if (v) e.vignette = v;
@@ -346,6 +388,7 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         if (e.partageeTamponNonSepare !== null) d.marquees.tampon++;
         if (e.basseDefinition === true) d.marquees.basse++;
         // MARQUE-EMPRUNT : posée AVEC l'entrée (le sink la range si l'entrée est admise) ; la nature vient de la décision, pas de la mention
+        if (masques.has(l.idProduct) && sink && typeof sink.masque === 'function') sink.masque(l.idProduct);       // JUMBO-VISUEL : avant la marque d'emprunt (un masqué est toujours emprunté)
         if (estEmprunt({ im, set: s, visuel })) {
             if (!empruntes.has(l.idProduct)) { empruntes.add(l.idProduct); d.emprunts++; d.empruntsParNature[visuel]++; }
             if (sink && typeof sink.emprunt === 'function') sink.emprunt(l.idProduct);
@@ -359,7 +402,13 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
     d.marqueursEcrits.sansEntree = d.marqueursEcrits.lignes - ecritsTraitees;
     d.marqueursEcrits.parType = Object.fromEntries(MQ.NOMS_TYPES.filter(t => d.marqueursEcrits.parType[t]).map(t => [t, d.marqueursEcrits.parType[t]]));      // dans l'ordre de la table
     d.melangeProduits = melanges.size;
-    return { entrees, denominateurs: d, liens, ...(sink ? {} : { jumeaux, melanges: [...melanges].sort((a, b) => a - b), emprunts: [...empruntes].sort((a, b) => a - b) }) };
+    // JUMBO-VISUEL : ce que la liste a fait, produit par produit (distincts), et ce qu'elle nomme sans que la décision ait émis d'entrée
+    if (jumbosVisuel) {
+        for (const id of jumbosEmpruntes) { if (jumbosVisuel.get(id) === 'sans-visuel') d.jumbosVisuel.sansVisuel++; else d.jumbosVisuel.emprunt++; }
+        for (const [id, classe] of jumbosVisuel) if (!classesVues.has(id)) d.jumbosVisuel.sansEntree.push({ idProduct: id, classe });
+        d.jumbosVisuel.sansEntree.sort((a, b) => a.idProduct - b.idProduct); d.jumbosVisuel.sansMarqueur.sort((a, b) => a - b); d.jumbosVisuel.sansVerdict.sort((a, b) => a - b);
+    }
+    return { entrees, denominateurs: d, liens, ...(sink ? {} : { jumeaux, melanges: [...melanges].sort((a, b) => a - b), emprunts: [...empruntes].sort((a, b) => a - b), masques: [...masques].sort((a, b) => a - b) }) };
 }
 
-module.exports = { decider, verifierRegle, cleFiche, REGLE_REQUISE, FAMILLES_SANS_REPLI, refusDeRepli, estEmprunt, positionDuSlug, admissionDuCatalogue, EXCLURE_BASSE_DEFINITION, partageIncoherent, varianteAvecPreuve };
+module.exports = { baseSetEdition1, BASE_SET, decider, verifierRegle, cleFiche, REGLE_REQUISE, FAMILLES_SANS_REPLI, refusDeRepli, estEmprunt, positionDuSlug, admissionDuCatalogue, EXCLURE_BASSE_DEFINITION, partageIncoherent, varianteAvecPreuve };

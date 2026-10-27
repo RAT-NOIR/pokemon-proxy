@@ -112,7 +112,7 @@ function suivre(exclusions) {
  */
 function comparerMarques(complete, exclue, exclus) {
     const sans = (l, ids) => { const r = Array.isArray(l) ? l.filter(x => !ids.has(x)) : null; return r && r.length > 1 ? r : null; };
-    const norme = (v, id) => { const e = v.entree(id); if (!e) return null; const { produitsPartages, ...reste } = e; return JSON.stringify([reste, sans(produitsPartages, exclus), v.partagesDe(id), v.jumeauxDe(id), v.prixMelange(id), v.empruntDe(id)]); };
+    const norme = (v, id) => { const e = v.entree(id); if (!e) return null; const { produitsPartages, ...reste } = e; return JSON.stringify([reste, sans(produitsPartages, exclus), v.partagesDe(id), v.jumeauxDe(id), v.prixMelange(id), v.empruntDe(id), v.masqueDe(id)]); };       // JUMBO-VISUEL : l'exclusion d'un voisin ne change pas non plus le masque d'un produit
     let perdus = 0; const ids = [];
     for (const id of exclue.identifiants()) {
         if (norme(complete, id) !== norme(exclue, id)) { perdus++; if (ids.length < 20) ids.push(id); }

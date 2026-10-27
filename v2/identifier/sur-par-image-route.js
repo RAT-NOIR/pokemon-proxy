@@ -7,6 +7,7 @@
 const SPI = require('./sur-par-image');
 const { preparerVecteur } = require('./voisins-empreinte');
 const { lectureDe } = require('./garde-contradiction');
+const { estMentionDAffichage } = require('./emprunt');                  // JUMBO-VISUEL : la mention d'affichage de Base Set n'est pas une marque d'emprunt
 
 // (7) LES SIGNAUX D'UN VISUEL SUSPECT, lus dans l'archive EN MÉMOIRE (aucune liste dans le code) :
 //   · basse : entree(id).basseDefinition (version.js:107, champ de l'archive ; null = colonne absente -> la règle se tait) ;
@@ -70,6 +71,8 @@ function emprunteDe(version) {
         if (m !== false) return null;
         const e = version.entree(id);
         if (!e) return null;
+        // JUMBO-VISUEL : la mention d'AFFICHAGE de Base Set (scan Édition 1 d'une fiche Pokémon) dit que le scan est d'un autre tirage SANS que le dessin change : ce n'est pas une marque d'emprunt oubliée, l'image peut servir
+        if (estMentionDAffichage(e.mention)) return false;
         return typeof e.mention === 'string' && e.mention.length > 0 ? true : e.mention === null ? false : null;
     };
 }

@@ -5,6 +5,12 @@
 // DÉFAUT FERMÉ, écrit par ce qu'il AUTORISE : seul un `false` de la colonne dit « pas emprunté ». Une archive d'avant (null), une version absente ou illisible : emprunté (la règle se tait).
 const etat = require('../chargeur/etat');
 
+// JUMBO-VISUEL — la mention d'AFFICHAGE des fiches Pokémon de Base Set (n° 1 à 69) : leur scan est celui de la 1re édition (TCGdex), servi à TOUS les produits de la fiche (Cardmarket ne dit pas lequel des V1…Vn est la
+// 1re édition). Ce n'est PAS un emprunt pour les règles d'image (le dessin est le même : l'identification ne change pas) : c'est une mention qui DIT que le scan est d'un autre tirage. UNE définition du texte ;
+// la ceinture de SUR-PAR-IMAGE (sur-par-image-route.js::emprunteDe) la reconnaît pour ne pas la lire comme une marque d'emprunt oubliée.
+const MENTION_EDITION_1 = 'Visuel d\'un autre tirage';
+const estMentionDAffichage = m => m === MENTION_EDITION_1;
+
 /** Vrai sauf si la version dit explicitement « pas emprunté » (false). null, version absente, fonction absente : vrai. */
 function empruntOuInconnu(version, idProduct) {
     if (!version || typeof version.empruntDe !== 'function') return true;
@@ -54,4 +60,4 @@ function contexteDeLaRegle(ctx, emprunte) {
     return version ? contexteDeLaVersion(ctx, version) : contexteSansEmprunts(ctx, () => null);
 }
 
-module.exports = { empruntOuInconnu, contexteSansEmprunts, contexteDeLaRegle };
+module.exports = { empruntOuInconnu, contexteSansEmprunts, contexteDeLaRegle, MENTION_EDITION_1, estMentionDAffichage };
