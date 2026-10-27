@@ -200,6 +200,13 @@ const refus = f => { const r = J.lireFichierJumbos(typeof f === 'string' ? f : e
     H.v('6i. BASE SET : le même résultat avec ou sans liste (la mention ne dépend pas de la liste) ; aucun Base Set n\'est emprunté ni masqué', [[4101, 4102, 4103, 4104, 4105, 4106, 4108].map(id => JSON.stringify(champs(E(sans, id))) === JSON.stringify(champs(E(avec, id)))).every(Boolean), avec.emprunts.filter(id => id !== 4107 && id > 4100)], [true, []]);
     H.v('6j. BASE SET × liste : un JUMBO de Base Set nommé par la liste suit sa CLASSE (4107 : emprunt SANS mention) ; sans la liste (JUMBO inconnu) il reçoit la mention de la fiche', [champs(E(avec, 4107)), champs(E(sans, 4107))], [['autre-tirage', null], ['du-set', MENTION_EDITION_1]]);
     H.v('6k. estEmprunt (la marque de la colonne des emprunts) : vrai pour les JUMBO classés, FAUX pour Base Set (mention seule)', [estEmprunt({ im: {}, set: SET_A, visuel: E(avec, 4002).visuel }), estEmprunt({ im: {}, set: SET_BS, visuel: E(avec, 4101).visuel })], [true, false]);
+    // la règle de Base Set, ses bornes une à une (écrite par ce qu'elle AUTORISE : le set, la source TCGdex de CE set, un numéro de 1 à 69)
+    const { baseSetEdition1 } = require('../chargeur/decision');
+    const bs = (numeroFiche, o = {}) => baseSetEdition1({ set: { _id: 'Base-Set' }, im: { source: 'tcgdex', set: 'Base-Set' }, numeroFiche, ...o });
+    H.v('6m. Base Set, les bornes : 1, 004, 69 oui ; 0, 70, 100, vide, texte, null non ; un autre set, une autre source, le scan d\'un autre set non',
+        [bs('1'), bs('004'), bs('69'), bs('0'), bs('70'), bs('100'), bs(''), bs('SWSH1'), bs(null), bs('04a'),
+            bs('4', { set: { _id: 'Base-Set-2' } }), bs('4', { set: null }), bs('4', { im: { source: 'artofpkm', set: 'Base-Set' } }), bs('4', { im: { source: 'tcgdex', set: 'Base-Set-2' } }), bs('4', { im: null })],
+        [true, true, true, false, false, false, false, false, false, false, false, false, false, false, false]);
     // la garde de la Map qui entre dans la décision
     const refusDecision = async classesMauvaises => { try { await decider({ sets: [SET_A], docs, lignes, metacarte, regle, jumbosVisuel: classesMauvaises }); return null; } catch (e) { return e.message; } };
     // ── 7. la CONSTRUCTION : calculer, l'archive précalculée, la ligne de commande
