@@ -16,6 +16,11 @@ const lignes73 = section73.split(/\r?\n/).filter(l => l.startsWith('|'));
 
 const ANALYSES = ['identifiee.json', 'identifiee-impressions.json', 'a-trancher-2.json', 'a-trancher-3.json', 'lot.json', 'introuvable.json'];
 const COUVERTS = [...ANALYSES, 'quota.json', 'reponses.json', 'lectures.json', 'reels.js'];
+// Les fichiers présents que ce banc NE REJOUE PAS, chacun avec sa raison écrite. Une déclaration périmée se voit : elle échoue le jour où le schéma publié connaît ce que le vecteur montre.
+//   probable.json (extension, 26/10) : le niveau « probable » (`niveau`, `probable: { idProduct, aConfirmer }`) ; contrat : DEMANDE-SERVEUR-EXTENSION.md, « API — 25/10 : CONTRAT DU NIVEAU « PROBABLE » ».
+const NON_COUVERTS = { 'probable.json': 'niveau probable pas encore servi : jeton `probable` absent de capacites, schéma sans `niveau`' };
+const cleDansSchema = (v, nom) => v !== null && typeof v === 'object' && (Object.prototype.hasOwnProperty.call(v, nom) || Object.values(v).some(x => cleDansSchema(x, nom)));
+const probableServi = () => cleDansSchema(SCHEMA, 'niveau') || cleDansSchema(SCHEMA, 'probable') || require('../capacites').CAPACITES.includes('probable');
 // Normalisation : les indices de tableau, l'identifiant de scan et le nom du choix des vecteurs ne sont pas des chemins du contrat.
 const norm = c => c.replace(/\[\d+\]/g, '[]').replace(/\$\.fausse-[a-z]+-\d+/, '$.<scanId>').replace(/^(\$\.<scanId>\[\])\.(a|b|c|aucune|ne-sait-pas)\./, '$1.<choix>.');
 
@@ -41,7 +46,10 @@ const CLASSES = new Map([
     const presents = fs.readdirSync(DOSSIER).filter(f => fs.statSync(path.join(DOSSIER, f)).isFile()).sort();
     console.log(`   ${presents.length} fichiers : ${presents.join(', ')}`);
     H.v('tous les fichiers couverts par ce banc sont là', COUVERTS.filter(f => !presents.includes(f)), []);
-    H.v('« aucun fichier non couvert » dit la vérité sur le dossier : tout fichier présent est couvert (rejoué, ou déclaré non couvert avec sa raison)', presents.filter(f => !COUVERTS.includes(f)), []);
+    H.v('« aucun fichier non couvert » dit la vérité sur le dossier : tout fichier présent est couvert (rejoué, ou déclaré non couvert avec sa raison)', presents.filter(f => !COUVERTS.includes(f) && !(f in NON_COUVERTS)), []);
+    for (const f of Object.keys(NON_COUVERTS)) console.log(`   non couvert : ${f} — ${NON_COUVERTS[f]}`);
+    H.v('déclarations « non couvert » périmées : le fichier n\'est plus là, ou le niveau « probable » est servi (jeton `probable` dans capacites, ou `niveau` / `probable` dans le schéma publié) : il faut alors le REJOUER', Object.keys(NON_COUVERTS).filter(f => !presents.includes(f) || probableServi()), []);
+    H.vrai('   le détecteur sait dire NON : une clé `niveau` dans un schéma est vue, une simple chaîne ne l\'est pas', cleDansSchema({ components: { schemas: { X: { properties: { niveau: {} } } } } }, 'niveau') && !cleDansSchema({ a: [{ b: 'niveau' }] }, 'niveau'));
     const lire = f => JSON.parse(fs.readFileSync(path.join(DOSSIER, f), 'utf8'));
     const observes = [];                                         // { fichier, route, statut, chemin, message }
     const verser = (fichier, route, statut, erreurs) => { for (const e of erreurs) observes.push({ fichier, route, statut, chemin: e.chemin, message: e.message }); };

@@ -19,6 +19,7 @@ Deux adresses pour le même serveur, même base, mêmes réponses : `https://api
 | `POST /api/installation` | extension | aucune | facultative (§5 : un rejeu rend la MÊME installation et le MÊME jeton) | `RequeteInstallation` → `201 ReponseInstallation` (le jeton n'est rendu qu'ICI) |
 | `POST /api/identifier` (avec `contrat: 2`) | extension | Bearer | **oui** | `RequeteIdentifier` → `ReponseAnalyse` |
 | `POST /api/identifier/reponse` | extension | Bearer | facultative | `RequeteReponse` → `ReponseQuestion` |
+| `POST /api/identifier/mesures` | extension | Bearer | facultative | `RequeteMesures` → `ReponseMesures` (CALCUL-CLIENT, le second envoi : les mesures d'image calculées par le client ; derrière `V2_MESURES_CLIENT=1` et `V2_EMPREINTE_EXTENSION=1`, sinon 404 ; le jeton `mesures-client` de `/ping` exige en plus `V2_ORB_SERVEUR=0` et l'index d'empreintes chargé — ses quatre conditions sont au tableau des capacités : la route peut exister sans être annoncée, n'envoyez des mesures que si le jeton est là) |
 | `POST /api/retour-live` (avec Bearer) | extension | Bearer | facultative | `RequeteRetourLive` → `ReponseRetourLive` |
 | `POST /api/solde` (avec Bearer) | extension | Bearer | non | rien → `ReponseSolde` |
 | `POST /api/compte/lier` | extension | Bearer | facultative (§5 : un rejeu, même avec l'ANCIEN jeton, rend le MÊME nouveau jeton) | `RequeteLier` → `ReponseLier` |
@@ -1751,6 +1752,7 @@ Le banc joue chaque route de `paths` dans chaque état contre le serveur v2 rée
 | X9 | `GET /api/modele-empreinte/{sha256}` · `429` | documenté, non joué par ce banc : route derrière `V2_EMPREINTE_EXTENSION=1`, absente de ce montage (drapeau éteint) ; joué sur un serveur réel par `test-modele-empreinte.js` | rien |
 | X9 | `GET /api/modele-empreinte/{sha256}` · `502` | documenté, non joué par ce banc : route derrière `V2_EMPREINTE_EXTENSION=1`, absente de ce montage (drapeau éteint) ; joué sur un serveur réel par `test-modele-empreinte.js` | rien |
 | X9 | `GET /api/modele-empreinte/{sha256}` · `503` | documenté, non joué par ce banc : route derrière `V2_EMPREINTE_EXTENSION=1`, absente de ce montage (drapeau éteint) ; joué sur un serveur réel par `test-modele-empreinte.js` | rien |
+| X10 | `POST /api/identifier/mesures` · `500` | documenté, non joué par ce banc : `SERVEUR` n'est rendu que si la carte promue ne peut pas être fabriquée depuis `analyses` (`v2/identifier/calcul-client-route.js` l.146), donc après une promotion réelle (index d'empreintes chargé, règle G rejouée, question réservée réglée) ; ce banc joue les autres statuts de la route (`200` change: false, `400`, `401`, `404`, `409`, `410`, `422`, `429`, `503`) sur un serveur aux drapeaux `V2_MESURES_CLIENT=1` et `V2_EMPREINTE_EXTENSION=1`. Le `200` change: true est joué par `test-calcul-client-route.js` | rien |
 | X6 | code `EN_RECONCILIATION` | n'est produit que sur une clé de débit rejouée dont la ligne attend la réconciliation (état fabriqué par `test-argent-tour4.js`) ; le banc de contrat le déclare non produit et échoue si un état courant le produit | rien |
 
 ---
