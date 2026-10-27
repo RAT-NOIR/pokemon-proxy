@@ -165,7 +165,8 @@ const { idsDeLaGarde } = require('./garde-contradiction');
 const { preparer: preparerLD } = require('./langue-decisive-charge');
 const etatChargeur = require('../chargeur/etat');
 const { creerCatalogue } = require('./catalogue');
-const { regleVerdict } = require('./taux');
+const { regleVerdict: regleVerdictBrute, cacheDuModule: cacheTaux } = require('./taux');
+const regleVerdict = devise => regleVerdictBrute(devise, { cache: cacheTaux });        // PERF-SCAN P3 : le taux du jour, gardé 120 s par (devise, jour de Paris), vidé par l'écriture des taux (taux.js)
 const { avecRepliAnalyse, analyseAvecRepli } = require('./prix-repli');
 const { preparerAnnonce } = require('../annonce/verifier');
 const { conserverAnnonce } = require('../annonce/conservation');
