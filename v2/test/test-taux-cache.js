@@ -62,6 +62,15 @@ const v = (nom, obtenu, attendu) => { const b = JSON.stringify(obtenu) === JSON.
     T.oublierTaux(); const l6 = lectures;
     await T.regleVerdict('GBP', { maintenant, col, cache: T.cacheDuModule }); await T.regleVerdict('GBP', { maintenant, col, cache: T.cacheDuModule });
     v('le cache du module (celui de la route) garde aussi : une lecture pour deux demandes ; oublierTaux() le vide', [lectures - l6, (T.oublierTaux(), await (async () => { const l = lectures; await T.regleVerdict('GBP', { maintenant, col, cache: T.cacheDuModule }); return lectures - l; })())], [1, 1]);
+    // ── 5 bis. la COURSE : une lecture commencée AVANT l'écriture des taux ne doit pas poser, APRÈS elle, l'ancienne valeur
+    const cacheC = T.creerCacheTaux({ ttlMs: 120000, maintenant: () => t });
+    let liberer; const portail = new Promise(r => { liberer = r; });
+    const colLente = { find: () => { lectures++; return { sort: () => ({ limit: () => ({ next: async () => { await portail; return { devise: 'GBP', date: jour, rate: 0.86 }; } }) }) }; } };
+    const lente = T.versEUR('GBP', { maintenant, col: colLente, cache: cacheC });
+    cacheC.oublier();                       // l'écriture des taux passe PENDANT la lecture
+    liberer(); await lente;
+    const lC = lectures; await T.versEUR('GBP', { maintenant, col, cache: cacheC });
+    v('course : la lecture commencée avant l\'oubli ne pose rien — la demande suivante RELIT', lectures - lC, 1);
     // ── 6. bornes
     const petit = T.creerCacheTaux({ ttlMs: 1000, maintenant: () => 0, max: 2 });
     petit.poser('a', 1); petit.poser('b', 2); petit.poser('c', 3);

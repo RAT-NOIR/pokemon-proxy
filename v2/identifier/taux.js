@@ -31,11 +31,12 @@ function parisDe(maintenant) {
 // qui écrivent dans `taux` à la main entre deux lectures n'en sont pas affectés. La route de l'identification passe `cacheDuModule`.
 const DUREE_CACHE_TAUX_MS = 120 * 1000;
 function creerCacheTaux({ ttlMs = DUREE_CACHE_TAUX_MS, maintenant = Date.now, max = 64 } = {}) {
-    const m = new Map();
+    const m = new Map(); let epoque = 0;       // l'époque monte à chaque oubli : une lecture commencée avant ne pose pas sa valeur après (course avec l'écriture des taux)
     return {
+        epoque() { return epoque; },
         lire(cle) { const e = m.get(cle); if (!e) return undefined; if (maintenant() - e.le >= ttlMs) { m.delete(cle); return undefined; } return e.v; },
-        poser(cle, v) { if (!m.has(cle) && m.size >= max) m.delete(m.keys().next().value); m.set(cle, { v, le: maintenant() }); },
-        oublier() { m.clear(); }
+        poser(cle, v, ep) { if (ep !== undefined && ep !== epoque) return; if (!m.has(cle) && m.size >= max) m.delete(m.keys().next().value); m.set(cle, { v, le: maintenant() }); },
+        oublier() { epoque++; m.clear(); }
     };
 }
 const CACHE_TAUX = creerCacheTaux();
@@ -75,13 +76,14 @@ async function versEUR(devise, { maintenant = new Date(), col = null, journal = 
         const memo = cache;                                                      // sans `cache` explicite : la lecture directe, comme avant (la route passe `cacheDuModule`)
         const cle = `${d}|${jour}`;
         if (memo) { const gardee = memo.lire(cle); if (gardee !== undefined) return { ...gardee }; }
+        const ep = memo ? memo.epoque() : undefined;
         const c = col || colDefaut('taux');
         const doc = await c.find({ devise: d, date: { $lte: jour } }).sort({ date: -1 }).limit(1).next();
         let r;
         if (!doc || !(Number.isFinite(doc.rate) && doc.rate > 0) || typeof doc.date !== 'string') r = NUL();
         else if (joursEntre(doc.date, jour) > AGE_MAX_JOURS) r = NUL();
         else r = { versEUR: arrondi6(1 / doc.rate), tauxDate: doc.date };
-        if (memo) memo.poser(cle, { ...r });
+        if (memo) memo.poser(cle, { ...r }, ep);
         return r;
     } catch (e) { try { journal(`lecture du taux de ${devise} impossible : ${codeErr(e)}`); } catch { /* muet */ } return NUL(); }
 }
