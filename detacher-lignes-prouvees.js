@@ -113,6 +113,14 @@ const DECISIONS = {
         ['187856|700744', 'Vivillon [Conversion Powder | Colorful Wind]', 'Vivillon', [281354, 700739, 700740, 700742], 'tcgdex+pont', 'Cardmarket montre le motif « Russian Icy Snow Pattern » (texte russe) ; le visuel servi montre un autre motif (celui de la V1)']
     ].map(([id, nomCm, carteNom, justes, preuveLigne, vu]) => ({ id, preuve: 'vu', type: 'fiche-contredite-par-la-vue', nomCm, carteNom, justes, preuveLigne, vu,
         pourquoi: `PHASE 2 v2 : « ${nomCm} » joint à la carte « ${carteNom} » (ligne posée par ${preuveLigne}) — ${vu}` })),
+    // FEU VERT NOMMÉ de l'éditeur (2026-10-27 après-midi) : « détacher le jumbo XY66 rattaché au XY69 ». La vignette Cardmarket de 363674 (Rayquaza-EX-V2-OS,
+    // « Oversized ») montre le Rayquaza VERT, n° XY66 lu sur la carte ; sa ligne (set+numero) le joint à la fiche XY69 (Rayquaza noir chromé). 363675
+    // (V3-OS) montre bien XY69 : sa ligne est juste et n'est PAS dans la décision. Le document 202633 porte les deux impressions (XY66 et XY69) : le nom et
+    // les attaques ne contredisent rien, la preuve est visuelle (« vu »). Justes sur la même carte : les deux normaux (289723 XY66, 289780 XY69) et 363675.
+    '2026-10-27': [
+        ['202633|363674', 'Rayquaza EX [Mega Ascension | Aeroscream]', 'Rayquaza-EX', [289723, 289780, 363675], 'set+numero', 'la vignette Cardmarket montre le Rayquaza-EX VERT n° XY66 (jumbo) ; la ligne le joint à la fiche XY69, le Rayquaza noir chromé : autre illustration']
+    ].map(([id, nomCm, carteNom, justes, preuveLigne, vu]) => ({ id, preuve: 'vu', type: 'fiche-contredite-par-la-vue', nomCm, carteNom, justes, preuveLigne, vu,
+        pourquoi: `feu vert de l'éditeur du 27/10 : « ${nomCm} » (jumbo) joint à la fiche XY69 de « ${carteNom} » (ligne posée par ${preuveLigne}) — ${vu}` })),
     '2026-10-17': [
         ['158475|676477', 'Energy Switch', 'Minccino'], ['148517|676478', 'Energy Search', 'Ultra Ball'], ['25165|676479', 'Switch', 'Rare Candy'],
         ['158409|676480', 'Pokédex HANDY910is', 'Giant Cape'], ['120958|676481', 'Poké Ball', 'Professor Juniper'], ['126640|676482', 'Buffer Piece', 'Cheren'],
