@@ -83,6 +83,9 @@ const trie = x => Array.isArray(x) ? x.map(trie) : x && typeof x === 'object' ? 
         verifier('document images déjà « retire » : refus', (await D.simuler(B3.db)).refus.length, 2);
         const B4 = monde(); B4.col('images').delete('f45331');
         verifier('document images absent : refus', (await D.simuler(B4.db)).refus.map(r => /0 document/.test(r.raison)), [true]);
+        // relecture du 27/10 (mutant m9) : l'entrée à la clé détachée doit venir de la source pkc ; une autre source au même chemin est refusée
+        const B6 = monde(); B6.col('cartes').get(45331).images.find(i => i.cleR2.startsWith('pkc/')).source = 'tcgdex';
+        verifier('entrée à détacher d\'une autre source que pkc : refus de cette ligne', [(await D.simuler(B6.db)).aDetacher.map(x => x.entree.carteId), (await D.simuler(B6.db)).refus.map(r => r.entree.carteId)], [[45339], [45331]]);
         const B5 = monde(); B5.col('cartes').delete(45339);
         verifier('carte absente : refus', (await D.simuler(B5.db)).refus.map(r => /absente/.test(r.raison)), [true]);
     });
@@ -92,6 +95,9 @@ const trie = x => Array.isArray(x) ? x.map(trie) : x && typeof x === 'object' ? 
         const plan = await D.simuler(B.db);
         let m = null; try { await D.detacher(B.db, plan, { ecrireFichier }); } catch (e) { m = e.message; }
         verifier('sans sauvegarde : refuse avant d\'écrire', [/sauvegarde/.test(m || ''), B.writes.length], [true, 0]);
+        const fx = path.join(tmp(), 'existe.json'); fs.writeFileSync(fx, 'ancienne');
+        let mx = null; try { await D.detacher(B.db, plan, { sauvegarde: fx, ecrireFichier }); } catch (e) { mx = e.message; }
+        verifier('sauvegarde déjà présente : refuse, rien écrit, fichier intact (relecture du 27/10)', [/existe/.test(mx || ''), B.writes.length, fs.readFileSync(fx, 'utf8')], [true, 0, 'ancienne']);
         const n = await D.detacher(B.db, plan, { sauvegarde: f, ecrireFichier });
         verifier('écriture : 2 détachées ; cartes : il reste la gardée et l\'autre set', [n, B.col('cartes').get(45331).images.map(i => i.cleR2), B.col('cartes').get(45339).images.length], [2, ['pokemontcg.io/EX-Trainer-Kit-2/M2-45331-en.webp', 'tcgdex/Autre/45331.webp'], 2]);
         const d = B.col('images').get('f45331');

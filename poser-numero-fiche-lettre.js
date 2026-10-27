@@ -47,6 +47,8 @@ async function appliquer(cartesDb, plan, { ecrire = false, attendu, sauvegarde }
     if (!ecrire) return r;
     if (!plan.pose.length) return { ...r, relu: { poses: 0 } };
     if (!sauvegarde) throw new Error('--ecrire exige une sauvegarde des valeurs d\'avant (--sauvegarde=<f>.json) : rien n\'est écrit');
+    // une sauvegarde EXISTANTE n'est jamais écrasée : une reprise mi-lot perdrait les valeurs d'avant des lignes déjà posées (relecture du 27/10)
+    if (fs.existsSync(sauvegarde)) throw new Error(`la sauvegarde ${sauvegarde} existe déjà : rien n'est écrit (choisir un nouveau fichier)`);
     fs.mkdirSync(path.dirname(path.resolve(sauvegarde)), { recursive: true });
     fs.writeFileSync(sauvegarde, JSON.stringify({ le: new Date().toISOString(), quoi: 'valeurs d\'avant de la pose de numeroFiche avec lettre (poser-numero-fiche-lettre.js)', lignes: plan.pose.map(p => ({ _id: p._id, idProduct: p.idProduct, slugSet: p.slugSet, avant: p.avant, pose: p.numeroFiche })) }, null, 1));
     for (const p of plan.pose) {

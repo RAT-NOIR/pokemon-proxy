@@ -55,6 +55,8 @@ function annonce(plan) {
 async function detacher(db, plan, { sauvegarde, ecrireFichier } = {}) {
     if (!sauvegarde) throw new Error('écrire exige une sauvegarde des entrées détachées (--sauvegarde=<f>.json) : rien n\'est écrit');
     if (!plan.aDetacher.length) return 0;
+    // une sauvegarde EXISTANTE n'est jamais écrasée : une reprise perdrait les entrées déjà détachées (relecture du 27/10)
+    if (require('fs').existsSync(sauvegarde)) throw new Error(`la sauvegarde ${sauvegarde} existe déjà : rien n'est écrit (choisir un nouveau fichier)`);
     ecrireFichier(sauvegarde, { le: new Date().toISOString(), quoi: 'entrées cartes.images détachées (detacher-doublons-lus.js) + documents images passés à « retire »', lignes: plan.aDetacher.map(x => ({ carteId: x.entree.carteId, set: x.entree.set, cleR2: x.entree.cleDetachee, entree: x.fausse })) });
     const maintenant = new Date();
     let n = 0;

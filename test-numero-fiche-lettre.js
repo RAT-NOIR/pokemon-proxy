@@ -90,6 +90,10 @@ const lire = async (db, produits = PRODUITS) => P.lireLignes(db, produits);
         let m2 = null; try { await P.appliquer(B.db, plan, { ecrire: true, sauvegarde: f }); } catch (e) { m2 = e.message; }
         let m3 = null; try { await P.appliquer(B.db, plan, { ecrire: true, attendu: 3 }); } catch (e) { m3 = e.message; }
         verifier('sans --attendu / sans sauvegarde : refuse', [/attendu/.test(m2 || ''), /sauvegarde/.test(m3 || ''), B.writes.length], [true, true, 0]);
+        // relecture du 27/10 : une sauvegarde EXISTANTE n'est jamais écrasée (une reprise mi-lot perdrait les valeurs d'avant des lignes déjà posées)
+        const fx = path.join(tmp(), 'existe.json'); fs.writeFileSync(fx, '{"lignes":["ancienne"]}');
+        let m6 = null; try { await P.appliquer(B.db, plan, { ecrire: true, attendu: 3, sauvegarde: fx }); } catch (e) { m6 = e.message; }
+        verifier('sauvegarde déjà présente : refuse, rien écrit, fichier intact', [/existe/.test(m6 || ''), B.writes.length, fs.readFileSync(fx, 'utf8')], [true, 0, '{"lignes":["ancienne"]}']);
         const r = await P.appliquer(B.db, plan, { ecrire: true, attendu: 3, sauvegarde: f });
         verifier('écriture : 3 lignes, relu 3 posées', [r.lignes, r.relu], [3, { poses: 3 }]);
         const l = id => B.col('cartes_produits').get(`${id}|c`);
