@@ -8,6 +8,8 @@
 // EXACTES : une admission ne fait que RETIRER de « aucun visuel » et du repli (par famille aussi), et le reste tombe juste sur « écrites + partage + contredites − admises de aucun/repli ».
 // Une exclusion inconnue fait toujours diverger ce dernier compte. ⚠️ Limite nommée : les produits à position contredite sans autre entrée prennent le motif « partage-incohérent »
 // par élimination dans etat-api.js (motifManquant) — leur NOMBRE est rendu ici (`positionContredite`), jamais sous-entendu.
+// ⚠️ Deux angles morts étroits (relecture) : l'inégalité des admissions a une marge égale aux lignes « contredites puis admises », que decider ne compte pas à part — une exclusion
+// silencieuse compensée par une admission silencieuse passerait dans cette marge ; et une ligne admise puis écartée par partageIncoherent ferait LEVER à tort (côté sûr).
 /**
  * @param {{ d: object, traces: Array<{sansFiche:boolean, im:object|null, refus:string|null}>, nLignes: number, nEntrees: number }} e
  *   `d` : `denominateurs` de decider ; `traces` : TOUTES les traces (une par ligne) ; `nLignes` : les lignes cartes_produits lues ; `nEntrees` : les entrées que decider a rendues.
