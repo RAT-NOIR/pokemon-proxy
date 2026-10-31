@@ -174,10 +174,15 @@ function pageAppriseDe(fiches, L) {
     const f = (fiches ?? []).find(x => x?.fiche?.code === L?.codePk);
     return f ? { fichier: f.fichier, tuiles: f.fiche.tuiles, origines: new Map(f.fiche.origines ?? []), titre: f.fiche.titre } : null;
 }
-/** L'alerte active ne porte-t-elle QUE sur l'hôte des PAGES ? Chaque adresse lisible (blocages, motif) doit y être, et il en faut au moins une : sinon on ne sait pas, elle bloque. */
+/**
+ * L'alerte active ne porte-t-elle QUE sur l'hôte des PAGES ? Elle passe SEULEMENT si chaque blocage porte une adresse lisible de l'hôte des pages, si le motif en porte au moins une
+ * et que toutes y sont. Un blocage sans adresse (Crawl-delay, erreur répétée…) ou un motif muet : on ne sait pas sur quel hôte, elle bloque (relecture 31/10).
+ */
 function alerteDesSeulesPages(alerte) {
-    const adresses = [...(alerte?.blocages ?? []).map(b => b?.url), ...String(alerte?.motif ?? '').match(/https:\/\/\S+/g) ?? []].filter(Boolean);
-    return adresses.length > 0 && adresses.every(u => { try { return new URL(u).hostname === P.HOTE_PAGES; } catch { return false; } });
+    const desPages = u => { try { return new URL(u).hostname === P.HOTE_PAGES; } catch { return false; } };
+    const blocages = Array.isArray(alerte?.blocages) ? alerte.blocages : [];
+    const duMotif = String(alerte?.motif ?? '').match(/https:\/\/\S+/g) ?? [];
+    return duMotif.length > 0 && duMotif.every(desPages) && blocages.every(b => typeof b?.url === 'string' && desPages(b.url));
 }
 async function collecterSet(unite, M, { verrou, client: clientInjecte = null, deposer = (b, c, d, t) => r2.deposerBinaire(b, c, d, t), fabriquerVerrouSet = fabriquerVerrou, stopOctets = STOP_OCTETS, ligneDe = lignePikaqian, vignetter = vignetterApresJointure, pageApprise = null } = {}) {
     const refus = (etat, erreur) => { console.error(`❌ ${unite?._id} : ${erreur}.`); return { code: unite?._id, etat, erreur, sansJointure: true }; };
@@ -353,21 +358,28 @@ async function lancerEcriture(slugs, M, { verrou, client, R2 = r2, bucket = proc
     return { code, resultats };
 }
 
-module.exports = { collecterSet, pageAppriseDe, alerteDesSeulesPages, releve, gardeTirage, gardeProduits, planifier, lancerEcriture, provenanceDe, poserOriginal, joindreAdditif, compterEntrees, sha, cleNum, STOP_OCTETS, TABLE_PIKAQIAN, SOURCE: P.SOURCE, VERROU_GLOBAL: P.VERROU_GLOBAL };
+// La ligne de commande s'écrit par ce qu'elle AUTORISE (§54) : un argument inconnu refuse avant toute connexion ; --plan et --ecrire exigent --sets=.
+// Relecture 31/10 : --ecrire exige --depuis-appris — les pages sont fermées (défi), un --ecrire sans fiche apprise ne ferait que salir l'alerte.
+const AUTORISES = [/^--plan$/, /^--verrou$/, /^--ecrire$/, /^--depuis-appris$/, /^--sets=[A-Za-z0-9][A-Za-z0-9-]*(,[A-Za-z0-9][A-Za-z0-9-]*)*$/, /^--html=.+\.html$/];
+/** Le refus des arguments (une phrase), ou null. Pure : jugée avant toute connexion. */
+function refusArguments(args) {
+    const inconnus = args.filter(a => !AUTORISES.some(r => r.test(a)));
+    const modes = ['--plan', '--verrou', '--ecrire'].filter(m => args.includes(m));
+    const voulus = args.find(a => a.startsWith('--sets='))?.slice(7).split(',');
+    const ok = !inconnus.length && modes.length === 1 && (modes[0] === '--verrou' || voulus) && !(modes[0] === '--plan' && voulus.length > 3)
+        && !(args.some(a => a.startsWith('--html=')) && modes[0] !== '--plan') && (args.includes('--depuis-appris') === (modes[0] === '--ecrire'));
+    return ok ? null : `${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}un seul mode parmi --plan, --verrou, --ecrire ; --plan et --ecrire exigent --sets=<slug>,… (jamais « tous » ; --plan : 3 sets au plus) ; --ecrire exige --depuis-appris (et --depuis-appris n'existe qu'avec --ecrire) ; --html=<fichier>.html (avec --plan) garde la page lue. Ex. : --ecrire --depuis-appris --sets=Dynamax-Clash-Flame`;
+}
+
+module.exports = { collecterSet, pageAppriseDe, alerteDesSeulesPages, refusArguments, releve, gardeTirage, gardeProduits, planifier, lancerEcriture, provenanceDe, poserOriginal, joindreAdditif, compterEntrees, sha, cleNum, STOP_OCTETS, TABLE_PIKAQIAN, SOURCE: P.SOURCE, VERROU_GLOBAL: P.VERROU_GLOBAL };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE : le worker importe `collecterSet`.
 if (require.main !== module) return;
 
-// La ligne de commande s'écrit par ce qu'elle AUTORISE (§54) : un argument inconnu refuse avant toute connexion ; --plan et --ecrire exigent --sets=.
-const AUTORISES = [/^--plan$/, /^--verrou$/, /^--ecrire$/, /^--depuis-appris$/, /^--sets=[A-Za-z0-9][A-Za-z0-9-]*(,[A-Za-z0-9][A-Za-z0-9-]*)*$/, /^--html=.+\.html$/];
 const args = process.argv.slice(2);
-const inconnus = args.filter(a => !AUTORISES.some(r => r.test(a)));
-const modes = ['--plan', '--verrou', '--ecrire'].filter(m => args.includes(m));
 const voulus = args.find(a => a.startsWith('--sets='))?.slice(7).split(',');
-if (inconnus.length || modes.length !== 1 || (modes[0] !== '--verrou' && !voulus) || (modes[0] === '--plan' && voulus.length > 3) || (args.some(a => a.startsWith('--html=')) && modes[0] !== '--plan') || (args.includes('--depuis-appris') && modes[0] !== '--ecrire')) {
-    console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}un seul mode parmi --plan, --verrou, --ecrire ; --plan et --ecrire exigent --sets=<slug>,… (jamais « tous » ; --plan : 3 sets au plus) ; --html=<fichier>.html (avec --plan) garde la page lue. Ex. : --plan --sets=Dynamax-Clash-Flame`);
-    process.exit(2);
-}
+const refus = refusArguments(args);
+if (refus) { console.error(`❌ ${refus}`); process.exit(2); }
 (async () => {
     const { ouvrirConnexions } = require('./collecte-cartes/garde');
     const { modeles } = require('./collecte-cartes/schemas');

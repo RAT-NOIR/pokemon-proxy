@@ -417,9 +417,14 @@ const defi = r => RH.detecterDefi(RH.entreeDepuisClient(r, { borne: 5000 })) !==
 // robots.txt d'un hôte de fichiers (S3) : « AccessDenied » d'un S3 sans cette clé veut dire « pas de robots.txt » — pas un défi (aucune marque Cloudflare)
 // ➕ 2026-10-31 (décision du testeur) : RFC 9309 § 2.3.1.3 — le robots.txt de l'HÔTE D'IMAGES en 4xx (hors 429) est « indisponible » : aucune règle. Pas s'il porte une marque de défi
 // (cf-mitigated, serveur ou via Cloudflare, corps HTML) : celui-là reste un blocage. L'hôte des PAGES garde sa règle.
-const robotsImagesIndisponible = (r, hote) => hote === HOTE_IMAGES && r.status >= 400 && r.status < 500 && r.status !== 429 && !r.cfMitigated
-    && !/cloudflare/i.test(`${r.server ?? ''} ${r.via ?? ''}`) && !/<\s*(!doctype|html|head|body)\b/i.test(String(r.texte ?? '').slice(0, 5000));
-const robotsAbsentS3 = r =>r.status === 403 && !r.cfMitigated && !/cloudflare/i.test(`${r.server ?? ''} ${r.via ?? ''}`) && /AmazonS3|CloudFront/i.test(`${r.server ?? ''} ${r.via ?? ''}`) && /<Code>AccessDenied<\/Code>/.test(String(r.texte ?? '').slice(0, 2000));
+// Relecture 31/10 : la garde s'écrit par ce qu'elle AUTORISE — les seuls statuts admis sont ceux d'une absence (400, 403, 405, 406 ; 404 et 410 sont lus plus haut) ; 401, 407, 451 et 429
+// restent des refus. Les marqueurs de défi de la règle commune (reponse-hote.js, MARQUEURS) sont appliqués au corps, même en texte brut. ⚠️ RISQUE ACCEPTÉ : un 403 au corps vide, sans
+// en-tête de défi, est indistinguable d'un défi muet ; il vaut « indisponible » (le cas mesuré du 31/10) — l'IMAGE, elle, reste jugée par la règle commune (premier 403 : arrêt définitif).
+const ROBOTS_IMAGES_ABSENCE = Object.freeze([400, 403, 405, 406]);
+const robotsImagesIndisponible = (r, hote) => hote === HOTE_IMAGES && ROBOTS_IMAGES_ABSENCE.includes(r.status) && !r.cfMitigated
+    && !/cloudflare/i.test(`${r.server ?? ''} ${r.via ?? ''}`) && !/<\s*(!doctype|html|head|body)\b/i.test(String(r.texte ?? '').slice(0, 5000))
+    && !defi({ ...r, status: 200 });
+const robotsAbsentS3 = r => r.status === 403 && !r.cfMitigated && !/cloudflare/i.test(`${r.server ?? ''} ${r.via ?? ''}`) && /AmazonS3|CloudFront/i.test(`${r.server ?? ''} ${r.via ?? ''}`) && /<Code>AccessDenied<\/Code>/.test(String(r.texte ?? '').slice(0, 2000));
 
 /**
  * Le SEUL chemin vers pikaqian.com / images.pikaqian.com. Garde FERMÉE : aucune requête sans verrou global lié, tenu et non perdu ; hôtes
@@ -455,8 +460,14 @@ function fabriquerClientPikaqian({ transport = transportFetch, cadenceMs = CADEN
         }
         throw erreur;
     }
+    // 🔑 RÈGLE DU TESTEUR (31/10) : au PREMIER 403 ou 429 sur une image ou une page, fermeture DÉFINITIVE — l'arrêt s'ÉCRIT (ARRET-HOTE, reponse-hote.js), relu par garderHote
+    // avant toute requête de tout client suivant ; une écriture qui échoue n'ouvre rien (le client s'arrête quand même, et le dit)
     const bloquer = (r, url) => {
-        bloque = arret = Object.assign(new Error(`${SOURCE} BLOQUÉ (HTTP ${r.status}${r.cfMitigated ? `, cf-mitigated ${r.cfMitigated}` : ''}) sur ${url} — on s'arrête, plus aucune requête`), { bloque: true, arret: true, status: r.status });
+        const motif = `${SOURCE} BLOQUÉ (HTTP ${r.status}${r.cfMitigated ? `, cf-mitigated ${r.cfMitigated}` : ''}) sur ${url}`;
+        let fichier = null, ecriture = null;
+        try { fichier = RH.arretHote(new URL(url).hostname, motif, { dossier: dossierPauses, url }); } catch (e) { ecriture = e.message; }
+        bloque = arret = Object.assign(new Error(`${motif} — on s'arrête, plus aucune requête${fichier ? ` ; arrêt définitif écrit (${fichier})` : ` ; ÉCRITURE DE L'ARRÊT IMPOSSIBLE (${ecriture})`}`),
+            { bloque: true, arret: true, arretDefinitif: true, status: r.status, fichier, ...(ecriture ? { ecritureEchouee: true } : {}) });
         throw arret;
     };
     /** Une requête de la FILE : cadence, comptes, transport. Une coupure réseau compte comme un échec. */

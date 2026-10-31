@@ -17,6 +17,8 @@ const verifier = (nom, obtenu, attendu) => {
     const a = JSON.stringify(obtenu), b = JSON.stringify(attendu);
     if (a === b) { ok++; console.log(`✅ ${nom}`); } else { ko++; console.log(`❌ ${nom}\n   obtenu  ${a}\n   attendu ${b}`); }
 };
+// chaque client du banc a SON dossier d'arrêts (le premier 403/429 s'écrit désormais, ARRET-HOTE) : un arrêt d'un cas ne ferme pas l'hôte pour les cas suivants
+const dpNeuf = () => require('fs').mkdtempSync(path.join(require('os').tmpdir(), 'pq-arrets-cas-'));
 const silencieux = () => { const l = console.log, w = console.warn, e = console.error; console.log = console.warn = console.error = () => { }; return () => { console.log = l; console.warn = w; console.error = e; }; };
 
 // ── une base en mémoire : les seules formes de requête que le collecteur emploie ──────────────────────────────────────
@@ -84,7 +86,7 @@ const imageDe = async larg => sharp({ create: { width: larg, height: Math.round(
     const vignetteOk = () => { const f = async () => { f.n++; return { vg: { entrees: 1, fabriquees: 1, echecs: 0 }, sets: [] }; }; f.n = 0; return f; };
     const lancer = async (B, tr, o = {}) => {
         const depots = [];
-        const client = P.fabriquerClientPikaqian({ transport: tr, cadenceMs: 0, verrou, pause: async () => { }, horloge: () => 0 });
+        const client = P.fabriquerClientPikaqian({ transport: tr, cadenceMs: 0, verrou, pause: async () => { }, horloge: () => 0, dossierPauses: dpNeuf() });
         const vignetter = o.vignetter || vignetteOk();
         const r = silencieux();
         try { return { b: await collecterSet(o.unite || uniteDeLaLigne(lignePikaqian(SLUG)), B.M, { verrou, client, deposer: async (...a) => depots.push(a), fabriquerVerrouSet: verrouSet, stopOctets: o.stopOctets, vignetter, ligneDe: o.ligneDe }), depots, vignetter, client }; }
@@ -230,7 +232,7 @@ const imageDe = async larg => sharp({ create: { width: larg, height: Math.round(
     verifier('deux fichiers illisibles de suite → arrêt, alerte posée', [BI.col('collecte_images_etat').get('alerte/source-bloquee/pikaqian')?.active, [...BI.col('images').values()].filter(d => d.etat === 'echec').length], [true, 2]);
     // le plafond de requêtes de l'unité : une page qui ne mène qu'à 1 image ne peut pas déclencher d'avalanche
     const BL = fausseBase(); semer(BL);
-    const clientPlafond = P.fabriquerClientPikaqian({ transport: reseau(normal()), cadenceMs: 0, verrou, pause: async () => { }, horloge: () => 0 });
+    const clientPlafond = P.fabriquerClientPikaqian({ transport: reseau(normal()), cadenceMs: 0, verrou, pause: async () => { }, horloge: () => 0, dossierPauses: dpNeuf() });
     clientPlafond.plafonner(1);
     const rr0 = silencieux();
     try { var pl = await collecterSet(uniteDeLaLigne(lignePikaqian(SLUG)), BL.M, { verrou, client: clientPlafond, deposer: async () => { }, fabriquerVerrouSet: verrouSet, vignetter: vignetteOk() }); } finally { rr0(); }
@@ -373,7 +375,7 @@ const imageDe = async larg => sharp({ create: { width: larg, height: Math.round(
         const apprise = { fichier: 'cs1bc--20261012T000000Z.json', tuiles: lireTuiles(PAGE), origines: lireOrigines(PAGE), titre: titreLu(PAGE) };
         const lancerAppris = async (B, tr, alerte) => {
             if (alerte) B.col('collecte_images_etat').set(alerte._id, alerte);
-            const client = P.fabriquerClientPikaqian({ transport: tr, cadenceMs: 0, verrou, pause: async () => { }, horloge: () => 0 });
+            const client = P.fabriquerClientPikaqian({ transport: tr, cadenceMs: 0, verrou, pause: async () => { }, horloge: () => 0, dossierPauses: dpNeuf() });
             const r = silencieux();
             try { return await collecterSet(uniteDeLaLigne(lignePikaqian(SLUG)), B.M, { verrou, client, deposer: async () => { }, fabriquerVerrouSet: verrouSet, vignetter: vignetteOk(), pageApprise: apprise }); }
             finally { r(); }
@@ -386,7 +388,11 @@ const imageDe = async larg => sharp({ create: { width: larg, height: Math.round(
         verifier('   l\'alerte de blocage qui ne porte QUE sur l\'hôte des pages ne bloque pas l\'hôte d\'images ; le visuel est écrit', Ba.col('images').get(P.idImagePikaqian(SLUG, 1, '001'))?.etat, 'ok');
         verifier('   le bilan dit la page apprise (fichier), jamais une page lue', Ba.col('sets').get(SLUG).visuelsPikaqian?.pageApprise, apprise.fichier);
         for (const [nom, al] of [['un blocage sur l\'hôte d\'IMAGES', { ...ALERTE_PAGES, blocages: [...ALERTE_PAGES.blocages, { url: `https://images.pikaqian.com/cs1bc/${UUID(1)}.webp`, status: 403 }] }],
-            ['une alerte sans adresse lisible', { _id: P.ID_ALERTE, active: true, depuis: '2026-10-31T00:00:00Z', motif: 'erreur répétée', blocages: [] }]]) {
+            ['une alerte sans adresse lisible', { _id: P.ID_ALERTE, active: true, depuis: '2026-10-31T00:00:00Z', motif: 'erreur répétée', blocages: [] }],
+            // relecture 31/10 (bloquant) : un blocage SANS adresse (Crawl-delay de l'hôte d'images, erreur répétée…) à côté des blocages des pages ne se perd pas dans un filter(Boolean)
+            ['un blocage sans adresse à côté des blocages des pages', { ...ALERTE_PAGES, blocages: [...ALERTE_PAGES.blocages, { url: null, status: null, motif: 'robots.txt de images.pikaqian.com demande un Crawl-delay de 900 s' }] }],
+            ['un blocage à l\'adresse illisible', { ...ALERTE_PAGES, blocages: [...ALERTE_PAGES.blocages, { url: 'pas une adresse', status: 403 }] }],
+            ['un dernier motif sans adresse (blocages des pages seulement)', { ...ALERTE_PAGES, motif: 'pikaqian : 2 échecs de suite — erreur répétée' }]]) {
             Ba = fausseBase(); semer(Ba); tra = reseau(normal());
             ba = await lancerAppris(Ba, tra, al);
             verifier(`page apprise, alerte avec ${nom} : refus, aucune requête`, [ba.etat, tra.appels.length], ['refuse-source-bloquee', 0]);
@@ -398,7 +404,7 @@ const imageDe = async larg => sharp({ create: { width: larg, height: Math.round(
         // une page apprise qui n'est pas celle du set (code étranger) : refus sans requête, par la règle de la page
         Ba = fausseBase(); semer(Ba); tra = reseau(normal());
         const r2 = silencieux(); let bx;
-        try { bx = await collecterSet(uniteDeLaLigne(lignePikaqian(SLUG)), Ba.M, { verrou, client: P.fabriquerClientPikaqian({ transport: tra, cadenceMs: 0, verrou, pause: async () => { }, horloge: () => 0 }), deposer: async () => { }, fabriquerVerrouSet: verrouSet, vignetter: vignetteOk(),
+        try { bx = await collecterSet(uniteDeLaLigne(lignePikaqian(SLUG)), Ba.M, { verrou, client: P.fabriquerClientPikaqian({ transport: tra, cadenceMs: 0, verrou, pause: async () => { }, horloge: () => 0, dossierPauses: dpNeuf() }), deposer: async () => { }, fabriquerVerrouSet: verrouSet, vignetter: vignetteOk(),
             pageApprise: { ...apprise, tuiles: lireTuiles(PAGE.replaceAll('cs1bc', 'csv1c')) } }); } finally { r2(); }
         verifier('page apprise d\'un AUTRE set : refus (verdict de page), aucune requête', [bx.etat, tra.appels.length], ['refuse-liste', 0]);
         // la fiche apprise d'un set : celle de SON code, la plus récente (lireApprises la choisit) ; absente → null (le set ne part pas)
@@ -406,6 +412,22 @@ const imageDe = async larg => sharp({ create: { width: larg, height: Math.round(
         const fiches = [{ fichier: 'csv1c--x.json', fiche: { code: 'csv1c', tuiles: [1], origines: [], titre: 'a' } }, { fichier: 'cs1bc--y.json', fiche: { code: 'cs1bc', tuiles: [2], origines: [['u', { officielle: null }]], titre: 'b' } }];
         const pa = pageAppriseDe(fiches, lignePikaqian(SLUG));
         verifier('pageAppriseDe : la fiche du code du set (tuiles, origines en Map, titre, fichier) ; aucun code → null', [pa?.fichier, pa?.tuiles, pa?.origines instanceof Map && pa.origines.has('u'), pa?.titre, pageAppriseDe(fiches.slice(0, 1), lignePikaqian(SLUG))], ['cs1bc--y.json', [2], true, 'b', null]);
+        // la ligne de commande (relecture 31/10, mineur) : --ecrire SANS --depuis-appris demanderait une page (passive) et salirait l'alerte → refusé avant toute connexion
+        const { refusArguments } = require(process.env.PK_COLLECTEUR ? path.resolve(process.env.PK_COLLECTEUR) : './collecteur-images-pikaqian');
+        verifier('arguments : --ecrire sans --depuis-appris refusé ; avec, admis ; --plan admis ; --depuis-appris hors --ecrire refusé ; argument inconnu refusé',
+            [typeof refusArguments === 'function' && !!refusArguments(['--ecrire', `--sets=${SLUG}`]), typeof refusArguments === 'function' && refusArguments(['--ecrire', '--depuis-appris', `--sets=${SLUG}`]),
+                typeof refusArguments === 'function' && refusArguments(['--plan', `--sets=${SLUG}`]), typeof refusArguments === 'function' && !!refusArguments(['--plan', '--depuis-appris', `--sets=${SLUG}`]),
+                typeof refusArguments === 'function' && !!refusArguments(['--ecrire', '--depuis-appris', `--sets=${SLUG}`, '--force'])],
+            [true, null, null, true, true]);
+        // lancerEcriture avec --depuis-appris : un set SANS fiche apprise ne part pas — aucune requête, aucun collecterSet, code 1
+        {
+            const { lancerEcriture } = require(process.env.PK_COLLECTEUR ? path.resolve(process.env.PK_COLLECTEUR) : './collecteur-images-pikaqian');
+            Ba = fausseBase(); semer(Ba); tra = reseau(normal());
+            const cl = P.fabriquerClientPikaqian({ transport: tra, cadenceMs: 0, verrou, pause: async () => { }, horloge: () => 0, dossierPauses: dpNeuf() });
+            const r3 = silencieux(); let le;
+            try { le = await lancerEcriture([SLUG], Ba.M, { verrou, client: cl, R2: { verifierBucket: async () => { }, deposerBinaire: async () => { } }, bucket: 'banc', vignetter: vignetteOk(), fabriquerVerrouSet: verrouSet, apprises: [] }); } finally { r3(); }
+            verifier('lancerEcriture --depuis-appris, aucune fiche pour le set : rien ne part (0 requête, 0 résultat), code 1', [le.code, le.resultats.length, tra.appels.length], [1, 0, 0]);
+        }
     }
 
     console.log(`\n${ok} passés, ${ko} en échec (sur ${ok + ko})`);
