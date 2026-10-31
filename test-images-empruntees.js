@@ -401,11 +401,11 @@ t('--sets : la sélection restreint le plan (aucune ligne des autres sets n\'est
 });
 t('verifierSelection : vide, doublon ou set hors du champ de lecture → LÈVE (jamais « tout » par défaut)', () => {
     assert.doesNotThrow(() => E.verifierSelection([SEA])); assert.doesNotThrow(() => E.verifierSelection([SEA, PP]));
-    assert.throws(() => E.verifierSelection([]), /vide/); assert.throws(() => E.verifierSelection([SEA, SEA]), /doublon/); assert.throws(() => E.verifierSelection(['Scarlet-Violet']), /hors du champ/); assert.throws(() => E.verifierSelection(['WCD-2009']), /hors du champ/);
+    assert.throws(() => E.verifierSelection([]), /vide/); assert.throws(() => E.verifierSelection([SEA, SEA]), /doublon/); assert.throws(() => E.verifierSelection(['Scarlet-Violet']), /hors du champ/); assert.throws(() => E.verifierSelection(['WCD-2008']), /hors du champ/);   // un set WCD absent de la liste fermée (WCD-2009 y est depuis le 31/10)
     assert.throws(() => E.planifier(etatSEA([]), { sets: [] }), /vide/);
 });
 t('script : --sets est validé avant toute connexion (set hors champ → exit 2) et passé au plan ET à la relecture', () => {
-    const r = spawnSync(process.execPath, [path.join(__dirname, 'poser-images-empruntees.js'), '--sets=WCD-2009'], { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 30000 });
+    const r = spawnSync(process.execPath, [path.join(__dirname, 'poser-images-empruntees.js'), '--sets=WCD-2008'], { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 30000 });
     assert.strictEqual(r.status, 2); assert(/hors du champ/.test(r.stderr));
     const r2 = spawnSync(process.execPath, [path.join(__dirname, 'poser-images-empruntees.js'), '--sets='], { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 30000 });
     assert.strictEqual(r2.status, 2);
@@ -443,6 +443,13 @@ t('verdictApi : les produits du plan peuvent sortir de l\'API (image empruntée 
     assert(/gagnés : 9/.test(juge([sig(3), sig(9)]).raisons.join()));
     assert(/refus nouveau/.test(juge([sig(3)], 2).raisons.join()));
     assert.strictEqual(juge([sig(3)], 0).ok, true);
+    // 31/10 : depuis le 27/10, l'API SERT les emprunts WCD de la liste fermée en classe « autre-tirage » (bandeau). Un produit du plan GAGNÉ dans cette classe est l'effet voulu ;
+    // tout autre gain (hors du plan, ou dans une autre classe) reste un arrêt. Écrit par ce qu'il autorise.
+    const jugeGain = (apres, ids = plan3) => E.verdictApi({ cmp: PV.compareEntrees([sig(3)], apres, ids), idsPlan: ids, contratNouveaux: 0, apres });
+    assert.strictEqual(jugeGain([sig(1), sig(3)]).ok, true);                                   // 1 (du plan) gagné en « autre-tirage » : permis
+    assert(/gagnés : 9/.test(jugeGain([sig(3), sig(9)]).raisons.join()));                      // 9 hors du plan : refusé
+    assert(/gagnés : 1/.test(jugeGain([sig(1, { visuel: 'du-set' }), sig(3)]).raisons.join()));   // 1 du plan, mais servi comme vrai scan : refusé
+    assert(/gagnés : 1/.test(E.verdictApi({ cmp: PV.compareEntrees([sig(3)], [sig(1), sig(3)], plan3), idsPlan: plan3, contratNouveaux: 0 }).raisons.join()));   // sans l'état d'après : refusé (on ne sait pas)
 });
 t('le script lit les sets à liste fermée et dérive de l\'origine ces seuls produits (aucune lecture ni écriture hors liste)', () => {
     const src = require('fs').readFileSync(path.join(__dirname, 'poser-images-empruntees.js'), 'utf8');
@@ -606,7 +613,7 @@ const ligneWCD = (idProduct, o = {}) => ({ _id: `220753|${idProduct}`, carteId: 
 const etatWCD = (lignes, images = [oriGRI()]) => etat(lignes, [carte(images, 220753)]);
 t('WCD : la liste fermée est gelée, non vide, ne porte QUE des sets « WCD… », et chaque origine a exactement ses 5 champs (set d\'origine jamais WCD)', () => {
     const sets = Object.keys(E.ORIGINES_WCD); assert(sets.length > 0); assert(sets.every(E.estWCD), sets.join());
-    const n = sets.reduce((s, k) => s + Object.keys(E.ORIGINES_WCD[k]).length, 0); assert.strictEqual(n, 37);
+    const n = sets.reduce((s, k) => s + Object.keys(E.ORIGINES_WCD[k]).length, 0); assert.strictEqual(n, 606);   // 37 (26/10) + 569 (31/10 : 251 entrées, origine à deux sources, dessin lu à l'image)
     for (const k of sets) for (const [id, o] of Object.entries(E.ORIGINES_WCD[k])) {
         assert.deepStrictEqual(Object.keys(o).sort(), ['carteId', 'cleR2', 'numero', 'produitOrigine', 'setOrigine'], id);
         assert(Number.isInteger(o.carteId) && o.carteId > 0 && Number.isInteger(o.produitOrigine) && typeof o.cleR2 === 'string' && o.cleR2 && typeof o.numero === 'string' && !E.estWCD(o.setOrigine), id);

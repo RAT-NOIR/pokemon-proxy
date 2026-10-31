@@ -188,7 +188,7 @@ const melange = (liste, graine) => { const a = [...liste]; let s = graine; const
             console.log(`API : perdus ${cmpApi.perdus.length} (tous du plan : ${cmpApi.perdus.every(i => idsPlan.includes(i))}) · AUTRES produits perdus ${cmpApi.autresPerdus.length} · produits changés ${cmpApi.changes.length} · gagnés ${cmpApi.gagnes.length}`);
             const ctApi = await GC.verifierContrat({ api, avant: { sets: eApi.sets, cartes: eApi.cartes, cartesProduits: eApi.cartesProduits }, apres: { sets: etatApresApi.sets, cartes: etatApresApi.cartes, cartesProduits: etatApresApi.cartesProduits } });
             console.log(`${GC.ligneContrat(ctApi)} · CONTRAT : ${ctApi.nouveaux.length ? `🔴 ${ctApi.nouveaux.length} refus nouveau(x)` : '✅ zéro refus nouveau'}`);
-            const vApi = E.verdictApi({ cmp: cmpApi, idsPlan, contratNouveaux: ctApi.nouveaux.length });
+            const vApi = E.verdictApi({ cmp: cmpApi, idsPlan, contratNouveaux: ctApi.nouveaux.length, apres: apresApi.entrees });
             if (!vApi.ok) { console.error(`🔴 ARRÊT : l'API perd ou change un produit HORS du plan, ou le contrat refuse une entrée (${vApi.raisons.join(' ; ')}) — rien n'est écrit.`); process.exitCode = 1; return; }
         }
 

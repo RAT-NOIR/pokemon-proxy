@@ -269,14 +269,20 @@ function produitsHorsChamp(plan) {
 /**
  * Ce que la décision de l'API a le droit de faire à ce lot (PHASE 3b) : une image empruntée n'est jamais servie à l'identification, donc les produits du plan qui étaient servis SORTENT — et c'est tout.
  * @param cmp  P.compareEntrees(avant.entrees, apres.entrees, idsPlan) · @param idsPlan les produits du plan · @param contratNouveaux le nombre de refus nouveaux du contrat de l'API
+ * ➕ 31/10 : depuis le 27/10, l'API SERT les emprunts WCD de la liste fermée en classe `autre-tirage` (bandeau « visuel d'un autre tirage ») : un produit DU PLAN gagné dans
+ *   CETTE classe est l'effet voulu. `apres` (les entrées de l'API après le lot) est exigé pour le savoir ; sans lui, tout gain arrête (on ne sait pas).
  * @returns {{ok: boolean, raisons: string[]}}  ok = AUCUN autre produit perdu, changé ou gagné, et zéro refus nouveau
  */
-function verdictApi({ cmp, idsPlan, contratNouveaux }) {
+const VISUEL_EMPRUNT_API = 'autre-tirage';
+function verdictApi({ cmp, idsPlan, contratNouveaux, apres = null }) {
     const raisons = [];
     const horsPlan = cmp.perdus.filter(id => !idsPlan.includes(id));
     if (horsPlan.length || cmp.autresPerdus.length) raisons.push(`produits perdus HORS du plan : ${[...new Set([...horsPlan, ...cmp.autresPerdus])].join(',')}`);
     if (cmp.changes.length) raisons.push(`produits changés : ${cmp.changes.join(',')}`);
-    if (cmp.gagnes.length) raisons.push(`produits gagnés : ${cmp.gagnes.join(',')}`);
+    const visuelApres = id => (Array.isArray(apres) ? apres.filter(x => x.idProduct === id).map(x => x.visuel) : []);
+    const gainPermis = id => idsPlan.includes(id) && visuelApres(id).length > 0 && visuelApres(id).every(v => v === VISUEL_EMPRUNT_API);
+    const gagnesRefuses = cmp.gagnes.filter(id => !gainPermis(id));
+    if (gagnesRefuses.length) raisons.push(`produits gagnés : ${gagnesRefuses.join(',')}`);
     if (contratNouveaux > 0) raisons.push(`${contratNouveaux} refus nouveau(x) du contrat de l'API`);
     return { ok: !raisons.length, raisons };
 }

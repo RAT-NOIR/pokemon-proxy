@@ -1,174 +1,1272 @@
 {
- "WCD-2018": {
-  "863157": {
-   "carteId": 221208,
-   "setOrigine": "Guardians-Rising",
-   "numero": "060",
-   "cleR2": "tcgdex/Guardians-Rising/60-221208.webp",
-   "produitOrigine": 296843
+ "WCD-2004": {
+  "871799": {
+   "carteId": 25211,
+   "setOrigine": "EX-Ruby-Sapphire",
+   "numero": "5",
+   "cleR2": "tcgdex/EX-Ruby-Sapphire/5-25211.webp",
+   "produitOrigine": 275653
   },
-  "863158": {
-   "carteId": 220753,
-   "setOrigine": "Guardians-Rising",
-   "numero": "115",
-   "cleR2": "tcgdex/Guardians-Rising/115-220753.webp",
-   "produitOrigine": 297567
+  "871800": {
+   "carteId": 25211,
+   "setOrigine": "EX-Ruby-Sapphire",
+   "numero": "5",
+   "cleR2": "tcgdex/EX-Ruby-Sapphire/5-25211.webp",
+   "produitOrigine": 275653
   },
-  "863162": {
-   "carteId": 220756,
-   "setOrigine": "Guardians-Rising",
-   "numero": "121",
-   "cleR2": "tcgdex/Guardians-Rising/121-220756.webp",
-   "produitOrigine": 297573
+  "871801": {
+   "carteId": 25211,
+   "setOrigine": "EX-Ruby-Sapphire",
+   "numero": "5",
+   "cleR2": "tcgdex/EX-Ruby-Sapphire/5-25211.webp",
+   "produitOrigine": 275653
   },
-  "863164": {
-   "carteId": 171846,
-   "setOrigine": "BREAKthrough",
-   "numero": "137",
-   "cleR2": "tcgdex/BREAKthrough/137-171846.webp",
-   "produitOrigine": 286383
+  "871802": {
+   "carteId": 30632,
+   "setOrigine": "EX-Ruby-Sapphire",
+   "numero": "44",
+   "cleR2": "tcgdex/EX-Ruby-Sapphire/44-30632.webp",
+   "produitOrigine": 275692
   },
-  "863165": {
-   "carteId": 227766,
-   "setOrigine": "Forbidden-Light",
-   "numero": "113",
-   "cleR2": "tcgdex/Forbidden-Light/113-227766.webp",
-   "produitOrigine": 355626
+  "871803": {
+   "carteId": 30632,
+   "setOrigine": "EX-Ruby-Sapphire",
+   "numero": "44",
+   "cleR2": "tcgdex/EX-Ruby-Sapphire/44-30632.webp",
+   "produitOrigine": 275692
   },
-  "863173": {
-   "carteId": 183396,
-   "setOrigine": "BREAKpoint",
-   "numero": "107",
-   "cleR2": "tcgdex/BREAKpoint/107-183396.webp",
-   "produitOrigine": 288282
+  "871809": {
+   "carteId": 229226,
+   "setOrigine": "EX-Sandstorm",
+   "numero": "60",
+   "cleR2": "tcgdex/EX-Sandstorm/60-229226.webp",
+   "produitOrigine": 275837
   },
-  "863187": {
-   "carteId": 220756,
-   "setOrigine": "Guardians-Rising",
-   "numero": "121",
-   "cleR2": "tcgdex/Guardians-Rising/121-220756.webp",
-   "produitOrigine": 297573
+  "871810": {
+   "carteId": 229226,
+   "setOrigine": "EX-Sandstorm",
+   "numero": "60",
+   "cleR2": "tcgdex/EX-Sandstorm/60-229226.webp",
+   "produitOrigine": 275837
   },
-  "863189": {
-   "carteId": 171846,
-   "setOrigine": "BREAKthrough",
-   "numero": "137",
-   "cleR2": "tcgdex/BREAKthrough/137-171846.webp",
-   "produitOrigine": 286383
+  "871811": {
+   "carteId": 229226,
+   "setOrigine": "EX-Sandstorm",
+   "numero": "60",
+   "cleR2": "tcgdex/EX-Sandstorm/60-229226.webp",
+   "produitOrigine": 275837
   },
-  "863197": {
-   "carteId": 183396,
-   "setOrigine": "BREAKpoint",
-   "numero": "107",
-   "cleR2": "tcgdex/BREAKpoint/107-183396.webp",
-   "produitOrigine": 288282
+  "871819": {
+   "carteId": 30153,
+   "setOrigine": "EX-Dragon",
+   "numero": "17",
+   "cleR2": "tcgdex/EX-Dragon/17-30153.webp",
+   "produitOrigine": 275894
   },
-  "863204": {
-   "carteId": 221208,
-   "setOrigine": "Guardians-Rising",
-   "numero": "060",
-   "cleR2": "tcgdex/Guardians-Rising/60-221208.webp",
-   "produitOrigine": 296843
+  "871820": {
+   "carteId": 30153,
+   "setOrigine": "EX-Dragon",
+   "numero": "17",
+   "cleR2": "tcgdex/EX-Dragon/17-30153.webp",
+   "produitOrigine": 275894
   },
-  "863218": {
-   "carteId": 200781,
-   "setOrigine": "Celestial-Storm",
-   "numero": "123",
-   "cleR2": "tcgdex/Celestial-Storm/123-200781.webp",
-   "produitOrigine": 361362
+  "871833": {
+   "carteId": 30295,
+   "setOrigine": "EX-Hidden-Legends",
+   "numero": "92",
+   "cleR2": "tcgdex/EX-Hidden-Legends/92-30295.webp",
+   "produitOrigine": 276166
   },
-  "863222": {
-   "carteId": 227766,
-   "setOrigine": "Forbidden-Light",
-   "numero": "113",
-   "cleR2": "tcgdex/Forbidden-Light/113-227766.webp",
-   "produitOrigine": 355626
+  "871834": {
+   "carteId": 30295,
+   "setOrigine": "EX-Hidden-Legends",
+   "numero": "92",
+   "cleR2": "tcgdex/EX-Hidden-Legends/92-30295.webp",
+   "produitOrigine": 276166
   },
-  "863223": {
-   "carteId": 208789,
-   "setOrigine": "BREAKpoint",
-   "numero": "109",
-   "cleR2": "tcgdex/BREAKpoint/109-208789.webp",
-   "produitOrigine": 288284
+  "871835": {
+   "carteId": 30295,
+   "setOrigine": "EX-Hidden-Legends",
+   "numero": "92",
+   "cleR2": "tcgdex/EX-Hidden-Legends/92-30295.webp",
+   "produitOrigine": 276166
   },
-  "863227": {
-   "carteId": 220756,
-   "setOrigine": "Guardians-Rising",
-   "numero": "121",
-   "cleR2": "tcgdex/Guardians-Rising/121-220756.webp",
-   "produitOrigine": 297573
+  "871836": {
+   "carteId": 30295,
+   "setOrigine": "EX-Hidden-Legends",
+   "numero": "92",
+   "cleR2": "tcgdex/EX-Hidden-Legends/92-30295.webp",
+   "produitOrigine": 276166
   },
-  "863228": {
-   "carteId": 171846,
-   "setOrigine": "BREAKthrough",
-   "numero": "137",
-   "cleR2": "tcgdex/BREAKthrough/137-171846.webp",
-   "produitOrigine": 286383
+  "871840": {
+   "carteId": 43682,
+   "setOrigine": "Skyridge",
+   "numero": "138",
+   "cleR2": "tcgdex/Skyridge/138-43682.webp",
+   "produitOrigine": 275396
   },
-  "863231": {
-   "carteId": 183396,
-   "setOrigine": "BREAKpoint",
-   "numero": "107",
-   "cleR2": "tcgdex/BREAKpoint/107-183396.webp",
-   "produitOrigine": 288282
+  "871841": {
+   "carteId": 43682,
+   "setOrigine": "Skyridge",
+   "numero": "138",
+   "cleR2": "tcgdex/Skyridge/138-43682.webp",
+   "produitOrigine": 275396
   },
-  "863239": {
-   "carteId": 221208,
-   "setOrigine": "Guardians-Rising",
-   "numero": "060",
-   "cleR2": "tcgdex/Guardians-Rising/60-221208.webp",
-   "produitOrigine": 296843
+  "871842": {
+   "carteId": 43682,
+   "setOrigine": "Skyridge",
+   "numero": "138",
+   "cleR2": "tcgdex/Skyridge/138-43682.webp",
+   "produitOrigine": 275396
   },
-  "863240": {
-   "carteId": 225247,
-   "setOrigine": "Crimson-Invasion",
-   "numero": "070",
-   "cleR2": "tcgdex/Crimson-Invasion/70-225247.webp",
-   "produitOrigine": 311918
+  "871843": {
+   "carteId": 29854,
+   "setOrigine": "Expedition-Base-Set",
+   "numero": "148",
+   "cleR2": "tcgdex/Expedition-Base-Set/148-29854.webp",
+   "produitOrigine": 275023
   },
-  "863244": {
-   "carteId": 227766,
-   "setOrigine": "Forbidden-Light",
-   "numero": "113",
-   "cleR2": "tcgdex/Forbidden-Light/113-227766.webp",
-   "produitOrigine": 355626
+  "871844": {
+   "carteId": 29854,
+   "setOrigine": "Expedition-Base-Set",
+   "numero": "148",
+   "cleR2": "tcgdex/Expedition-Base-Set/148-29854.webp",
+   "produitOrigine": 275023
   },
-  "863245": {
-   "carteId": 208789,
-   "setOrigine": "BREAKpoint",
-   "numero": "109",
-   "cleR2": "tcgdex/BREAKpoint/109-208789.webp",
-   "produitOrigine": 288284
+  "871845": {
+   "carteId": 29854,
+   "setOrigine": "Expedition-Base-Set",
+   "numero": "148",
+   "cleR2": "tcgdex/Expedition-Base-Set/148-29854.webp",
+   "produitOrigine": 275023
   },
-  "863248": {
-   "carteId": 220756,
-   "setOrigine": "Guardians-Rising",
-   "numero": "121",
-   "cleR2": "tcgdex/Guardians-Rising/121-220756.webp",
-   "produitOrigine": 297573
+  "871846": {
+   "carteId": 43622,
+   "setOrigine": "Aquapolis",
+   "numero": "136",
+   "cleR2": "tcgdex/Aquapolis/136-43622.webp",
+   "produitOrigine": 275212
   },
-  "863249": {
-   "carteId": 171846,
-   "setOrigine": "BREAKthrough",
-   "numero": "137",
-   "cleR2": "tcgdex/BREAKthrough/137-171846.webp",
-   "produitOrigine": 286383
+  "871847": {
+   "carteId": 43622,
+   "setOrigine": "Aquapolis",
+   "numero": "136",
+   "cleR2": "tcgdex/Aquapolis/136-43622.webp",
+   "produitOrigine": 275212
   },
-  "863254": {
-   "carteId": 183396,
-   "setOrigine": "BREAKpoint",
-   "numero": "107",
-   "cleR2": "tcgdex/BREAKpoint/107-183396.webp",
-   "produitOrigine": 288282
+  "871849": {
+   "carteId": 25165,
+   "setOrigine": "EX-Sandstorm",
+   "numero": "88",
+   "cleR2": "tcgdex/EX-Sandstorm/88-25165.webp",
+   "produitOrigine": 275865
+  },
+  "871850": {
+   "carteId": 25165,
+   "setOrigine": "EX-Sandstorm",
+   "numero": "88",
+   "cleR2": "tcgdex/EX-Sandstorm/88-25165.webp",
+   "produitOrigine": 275865
+  },
+  "871851": {
+   "carteId": 25165,
+   "setOrigine": "EX-Sandstorm",
+   "numero": "88",
+   "cleR2": "tcgdex/EX-Sandstorm/88-25165.webp",
+   "produitOrigine": 275865
+  },
+  "871853": {
+   "carteId": 15381,
+   "setOrigine": "EX-Ruby-Sapphire",
+   "numero": "92",
+   "cleR2": "tcgdex/EX-Ruby-Sapphire/92-15381.webp",
+   "produitOrigine": 275740
+  },
+  "871854": {
+   "carteId": 15381,
+   "setOrigine": "EX-Ruby-Sapphire",
+   "numero": "92",
+   "cleR2": "tcgdex/EX-Ruby-Sapphire/92-15381.webp",
+   "produitOrigine": 275740
+  },
+  "871855": {
+   "carteId": 15381,
+   "setOrigine": "EX-Ruby-Sapphire",
+   "numero": "92",
+   "cleR2": "tcgdex/EX-Ruby-Sapphire/92-15381.webp",
+   "produitOrigine": 275740
+  },
+  "871856": {
+   "carteId": 15381,
+   "setOrigine": "EX-Ruby-Sapphire",
+   "numero": "92",
+   "cleR2": "tcgdex/EX-Ruby-Sapphire/92-15381.webp",
+   "produitOrigine": 275740
+  },
+  "871863": {
+   "carteId": 43628,
+   "setOrigine": "Aquapolis",
+   "numero": "141",
+   "cleR2": "tcgdex/Aquapolis/141-43628.webp",
+   "produitOrigine": 275217
+  },
+  "871869": {
+   "carteId": 43683,
+   "setOrigine": "Skyridge",
+   "numero": "140",
+   "cleR2": "tcgdex/Skyridge/140-43683.webp",
+   "produitOrigine": 275398
+  },
+  "871870": {
+   "carteId": 43683,
+   "setOrigine": "Skyridge",
+   "numero": "140",
+   "cleR2": "tcgdex/Skyridge/140-43683.webp",
+   "produitOrigine": 275398
+  },
+  "871877": {
+   "carteId": 11369,
+   "setOrigine": "EX-Sandstorm",
+   "numero": "93",
+   "cleR2": "tcgdex/EX-Sandstorm/93-11369.webp",
+   "produitOrigine": 275870
+  },
+  "871878": {
+   "carteId": 11369,
+   "setOrigine": "EX-Sandstorm",
+   "numero": "93",
+   "cleR2": "tcgdex/EX-Sandstorm/93-11369.webp",
+   "produitOrigine": 275870
   }
  },
- "WCD-2011": {
-  "868170": {
-   "carteId": 87218,
-   "setOrigine": "HeartGold-SoulSilver",
-   "numero": "028",
-   "cleR2": "tcgdex/HeartGold-SoulSilver/28-87218.webp",
-   "produitOrigine": 882912
+ "WCD-2005": {
+  "871511": {
+   "carteId": 53013,
+   "setOrigine": "EX-Deoxys",
+   "numero": "9",
+   "cleR2": "tcgdex/EX-Deoxys/9-53013.webp",
+   "produitOrigine": 276412
+  },
+  "871512": {
+   "carteId": 53013,
+   "setOrigine": "EX-Deoxys",
+   "numero": "9",
+   "cleR2": "tcgdex/EX-Deoxys/9-53013.webp",
+   "produitOrigine": 276412
+  },
+  "871517": {
+   "carteId": 30446,
+   "setOrigine": "EX-FireRed-LeafGreen",
+   "numero": "73",
+   "cleR2": "tcgdex/EX-FireRed-LeafGreen/73-30446.webp",
+   "produitOrigine": 276249
+  },
+  "871518": {
+   "carteId": 30446,
+   "setOrigine": "EX-FireRed-LeafGreen",
+   "numero": "73",
+   "cleR2": "tcgdex/EX-FireRed-LeafGreen/73-30446.webp",
+   "produitOrigine": 276249
+  },
+  "871521": {
+   "carteId": 30445,
+   "setOrigine": "EX-FireRed-LeafGreen",
+   "numero": "10",
+   "cleR2": "tcgdex/EX-FireRed-LeafGreen/10-30445.webp",
+   "produitOrigine": 276186
+  },
+  "871522": {
+   "carteId": 30445,
+   "setOrigine": "EX-FireRed-LeafGreen",
+   "numero": "10",
+   "cleR2": "tcgdex/EX-FireRed-LeafGreen/10-30445.webp",
+   "produitOrigine": 276186
+  },
+  "871545": {
+   "carteId": 30449,
+   "setOrigine": "EX-Team-Rocket-Returns",
+   "numero": "86",
+   "cleR2": "tcgdex/EX-Team-Rocket-Returns/86-30449.webp",
+   "produitOrigine": 276378
+  },
+  "871546": {
+   "carteId": 30449,
+   "setOrigine": "EX-Team-Rocket-Returns",
+   "numero": "86",
+   "cleR2": "tcgdex/EX-Team-Rocket-Returns/86-30449.webp",
+   "produitOrigine": 276378
+  },
+  "871547": {
+   "carteId": 30449,
+   "setOrigine": "EX-Team-Rocket-Returns",
+   "numero": "86",
+   "cleR2": "tcgdex/EX-Team-Rocket-Returns/86-30449.webp",
+   "produitOrigine": 276378
+  },
+  "871548": {
+   "carteId": 30449,
+   "setOrigine": "EX-Team-Rocket-Returns",
+   "numero": "86",
+   "cleR2": "tcgdex/EX-Team-Rocket-Returns/86-30449.webp",
+   "produitOrigine": 276378
+  },
+  "871549": {
+   "carteId": 25229,
+   "setOrigine": "EX-Emerald",
+   "numero": "84",
+   "cleR2": "tcgdex/EX-Emerald/84-25229.webp",
+   "produitOrigine": 276595
+  },
+  "871550": {
+   "carteId": 25229,
+   "setOrigine": "EX-Emerald",
+   "numero": "84",
+   "cleR2": "tcgdex/EX-Emerald/84-25229.webp",
+   "produitOrigine": 276595
+  },
+  "871555": {
+   "carteId": 43841,
+   "setOrigine": "EX-Team-Rocket-Returns",
+   "numero": "92",
+   "cleR2": "tcgdex/EX-Team-Rocket-Returns/92-43841.webp",
+   "produitOrigine": 276384
+  },
+  "871556": {
+   "carteId": 43841,
+   "setOrigine": "EX-Team-Rocket-Returns",
+   "numero": "92",
+   "cleR2": "tcgdex/EX-Team-Rocket-Returns/92-43841.webp",
+   "produitOrigine": 276384
+  },
+  "871560": {
+   "carteId": 25184,
+   "setOrigine": "EX-FireRed-LeafGreen",
+   "numero": "88",
+   "cleR2": "tcgdex/EX-FireRed-LeafGreen/88-25184.webp",
+   "produitOrigine": 276264
+  },
+  "871561": {
+   "carteId": 25184,
+   "setOrigine": "EX-FireRed-LeafGreen",
+   "numero": "88",
+   "cleR2": "tcgdex/EX-FireRed-LeafGreen/88-25184.webp",
+   "produitOrigine": 276264
+  },
+  "871562": {
+   "carteId": 25184,
+   "setOrigine": "EX-FireRed-LeafGreen",
+   "numero": "88",
+   "cleR2": "tcgdex/EX-FireRed-LeafGreen/88-25184.webp",
+   "produitOrigine": 276264
+  },
+  "871563": {
+   "carteId": 60696,
+   "setOrigine": "EX-Team-Rocket-Returns",
+   "numero": "83",
+   "cleR2": "tcgdex/EX-Team-Rocket-Returns/83-60696.webp",
+   "produitOrigine": 276375
+  },
+  "871564": {
+   "carteId": 60696,
+   "setOrigine": "EX-Team-Rocket-Returns",
+   "numero": "83",
+   "cleR2": "tcgdex/EX-Team-Rocket-Returns/83-60696.webp",
+   "produitOrigine": 276375
+  },
+  "871565": {
+   "carteId": 60696,
+   "setOrigine": "EX-Team-Rocket-Returns",
+   "numero": "83",
+   "cleR2": "tcgdex/EX-Team-Rocket-Returns/83-60696.webp",
+   "produitOrigine": 276375
+  },
+  "871566": {
+   "carteId": 43833,
+   "setOrigine": "EX-Hidden-Legends",
+   "numero": "88",
+   "cleR2": "tcgdex/EX-Hidden-Legends/88-43833.webp",
+   "produitOrigine": 276162
+  },
+  "871567": {
+   "carteId": 43833,
+   "setOrigine": "EX-Hidden-Legends",
+   "numero": "88",
+   "cleR2": "tcgdex/EX-Hidden-Legends/88-43833.webp",
+   "produitOrigine": 276162
+  },
+  "871568": {
+   "carteId": 43833,
+   "setOrigine": "EX-Hidden-Legends",
+   "numero": "88",
+   "cleR2": "tcgdex/EX-Hidden-Legends/88-43833.webp",
+   "produitOrigine": 276162
+  },
+  "871571": {
+   "carteId": 25165,
+   "setOrigine": "EX-Emerald",
+   "numero": "83",
+   "cleR2": "tcgdex/EX-Emerald/83-25165.webp",
+   "produitOrigine": 276594
+  },
+  "871572": {
+   "carteId": 25165,
+   "setOrigine": "EX-Emerald",
+   "numero": "83",
+   "cleR2": "tcgdex/EX-Emerald/83-25165.webp",
+   "produitOrigine": 276594
+  },
+  "871573": {
+   "carteId": 25165,
+   "setOrigine": "EX-Emerald",
+   "numero": "83",
+   "cleR2": "tcgdex/EX-Emerald/83-25165.webp",
+   "produitOrigine": 276594
+  },
+  "871581": {
+   "carteId": 11392,
+   "setOrigine": "EX-Emerald",
+   "numero": "88",
+   "cleR2": "tcgdex/EX-Emerald/88-11392.webp",
+   "produitOrigine": 276599
+  },
+  "871582": {
+   "carteId": 11392,
+   "setOrigine": "EX-Emerald",
+   "numero": "88",
+   "cleR2": "tcgdex/EX-Emerald/88-11392.webp",
+   "produitOrigine": 276599
+  }
+ },
+ "WCD-2006": {
+  "869519": {
+   "carteId": 30445,
+   "setOrigine": "EX-FireRed-LeafGreen",
+   "numero": "010",
+   "cleR2": "tcgdex/EX-FireRed-LeafGreen/10-30445.webp",
+   "produitOrigine": 276186
+  },
+  "869520": {
+   "carteId": 30445,
+   "setOrigine": "EX-FireRed-LeafGreen",
+   "numero": "010",
+   "cleR2": "tcgdex/EX-FireRed-LeafGreen/10-30445.webp",
+   "produitOrigine": 276186
+  },
+  "869521": {
+   "carteId": 30444,
+   "setOrigine": "EX-FireRed-LeafGreen",
+   "numero": "045",
+   "cleR2": "tcgdex/EX-FireRed-LeafGreen/45-30444.webp",
+   "produitOrigine": 276221
+  },
+  "869522": {
+   "carteId": 30444,
+   "setOrigine": "EX-FireRed-LeafGreen",
+   "numero": "045",
+   "cleR2": "tcgdex/EX-FireRed-LeafGreen/45-30444.webp",
+   "produitOrigine": 276221
+  },
+  "869523": {
+   "carteId": 30446,
+   "setOrigine": "EX-FireRed-LeafGreen",
+   "numero": "073",
+   "cleR2": "tcgdex/EX-FireRed-LeafGreen/73-30446.webp",
+   "produitOrigine": 276249
+  },
+  "869524": {
+   "carteId": 30446,
+   "setOrigine": "EX-FireRed-LeafGreen",
+   "numero": "073",
+   "cleR2": "tcgdex/EX-FireRed-LeafGreen/73-30446.webp",
+   "produitOrigine": 276249
+  },
+  "869527": {
+   "carteId": 30442,
+   "setOrigine": "EX-Delta-Species",
+   "numero": "021",
+   "cleR2": "tcgdex/EX-Delta-Species/21-30442.webp",
+   "produitOrigine": 276784
+  },
+  "869528": {
+   "carteId": 30442,
+   "setOrigine": "EX-Delta-Species",
+   "numero": "021",
+   "cleR2": "tcgdex/EX-Delta-Species/21-30442.webp",
+   "produitOrigine": 276784
+  },
+  "869529": {
+   "carteId": 31249,
+   "setOrigine": "EX-Delta-Species",
+   "numero": "022",
+   "cleR2": "tcgdex/EX-Delta-Species/22-31249.webp",
+   "produitOrigine": 276785
+  },
+  "869530": {
+   "carteId": 31249,
+   "setOrigine": "EX-Delta-Species",
+   "numero": "022",
+   "cleR2": "tcgdex/EX-Delta-Species/22-31249.webp",
+   "produitOrigine": 276785
+  },
+  "869550": {
+   "carteId": 25184,
+   "setOrigine": "EX-FireRed-LeafGreen",
+   "numero": "088",
+   "cleR2": "tcgdex/EX-FireRed-LeafGreen/88-25184.webp",
+   "produitOrigine": 276264
+  },
+  "869551": {
+   "carteId": 25184,
+   "setOrigine": "EX-FireRed-LeafGreen",
+   "numero": "088",
+   "cleR2": "tcgdex/EX-FireRed-LeafGreen/88-25184.webp",
+   "produitOrigine": 276264
+  },
+  "869554": {
+   "carteId": 30448,
+   "setOrigine": "EX-Team-Rocket-Returns",
+   "numero": "084",
+   "cleR2": "tcgdex/EX-Team-Rocket-Returns/84-30448.webp",
+   "produitOrigine": 276376
+  },
+  "869555": {
+   "carteId": 30448,
+   "setOrigine": "EX-Team-Rocket-Returns",
+   "numero": "084",
+   "cleR2": "tcgdex/EX-Team-Rocket-Returns/84-30448.webp",
+   "produitOrigine": 276376
+  },
+  "869556": {
+   "carteId": 30448,
+   "setOrigine": "EX-Team-Rocket-Returns",
+   "numero": "084",
+   "cleR2": "tcgdex/EX-Team-Rocket-Returns/84-30448.webp",
+   "produitOrigine": 276376
+  },
+  "869558": {
+   "carteId": 29854,
+   "setOrigine": "EX-Unseen-Forces",
+   "numero": "089",
+   "cleR2": "tcgdex/EX-Unseen-Forces/89-29854.webp",
+   "produitOrigine": 276735
+  },
+  "869559": {
+   "carteId": 29854,
+   "setOrigine": "EX-Unseen-Forces",
+   "numero": "089",
+   "cleR2": "tcgdex/EX-Unseen-Forces/89-29854.webp",
+   "produitOrigine": 276735
+  },
+  "869560": {
+   "carteId": 29854,
+   "setOrigine": "EX-Unseen-Forces",
+   "numero": "089",
+   "cleR2": "tcgdex/EX-Unseen-Forces/89-29854.webp",
+   "produitOrigine": 276735
+  },
+  "869561": {
+   "carteId": 25165,
+   "setOrigine": "EX-Holon-Phantoms",
+   "numero": "090",
+   "cleR2": "tcgdex/EX-Holon-Phantoms/90-25165.webp",
+   "produitOrigine": 277060
+  },
+  "869562": {
+   "carteId": 25165,
+   "setOrigine": "EX-Holon-Phantoms",
+   "numero": "090",
+   "cleR2": "tcgdex/EX-Holon-Phantoms/90-25165.webp",
+   "produitOrigine": 277060
+  },
+  "869563": {
+   "carteId": 30449,
+   "setOrigine": "EX-Team-Rocket-Returns",
+   "numero": "086",
+   "cleR2": "tcgdex/EX-Team-Rocket-Returns/86-30449.webp",
+   "produitOrigine": 276378
+  },
+  "869564": {
+   "carteId": 30449,
+   "setOrigine": "EX-Team-Rocket-Returns",
+   "numero": "086",
+   "cleR2": "tcgdex/EX-Team-Rocket-Returns/86-30449.webp",
+   "produitOrigine": 276378
+  },
+  "869565": {
+   "carteId": 30449,
+   "setOrigine": "EX-Team-Rocket-Returns",
+   "numero": "086",
+   "cleR2": "tcgdex/EX-Team-Rocket-Returns/86-30449.webp",
+   "produitOrigine": 276378
+  },
+  "869566": {
+   "carteId": 30449,
+   "setOrigine": "EX-Team-Rocket-Returns",
+   "numero": "086",
+   "cleR2": "tcgdex/EX-Team-Rocket-Returns/86-30449.webp",
+   "produitOrigine": 276378
+  },
+  "869567": {
+   "carteId": 30295,
+   "setOrigine": "EX-Hidden-Legends",
+   "numero": "092",
+   "cleR2": "tcgdex/EX-Hidden-Legends/92-30295.webp",
+   "produitOrigine": 276166
+  },
+  "869568": {
+   "carteId": 30295,
+   "setOrigine": "EX-Hidden-Legends",
+   "numero": "092",
+   "cleR2": "tcgdex/EX-Hidden-Legends/92-30295.webp",
+   "produitOrigine": 276166
+  },
+  "869569": {
+   "carteId": 30295,
+   "setOrigine": "EX-Hidden-Legends",
+   "numero": "092",
+   "cleR2": "tcgdex/EX-Hidden-Legends/92-30295.webp",
+   "produitOrigine": 276166
+  },
+  "869570": {
+   "carteId": 25406,
+   "setOrigine": "EX-Unseen-Forces",
+   "numero": "093",
+   "cleR2": "tcgdex/EX-Unseen-Forces/93-25406.webp",
+   "produitOrigine": 276739
+  },
+  "869571": {
+   "carteId": 25406,
+   "setOrigine": "EX-Unseen-Forces",
+   "numero": "093",
+   "cleR2": "tcgdex/EX-Unseen-Forces/93-25406.webp",
+   "produitOrigine": 276739
+  },
+  "869572": {
+   "carteId": 44058,
+   "setOrigine": "EX-Unseen-Forces",
+   "numero": "086",
+   "cleR2": "tcgdex/EX-Unseen-Forces/86-44058.webp",
+   "produitOrigine": 276732
+  },
+  "869573": {
+   "carteId": 44058,
+   "setOrigine": "EX-Unseen-Forces",
+   "numero": "086",
+   "cleR2": "tcgdex/EX-Unseen-Forces/86-44058.webp",
+   "produitOrigine": 276732
+  },
+  "869578": {
+   "carteId": 25550,
+   "setOrigine": "EX-Legend-Maker",
+   "numero": "072",
+   "cleR2": "tcgdex/EX-Legend-Maker/72-25550.webp",
+   "produitOrigine": 276949
+  },
+  "869579": {
+   "carteId": 25550,
+   "setOrigine": "EX-Legend-Maker",
+   "numero": "072",
+   "cleR2": "tcgdex/EX-Legend-Maker/72-25550.webp",
+   "produitOrigine": 276949
+  },
+  "869584": {
+   "carteId": 29862,
+   "setOrigine": "EX-Deoxys",
+   "numero": "092",
+   "cleR2": "tcgdex/EX-Deoxys/92-29862.webp",
+   "produitOrigine": 276495
+  },
+  "869600": {
+   "carteId": 11400,
+   "setOrigine": "EX-Delta-Species",
+   "numero": "104",
+   "cleR2": "tcgdex/EX-Delta-Species/104-11400.webp",
+   "produitOrigine": 276867
+  },
+  "869601": {
+   "carteId": 11400,
+   "setOrigine": "EX-Delta-Species",
+   "numero": "104",
+   "cleR2": "tcgdex/EX-Delta-Species/104-11400.webp",
+   "produitOrigine": 276867
+  }
+ },
+ "WCD-2007": {
+  "869354": {
+   "carteId": 31428,
+   "setOrigine": "Diamond-Pearl",
+   "numero": "004",
+   "cleR2": "tcgdex/Diamond-Pearl/4-31428.webp",
+   "produitOrigine": 277503
+  },
+  "869358": {
+   "carteId": 31425,
+   "setOrigine": "Diamond-Pearl",
+   "numero": "058",
+   "cleR2": "tcgdex/Diamond-Pearl/58-31425.webp",
+   "produitOrigine": 277557
+  },
+  "869359": {
+   "carteId": 24384,
+   "setOrigine": "Diamond-Pearl",
+   "numero": "093",
+   "cleR2": "tcgdex/Diamond-Pearl/93-24384.webp",
+   "produitOrigine": 277592
+  },
+  "869394": {
+   "carteId": 60723,
+   "setOrigine": "EX-Delta-Species",
+   "numero": "109",
+   "cleR2": "tcgdex/EX-Delta-Species/109-60723.webp",
+   "produitOrigine": 276872
+  },
+  "869395": {
+   "carteId": 60723,
+   "setOrigine": "EX-Delta-Species",
+   "numero": "109",
+   "cleR2": "tcgdex/EX-Delta-Species/109-60723.webp",
+   "produitOrigine": 276872
+  },
+  "869396": {
+   "carteId": 25190,
+   "setOrigine": "EX-Delta-Species",
+   "numero": "110",
+   "cleR2": "tcgdex/EX-Delta-Species/110-25190.webp",
+   "produitOrigine": 276873
+  },
+  "869397": {
+   "carteId": 25190,
+   "setOrigine": "EX-Delta-Species",
+   "numero": "110",
+   "cleR2": "tcgdex/EX-Delta-Species/110-25190.webp",
+   "produitOrigine": 276873
+  },
+  "869401": {
+   "carteId": 25230,
+   "setOrigine": "Diamond-Pearl",
+   "numero": "043",
+   "cleR2": "tcgdex/Diamond-Pearl/43-25230.webp",
+   "produitOrigine": 277542
+  },
+  "869406": {
+   "carteId": 25285,
+   "setOrigine": "EX-Delta-Species",
+   "numero": "071",
+   "cleR2": "tcgdex/EX-Delta-Species/71-25285.webp",
+   "produitOrigine": 276834
+  },
+  "869407": {
+   "carteId": 25285,
+   "setOrigine": "EX-Delta-Species",
+   "numero": "071",
+   "cleR2": "tcgdex/EX-Delta-Species/71-25285.webp",
+   "produitOrigine": 276834
+  },
+  "869415": {
+   "carteId": 25162,
+   "setOrigine": "EX-Delta-Species",
+   "numero": "98",
+   "cleR2": "tcgdex/EX-Delta-Species/98-25162.webp",
+   "produitOrigine": 276861
+  },
+  "869416": {
+   "carteId": 25162,
+   "setOrigine": "EX-Delta-Species",
+   "numero": "98",
+   "cleR2": "tcgdex/EX-Delta-Species/98-25162.webp",
+   "produitOrigine": 276861
+  },
+  "869417": {
+   "carteId": 25162,
+   "setOrigine": "EX-Delta-Species",
+   "numero": "98",
+   "cleR2": "tcgdex/EX-Delta-Species/98-25162.webp",
+   "produitOrigine": 276861
+  },
+  "869418": {
+   "carteId": 25162,
+   "setOrigine": "EX-Delta-Species",
+   "numero": "98",
+   "cleR2": "tcgdex/EX-Delta-Species/98-25162.webp",
+   "produitOrigine": 276861
+  },
+  "869419": {
+   "carteId": 25156,
+   "setOrigine": "EX-Dragon-Frontiers",
+   "numero": "075",
+   "cleR2": "tcgdex/EX-Dragon-Frontiers/75-25156.webp",
+   "produitOrigine": 277280
+  },
+  "869420": {
+   "carteId": 25156,
+   "setOrigine": "EX-Dragon-Frontiers",
+   "numero": "075",
+   "cleR2": "tcgdex/EX-Dragon-Frontiers/75-25156.webp",
+   "produitOrigine": 277280
+  },
+  "869421": {
+   "carteId": 25156,
+   "setOrigine": "EX-Dragon-Frontiers",
+   "numero": "075",
+   "cleR2": "tcgdex/EX-Dragon-Frontiers/75-25156.webp",
+   "produitOrigine": 277280
+  },
+  "869422": {
+   "carteId": 25156,
+   "setOrigine": "EX-Dragon-Frontiers",
+   "numero": "075",
+   "cleR2": "tcgdex/EX-Dragon-Frontiers/75-25156.webp",
+   "produitOrigine": 277280
+  },
+  "869423": {
+   "carteId": 25154,
+   "setOrigine": "EX-Holon-Phantoms",
+   "numero": "085",
+   "cleR2": "tcgdex/EX-Holon-Phantoms/85-25154.webp",
+   "produitOrigine": 277055
+  },
+  "869424": {
+   "carteId": 25154,
+   "setOrigine": "EX-Holon-Phantoms",
+   "numero": "085",
+   "cleR2": "tcgdex/EX-Holon-Phantoms/85-25154.webp",
+   "produitOrigine": 277055
+  },
+  "869425": {
+   "carteId": 25154,
+   "setOrigine": "EX-Holon-Phantoms",
+   "numero": "085",
+   "cleR2": "tcgdex/EX-Holon-Phantoms/85-25154.webp",
+   "produitOrigine": 277055
+  },
+  "869426": {
+   "carteId": 25154,
+   "setOrigine": "EX-Holon-Phantoms",
+   "numero": "085",
+   "cleR2": "tcgdex/EX-Holon-Phantoms/85-25154.webp",
+   "produitOrigine": 277055
+  },
+  "869427": {
+   "carteId": 25159,
+   "setOrigine": "EX-Delta-Species",
+   "numero": "097",
+   "cleR2": "tcgdex/EX-Delta-Species/97-25159.webp",
+   "produitOrigine": 276860
+  },
+  "869428": {
+   "carteId": 25159,
+   "setOrigine": "EX-Delta-Species",
+   "numero": "097",
+   "cleR2": "tcgdex/EX-Delta-Species/97-25159.webp",
+   "produitOrigine": 276860
+  },
+  "869429": {
+   "carteId": 25159,
+   "setOrigine": "EX-Delta-Species",
+   "numero": "097",
+   "cleR2": "tcgdex/EX-Delta-Species/97-25159.webp",
+   "produitOrigine": 276860
+  },
+  "869430": {
+   "carteId": 25159,
+   "setOrigine": "EX-Delta-Species",
+   "numero": "097",
+   "cleR2": "tcgdex/EX-Delta-Species/97-25159.webp",
+   "produitOrigine": 276860
+  },
+  "869434": {
+   "carteId": 25208,
+   "setOrigine": "EX-Crystal-Guardians",
+   "numero": "072",
+   "cleR2": "tcgdex/EX-Crystal-Guardians/72-25208.webp",
+   "produitOrigine": 277153
+  },
+  "869435": {
+   "carteId": 25208,
+   "setOrigine": "EX-Crystal-Guardians",
+   "numero": "072",
+   "cleR2": "tcgdex/EX-Crystal-Guardians/72-25208.webp",
+   "produitOrigine": 277153
+  },
+  "869436": {
+   "carteId": 60696,
+   "setOrigine": "EX-Dragon-Frontiers",
+   "numero": "073",
+   "cleR2": "tcgdex/EX-Dragon-Frontiers/73-60696.webp",
+   "produitOrigine": 277278
+  },
+  "869437": {
+   "carteId": 60696,
+   "setOrigine": "EX-Dragon-Frontiers",
+   "numero": "073",
+   "cleR2": "tcgdex/EX-Dragon-Frontiers/73-60696.webp",
+   "produitOrigine": 277278
+  },
+  "869440": {
+   "carteId": 25165,
+   "setOrigine": "EX-Holon-Phantoms",
+   "numero": "090",
+   "cleR2": "tcgdex/EX-Holon-Phantoms/90-25165.webp",
+   "produitOrigine": 277060
+  },
+  "869441": {
+   "carteId": 25165,
+   "setOrigine": "EX-Holon-Phantoms",
+   "numero": "090",
+   "cleR2": "tcgdex/EX-Holon-Phantoms/90-25165.webp",
+   "produitOrigine": 277060
+  },
+  "869444": {
+   "carteId": 29876,
+   "setOrigine": "EX-Crystal-Guardians",
+   "numero": "076",
+   "cleR2": "tcgdex/EX-Crystal-Guardians/76-29876.webp",
+   "produitOrigine": 277157
+  },
+  "869445": {
+   "carteId": 29876,
+   "setOrigine": "EX-Crystal-Guardians",
+   "numero": "076",
+   "cleR2": "tcgdex/EX-Crystal-Guardians/76-29876.webp",
+   "produitOrigine": 277157
+  },
+  "869449": {
+   "carteId": 29854,
+   "setOrigine": "EX-Dragon-Frontiers",
+   "numero": "079",
+   "cleR2": "tcgdex/EX-Dragon-Frontiers/79-29854.webp",
+   "produitOrigine": 277284
+  },
+  "869450": {
+   "carteId": 29854,
+   "setOrigine": "EX-Dragon-Frontiers",
+   "numero": "079",
+   "cleR2": "tcgdex/EX-Dragon-Frontiers/79-29854.webp",
+   "produitOrigine": 277284
+  },
+  "869451": {
+   "carteId": 29854,
+   "setOrigine": "EX-Dragon-Frontiers",
+   "numero": "079",
+   "cleR2": "tcgdex/EX-Dragon-Frontiers/79-29854.webp",
+   "produitOrigine": 277284
+  },
+  "869452": {
+   "carteId": 25229,
+   "setOrigine": "EX-Power-Keepers",
+   "numero": "081",
+   "cleR2": "tcgdex/EX-Power-Keepers/81-25229.webp",
+   "produitOrigine": 277387
+  },
+  "869453": {
+   "carteId": 25229,
+   "setOrigine": "EX-Power-Keepers",
+   "numero": "081",
+   "cleR2": "tcgdex/EX-Power-Keepers/81-25229.webp",
+   "produitOrigine": 277387
+  },
+  "869460": {
+   "carteId": 25226,
+   "setOrigine": "EX-Crystal-Guardians",
+   "numero": "085",
+   "cleR2": "tcgdex/EX-Crystal-Guardians/85-25226.webp",
+   "produitOrigine": 277166
+  },
+  "869461": {
+   "carteId": 25226,
+   "setOrigine": "EX-Crystal-Guardians",
+   "numero": "085",
+   "cleR2": "tcgdex/EX-Crystal-Guardians/85-25226.webp",
+   "produitOrigine": 277166
+  },
+  "869471": {
+   "carteId": 11369,
+   "setOrigine": "EX-Holon-Phantoms",
+   "numero": "096",
+   "cleR2": "tcgdex/EX-Holon-Phantoms/96-11369.webp",
+   "produitOrigine": 277066
+  }
+ },
+ "WCD-2009": {
+  "868869": {
+   "carteId": 40933,
+   "setOrigine": "Secret-Wonders",
+   "numero": "115",
+   "cleR2": "tcgdex/Secret-Wonders/115-40933.webp",
+   "produitOrigine": 277868
+  },
+  "868870": {
+   "carteId": 76022,
+   "setOrigine": "Rising-Rivals",
+   "numero": "053",
+   "cleR2": "tcgdex/Rising-Rivals/53-76022.webp",
+   "produitOrigine": 278627
+  },
+  "868871": {
+   "carteId": 75811,
+   "setOrigine": "Rising-Rivals",
+   "numero": "005",
+   "cleR2": "tcgdex/Rising-Rivals/5-75811.webp",
+   "produitOrigine": 278579
+  },
+  "868875": {
+   "carteId": 36289,
+   "setOrigine": "Great-Encounters",
+   "numero": "060",
+   "cleR2": "tcgdex/Great-Encounters/60-36289.webp",
+   "produitOrigine": 277962
+  },
+  "868876": {
+   "carteId": 36289,
+   "setOrigine": "Great-Encounters",
+   "numero": "060",
+   "cleR2": "tcgdex/Great-Encounters/60-36289.webp",
+   "produitOrigine": 277962
+  },
+  "868877": {
+   "carteId": 36289,
+   "setOrigine": "Great-Encounters",
+   "numero": "060",
+   "cleR2": "tcgdex/Great-Encounters/60-36289.webp",
+   "produitOrigine": 277962
+  },
+  "868878": {
+   "carteId": 36299,
+   "setOrigine": "Great-Encounters",
+   "numero": "015",
+   "cleR2": "tcgdex/Great-Encounters/15-36299.webp",
+   "produitOrigine": 277917
+  },
+  "868879": {
+   "carteId": 36299,
+   "setOrigine": "Great-Encounters",
+   "numero": "015",
+   "cleR2": "tcgdex/Great-Encounters/15-36299.webp",
+   "produitOrigine": 277917
+  },
+  "868880": {
+   "carteId": 36299,
+   "setOrigine": "Great-Encounters",
+   "numero": "015",
+   "cleR2": "tcgdex/Great-Encounters/15-36299.webp",
+   "produitOrigine": 277917
+  },
+  "868885": {
+   "carteId": 75928,
+   "setOrigine": "Rising-Rivals",
+   "numero": "071",
+   "cleR2": "tcgdex/Rising-Rivals/71-75928.webp",
+   "produitOrigine": 278645
+  },
+  "868886": {
+   "carteId": 75928,
+   "setOrigine": "Rising-Rivals",
+   "numero": "071",
+   "cleR2": "tcgdex/Rising-Rivals/71-75928.webp",
+   "produitOrigine": 278645
+  },
+  "868887": {
+   "carteId": 76086,
+   "setOrigine": "Rising-Rivals",
+   "numero": "030",
+   "cleR2": "tcgdex/Rising-Rivals/30-76086.webp",
+   "produitOrigine": 278604
+  },
+  "868888": {
+   "carteId": 76086,
+   "setOrigine": "Rising-Rivals",
+   "numero": "030",
+   "cleR2": "tcgdex/Rising-Rivals/30-76086.webp",
+   "produitOrigine": 278604
+  },
+  "868889": {
+   "carteId": 50824,
+   "setOrigine": "Legends-Awakened",
+   "numero": "043",
+   "cleR2": "tcgdex/Legends-Awakened/43-50824.webp",
+   "produitOrigine": 278192
+  },
+  "868890": {
+   "carteId": 50824,
+   "setOrigine": "Legends-Awakened",
+   "numero": "043",
+   "cleR2": "tcgdex/Legends-Awakened/43-50824.webp",
+   "produitOrigine": 278192
+  },
+  "868891": {
+   "carteId": 50824,
+   "setOrigine": "Legends-Awakened",
+   "numero": "043",
+   "cleR2": "tcgdex/Legends-Awakened/43-50824.webp",
+   "produitOrigine": 278192
+  },
+  "868892": {
+   "carteId": 50187,
+   "setOrigine": "Legends-Awakened",
+   "numero": "019",
+   "cleR2": "tcgdex/Legends-Awakened/19-50187.webp",
+   "produitOrigine": 278168
+  },
+  "868893": {
+   "carteId": 50187,
+   "setOrigine": "Legends-Awakened",
+   "numero": "019",
+   "cleR2": "tcgdex/Legends-Awakened/19-50187.webp",
+   "produitOrigine": 278168
+  },
+  "868894": {
+   "carteId": 50187,
+   "setOrigine": "Legends-Awakened",
+   "numero": "019",
+   "cleR2": "tcgdex/Legends-Awakened/19-50187.webp",
+   "produitOrigine": 278168
+  },
+  "868896": {
+   "carteId": 41670,
+   "setOrigine": "Majestic-Dawn",
+   "numero": "009",
+   "cleR2": "tcgdex/Majestic-Dawn/9-41670.webp",
+   "produitOrigine": 278058
+  },
+  "868965": {
+   "carteId": 28065,
+   "setOrigine": "Secret-Wonders",
+   "numero": "125",
+   "cleR2": "tcgdex/Secret-Wonders/125-28065.webp",
+   "produitOrigine": 277878
+  },
+  "868966": {
+   "carteId": 28065,
+   "setOrigine": "Secret-Wonders",
+   "numero": "125",
+   "cleR2": "tcgdex/Secret-Wonders/125-28065.webp",
+   "produitOrigine": 277878
+  },
+  "868968": {
+   "carteId": 28065,
+   "setOrigine": "Secret-Wonders",
+   "numero": "125",
+   "cleR2": "tcgdex/Secret-Wonders/125-28065.webp",
+   "produitOrigine": 277878
+  },
+  "868970": {
+   "carteId": 28065,
+   "setOrigine": "Secret-Wonders",
+   "numero": "125",
+   "cleR2": "tcgdex/Secret-Wonders/125-28065.webp",
+   "produitOrigine": 277878
+  },
+  "868974": {
+   "carteId": 23901,
+   "setOrigine": "Rising-Rivals",
+   "numero": "089",
+   "cleR2": "tcgdex/Rising-Rivals/89-23901.webp",
+   "produitOrigine": 278663
+  },
+  "868976": {
+   "carteId": 23901,
+   "setOrigine": "Rising-Rivals",
+   "numero": "089",
+   "cleR2": "tcgdex/Rising-Rivals/89-23901.webp",
+   "produitOrigine": 278663
+  },
+  "868978": {
+   "carteId": 23901,
+   "setOrigine": "Rising-Rivals",
+   "numero": "089",
+   "cleR2": "tcgdex/Rising-Rivals/89-23901.webp",
+   "produitOrigine": 278663
+  },
+  "868979": {
+   "carteId": 23901,
+   "setOrigine": "Rising-Rivals",
+   "numero": "089",
+   "cleR2": "tcgdex/Rising-Rivals/89-23901.webp",
+   "produitOrigine": 278663
+  },
+  "868986": {
+   "carteId": 58316,
+   "setOrigine": "Stormfront",
+   "numero": "086",
+   "cleR2": "tcgdex/Stormfront/86-58316.webp",
+   "produitOrigine": 278384
+  },
+  "868987": {
+   "carteId": 58316,
+   "setOrigine": "Stormfront",
+   "numero": "086",
+   "cleR2": "tcgdex/Stormfront/86-58316.webp",
+   "produitOrigine": 278384
+  },
+  "868989": {
+   "carteId": 58316,
+   "setOrigine": "Stormfront",
+   "numero": "086",
+   "cleR2": "tcgdex/Stormfront/86-58316.webp",
+   "produitOrigine": 278384
+  },
+  "868998": {
+   "carteId": 24742,
+   "setOrigine": "Secret-Wonders",
+   "numero": "120",
+   "cleR2": "tcgdex/Secret-Wonders/120-24742.webp",
+   "produitOrigine": 277873
+  },
+  "868999": {
+   "carteId": 24742,
+   "setOrigine": "Secret-Wonders",
+   "numero": "120",
+   "cleR2": "tcgdex/Secret-Wonders/120-24742.webp",
+   "produitOrigine": 277873
+  },
+  "869000": {
+   "carteId": 24742,
+   "setOrigine": "Secret-Wonders",
+   "numero": "120",
+   "cleR2": "tcgdex/Secret-Wonders/120-24742.webp",
+   "produitOrigine": 277873
+  },
+  "869001": {
+   "carteId": 24742,
+   "setOrigine": "Secret-Wonders",
+   "numero": "120",
+   "cleR2": "tcgdex/Secret-Wonders/120-24742.webp",
+   "produitOrigine": 277873
+  },
+  "869003": {
+   "carteId": 25165,
+   "setOrigine": "Great-Encounters",
+   "numero": "102",
+   "cleR2": "tcgdex/Great-Encounters/102-25165.webp",
+   "produitOrigine": 278004
+  },
+  "869004": {
+   "carteId": 25165,
+   "setOrigine": "Great-Encounters",
+   "numero": "102",
+   "cleR2": "tcgdex/Great-Encounters/102-25165.webp",
+   "produitOrigine": 278004
+  },
+  "869005": {
+   "carteId": 25165,
+   "setOrigine": "Great-Encounters",
+   "numero": "102",
+   "cleR2": "tcgdex/Great-Encounters/102-25165.webp",
+   "produitOrigine": 278004
+  },
+  "869035": {
+   "carteId": 41580,
+   "setOrigine": "Majestic-Dawn",
+   "numero": "092",
+   "cleR2": "tcgdex/Majestic-Dawn/92-41580.webp",
+   "produitOrigine": 278141
+  },
+  "869036": {
+   "carteId": 41580,
+   "setOrigine": "Majestic-Dawn",
+   "numero": "092",
+   "cleR2": "tcgdex/Majestic-Dawn/92-41580.webp",
+   "produitOrigine": 278141
   }
  },
  "WCD-2010": {
@@ -201,71 +1299,2982 @@
    "produitOrigine": 278959
   }
  },
- "WCD-2007": {
-  "869423": {
-   "carteId": 25154,
-   "setOrigine": "EX-Holon-Phantoms",
-   "numero": "085",
-   "cleR2": "tcgdex/EX-Holon-Phantoms/85-25154.webp",
-   "produitOrigine": 277055
+ "WCD-2011": {
+  "868141": {
+   "carteId": 101144,
+   "setOrigine": "Triumphant",
+   "numero": "068",
+   "cleR2": "tcgdex/Triumphant/68-101144.webp",
+   "produitOrigine": 279598
   },
-  "869424": {
-   "carteId": 25154,
-   "setOrigine": "EX-Holon-Phantoms",
-   "numero": "085",
-   "cleR2": "tcgdex/EX-Holon-Phantoms/85-25154.webp",
-   "produitOrigine": 277055
+  "868147": {
+   "carteId": 101144,
+   "setOrigine": "Triumphant",
+   "numero": "068",
+   "cleR2": "tcgdex/Triumphant/68-101144.webp",
+   "produitOrigine": 279598
   },
-  "869425": {
-   "carteId": 25154,
-   "setOrigine": "EX-Holon-Phantoms",
-   "numero": "085",
-   "cleR2": "tcgdex/EX-Holon-Phantoms/85-25154.webp",
-   "produitOrigine": 277055
+  "868170": {
+   "carteId": 87218,
+   "setOrigine": "HeartGold-SoulSilver",
+   "numero": "028",
+   "cleR2": "tcgdex/HeartGold-SoulSilver/28-87218.webp",
+   "produitOrigine": 882912
   },
-  "869426": {
-   "carteId": 25154,
-   "setOrigine": "EX-Holon-Phantoms",
-   "numero": "085",
-   "cleR2": "tcgdex/EX-Holon-Phantoms/85-25154.webp",
-   "produitOrigine": 277055
+  "868171": {
+   "carteId": 87406,
+   "setOrigine": "HeartGold-SoulSilver",
+   "numero": "097",
+   "cleR2": "tcgdex/HeartGold-SoulSilver/97-87406.webp",
+   "produitOrigine": 279069
   },
-  "869440": {
+  "868172": {
+   "carteId": 87406,
+   "setOrigine": "HeartGold-SoulSilver",
+   "numero": "097",
+   "cleR2": "tcgdex/HeartGold-SoulSilver/97-87406.webp",
+   "produitOrigine": 279069
+  },
+  "868173": {
+   "carteId": 87406,
+   "setOrigine": "HeartGold-SoulSilver",
+   "numero": "097",
+   "cleR2": "tcgdex/HeartGold-SoulSilver/97-87406.webp",
+   "produitOrigine": 279069
+  },
+  "868174": {
+   "carteId": 87406,
+   "setOrigine": "HeartGold-SoulSilver",
+   "numero": "097",
+   "cleR2": "tcgdex/HeartGold-SoulSilver/97-87406.webp",
+   "produitOrigine": 279069
+  },
+  "868184": {
    "carteId": 25165,
-   "setOrigine": "EX-Holon-Phantoms",
-   "numero": "090",
-   "cleR2": "tcgdex/EX-Holon-Phantoms/90-25165.webp",
-   "produitOrigine": 277060
+   "setOrigine": "Unleashed",
+   "numero": "082",
+   "cleR2": "tcgdex/Unleashed/82-25165.webp",
+   "produitOrigine": 279238
   },
-  "869441": {
+  "868185": {
    "carteId": 25165,
-   "setOrigine": "EX-Holon-Phantoms",
-   "numero": "090",
-   "cleR2": "tcgdex/EX-Holon-Phantoms/90-25165.webp",
-   "produitOrigine": 277060
+   "setOrigine": "Unleashed",
+   "numero": "082",
+   "cleR2": "tcgdex/Unleashed/82-25165.webp",
+   "produitOrigine": 279238
   },
-  "869471": {
-   "carteId": 11369,
-   "setOrigine": "EX-Holon-Phantoms",
-   "numero": "096",
-   "cleR2": "tcgdex/EX-Holon-Phantoms/96-11369.webp",
-   "produitOrigine": 277066
+  "868186": {
+   "carteId": 25165,
+   "setOrigine": "Unleashed",
+   "numero": "082",
+   "cleR2": "tcgdex/Unleashed/82-25165.webp",
+   "produitOrigine": 279238
+  },
+  "868187": {
+   "carteId": 25165,
+   "setOrigine": "Unleashed",
+   "numero": "082",
+   "cleR2": "tcgdex/Unleashed/82-25165.webp",
+   "produitOrigine": 279238
+  },
+  "868188": {
+   "carteId": 108513,
+   "setOrigine": "Triumphant",
+   "numero": "087",
+   "cleR2": "tcgdex/Triumphant/87-108513.webp",
+   "produitOrigine": 279617
+  },
+  "868189": {
+   "carteId": 108513,
+   "setOrigine": "Triumphant",
+   "numero": "087",
+   "cleR2": "tcgdex/Triumphant/87-108513.webp",
+   "produitOrigine": 279617
+  },
+  "868190": {
+   "carteId": 108513,
+   "setOrigine": "Triumphant",
+   "numero": "087",
+   "cleR2": "tcgdex/Triumphant/87-108513.webp",
+   "produitOrigine": 279617
+  },
+  "868198": {
+   "carteId": 15383,
+   "setOrigine": "Black-White",
+   "numero": "092",
+   "cleR2": "tcgdex/Black-White/92-15383.webp",
+   "produitOrigine": 279830
+  },
+  "868199": {
+   "carteId": 15383,
+   "setOrigine": "Black-White",
+   "numero": "092",
+   "cleR2": "tcgdex/Black-White/92-15383.webp",
+   "produitOrigine": 279830
+  },
+  "868200": {
+   "carteId": 15381,
+   "setOrigine": "Black-White",
+   "numero": "104",
+   "cleR2": "tcgdex/Black-White/104-15381.webp",
+   "produitOrigine": 279842
+  },
+  "868201": {
+   "carteId": 15381,
+   "setOrigine": "Black-White",
+   "numero": "104",
+   "cleR2": "tcgdex/Black-White/104-15381.webp",
+   "produitOrigine": 279842
+  },
+  "868217": {
+   "carteId": 108511,
+   "setOrigine": "Triumphant",
+   "numero": "090",
+   "cleR2": "tcgdex/Triumphant/90-108511.webp",
+   "produitOrigine": 279620
+  },
+  "868218": {
+   "carteId": 108511,
+   "setOrigine": "Triumphant",
+   "numero": "090",
+   "cleR2": "tcgdex/Triumphant/90-108511.webp",
+   "produitOrigine": 279620
   }
  },
- "WCD-2006": {
-  "869561": {
-   "carteId": 25165,
-   "setOrigine": "EX-Holon-Phantoms",
-   "numero": "090",
-   "cleR2": "tcgdex/EX-Holon-Phantoms/90-25165.webp",
-   "produitOrigine": 277060
+ "WCD-2012": {
+  "867989": {
+   "carteId": 142376,
+   "setOrigine": "Noble-Victories",
+   "numero": "073",
+   "cleR2": "tcgdex/Noble-Victories/73-142376.webp",
+   "produitOrigine": 280196
   },
-  "869562": {
-   "carteId": 25165,
-   "setOrigine": "EX-Holon-Phantoms",
+  "867990": {
+   "carteId": 89353,
+   "setOrigine": "Unleashed",
+   "numero": "008",
+   "cleR2": "tcgdex/Unleashed/8-89353.webp",
+   "produitOrigine": 279164
+  },
+  "867992": {
+   "carteId": 142376,
+   "setOrigine": "Noble-Victories",
+   "numero": "073",
+   "cleR2": "tcgdex/Noble-Victories/73-142376.webp",
+   "produitOrigine": 280196
+  },
+  "867993": {
+   "carteId": 142376,
+   "setOrigine": "Noble-Victories",
+   "numero": "073",
+   "cleR2": "tcgdex/Noble-Victories/73-142376.webp",
+   "produitOrigine": 280196
+  },
+  "867994": {
+   "carteId": 89353,
+   "setOrigine": "Unleashed",
+   "numero": "008",
+   "cleR2": "tcgdex/Unleashed/8-89353.webp",
+   "produitOrigine": 279164
+  },
+  "868000": {
+   "carteId": 141948,
+   "setOrigine": "Dark-Explorers",
+   "numero": "096",
+   "cleR2": "tcgdex/Dark-Explorers/96-141948.webp",
+   "produitOrigine": 280424
+  },
+  "868001": {
+   "carteId": 141948,
+   "setOrigine": "Dark-Explorers",
+   "numero": "096",
+   "cleR2": "tcgdex/Dark-Explorers/96-141948.webp",
+   "produitOrigine": 280424
+  },
+  "868002": {
+   "carteId": 141948,
+   "setOrigine": "Dark-Explorers",
+   "numero": "096",
+   "cleR2": "tcgdex/Dark-Explorers/96-141948.webp",
+   "produitOrigine": 280424
+  },
+  "868003": {
+   "carteId": 141948,
+   "setOrigine": "Dark-Explorers",
+   "numero": "096",
+   "cleR2": "tcgdex/Dark-Explorers/96-141948.webp",
+   "produitOrigine": 280424
+  },
+  "868004": {
+   "carteId": 120958,
+   "setOrigine": "Dark-Explorers",
+   "numero": "098",
+   "cleR2": "tcgdex/Dark-Explorers/98-120958.webp",
+   "produitOrigine": 280426
+  },
+  "868005": {
+   "carteId": 120958,
+   "setOrigine": "Dark-Explorers",
+   "numero": "098",
+   "cleR2": "tcgdex/Dark-Explorers/98-120958.webp",
+   "produitOrigine": 280426
+  },
+  "868006": {
+   "carteId": 120958,
+   "setOrigine": "Dark-Explorers",
+   "numero": "098",
+   "cleR2": "tcgdex/Dark-Explorers/98-120958.webp",
+   "produitOrigine": 280426
+  },
+  "868008": {
+   "carteId": 120958,
+   "setOrigine": "Dark-Explorers",
+   "numero": "098",
+   "cleR2": "tcgdex/Dark-Explorers/98-120958.webp",
+   "produitOrigine": 280426
+  },
+  "868009": {
+   "carteId": 87393,
+   "setOrigine": "Call-of-Legends",
+   "numero": "083",
+   "cleR2": "tcgdex/Call-of-Legends/83-87393.webp",
+   "produitOrigine": 279726
+  },
+  "868011": {
+   "carteId": 87393,
+   "setOrigine": "Call-of-Legends",
+   "numero": "083",
+   "cleR2": "tcgdex/Call-of-Legends/83-87393.webp",
+   "produitOrigine": 279726
+  },
+  "868012": {
+   "carteId": 87393,
+   "setOrigine": "Call-of-Legends",
+   "numero": "083",
+   "cleR2": "tcgdex/Call-of-Legends/83-87393.webp",
+   "produitOrigine": 279726
+  },
+  "868013": {
+   "carteId": 87393,
+   "setOrigine": "Call-of-Legends",
+   "numero": "083",
+   "cleR2": "tcgdex/Call-of-Legends/83-87393.webp",
+   "produitOrigine": 279726
+  },
+  "868014": {
+   "carteId": 108513,
+   "setOrigine": "Triumphant",
+   "numero": "087",
+   "cleR2": "tcgdex/Triumphant/87-108513.webp",
+   "produitOrigine": 279617
+  },
+  "868015": {
+   "carteId": 108513,
+   "setOrigine": "Triumphant",
+   "numero": "087",
+   "cleR2": "tcgdex/Triumphant/87-108513.webp",
+   "produitOrigine": 279617
+  },
+  "868016": {
+   "carteId": 108513,
+   "setOrigine": "Triumphant",
+   "numero": "087",
+   "cleR2": "tcgdex/Triumphant/87-108513.webp",
+   "produitOrigine": 279617
+  },
+  "868017": {
+   "carteId": 108513,
+   "setOrigine": "Triumphant",
+   "numero": "087",
+   "cleR2": "tcgdex/Triumphant/87-108513.webp",
+   "produitOrigine": 279617
+  },
+  "868018": {
+   "carteId": 120929,
+   "setOrigine": "Emerging-Powers",
+   "numero": "094",
+   "cleR2": "tcgdex/Emerging-Powers/94-120929.webp",
+   "produitOrigine": 280059
+  },
+  "868019": {
+   "carteId": 120929,
+   "setOrigine": "Emerging-Powers",
+   "numero": "094",
+   "cleR2": "tcgdex/Emerging-Powers/94-120929.webp",
+   "produitOrigine": 280059
+  },
+  "868024": {
+   "carteId": 15381,
+   "setOrigine": "Black-White",
+   "numero": "104",
+   "cleR2": "tcgdex/Black-White/104-15381.webp",
+   "produitOrigine": 279842
+  },
+  "868025": {
+   "carteId": 15381,
+   "setOrigine": "Black-White",
+   "numero": "104",
+   "cleR2": "tcgdex/Black-White/104-15381.webp",
+   "produitOrigine": 279842
+  },
+  "868026": {
+   "carteId": 15381,
+   "setOrigine": "Black-White",
+   "numero": "104",
+   "cleR2": "tcgdex/Black-White/104-15381.webp",
+   "produitOrigine": 279842
+  },
+  "868027": {
+   "carteId": 15381,
+   "setOrigine": "Black-White",
+   "numero": "104",
+   "cleR2": "tcgdex/Black-White/104-15381.webp",
+   "produitOrigine": 279842
+  },
+  "868036": {
+   "carteId": 15388,
+   "setOrigine": "Black-White",
+   "numero": "096",
+   "cleR2": "tcgdex/Black-White/96-15388.webp",
+   "produitOrigine": 279834
+  },
+  "868037": {
+   "carteId": 15388,
+   "setOrigine": "Black-White",
+   "numero": "096",
+   "cleR2": "tcgdex/Black-White/96-15388.webp",
+   "produitOrigine": 279834
+  },
+  "868038": {
+   "carteId": 15388,
+   "setOrigine": "Black-White",
+   "numero": "096",
+   "cleR2": "tcgdex/Black-White/96-15388.webp",
+   "produitOrigine": 279834
+  },
+  "868039": {
+   "carteId": 15388,
+   "setOrigine": "Black-White",
+   "numero": "096",
+   "cleR2": "tcgdex/Black-White/96-15388.webp",
+   "produitOrigine": 279834
+  },
+  "868043": {
+   "carteId": 148519,
+   "setOrigine": "Dark-Explorers",
+   "numero": "099",
+   "cleR2": "tcgdex/Dark-Explorers/99-148519.webp",
+   "produitOrigine": 280427
+  },
+  "868045": {
+   "carteId": 148519,
+   "setOrigine": "Dark-Explorers",
+   "numero": "099",
+   "cleR2": "tcgdex/Dark-Explorers/99-148519.webp",
+   "produitOrigine": 280427
+  },
+  "868046": {
+   "carteId": 148519,
+   "setOrigine": "Dark-Explorers",
+   "numero": "099",
+   "cleR2": "tcgdex/Dark-Explorers/99-148519.webp",
+   "produitOrigine": 280427
+  },
+  "868048": {
+   "carteId": 148519,
+   "setOrigine": "Dark-Explorers",
+   "numero": "099",
+   "cleR2": "tcgdex/Dark-Explorers/99-148519.webp",
+   "produitOrigine": 280427
+  },
+  "868049": {
+   "carteId": 148517,
+   "setOrigine": "Dark-Explorers",
+   "numero": "102",
+   "cleR2": "tcgdex/Dark-Explorers/102-148517.webp",
+   "produitOrigine": 280430
+  },
+  "868051": {
+   "carteId": 148517,
+   "setOrigine": "Dark-Explorers",
+   "numero": "102",
+   "cleR2": "tcgdex/Dark-Explorers/102-148517.webp",
+   "produitOrigine": 280430
+  },
+  "868054": {
+   "carteId": 142377,
+   "setOrigine": "Noble-Victories",
+   "numero": "091",
+   "cleR2": "tcgdex/Noble-Victories/91-142377.webp",
+   "produitOrigine": 280214
+  },
+  "868055": {
+   "carteId": 142377,
+   "setOrigine": "Noble-Victories",
+   "numero": "091",
+   "cleR2": "tcgdex/Noble-Victories/91-142377.webp",
+   "produitOrigine": 280214
+  },
+  "868056": {
+   "carteId": 142377,
+   "setOrigine": "Noble-Victories",
+   "numero": "091",
+   "cleR2": "tcgdex/Noble-Victories/91-142377.webp",
+   "produitOrigine": 280214
+  },
+  "868073": {
+   "carteId": 11408,
+   "setOrigine": "Next-Destinies",
+   "numero": "092",
+   "cleR2": "tcgdex/Next-Destinies/92-11408.webp",
+   "produitOrigine": 280317
+  },
+  "868074": {
+   "carteId": 11408,
+   "setOrigine": "Next-Destinies",
+   "numero": "092",
+   "cleR2": "tcgdex/Next-Destinies/92-11408.webp",
+   "produitOrigine": 280317
+  },
+  "868075": {
+   "carteId": 11408,
+   "setOrigine": "Next-Destinies",
+   "numero": "092",
+   "cleR2": "tcgdex/Next-Destinies/92-11408.webp",
+   "produitOrigine": 280317
+  },
+  "868077": {
+   "carteId": 11408,
+   "setOrigine": "Next-Destinies",
+   "numero": "092",
+   "cleR2": "tcgdex/Next-Destinies/92-11408.webp",
+   "produitOrigine": 280317
+  }
+ },
+ "WCD-2013": {
+  "867820": {
+   "carteId": 163953,
+   "setOrigine": "Boundaries-Crossed",
+   "numero": "049",
+   "cleR2": "tcgdex/Boundaries-Crossed/49-163953.webp",
+   "produitOrigine": 280636
+  },
+  "867821": {
+   "carteId": 163953,
+   "setOrigine": "Boundaries-Crossed",
+   "numero": "049",
+   "cleR2": "tcgdex/Boundaries-Crossed/49-163953.webp",
+   "produitOrigine": 280636
+  },
+  "867822": {
+   "carteId": 163953,
+   "setOrigine": "Boundaries-Crossed",
+   "numero": "049",
+   "cleR2": "tcgdex/Boundaries-Crossed/49-163953.webp",
+   "produitOrigine": 280636
+  },
+  "867841": {
+   "carteId": 120958,
+   "setOrigine": "Dark-Explorers",
+   "numero": "098",
+   "cleR2": "tcgdex/Dark-Explorers/98-120958.webp",
+   "produitOrigine": 280426
+  },
+  "867842": {
+   "carteId": 120958,
+   "setOrigine": "Dark-Explorers",
+   "numero": "098",
+   "cleR2": "tcgdex/Dark-Explorers/98-120958.webp",
+   "produitOrigine": 280426
+  },
+  "867843": {
+   "carteId": 120958,
+   "setOrigine": "Dark-Explorers",
+   "numero": "098",
+   "cleR2": "tcgdex/Dark-Explorers/98-120958.webp",
+   "produitOrigine": 280426
+  },
+  "867844": {
+   "carteId": 120958,
+   "setOrigine": "Dark-Explorers",
+   "numero": "098",
+   "cleR2": "tcgdex/Dark-Explorers/98-120958.webp",
+   "produitOrigine": 280426
+  },
+  "867845": {
+   "carteId": 141948,
+   "setOrigine": "Dark-Explorers",
+   "numero": "096",
+   "cleR2": "tcgdex/Dark-Explorers/96-141948.webp",
+   "produitOrigine": 280424
+  },
+  "867846": {
+   "carteId": 141948,
+   "setOrigine": "Dark-Explorers",
+   "numero": "096",
+   "cleR2": "tcgdex/Dark-Explorers/96-141948.webp",
+   "produitOrigine": 280424
+  },
+  "867847": {
+   "carteId": 141948,
+   "setOrigine": "Dark-Explorers",
+   "numero": "096",
+   "cleR2": "tcgdex/Dark-Explorers/96-141948.webp",
+   "produitOrigine": 280424
+  },
+  "867848": {
+   "carteId": 141948,
+   "setOrigine": "Dark-Explorers",
+   "numero": "096",
+   "cleR2": "tcgdex/Dark-Explorers/96-141948.webp",
+   "produitOrigine": 280424
+  },
+  "867849": {
+   "carteId": 168051,
+   "setOrigine": "Plasma-Storm",
+   "numero": "118",
+   "cleR2": "tcgdex/Plasma-Storm/118-168051.webp",
+   "produitOrigine": 280858
+  },
+  "867850": {
+   "carteId": 168051,
+   "setOrigine": "Plasma-Storm",
+   "numero": "118",
+   "cleR2": "tcgdex/Plasma-Storm/118-168051.webp",
+   "produitOrigine": 280858
+  },
+  "867851": {
+   "carteId": 168051,
+   "setOrigine": "Plasma-Storm",
+   "numero": "118",
+   "cleR2": "tcgdex/Plasma-Storm/118-168051.webp",
+   "produitOrigine": 280858
+  },
+  "867852": {
+   "carteId": 148517,
+   "setOrigine": "Dark-Explorers",
+   "numero": "102",
+   "cleR2": "tcgdex/Dark-Explorers/102-148517.webp",
+   "produitOrigine": 280430
+  },
+  "867853": {
+   "carteId": 148517,
+   "setOrigine": "Dark-Explorers",
+   "numero": "102",
+   "cleR2": "tcgdex/Dark-Explorers/102-148517.webp",
+   "produitOrigine": 280430
+  },
+  "867854": {
+   "carteId": 148517,
+   "setOrigine": "Dark-Explorers",
+   "numero": "102",
+   "cleR2": "tcgdex/Dark-Explorers/102-148517.webp",
+   "produitOrigine": 280430
+  },
+  "867855": {
+   "carteId": 148517,
+   "setOrigine": "Dark-Explorers",
+   "numero": "102",
+   "cleR2": "tcgdex/Dark-Explorers/102-148517.webp",
+   "produitOrigine": 280430
+  },
+  "867864": {
+   "carteId": 20118,
+   "setOrigine": "Boundaries-Crossed",
+   "numero": "128",
+   "cleR2": "tcgdex/Boundaries-Crossed/128-20118.webp",
+   "produitOrigine": 280715
+  },
+  "867865": {
+   "carteId": 20118,
+   "setOrigine": "Boundaries-Crossed",
+   "numero": "128",
+   "cleR2": "tcgdex/Boundaries-Crossed/128-20118.webp",
+   "produitOrigine": 280715
+  },
+  "867866": {
+   "carteId": 20118,
+   "setOrigine": "Boundaries-Crossed",
+   "numero": "128",
+   "cleR2": "tcgdex/Boundaries-Crossed/128-20118.webp",
+   "produitOrigine": 280715
+  },
+  "867867": {
+   "carteId": 171846,
+   "setOrigine": "Plasma-Freeze",
+   "numero": "099",
+   "cleR2": "tcgdex/Plasma-Freeze/99-171846.webp",
+   "produitOrigine": 280977
+  },
+  "867868": {
+   "carteId": 171846,
+   "setOrigine": "Plasma-Freeze",
+   "numero": "099",
+   "cleR2": "tcgdex/Plasma-Freeze/99-171846.webp",
+   "produitOrigine": 280977
+  },
+  "867869": {
+   "carteId": 171846,
+   "setOrigine": "Plasma-Freeze",
+   "numero": "099",
+   "cleR2": "tcgdex/Plasma-Freeze/99-171846.webp",
+   "produitOrigine": 280977
+  },
+  "867870": {
+   "carteId": 163691,
+   "setOrigine": "Boundaries-Crossed",
+   "numero": "134",
+   "cleR2": "tcgdex/Boundaries-Crossed/134-163691.webp",
+   "produitOrigine": 280721
+  },
+  "867871": {
+   "carteId": 163691,
+   "setOrigine": "Boundaries-Crossed",
+   "numero": "134",
+   "cleR2": "tcgdex/Boundaries-Crossed/134-163691.webp",
+   "produitOrigine": 280721
+  },
+  "867878": {
+   "carteId": 15638,
+   "setOrigine": "Boundaries-Crossed",
+   "numero": "137",
+   "cleR2": "tcgdex/Boundaries-Crossed/137-15638.webp",
+   "produitOrigine": 280724
+  },
+  "867879": {
+   "carteId": 15638,
+   "setOrigine": "Boundaries-Crossed",
+   "numero": "137",
+   "cleR2": "tcgdex/Boundaries-Crossed/137-15638.webp",
+   "produitOrigine": 280724
+  },
+  "867880": {
+   "carteId": 15638,
+   "setOrigine": "Boundaries-Crossed",
+   "numero": "137",
+   "cleR2": "tcgdex/Boundaries-Crossed/137-15638.webp",
+   "produitOrigine": 280724
+  },
+  "867885": {
+   "carteId": 164744,
+   "setOrigine": "Plasma-Storm",
+   "numero": "126",
+   "cleR2": "tcgdex/Plasma-Storm/126-164744.webp",
+   "produitOrigine": 280866
+  },
+  "867886": {
+   "carteId": 164744,
+   "setOrigine": "Plasma-Storm",
+   "numero": "126",
+   "cleR2": "tcgdex/Plasma-Storm/126-164744.webp",
+   "produitOrigine": 280866
+  },
+  "867888": {
+   "carteId": 168005,
+   "setOrigine": "Plasma-Storm",
+   "numero": "123",
+   "cleR2": "tcgdex/Plasma-Storm/123-168005.webp",
+   "produitOrigine": 280863
+  },
+  "867889": {
+   "carteId": 168005,
+   "setOrigine": "Plasma-Storm",
+   "numero": "123",
+   "cleR2": "tcgdex/Plasma-Storm/123-168005.webp",
+   "produitOrigine": 280863
+  }
+ },
+ "WCD-2014": {
+  "867470": {
+   "carteId": 141948,
+   "setOrigine": "Dark-Explorers",
+   "numero": "096",
+   "cleR2": "tcgdex/Dark-Explorers/96-141948.webp",
+   "produitOrigine": 280424
+  },
+  "867471": {
+   "carteId": 141948,
+   "setOrigine": "Dark-Explorers",
+   "numero": "096",
+   "cleR2": "tcgdex/Dark-Explorers/96-141948.webp",
+   "produitOrigine": 280424
+  },
+  "867472": {
+   "carteId": 141948,
+   "setOrigine": "Dark-Explorers",
+   "numero": "096",
+   "cleR2": "tcgdex/Dark-Explorers/96-141948.webp",
+   "produitOrigine": 280424
+  },
+  "867473": {
+   "carteId": 141948,
+   "setOrigine": "Dark-Explorers",
+   "numero": "096",
+   "cleR2": "tcgdex/Dark-Explorers/96-141948.webp",
+   "produitOrigine": 280424
+  },
+  "867480": {
+   "carteId": 163691,
+   "setOrigine": "Boundaries-Crossed",
+   "numero": "134",
+   "cleR2": "tcgdex/Boundaries-Crossed/134-163691.webp",
+   "produitOrigine": 280721
+  },
+  "867481": {
+   "carteId": 163691,
+   "setOrigine": "Boundaries-Crossed",
+   "numero": "134",
+   "cleR2": "tcgdex/Boundaries-Crossed/134-163691.webp",
+   "produitOrigine": 280721
+  },
+  "867482": {
+   "carteId": 163691,
+   "setOrigine": "Boundaries-Crossed",
+   "numero": "134",
+   "cleR2": "tcgdex/Boundaries-Crossed/134-163691.webp",
+   "produitOrigine": 280721
+  }
+ },
+ "WCD-2015": {
+  "867344": {
+   "carteId": 120958,
+   "setOrigine": "Plasma-Blast",
+   "numero": "084",
+   "cleR2": "tcgdex/Plasma-Blast/84-120958.webp",
+   "produitOrigine": 281105
+  },
+  "867345": {
+   "carteId": 120958,
+   "setOrigine": "Plasma-Blast",
+   "numero": "084",
+   "cleR2": "tcgdex/Plasma-Blast/84-120958.webp",
+   "produitOrigine": 281105
+  },
+  "867346": {
+   "carteId": 120958,
+   "setOrigine": "Plasma-Blast",
+   "numero": "084",
+   "cleR2": "tcgdex/Plasma-Blast/84-120958.webp",
+   "produitOrigine": 281105
+  },
+  "867347": {
+   "carteId": 189926,
+   "setOrigine": "Flashfire",
    "numero": "090",
-   "cleR2": "tcgdex/EX-Holon-Phantoms/90-25165.webp",
-   "produitOrigine": 277060
+   "cleR2": "tcgdex/Flashfire/90-189926.webp",
+   "produitOrigine": 281573
+  },
+  "867348": {
+   "carteId": 189926,
+   "setOrigine": "Flashfire",
+   "numero": "090",
+   "cleR2": "tcgdex/Flashfire/90-189926.webp",
+   "produitOrigine": 281573
+  },
+  "867349": {
+   "carteId": 189926,
+   "setOrigine": "Flashfire",
+   "numero": "090",
+   "cleR2": "tcgdex/Flashfire/90-189926.webp",
+   "produitOrigine": 281573
+  },
+  "867350": {
+   "carteId": 189926,
+   "setOrigine": "Flashfire",
+   "numero": "090",
+   "cleR2": "tcgdex/Flashfire/90-189926.webp",
+   "produitOrigine": 281573
+  },
+  "867351": {
+   "carteId": 141948,
+   "setOrigine": "Dark-Explorers",
+   "numero": "096",
+   "cleR2": "tcgdex/Dark-Explorers/96-141948.webp",
+   "produitOrigine": 280424
+  },
+  "867352": {
+   "carteId": 141948,
+   "setOrigine": "Dark-Explorers",
+   "numero": "096",
+   "cleR2": "tcgdex/Dark-Explorers/96-141948.webp",
+   "produitOrigine": 280424
+  },
+  "867353": {
+   "carteId": 141948,
+   "setOrigine": "Dark-Explorers",
+   "numero": "096",
+   "cleR2": "tcgdex/Dark-Explorers/96-141948.webp",
+   "produitOrigine": 280424
+  },
+  "867354": {
+   "carteId": 141948,
+   "setOrigine": "Dark-Explorers",
+   "numero": "096",
+   "cleR2": "tcgdex/Dark-Explorers/96-141948.webp",
+   "produitOrigine": 280424
+  },
+  "867359": {
+   "carteId": 43839,
+   "setOrigine": "Phantom-Forces",
+   "numero": "109",
+   "cleR2": "tcgdex/Phantom-Forces/109-43839.webp",
+   "produitOrigine": 281916
+  },
+  "867360": {
+   "carteId": 43839,
+   "setOrigine": "Phantom-Forces",
+   "numero": "109",
+   "cleR2": "tcgdex/Phantom-Forces/109-43839.webp",
+   "produitOrigine": 281916
+  },
+  "867361": {
+   "carteId": 43839,
+   "setOrigine": "Phantom-Forces",
+   "numero": "109",
+   "cleR2": "tcgdex/Phantom-Forces/109-43839.webp",
+   "produitOrigine": 281916
+  },
+  "867362": {
+   "carteId": 43839,
+   "setOrigine": "Phantom-Forces",
+   "numero": "109",
+   "cleR2": "tcgdex/Phantom-Forces/109-43839.webp",
+   "produitOrigine": 281916
+  },
+  "867370": {
+   "carteId": 148517,
+   "setOrigine": "Roaring-Skies",
+   "numero": "093",
+   "cleR2": "tcgdex/Roaring-Skies/93-148517.webp",
+   "produitOrigine": 282761
+  },
+  "867371": {
+   "carteId": 148517,
+   "setOrigine": "Roaring-Skies",
+   "numero": "093",
+   "cleR2": "tcgdex/Roaring-Skies/93-148517.webp",
+   "produitOrigine": 282761
+  },
+  "867372": {
+   "carteId": 148517,
+   "setOrigine": "Roaring-Skies",
+   "numero": "093",
+   "cleR2": "tcgdex/Roaring-Skies/93-148517.webp",
+   "produitOrigine": 282761
+  },
+  "867373": {
+   "carteId": 148517,
+   "setOrigine": "Roaring-Skies",
+   "numero": "093",
+   "cleR2": "tcgdex/Roaring-Skies/93-148517.webp",
+   "produitOrigine": 282761
+  },
+  "867378": {
+   "carteId": 192724,
+   "setOrigine": "Furious-Fists",
+   "numero": "090",
+   "cleR2": "tcgdex/Furious-Fists/90-192724.webp",
+   "produitOrigine": 281754
+  },
+  "867379": {
+   "carteId": 192724,
+   "setOrigine": "Furious-Fists",
+   "numero": "090",
+   "cleR2": "tcgdex/Furious-Fists/90-192724.webp",
+   "produitOrigine": 281754
+  },
+  "867387": {
+   "carteId": 186649,
+   "setOrigine": "XY",
+   "numero": "121",
+   "cleR2": "tcgdex/XY/121-186649.webp",
+   "produitOrigine": 281458
+  },
+  "867388": {
+   "carteId": 186649,
+   "setOrigine": "XY",
+   "numero": "121",
+   "cleR2": "tcgdex/XY/121-186649.webp",
+   "produitOrigine": 281458
+  },
+  "867389": {
+   "carteId": 186649,
+   "setOrigine": "XY",
+   "numero": "121",
+   "cleR2": "tcgdex/XY/121-186649.webp",
+   "produitOrigine": 281458
+  },
+  "867393": {
+   "carteId": 168051,
+   "setOrigine": "Plasma-Storm",
+   "numero": "118",
+   "cleR2": "tcgdex/Plasma-Storm/118-168051.webp",
+   "produitOrigine": 280858
+  },
+  "867394": {
+   "carteId": 168051,
+   "setOrigine": "Plasma-Storm",
+   "numero": "118",
+   "cleR2": "tcgdex/Plasma-Storm/118-168051.webp",
+   "produitOrigine": 280858
+  },
+  "867397": {
+   "carteId": 24161,
+   "setOrigine": "Furious-Fists",
+   "numero": "100",
+   "cleR2": "tcgdex/Furious-Fists/100-24161.webp",
+   "produitOrigine": 281764
+  },
+  "867398": {
+   "carteId": 24161,
+   "setOrigine": "Furious-Fists",
+   "numero": "100",
+   "cleR2": "tcgdex/Furious-Fists/100-24161.webp",
+   "produitOrigine": 281764
+  },
+  "867418": {
+   "carteId": 202651,
+   "setOrigine": "Roaring-Skies",
+   "numero": "077",
+   "cleR2": "tcgdex/Roaring-Skies/77-202651.webp",
+   "produitOrigine": 282745
+  },
+  "867419": {
+   "carteId": 202651,
+   "setOrigine": "Roaring-Skies",
+   "numero": "077",
+   "cleR2": "tcgdex/Roaring-Skies/77-202651.webp",
+   "produitOrigine": 282745
+  },
+  "867420": {
+   "carteId": 202651,
+   "setOrigine": "Roaring-Skies",
+   "numero": "077",
+   "cleR2": "tcgdex/Roaring-Skies/77-202651.webp",
+   "produitOrigine": 282745
+  },
+  "867423": {
+   "carteId": 168129,
+   "setOrigine": "Plasma-Storm",
+   "numero": "053",
+   "cleR2": "tcgdex/Plasma-Storm/53-168129.webp",
+   "produitOrigine": 280793
+  },
+  "867424": {
+   "carteId": 168129,
+   "setOrigine": "Plasma-Storm",
+   "numero": "053",
+   "cleR2": "tcgdex/Plasma-Storm/53-168129.webp",
+   "produitOrigine": 280793
+  },
+  "867425": {
+   "carteId": 195230,
+   "setOrigine": "Phantom-Forces",
+   "numero": "032",
+   "cleR2": "tcgdex/Phantom-Forces/32-195230.webp",
+   "produitOrigine": 281838
+  },
+  "867426": {
+   "carteId": 195230,
+   "setOrigine": "Phantom-Forces",
+   "numero": "032",
+   "cleR2": "tcgdex/Phantom-Forces/32-195230.webp",
+   "produitOrigine": 281838
+  },
+  "867427": {
+   "carteId": 195231,
+   "setOrigine": "Phantom-Forces",
+   "numero": "033",
+   "cleR2": "tcgdex/Phantom-Forces/33-195231.webp",
+   "produitOrigine": 281839
+  },
+  "867428": {
+   "carteId": 195231,
+   "setOrigine": "Phantom-Forces",
+   "numero": "033",
+   "cleR2": "tcgdex/Phantom-Forces/33-195231.webp",
+   "produitOrigine": 281839
+  }
+ },
+ "WCD-2016": {
+  "865656": {
+   "carteId": 208312,
+   "setOrigine": "BREAKpoint",
+   "numero": "097",
+   "cleR2": "tcgdex/BREAKpoint/97-208312.webp",
+   "produitOrigine": 288272
+  },
+  "865657": {
+   "carteId": 208312,
+   "setOrigine": "BREAKpoint",
+   "numero": "097",
+   "cleR2": "tcgdex/BREAKpoint/97-208312.webp",
+   "produitOrigine": 288272
+  },
+  "865660": {
+   "carteId": 148048,
+   "setOrigine": "Ancient-Origins",
+   "numero": "076",
+   "cleR2": "tcgdex/Ancient-Origins/76-148048.webp",
+   "produitOrigine": 284257
+  },
+  "865661": {
+   "carteId": 148048,
+   "setOrigine": "Ancient-Origins",
+   "numero": "076",
+   "cleR2": "tcgdex/Ancient-Origins/76-148048.webp",
+   "produitOrigine": 284257
+  },
+  "865662": {
+   "carteId": 141948,
+   "setOrigine": "Fates-Collide",
+   "numero": "105",
+   "cleR2": "tcgdex/Fates-Collide/105-141948.webp",
+   "produitOrigine": 289925
+  },
+  "865663": {
+   "carteId": 141948,
+   "setOrigine": "Fates-Collide",
+   "numero": "105",
+   "cleR2": "tcgdex/Fates-Collide/105-141948.webp",
+   "produitOrigine": 289925
+  },
+  "865664": {
+   "carteId": 141948,
+   "setOrigine": "Fates-Collide",
+   "numero": "105",
+   "cleR2": "tcgdex/Fates-Collide/105-141948.webp",
+   "produitOrigine": 289925
+  },
+  "865665": {
+   "carteId": 141948,
+   "setOrigine": "Fates-Collide",
+   "numero": "105",
+   "cleR2": "tcgdex/Fates-Collide/105-141948.webp",
+   "produitOrigine": 289925
+  },
+  "865668": {
+   "carteId": 183396,
+   "setOrigine": "BREAKpoint",
+   "numero": "107",
+   "cleR2": "tcgdex/BREAKpoint/107-183396.webp",
+   "produitOrigine": 288282
+  },
+  "865669": {
+   "carteId": 183396,
+   "setOrigine": "BREAKpoint",
+   "numero": "107",
+   "cleR2": "tcgdex/BREAKpoint/107-183396.webp",
+   "produitOrigine": 288282
+  },
+  "865670": {
+   "carteId": 183396,
+   "setOrigine": "BREAKpoint",
+   "numero": "107",
+   "cleR2": "tcgdex/BREAKpoint/107-183396.webp",
+   "produitOrigine": 288282
+  },
+  "865671": {
+   "carteId": 183396,
+   "setOrigine": "BREAKpoint",
+   "numero": "107",
+   "cleR2": "tcgdex/BREAKpoint/107-183396.webp",
+   "produitOrigine": 288282
+  },
+  "865673": {
+   "carteId": 191031,
+   "setOrigine": "Flashfire",
+   "numero": "097",
+   "cleR2": "tcgdex/Flashfire/97-191031.webp",
+   "produitOrigine": 281580
+  },
+  "865674": {
+   "carteId": 191031,
+   "setOrigine": "Flashfire",
+   "numero": "097",
+   "cleR2": "tcgdex/Flashfire/97-191031.webp",
+   "produitOrigine": 281580
+  },
+  "865675": {
+   "carteId": 24167,
+   "setOrigine": "BREAKthrough",
+   "numero": "149",
+   "cleR2": "tcgdex/BREAKthrough/149-24167.webp",
+   "produitOrigine": 286395
+  },
+  "865676": {
+   "carteId": 24167,
+   "setOrigine": "BREAKthrough",
+   "numero": "149",
+   "cleR2": "tcgdex/BREAKthrough/149-24167.webp",
+   "produitOrigine": 286395
+  },
+  "865677": {
+   "carteId": 24167,
+   "setOrigine": "BREAKthrough",
+   "numero": "149",
+   "cleR2": "tcgdex/BREAKthrough/149-24167.webp",
+   "produitOrigine": 286395
+  },
+  "865678": {
+   "carteId": 43839,
+   "setOrigine": "Phantom-Forces",
+   "numero": "109",
+   "cleR2": "tcgdex/Phantom-Forces/109-43839.webp",
+   "produitOrigine": 281916
+  },
+  "865679": {
+   "carteId": 43839,
+   "setOrigine": "Phantom-Forces",
+   "numero": "109",
+   "cleR2": "tcgdex/Phantom-Forces/109-43839.webp",
+   "produitOrigine": 281916
+  },
+  "865680": {
+   "carteId": 43839,
+   "setOrigine": "Phantom-Forces",
+   "numero": "109",
+   "cleR2": "tcgdex/Phantom-Forces/109-43839.webp",
+   "produitOrigine": 281916
+  },
+  "865681": {
+   "carteId": 43839,
+   "setOrigine": "Phantom-Forces",
+   "numero": "109",
+   "cleR2": "tcgdex/Phantom-Forces/109-43839.webp",
+   "produitOrigine": 281916
+  },
+  "865694": {
+   "carteId": 189926,
+   "setOrigine": "Ancient-Origins",
+   "numero": "078",
+   "cleR2": "tcgdex/Ancient-Origins/78-189926.webp",
+   "produitOrigine": 284259
+  },
+  "865695": {
+   "carteId": 189926,
+   "setOrigine": "Ancient-Origins",
+   "numero": "078",
+   "cleR2": "tcgdex/Ancient-Origins/78-189926.webp",
+   "produitOrigine": 284259
+  },
+  "865696": {
+   "carteId": 189926,
+   "setOrigine": "Ancient-Origins",
+   "numero": "078",
+   "cleR2": "tcgdex/Ancient-Origins/78-189926.webp",
+   "produitOrigine": 284259
+  },
+  "865714": {
+   "carteId": 203164,
+   "setOrigine": "Roaring-Skies",
+   "numero": "092",
+   "cleR2": "pokemontcg.io/Roaring-Skies/92-203164-en.webp",
+   "produitOrigine": 282760
+  },
+  "865715": {
+   "carteId": 203164,
+   "setOrigine": "Roaring-Skies",
+   "numero": "092",
+   "cleR2": "pokemontcg.io/Roaring-Skies/92-203164-en.webp",
+   "produitOrigine": 282760
+  },
+  "865734": {
+   "carteId": 202651,
+   "setOrigine": "Roaring-Skies",
+   "numero": "077",
+   "cleR2": "tcgdex/Roaring-Skies/77-202651.webp",
+   "produitOrigine": 282745
+  },
+  "865736": {
+   "carteId": 202651,
+   "setOrigine": "Roaring-Skies",
+   "numero": "077",
+   "cleR2": "tcgdex/Roaring-Skies/77-202651.webp",
+   "produitOrigine": 282745
+  },
+  "865738": {
+   "carteId": 202651,
+   "setOrigine": "Roaring-Skies",
+   "numero": "077",
+   "cleR2": "tcgdex/Roaring-Skies/77-202651.webp",
+   "produitOrigine": 282745
+  },
+  "865746": {
+   "carteId": 204547,
+   "setOrigine": "Ancient-Origins",
+   "numero": "036",
+   "cleR2": "tcgdex/Ancient-Origins/36-204547.webp",
+   "produitOrigine": 284217
+  },
+  "865748": {
+   "carteId": 204547,
+   "setOrigine": "Ancient-Origins",
+   "numero": "036",
+   "cleR2": "tcgdex/Ancient-Origins/36-204547.webp",
+   "produitOrigine": 284217
+  }
+ },
+ "WCD-2017": {
+  "865251": {
+   "carteId": 222066,
+   "setOrigine": "Burning-Shadows",
+   "numero": "112",
+   "cleR2": "tcgdex/Burning-Shadows/112-222066.webp",
+   "produitOrigine": 299513
+  },
+  "865252": {
+   "carteId": 222066,
+   "setOrigine": "Burning-Shadows",
+   "numero": "112",
+   "cleR2": "tcgdex/Burning-Shadows/112-222066.webp",
+   "produitOrigine": 299513
+  },
+  "865253": {
+   "carteId": 222066,
+   "setOrigine": "Burning-Shadows",
+   "numero": "112",
+   "cleR2": "tcgdex/Burning-Shadows/112-222066.webp",
+   "produitOrigine": 299513
+  },
+  "865254": {
+   "carteId": 207233,
+   "setOrigine": "BREAKthrough",
+   "numero": "134",
+   "cleR2": "tcgdex/BREAKthrough/134-207233.webp",
+   "produitOrigine": 286380
+  },
+  "865255": {
+   "carteId": 207233,
+   "setOrigine": "BREAKthrough",
+   "numero": "134",
+   "cleR2": "tcgdex/BREAKthrough/134-207233.webp",
+   "produitOrigine": 286380
+  },
+  "865256": {
+   "carteId": 207233,
+   "setOrigine": "BREAKthrough",
+   "numero": "134",
+   "cleR2": "tcgdex/BREAKthrough/134-207233.webp",
+   "produitOrigine": 286380
+  },
+  "865257": {
+   "carteId": 207233,
+   "setOrigine": "BREAKthrough",
+   "numero": "134",
+   "cleR2": "tcgdex/BREAKthrough/134-207233.webp",
+   "produitOrigine": 286380
+  },
+  "865258": {
+   "carteId": 220756,
+   "setOrigine": "Guardians-Rising",
+   "numero": "121",
+   "cleR2": "tcgdex/Guardians-Rising/121-220756.webp",
+   "produitOrigine": 297573
+  },
+  "865259": {
+   "carteId": 220756,
+   "setOrigine": "Guardians-Rising",
+   "numero": "121",
+   "cleR2": "tcgdex/Guardians-Rising/121-220756.webp",
+   "produitOrigine": 297573
+  },
+  "865260": {
+   "carteId": 220756,
+   "setOrigine": "Guardians-Rising",
+   "numero": "121",
+   "cleR2": "tcgdex/Guardians-Rising/121-220756.webp",
+   "produitOrigine": 297573
+  },
+  "865261": {
+   "carteId": 220756,
+   "setOrigine": "Guardians-Rising",
+   "numero": "121",
+   "cleR2": "tcgdex/Guardians-Rising/121-220756.webp",
+   "produitOrigine": 297573
+  },
+  "865262": {
+   "carteId": 221815,
+   "setOrigine": "Guardians-Rising",
+   "numero": "125",
+   "cleR2": "tcgdex/Guardians-Rising/125-221815.webp",
+   "produitOrigine": 297577
+  },
+  "865263": {
+   "carteId": 221815,
+   "setOrigine": "Guardians-Rising",
+   "numero": "125",
+   "cleR2": "tcgdex/Guardians-Rising/125-221815.webp",
+   "produitOrigine": 297577
+  },
+  "865264": {
+   "carteId": 221815,
+   "setOrigine": "Guardians-Rising",
+   "numero": "125",
+   "cleR2": "tcgdex/Guardians-Rising/125-221815.webp",
+   "produitOrigine": 297577
+  },
+  "865265": {
+   "carteId": 221815,
+   "setOrigine": "Guardians-Rising",
+   "numero": "125",
+   "cleR2": "tcgdex/Guardians-Rising/125-221815.webp",
+   "produitOrigine": 297577
+  },
+  "865266": {
+   "carteId": 223420,
+   "setOrigine": "Burning-Shadows",
+   "numero": "115",
+   "cleR2": "tcgdex/Burning-Shadows/115-223420.webp",
+   "produitOrigine": 298778
+  },
+  "865267": {
+   "carteId": 223420,
+   "setOrigine": "Burning-Shadows",
+   "numero": "115",
+   "cleR2": "tcgdex/Burning-Shadows/115-223420.webp",
+   "produitOrigine": 298778
+  },
+  "865268": {
+   "carteId": 223420,
+   "setOrigine": "Burning-Shadows",
+   "numero": "115",
+   "cleR2": "tcgdex/Burning-Shadows/115-223420.webp",
+   "produitOrigine": 298778
+  },
+  "865269": {
+   "carteId": 223420,
+   "setOrigine": "Burning-Shadows",
+   "numero": "115",
+   "cleR2": "tcgdex/Burning-Shadows/115-223420.webp",
+   "produitOrigine": 298778
+  },
+  "865270": {
+   "carteId": 205104,
+   "setOrigine": "Ancient-Origins",
+   "numero": "075",
+   "cleR2": "tcgdex/Ancient-Origins/75-205104.webp",
+   "produitOrigine": 284256
+  },
+  "865271": {
+   "carteId": 205104,
+   "setOrigine": "Ancient-Origins",
+   "numero": "075",
+   "cleR2": "tcgdex/Ancient-Origins/75-205104.webp",
+   "produitOrigine": 284256
+  },
+  "865272": {
+   "carteId": 141948,
+   "setOrigine": "Fates-Collide",
+   "numero": "105",
+   "cleR2": "tcgdex/Fates-Collide/105-141948.webp",
+   "produitOrigine": 289925
+  },
+  "865273": {
+   "carteId": 141948,
+   "setOrigine": "Fates-Collide",
+   "numero": "105",
+   "cleR2": "tcgdex/Fates-Collide/105-141948.webp",
+   "produitOrigine": 289925
+  },
+  "865274": {
+   "carteId": 141948,
+   "setOrigine": "Fates-Collide",
+   "numero": "105",
+   "cleR2": "tcgdex/Fates-Collide/105-141948.webp",
+   "produitOrigine": 289925
+  },
+  "865275": {
+   "carteId": 141948,
+   "setOrigine": "Fates-Collide",
+   "numero": "105",
+   "cleR2": "tcgdex/Fates-Collide/105-141948.webp",
+   "produitOrigine": 289925
+  },
+  "865277": {
+   "carteId": 183396,
+   "setOrigine": "BREAKpoint",
+   "numero": "107",
+   "cleR2": "tcgdex/BREAKpoint/107-183396.webp",
+   "produitOrigine": 288282
+  },
+  "865278": {
+   "carteId": 183396,
+   "setOrigine": "BREAKpoint",
+   "numero": "107",
+   "cleR2": "tcgdex/BREAKpoint/107-183396.webp",
+   "produitOrigine": 288282
+  },
+  "865279": {
+   "carteId": 183396,
+   "setOrigine": "BREAKpoint",
+   "numero": "107",
+   "cleR2": "tcgdex/BREAKpoint/107-183396.webp",
+   "produitOrigine": 288282
+  },
+  "865280": {
+   "carteId": 183396,
+   "setOrigine": "BREAKpoint",
+   "numero": "107",
+   "cleR2": "tcgdex/BREAKpoint/107-183396.webp",
+   "produitOrigine": 288282
+  },
+  "865282": {
+   "carteId": 221788,
+   "setOrigine": "Guardians-Rising",
+   "numero": "130",
+   "cleR2": "tcgdex/Guardians-Rising/130-221788.webp",
+   "produitOrigine": 297582
+  },
+  "865283": {
+   "carteId": 221788,
+   "setOrigine": "Guardians-Rising",
+   "numero": "130",
+   "cleR2": "tcgdex/Guardians-Rising/130-221788.webp",
+   "produitOrigine": 297582
+  },
+  "865286": {
+   "carteId": 148517,
+   "setOrigine": "Sun-Moon",
+   "numero": "135",
+   "cleR2": "tcgdex/Sun-Moon/135-148517.webp",
+   "produitOrigine": 295448
+  },
+  "865287": {
+   "carteId": 148517,
+   "setOrigine": "Sun-Moon",
+   "numero": "135",
+   "cleR2": "tcgdex/Sun-Moon/135-148517.webp",
+   "produitOrigine": 295448
+  },
+  "865288": {
+   "carteId": 148517,
+   "setOrigine": "Sun-Moon",
+   "numero": "135",
+   "cleR2": "tcgdex/Sun-Moon/135-148517.webp",
+   "produitOrigine": 295448
+  },
+  "865289": {
+   "carteId": 148517,
+   "setOrigine": "Sun-Moon",
+   "numero": "135",
+   "cleR2": "tcgdex/Sun-Moon/135-148517.webp",
+   "produitOrigine": 295448
+  },
+  "865290": {
+   "carteId": 43839,
+   "setOrigine": "Phantom-Forces",
+   "numero": "109",
+   "cleR2": "tcgdex/Phantom-Forces/109-43839.webp",
+   "produitOrigine": 281916
+  },
+  "865291": {
+   "carteId": 43839,
+   "setOrigine": "Phantom-Forces",
+   "numero": "109",
+   "cleR2": "tcgdex/Phantom-Forces/109-43839.webp",
+   "produitOrigine": 281916
+  },
+  "865292": {
+   "carteId": 43839,
+   "setOrigine": "Phantom-Forces",
+   "numero": "109",
+   "cleR2": "tcgdex/Phantom-Forces/109-43839.webp",
+   "produitOrigine": 281916
+  },
+  "865293": {
+   "carteId": 43839,
+   "setOrigine": "Phantom-Forces",
+   "numero": "109",
+   "cleR2": "tcgdex/Phantom-Forces/109-43839.webp",
+   "produitOrigine": 281916
+  },
+  "865320": {
+   "carteId": 223418,
+   "setOrigine": "Burning-Shadows",
+   "numero": "017",
+   "cleR2": "tcgdex/Burning-Shadows/17-223418.webp",
+   "produitOrigine": 298779
+  },
+  "865322": {
+   "carteId": 223418,
+   "setOrigine": "Burning-Shadows",
+   "numero": "017",
+   "cleR2": "tcgdex/Burning-Shadows/17-223418.webp",
+   "produitOrigine": 298779
+  },
+  "865325": {
+   "carteId": 223938,
+   "setOrigine": "Burning-Shadows",
+   "numero": "016",
+   "cleR2": "tcgdex/Burning-Shadows/16-223938.webp",
+   "produitOrigine": 299423
+  },
+  "865326": {
+   "carteId": 223938,
+   "setOrigine": "Burning-Shadows",
+   "numero": "016",
+   "cleR2": "tcgdex/Burning-Shadows/16-223938.webp",
+   "produitOrigine": 299423
+  },
+  "865354": {
+   "carteId": 171846,
+   "setOrigine": "BREAKthrough",
+   "numero": "137",
+   "cleR2": "tcgdex/BREAKthrough/137-171846.webp",
+   "produitOrigine": 286383
+  },
+  "865355": {
+   "carteId": 171846,
+   "setOrigine": "BREAKthrough",
+   "numero": "137",
+   "cleR2": "tcgdex/BREAKthrough/137-171846.webp",
+   "produitOrigine": 286383
+  },
+  "865357": {
+   "carteId": 171846,
+   "setOrigine": "BREAKthrough",
+   "numero": "137",
+   "cleR2": "tcgdex/BREAKthrough/137-171846.webp",
+   "produitOrigine": 286383
+  }
+ },
+ "WCD-2018": {
+  "863157": {
+   "carteId": 221208,
+   "setOrigine": "Guardians-Rising",
+   "numero": "060",
+   "cleR2": "tcgdex/Guardians-Rising/60-221208.webp",
+   "produitOrigine": 296843
+  },
+  "863158": {
+   "carteId": 220753,
+   "setOrigine": "Guardians-Rising",
+   "numero": "115",
+   "cleR2": "tcgdex/Guardians-Rising/115-220753.webp",
+   "produitOrigine": 297567
+  },
+  "863162": {
+   "carteId": 220756,
+   "setOrigine": "Guardians-Rising",
+   "numero": "121",
+   "cleR2": "tcgdex/Guardians-Rising/121-220756.webp",
+   "produitOrigine": 297573
+  },
+  "863163": {
+   "carteId": 221815,
+   "setOrigine": "Guardians-Rising",
+   "numero": "125",
+   "cleR2": "tcgdex/Guardians-Rising/125-221815.webp",
+   "produitOrigine": 297577
+  },
+  "863164": {
+   "carteId": 171846,
+   "setOrigine": "BREAKthrough",
+   "numero": "137",
+   "cleR2": "tcgdex/BREAKthrough/137-171846.webp",
+   "produitOrigine": 286383
+  },
+  "863165": {
+   "carteId": 227766,
+   "setOrigine": "Forbidden-Light",
+   "numero": "113",
+   "cleR2": "tcgdex/Forbidden-Light/113-227766.webp",
+   "produitOrigine": 355626
+  },
+  "863171": {
+   "carteId": 223420,
+   "setOrigine": "Burning-Shadows",
+   "numero": "115",
+   "cleR2": "tcgdex/Burning-Shadows/115-223420.webp",
+   "produitOrigine": 298778
+  },
+  "863172": {
+   "carteId": 141948,
+   "setOrigine": "Fates-Collide",
+   "numero": "105",
+   "cleR2": "tcgdex/Fates-Collide/105-141948.webp",
+   "produitOrigine": 289925
+  },
+  "863173": {
+   "carteId": 183396,
+   "setOrigine": "BREAKpoint",
+   "numero": "107",
+   "cleR2": "tcgdex/BREAKpoint/107-183396.webp",
+   "produitOrigine": 288282
+  },
+  "863186": {
+   "carteId": 221815,
+   "setOrigine": "Guardians-Rising",
+   "numero": "125",
+   "cleR2": "tcgdex/Guardians-Rising/125-221815.webp",
+   "produitOrigine": 297577
+  },
+  "863187": {
+   "carteId": 220756,
+   "setOrigine": "Guardians-Rising",
+   "numero": "121",
+   "cleR2": "tcgdex/Guardians-Rising/121-220756.webp",
+   "produitOrigine": 297573
+  },
+  "863189": {
+   "carteId": 171846,
+   "setOrigine": "BREAKthrough",
+   "numero": "137",
+   "cleR2": "tcgdex/BREAKthrough/137-171846.webp",
+   "produitOrigine": 286383
+  },
+  "863195": {
+   "carteId": 223420,
+   "setOrigine": "Burning-Shadows",
+   "numero": "115",
+   "cleR2": "tcgdex/Burning-Shadows/115-223420.webp",
+   "produitOrigine": 298778
+  },
+  "863196": {
+   "carteId": 141948,
+   "setOrigine": "Fates-Collide",
+   "numero": "105",
+   "cleR2": "tcgdex/Fates-Collide/105-141948.webp",
+   "produitOrigine": 289925
+  },
+  "863197": {
+   "carteId": 183396,
+   "setOrigine": "BREAKpoint",
+   "numero": "107",
+   "cleR2": "tcgdex/BREAKpoint/107-183396.webp",
+   "produitOrigine": 288282
+  },
+  "863204": {
+   "carteId": 221208,
+   "setOrigine": "Guardians-Rising",
+   "numero": "060",
+   "cleR2": "tcgdex/Guardians-Rising/60-221208.webp",
+   "produitOrigine": 296843
+  },
+  "863218": {
+   "carteId": 200781,
+   "setOrigine": "Celestial-Storm",
+   "numero": "123",
+   "cleR2": "tcgdex/Celestial-Storm/123-200781.webp",
+   "produitOrigine": 361362
+  },
+  "863220": {
+   "carteId": 221815,
+   "setOrigine": "Guardians-Rising",
+   "numero": "125",
+   "cleR2": "tcgdex/Guardians-Rising/125-221815.webp",
+   "produitOrigine": 297577
+  },
+  "863222": {
+   "carteId": 227766,
+   "setOrigine": "Forbidden-Light",
+   "numero": "113",
+   "cleR2": "tcgdex/Forbidden-Light/113-227766.webp",
+   "produitOrigine": 355626
+  },
+  "863223": {
+   "carteId": 208789,
+   "setOrigine": "BREAKpoint",
+   "numero": "109",
+   "cleR2": "tcgdex/BREAKpoint/109-208789.webp",
+   "produitOrigine": 288284
+  },
+  "863227": {
+   "carteId": 220756,
+   "setOrigine": "Guardians-Rising",
+   "numero": "121",
+   "cleR2": "tcgdex/Guardians-Rising/121-220756.webp",
+   "produitOrigine": 297573
+  },
+  "863228": {
+   "carteId": 171846,
+   "setOrigine": "BREAKthrough",
+   "numero": "137",
+   "cleR2": "tcgdex/BREAKthrough/137-171846.webp",
+   "produitOrigine": 286383
+  },
+  "863229": {
+   "carteId": 223420,
+   "setOrigine": "Burning-Shadows",
+   "numero": "115",
+   "cleR2": "tcgdex/Burning-Shadows/115-223420.webp",
+   "produitOrigine": 298778
+  },
+  "863231": {
+   "carteId": 183396,
+   "setOrigine": "BREAKpoint",
+   "numero": "107",
+   "cleR2": "tcgdex/BREAKpoint/107-183396.webp",
+   "produitOrigine": 288282
+  },
+  "863239": {
+   "carteId": 221208,
+   "setOrigine": "Guardians-Rising",
+   "numero": "060",
+   "cleR2": "tcgdex/Guardians-Rising/60-221208.webp",
+   "produitOrigine": 296843
+  },
+  "863240": {
+   "carteId": 225247,
+   "setOrigine": "Crimson-Invasion",
+   "numero": "070",
+   "cleR2": "tcgdex/Crimson-Invasion/70-225247.webp",
+   "produitOrigine": 311918
+  },
+  "863243": {
+   "carteId": 221815,
+   "setOrigine": "Guardians-Rising",
+   "numero": "125",
+   "cleR2": "tcgdex/Guardians-Rising/125-221815.webp",
+   "produitOrigine": 297577
+  },
+  "863244": {
+   "carteId": 227766,
+   "setOrigine": "Forbidden-Light",
+   "numero": "113",
+   "cleR2": "tcgdex/Forbidden-Light/113-227766.webp",
+   "produitOrigine": 355626
+  },
+  "863245": {
+   "carteId": 208789,
+   "setOrigine": "BREAKpoint",
+   "numero": "109",
+   "cleR2": "tcgdex/BREAKpoint/109-208789.webp",
+   "produitOrigine": 288284
+  },
+  "863248": {
+   "carteId": 220756,
+   "setOrigine": "Guardians-Rising",
+   "numero": "121",
+   "cleR2": "tcgdex/Guardians-Rising/121-220756.webp",
+   "produitOrigine": 297573
+  },
+  "863249": {
+   "carteId": 171846,
+   "setOrigine": "BREAKthrough",
+   "numero": "137",
+   "cleR2": "tcgdex/BREAKthrough/137-171846.webp",
+   "produitOrigine": 286383
+  },
+  "863253": {
+   "carteId": 141948,
+   "setOrigine": "Fates-Collide",
+   "numero": "105",
+   "cleR2": "tcgdex/Fates-Collide/105-141948.webp",
+   "produitOrigine": 289925
+  },
+  "863254": {
+   "carteId": 183396,
+   "setOrigine": "BREAKpoint",
+   "numero": "107",
+   "cleR2": "tcgdex/BREAKpoint/107-183396.webp",
+   "produitOrigine": 288282
+  },
+  "863257": {
+   "carteId": 223420,
+   "setOrigine": "Burning-Shadows",
+   "numero": "115",
+   "cleR2": "tcgdex/Burning-Shadows/115-223420.webp",
+   "produitOrigine": 298778
+  }
+ },
+ "WCD-2019": {
+  "862446": {
+   "carteId": 237809,
+   "setOrigine": "Unified-Minds",
+   "numero": "191",
+   "cleR2": "tcgdex/Unified-Minds/191-237809.webp",
+   "produitOrigine": 388742
+  },
+  "862447": {
+   "carteId": 230504,
+   "setOrigine": "Lost-Thunder",
+   "numero": "171",
+   "cleR2": "tcgdex/Lost-Thunder/171-230504.webp",
+   "produitOrigine": 365807
+  },
+  "862448": {
+   "carteId": 226517,
+   "setOrigine": "Ultra-Prism",
+   "numero": "119",
+   "cleR2": "tcgdex/Ultra-Prism/119-226517.webp",
+   "produitOrigine": 316045
+  },
+  "862456": {
+   "carteId": 236775,
+   "setOrigine": "Unified-Minds",
+   "numero": "206",
+   "cleR2": "tcgdex/Unified-Minds/206-236775.webp",
+   "produitOrigine": 388817
+  },
+  "862473": {
+   "carteId": 200781,
+   "setOrigine": "Celestial-Storm",
+   "numero": "123",
+   "cleR2": "tcgdex/Celestial-Storm/123-200781.webp",
+   "produitOrigine": 361362
+  },
+  "862475": {
+   "carteId": 237809,
+   "setOrigine": "Unified-Minds",
+   "numero": "191",
+   "cleR2": "tcgdex/Unified-Minds/191-237809.webp",
+   "produitOrigine": 388742
+  },
+  "862476": {
+   "carteId": 230504,
+   "setOrigine": "Lost-Thunder",
+   "numero": "171",
+   "cleR2": "tcgdex/Lost-Thunder/171-230504.webp",
+   "produitOrigine": 365807
+  },
+  "862479": {
+   "carteId": 236650,
+   "setOrigine": "Unified-Minds",
+   "numero": "197",
+   "cleR2": "tcgdex/Unified-Minds/197-236650.webp",
+   "produitOrigine": 388772
+  },
+  "862484": {
+   "carteId": 235856,
+   "setOrigine": "Unbroken-Bonds",
+   "numero": "189",
+   "cleR2": "tcgdex/Unbroken-Bonds/189-235856.webp",
+   "produitOrigine": 372260
+  },
+  "862495": {
+   "carteId": 200781,
+   "setOrigine": "Celestial-Storm",
+   "numero": "123",
+   "cleR2": "tcgdex/Celestial-Storm/123-200781.webp",
+   "produitOrigine": 361362
+  },
+  "862496": {
+   "carteId": 237809,
+   "setOrigine": "Unified-Minds",
+   "numero": "191",
+   "cleR2": "tcgdex/Unified-Minds/191-237809.webp",
+   "produitOrigine": 388742
+  },
+  "862499": {
+   "carteId": 236650,
+   "setOrigine": "Unified-Minds",
+   "numero": "197",
+   "cleR2": "tcgdex/Unified-Minds/197-236650.webp",
+   "produitOrigine": 388772
+  },
+  "862504": {
+   "carteId": 235856,
+   "setOrigine": "Unbroken-Bonds",
+   "numero": "189",
+   "cleR2": "tcgdex/Unbroken-Bonds/189-235856.webp",
+   "produitOrigine": 372260
+  },
+  "862517": {
+   "carteId": 237809,
+   "setOrigine": "Unified-Minds",
+   "numero": "191",
+   "cleR2": "tcgdex/Unified-Minds/191-237809.webp",
+   "produitOrigine": 388742
+  },
+  "862518": {
+   "carteId": 230504,
+   "setOrigine": "Lost-Thunder",
+   "numero": "171",
+   "cleR2": "tcgdex/Lost-Thunder/171-230504.webp",
+   "produitOrigine": 365807
+  },
+  "862519": {
+   "carteId": 226517,
+   "setOrigine": "Ultra-Prism",
+   "numero": "119",
+   "cleR2": "tcgdex/Ultra-Prism/119-226517.webp",
+   "produitOrigine": 316045
+  },
+  "862524": {
+   "carteId": 236775,
+   "setOrigine": "Unified-Minds",
+   "numero": "206",
+   "cleR2": "tcgdex/Unified-Minds/206-236775.webp",
+   "produitOrigine": 388817
+  },
+  "862526": {
+   "carteId": 235856,
+   "setOrigine": "Unbroken-Bonds",
+   "numero": "189",
+   "cleR2": "tcgdex/Unbroken-Bonds/189-235856.webp",
+   "produitOrigine": 372260
+  }
+ },
+ "WCD-2022": {
+  "834838": {
+   "carteId": 262630,
+   "setOrigine": "Evolving-Skies",
+   "numero": "076",
+   "cleR2": "tcgdex/Evolving-Skies/076-262630.webp",
+   "produitOrigine": 574124
+  },
+  "834842": {
+   "carteId": 264444,
+   "setOrigine": "Fusion-Strike",
+   "numero": "225",
+   "cleR2": "tcgdex/Fusion-Strike/225-264444.webp",
+   "produitOrigine": 582961
+  },
+  "834849": {
+   "carteId": 15381,
+   "setOrigine": "Sword-Shield",
+   "numero": "183",
+   "cleR2": "tcgdex/Sword-Shield/183-15381.webp",
+   "produitOrigine": 437009
+  },
+  "834856": {
+   "carteId": 265796,
+   "setOrigine": "Brilliant-Stars",
+   "numero": "151",
+   "cleR2": "tcgdex/Brilliant-Stars/151-265796.webp",
+   "produitOrigine": 608697
+  },
+  "834876": {
+   "carteId": 262630,
+   "setOrigine": "Evolving-Skies",
+   "numero": "076",
+   "cleR2": "tcgdex/Evolving-Skies/076-262630.webp",
+   "produitOrigine": 574124
+  },
+  "834884": {
+   "carteId": 261438,
+   "setOrigine": "Chilling-Reign",
+   "numero": "148",
+   "cleR2": "tcgdex/Chilling-Reign/148-261438.webp",
+   "produitOrigine": 567256
+  },
+  "834888": {
+   "carteId": 244863,
+   "setOrigine": "Sword-Shield",
+   "numero": "163",
+   "cleR2": "tcgdex/Sword-Shield/163-244863.webp",
+   "produitOrigine": 436909
+  },
+  "834889": {
+   "carteId": 15381,
+   "setOrigine": "Sword-Shield",
+   "numero": "183",
+   "cleR2": "tcgdex/Sword-Shield/183-15381.webp",
+   "produitOrigine": 437009
+  },
+  "834896": {
+   "carteId": 265796,
+   "setOrigine": "Brilliant-Stars",
+   "numero": "151",
+   "cleR2": "tcgdex/Brilliant-Stars/151-265796.webp",
+   "produitOrigine": 608697
+  },
+  "834911": {
+   "carteId": 244998,
+   "setOrigine": "Sword-Shield",
+   "numero": "056",
+   "cleR2": "tcgdex/Sword-Shield/056-244998.webp",
+   "produitOrigine": 436419
+  },
+  "834914": {
+   "carteId": 260507,
+   "setOrigine": "Chilling-Reign",
+   "numero": "041",
+   "cleR2": "tcgdex/Chilling-Reign/041-260507.webp",
+   "produitOrigine": 567121
+  },
+  "834922": {
+   "carteId": 267533,
+   "setOrigine": "Brilliant-Stars",
+   "numero": "041",
+   "cleR2": "tcgdex/Brilliant-Stars/041-267533.webp",
+   "produitOrigine": 608491
+  },
+  "834934": {
+   "carteId": 261438,
+   "setOrigine": "Chilling-Reign",
+   "numero": "148",
+   "cleR2": "tcgdex/Chilling-Reign/148-261438.webp",
+   "produitOrigine": 567256
+  },
+  "834937": {
+   "carteId": 244863,
+   "setOrigine": "Sword-Shield",
+   "numero": "163",
+   "cleR2": "tcgdex/Sword-Shield/163-244863.webp",
+   "produitOrigine": 436909
+  },
+  "834944": {
+   "carteId": 248284,
+   "setOrigine": "Rebel-Clash",
+   "numero": "165",
+   "cleR2": "tcgdex/Rebel-Clash/165-248284.webp",
+   "produitOrigine": 456533
+  },
+  "834945": {
+   "carteId": 264444,
+   "setOrigine": "Fusion-Strike",
+   "numero": "225",
+   "cleR2": "tcgdex/Fusion-Strike/225-264444.webp",
+   "produitOrigine": 582961
+  },
+  "834961": {
+   "carteId": 244998,
+   "setOrigine": "Sword-Shield",
+   "numero": "056",
+   "cleR2": "tcgdex/Sword-Shield/056-244998.webp",
+   "produitOrigine": 436419
+  },
+  "834963": {
+   "carteId": 260507,
+   "setOrigine": "Chilling-Reign",
+   "numero": "041",
+   "cleR2": "tcgdex/Chilling-Reign/041-260507.webp",
+   "produitOrigine": 567121
+  },
+  "834970": {
+   "carteId": 267533,
+   "setOrigine": "Brilliant-Stars",
+   "numero": "041",
+   "cleR2": "tcgdex/Brilliant-Stars/041-267533.webp",
+   "produitOrigine": 608491
+  },
+  "834982": {
+   "carteId": 248284,
+   "setOrigine": "Rebel-Clash",
+   "numero": "165",
+   "cleR2": "tcgdex/Rebel-Clash/165-248284.webp",
+   "produitOrigine": 456533
+  },
+  "834985": {
+   "carteId": 244863,
+   "setOrigine": "Sword-Shield",
+   "numero": "163",
+   "cleR2": "tcgdex/Sword-Shield/163-244863.webp",
+   "produitOrigine": 436909
+  }
+ },
+ "WCD-2023": {
+  "832997": {
+   "carteId": 267651,
+   "setOrigine": "Brilliant-Stars",
+   "numero": "137",
+   "cleR2": "tcgdex/Brilliant-Stars/137-267651.webp",
+   "produitOrigine": 608683
+  },
+  "833030": {
+   "carteId": 267649,
+   "setOrigine": "Paldea-Evolved",
+   "numero": "176",
+   "cleR2": "tcgdex/Paldea-Evolved/176-267649.webp",
+   "produitOrigine": 715651
+  },
+  "833032": {
+   "carteId": 261438,
+   "setOrigine": "Chilling-Reign",
+   "numero": "148",
+   "cleR2": "tcgdex/Chilling-Reign/148-261438.webp",
+   "produitOrigine": 567256
+  },
+  "833034": {
+   "carteId": 217135,
+   "setOrigine": "Scarlet-Violet",
+   "numero": "181",
+   "cleR2": "tcgdex/Scarlet-Violet/181-217135.webp",
+   "produitOrigine": 702477
+  },
+  "833038": {
+   "carteId": 265796,
+   "setOrigine": "Brilliant-Stars",
+   "numero": "151",
+   "cleR2": "tcgdex/Brilliant-Stars/151-265796.webp",
+   "produitOrigine": 608697
+  },
+  "833040": {
+   "carteId": 248285,
+   "setOrigine": "Paldea-Evolved",
+   "numero": "172",
+   "cleR2": "tcgdex/Paldea-Evolved/172-248285.webp",
+   "produitOrigine": 715647
+  },
+  "833051": {
+   "carteId": 282264,
+   "setOrigine": "Paldea-Evolved",
+   "numero": "185",
+   "cleR2": "tcgdex/Paldea-Evolved/185-282264.webp",
+   "produitOrigine": 715660
+  },
+  "833070": {
+   "carteId": 272680,
+   "setOrigine": "Lost-Origin",
+   "numero": "162",
+   "cleR2": "tcgdex/Lost-Origin/162-272680.webp",
+   "produitOrigine": 674171
+  },
+  "833076": {
+   "carteId": 263506,
+   "setOrigine": "Fusion-Strike",
+   "numero": "236",
+   "cleR2": "tcgdex/Fusion-Strike/236-263506.webp",
+   "produitOrigine": 582972
+  },
+  "833081": {
+   "carteId": 262815,
+   "setOrigine": "Fusion-Strike",
+   "numero": "229",
+   "cleR2": "tcgdex/Fusion-Strike/229-262815.webp",
+   "produitOrigine": 582965
+  },
+  "833102": {
+   "carteId": 264444,
+   "setOrigine": "Fusion-Strike",
+   "numero": "225",
+   "cleR2": "tcgdex/Fusion-Strike/225-264444.webp",
+   "produitOrigine": 582961
+  },
+  "833106": {
+   "carteId": 272682,
+   "setOrigine": "Lost-Origin",
+   "numero": "161",
+   "cleR2": "tcgdex/Lost-Origin/161-272682.webp",
+   "produitOrigine": 674170
+  },
+  "833113": {
+   "carteId": 163710,
+   "setOrigine": "Battle-Styles",
+   "numero": "125",
+   "cleR2": "tcgdex/Battle-Styles/125-163710.webp",
+   "produitOrigine": 545846
+  },
+  "833123": {
+   "carteId": 263514,
+   "setOrigine": "Fusion-Strike",
+   "numero": "244",
+   "cleR2": "tcgdex/Fusion-Strike/244-263514.webp",
+   "produitOrigine": 582980
+  },
+  "833127": {
+   "carteId": 267649,
+   "setOrigine": "Paldea-Evolved",
+   "numero": "176",
+   "cleR2": "tcgdex/Paldea-Evolved/176-267649.webp",
+   "produitOrigine": 715651
+  },
+  "833142": {
+   "carteId": 262551,
+   "setOrigine": "Evolving-Skies",
+   "numero": "144",
+   "cleR2": "tcgdex/Evolving-Skies/144-262551.webp",
+   "produitOrigine": 574202
+  },
+  "833148": {
+   "carteId": 261438,
+   "setOrigine": "Chilling-Reign",
+   "numero": "148",
+   "cleR2": "tcgdex/Chilling-Reign/148-261438.webp",
+   "produitOrigine": 567256
+  },
+  "833154": {
+   "carteId": 217135,
+   "setOrigine": "Scarlet-Violet",
+   "numero": "181",
+   "cleR2": "tcgdex/Scarlet-Violet/181-217135.webp",
+   "produitOrigine": 702477
+  },
+  "833155": {
+   "carteId": 271040,
+   "setOrigine": "Lost-Origin",
+   "numero": "154",
+   "cleR2": "tcgdex/Lost-Origin/154-271040.webp",
+   "produitOrigine": 674163
+  },
+  "833158": {
+   "carteId": 270291,
+   "setOrigine": "Astral-Radiance",
+   "numero": "154",
+   "cleR2": "tcgdex/Astral-Radiance/154-270291.webp",
+   "produitOrigine": 658815
+  },
+  "833160": {
+   "carteId": 263504,
+   "setOrigine": "Fusion-Strike",
+   "numero": "185",
+   "cleR2": "tcgdex/Fusion-Strike/185-263504.webp",
+   "produitOrigine": 582813
+  },
+  "833161": {
+   "carteId": 263491,
+   "setOrigine": "Fusion-Strike",
+   "numero": "042",
+   "cleR2": "tcgdex/Fusion-Strike/042-263491.webp",
+   "produitOrigine": 582176
+  },
+  "833162": {
+   "carteId": 265796,
+   "setOrigine": "Brilliant-Stars",
+   "numero": "151",
+   "cleR2": "tcgdex/Brilliant-Stars/151-265796.webp",
+   "produitOrigine": 608697
+  },
+  "833164": {
+   "carteId": 274715,
+   "setOrigine": "Silver-Tempest",
+   "numero": "156",
+   "cleR2": "tcgdex/Silver-Tempest/156-274715.webp",
+   "produitOrigine": 682203
+  },
+  "833170": {
+   "carteId": 248285,
+   "setOrigine": "Paldea-Evolved",
+   "numero": "172",
+   "cleR2": "tcgdex/Paldea-Evolved/172-248285.webp",
+   "produitOrigine": 715647
+  },
+  "833172": {
+   "carteId": 263497,
+   "setOrigine": "Fusion-Strike",
+   "numero": "113",
+   "cleR2": "tcgdex/Fusion-Strike/113-263497.webp",
+   "produitOrigine": 582611
+  },
+  "833175": {
+   "carteId": 263499,
+   "setOrigine": "Fusion-Strike",
+   "numero": "124",
+   "cleR2": "tcgdex/Fusion-Strike/124-263499.webp",
+   "produitOrigine": 582652
+  },
+  "833177": {
+   "carteId": 282264,
+   "setOrigine": "Paldea-Evolved",
+   "numero": "185",
+   "cleR2": "tcgdex/Paldea-Evolved/185-282264.webp",
+   "produitOrigine": 715660
+  },
+  "833181": {
+   "carteId": 186656,
+   "setOrigine": "Scarlet-Violet",
+   "numero": "182",
+   "cleR2": "tcgdex/Scarlet-Violet/182-186656.webp",
+   "produitOrigine": 702478
+  },
+  "833183": {
+   "carteId": 272680,
+   "setOrigine": "Lost-Origin",
+   "numero": "162",
+   "cleR2": "tcgdex/Lost-Origin/162-272680.webp",
+   "produitOrigine": 674171
+  },
+  "833186": {
+   "carteId": 272679,
+   "setOrigine": "Lost-Origin",
+   "numero": "163",
+   "cleR2": "tcgdex/Lost-Origin/163-272679.webp",
+   "produitOrigine": 670821
+  },
+  "833188": {
+   "carteId": 272681,
+   "setOrigine": "Lost-Origin",
+   "numero": "155",
+   "cleR2": "tcgdex/Lost-Origin/155-272681.webp",
+   "produitOrigine": 670820
+  },
+  "833190": {
+   "carteId": 272676,
+   "setOrigine": "Lost-Origin",
+   "numero": "079",
+   "cleR2": "tcgdex/Lost-Origin/079-272676.webp",
+   "produitOrigine": 674092
+  },
+  "833196": {
+   "carteId": 260516,
+   "setOrigine": "Chilling-Reign",
+   "numero": "136",
+   "cleR2": "tcgdex/Chilling-Reign/136-260516.webp",
+   "produitOrigine": 567243
+  },
+  "833199": {
+   "carteId": 264444,
+   "setOrigine": "Fusion-Strike",
+   "numero": "225",
+   "cleR2": "tcgdex/Fusion-Strike/225-264444.webp",
+   "produitOrigine": 582961
+  },
+  "833200": {
+   "carteId": 163710,
+   "setOrigine": "Battle-Styles",
+   "numero": "125",
+   "cleR2": "tcgdex/Battle-Styles/125-163710.webp",
+   "produitOrigine": 545846
+  },
+  "833201": {
+   "carteId": 261099,
+   "setOrigine": "Chilling-Reign",
+   "numero": "145",
+   "cleR2": "tcgdex/Chilling-Reign/145-261099.webp",
+   "produitOrigine": 567253
+  },
+  "833202": {
+   "carteId": 267533,
+   "setOrigine": "Brilliant-Stars",
+   "numero": "041",
+   "cleR2": "tcgdex/Brilliant-Stars/041-267533.webp",
+   "produitOrigine": 608491
+  },
+  "833204": {
+   "carteId": 272673,
+   "setOrigine": "Lost-Origin",
+   "numero": "050",
+   "cleR2": "tcgdex/Lost-Origin/050-272673.webp",
+   "produitOrigine": 674060
+  },
+  "833205": {
+   "carteId": 202342,
+   "setOrigine": "Battle-Styles",
+   "numero": "124",
+   "cleR2": "tcgdex/Battle-Styles/124-202342.webp",
+   "produitOrigine": 545836
+  },
+  "833210": {
+   "carteId": 217135,
+   "setOrigine": "Scarlet-Violet",
+   "numero": "181",
+   "cleR2": "tcgdex/Scarlet-Violet/181-217135.webp",
+   "produitOrigine": 702477
+  },
+  "833214": {
+   "carteId": 270291,
+   "setOrigine": "Astral-Radiance",
+   "numero": "154",
+   "cleR2": "tcgdex/Astral-Radiance/154-270291.webp",
+   "produitOrigine": 658815
+  },
+  "833217": {
+   "carteId": 269930,
+   "setOrigine": "Astral-Radiance",
+   "numero": "146",
+   "cleR2": "tcgdex/Astral-Radiance/146-269930.webp",
+   "produitOrigine": 658807
+  },
+  "833222": {
+   "carteId": 268759,
+   "setOrigine": "Astral-Radiance",
+   "numero": "046",
+   "cleR2": "tcgdex/Astral-Radiance/046-268759.webp",
+   "produitOrigine": 658586
+  },
+  "833226": {
+   "carteId": 271103,
+   "setOrigine": "Pokemon-GO",
+   "numero": "068",
+   "cleR2": "tcgdex/Pokemon-GO/068-271103.webp",
+   "produitOrigine": 665288
+  },
+  "833230": {
+   "carteId": 274715,
+   "setOrigine": "Silver-Tempest",
+   "numero": "156",
+   "cleR2": "tcgdex/Silver-Tempest/156-274715.webp",
+   "produitOrigine": 682203
+  },
+  "833235": {
+   "carteId": 273026,
+   "setOrigine": "Lost-Origin",
+   "numero": "070",
+   "cleR2": "tcgdex/Lost-Origin/070-273026.webp",
+   "produitOrigine": 674079
+  },
+  "833239": {
+   "carteId": 186656,
+   "setOrigine": "Scarlet-Violet",
+   "numero": "182",
+   "cleR2": "tcgdex/Scarlet-Violet/182-186656.webp",
+   "produitOrigine": 702478
+  },
+  "833245": {
+   "carteId": 273360,
+   "setOrigine": "Silver-Tempest",
+   "numero": "068",
+   "cleR2": "tcgdex/Silver-Tempest/068-273360.webp",
+   "produitOrigine": 682115
+  },
+  "833247": {
+   "carteId": 279633,
+   "setOrigine": "Scarlet-Violet",
+   "numero": "086",
+   "cleR2": "tcgdex/Scarlet-Violet/086-279633.webp",
+   "produitOrigine": 702382
+  },
+  "833250": {
+   "carteId": 272680,
+   "setOrigine": "Lost-Origin",
+   "numero": "162",
+   "cleR2": "tcgdex/Lost-Origin/162-272680.webp",
+   "produitOrigine": 674171
+  },
+  "833254": {
+   "carteId": 261514,
+   "setOrigine": "Chilling-Reign",
+   "numero": "061",
+   "cleR2": "tcgdex/Chilling-Reign/061-261514.webp",
+   "produitOrigine": 567169
+  },
+  "833255": {
+   "carteId": 267651,
+   "setOrigine": "Brilliant-Stars",
+   "numero": "137",
+   "cleR2": "tcgdex/Brilliant-Stars/137-267651.webp",
+   "produitOrigine": 608683
+  },
+  "833261": {
+   "carteId": 264444,
+   "setOrigine": "Fusion-Strike",
+   "numero": "225",
+   "cleR2": "tcgdex/Fusion-Strike/225-264444.webp",
+   "produitOrigine": 582961
+  },
+  "833269": {
+   "carteId": 267533,
+   "setOrigine": "Brilliant-Stars",
+   "numero": "041",
+   "cleR2": "tcgdex/Brilliant-Stars/041-267533.webp",
+   "produitOrigine": 608491
+  },
+  "833275": {
+   "carteId": 282847,
+   "setOrigine": "Paldea-Evolved",
+   "numero": "192",
+   "cleR2": "tcgdex/Paldea-Evolved/192-282847.webp",
+   "produitOrigine": 715667
+  },
+  "833278": {
+   "carteId": 270288,
+   "setOrigine": "Lost-Origin",
+   "numero": "074",
+   "cleR2": "tcgdex/Lost-Origin/074-270288.webp",
+   "produitOrigine": 674086
+  },
+  "833299": {
+   "carteId": 268759,
+   "setOrigine": "Astral-Radiance",
+   "numero": "046",
+   "cleR2": "tcgdex/Astral-Radiance/046-268759.webp",
+   "produitOrigine": 658586
+  },
+  "833310": {
+   "carteId": 274715,
+   "setOrigine": "Silver-Tempest",
+   "numero": "156",
+   "cleR2": "tcgdex/Silver-Tempest/156-274715.webp",
+   "produitOrigine": 682203
+  },
+  "833314": {
+   "carteId": 248285,
+   "setOrigine": "Paldea-Evolved",
+   "numero": "172",
+   "cleR2": "tcgdex/Paldea-Evolved/172-248285.webp",
+   "produitOrigine": 715647
+  },
+  "833319": {
+   "carteId": 282264,
+   "setOrigine": "Paldea-Evolved",
+   "numero": "185",
+   "cleR2": "tcgdex/Paldea-Evolved/185-282264.webp",
+   "produitOrigine": 715660
+  },
+  "833321": {
+   "carteId": 186656,
+   "setOrigine": "Scarlet-Violet",
+   "numero": "182",
+   "cleR2": "tcgdex/Scarlet-Violet/182-186656.webp",
+   "produitOrigine": 702478
+  },
+  "833324": {
+   "carteId": 261442,
+   "setOrigine": "Chilling-Reign",
+   "numero": "140",
+   "cleR2": "tcgdex/Chilling-Reign/140-261442.webp",
+   "produitOrigine": 567248
+  }
+ },
+ "WCD-2024": {
+  "815404": {
+   "carteId": 302108,
+   "setOrigine": "Temporal-Forces",
+   "numero": "109",
+   "cleR2": "tcgdex/Temporal-Forces/109-302108.webp",
+   "produitOrigine": 760739
+  },
+  "815405": {
+   "carteId": 301355,
+   "setOrigine": "Temporal-Forces",
+   "numero": "078",
+   "cleR2": "tcgdex/Temporal-Forces/078-301355.webp",
+   "produitOrigine": 760708
+  },
+  "815407": {
+   "carteId": 309629,
+   "setOrigine": "Shrouded-Fable",
+   "numero": "038",
+   "cleR2": "tcgdex/Shrouded-Fable/038-309629.webp",
+   "produitOrigine": 780933
+  },
+  "815408": {
+   "carteId": 268759,
+   "setOrigine": "Astral-Radiance",
+   "numero": "046",
+   "cleR2": "tcgdex/Astral-Radiance/046-268759.webp",
+   "produitOrigine": 658586
+  },
+  "815411": {
+   "carteId": 248285,
+   "setOrigine": "Paldea-Evolved",
+   "numero": "172",
+   "cleR2": "tcgdex/Paldea-Evolved/172-248285.webp",
+   "produitOrigine": 715647
+  },
+  "815412": {
+   "carteId": 217135,
+   "setOrigine": "Scarlet-Violet",
+   "numero": "181",
+   "cleR2": "tcgdex/Scarlet-Violet/181-217135.webp",
+   "produitOrigine": 702477
+  },
+  "815413": {
+   "carteId": 295755,
+   "setOrigine": "Paradox-Rift",
+   "numero": "163",
+   "cleR2": "tcgdex/Paradox-Rift/163-295755.webp",
+   "produitOrigine": 740704
+  },
+  "815414": {
+   "carteId": 87404,
+   "setOrigine": "Scarlet-Violet",
+   "numero": "186",
+   "cleR2": "tcgdex/Scarlet-Violet/186-87404.webp",
+   "produitOrigine": 702482
+  },
+  "815419": {
+   "carteId": 148517,
+   "setOrigine": "Scarlet-Violet",
+   "numero": "196",
+   "cleR2": "tcgdex/Scarlet-Violet/196-148517.webp",
+   "produitOrigine": 702492
+  },
+  "815421": {
+   "carteId": 24167,
+   "setOrigine": "Paldea-Evolved",
+   "numero": "188",
+   "cleR2": "tcgdex/Paldea-Evolved/188-24167.webp",
+   "produitOrigine": 715663
+  },
+  "815422": {
+   "carteId": 177072,
+   "setOrigine": "Paldea-Evolved",
+   "numero": "189",
+   "cleR2": "tcgdex/Paldea-Evolved/189-177072.webp",
+   "produitOrigine": 715664
+  },
+  "815424": {
+   "carteId": 295382,
+   "setOrigine": "Temporal-Forces",
+   "numero": "140",
+   "cleR2": "tcgdex/Temporal-Forces/140-295382.webp",
+   "produitOrigine": 760770
+  },
+  "815425": {
+   "carteId": 280564,
+   "setOrigine": "Scarlet-Violet",
+   "numero": "169",
+   "cleR2": "tcgdex/Scarlet-Violet/169-280564.webp",
+   "produitOrigine": 702465
+  },
+  "815426": {
+   "carteId": 271103,
+   "setOrigine": "Pokemon-GO",
+   "numero": "068",
+   "cleR2": "tcgdex/Pokemon-GO/068-271103.webp",
+   "produitOrigine": 665288
+  },
+  "815429": {
+   "carteId": 275354,
+   "setOrigine": "Silver-Tempest",
+   "numero": "135",
+   "cleR2": "tcgdex/Silver-Tempest/135-275354.webp",
+   "produitOrigine": 682182
+  },
+  "815430": {
+   "carteId": 275355,
+   "setOrigine": "Silver-Tempest",
+   "numero": "136",
+   "cleR2": "tcgdex/Silver-Tempest/136-275355.webp",
+   "produitOrigine": 682183
+  },
+  "815431": {
+   "carteId": 306531,
+   "setOrigine": "Twilight-Masquerade",
+   "numero": "025",
+   "cleR2": "tcgdex/Twilight-Masquerade/025-306531.webp",
+   "produitOrigine": 769199
+  },
+  "815432": {
+   "carteId": 308596,
+   "setOrigine": "Twilight-Masquerade",
+   "numero": "130",
+   "cleR2": "tcgdex/Twilight-Masquerade/130-308596.webp",
+   "produitOrigine": 769304
+  },
+  "815434": {
+   "carteId": 272678,
+   "setOrigine": "Lost-Origin",
+   "numero": "131",
+   "cleR2": "tcgdex/Lost-Origin/131-272678.webp",
+   "produitOrigine": 674143
+  },
+  "815435": {
+   "carteId": 309629,
+   "setOrigine": "Shrouded-Fable",
+   "numero": "038",
+   "cleR2": "tcgdex/Shrouded-Fable/038-309629.webp",
+   "produitOrigine": 780933
+  },
+  "815438": {
+   "carteId": 309618,
+   "setOrigine": "Shrouded-Fable",
+   "numero": "047",
+   "cleR2": "tcgdex/Shrouded-Fable/047-309618.webp",
+   "produitOrigine": 780943
+  },
+  "815439": {
+   "carteId": 280419,
+   "setOrigine": "Scarlet-Violet",
+   "numero": "118",
+   "cleR2": "tcgdex/Scarlet-Violet/118-280419.webp",
+   "produitOrigine": 702414
+  },
+  "815440": {
+   "carteId": 244868,
+   "setOrigine": "Scarlet-Violet",
+   "numero": "189",
+   "cleR2": "tcgdex/Scarlet-Violet/189-244868.webp",
+   "produitOrigine": 689768
+  },
+  "815441": {
+   "carteId": 282264,
+   "setOrigine": "Paldea-Evolved",
+   "numero": "185",
+   "cleR2": "tcgdex/Paldea-Evolved/185-282264.webp",
+   "produitOrigine": 715660
+  },
+  "815442": {
+   "carteId": 248285,
+   "setOrigine": "Paldea-Evolved",
+   "numero": "172",
+   "cleR2": "tcgdex/Paldea-Evolved/172-248285.webp",
+   "produitOrigine": 715647
+  },
+  "815443": {
+   "carteId": 148517,
+   "setOrigine": "Scarlet-Violet",
+   "numero": "196",
+   "cleR2": "tcgdex/Scarlet-Violet/196-148517.webp",
+   "produitOrigine": 702492
+  },
+  "815444": {
+   "carteId": 217135,
+   "setOrigine": "Scarlet-Violet",
+   "numero": "181",
+   "cleR2": "tcgdex/Scarlet-Violet/181-217135.webp",
+   "produitOrigine": 702477
+  },
+  "815445": {
+   "carteId": 24748,
+   "setOrigine": "Scarlet-Violet",
+   "numero": "173",
+   "cleR2": "tcgdex/Scarlet-Violet/173-24748.webp",
+   "produitOrigine": 702469
+  },
+  "815446": {
+   "carteId": 295755,
+   "setOrigine": "Paradox-Rift",
+   "numero": "163",
+   "cleR2": "tcgdex/Paradox-Rift/163-295755.webp",
+   "produitOrigine": 740704
+  },
+  "815447": {
+   "carteId": 301231,
+   "setOrigine": "Temporal-Forces",
+   "numero": "157",
+   "cleR2": "tcgdex/Temporal-Forces/157-301231.webp",
+   "produitOrigine": 760787
+  },
+  "815448": {
+   "carteId": 15381,
+   "setOrigine": "Scarlet-Violet",
+   "numero": "194",
+   "cleR2": "tcgdex/Scarlet-Violet/194-15381.webp",
+   "produitOrigine": 702490
+  },
+  "815449": {
+   "carteId": 177072,
+   "setOrigine": "Paldea-Evolved",
+   "numero": "189",
+   "cleR2": "tcgdex/Paldea-Evolved/189-177072.webp",
+   "produitOrigine": 715664
+  },
+  "815450": {
+   "carteId": 24167,
+   "setOrigine": "Paldea-Evolved",
+   "numero": "188",
+   "cleR2": "tcgdex/Paldea-Evolved/188-24167.webp",
+   "produitOrigine": 715663
+  },
+  "815451": {
+   "carteId": 269315,
+   "setOrigine": "Astral-Radiance",
+   "numero": "136",
+   "cleR2": "tcgdex/Astral-Radiance/136-269315.webp",
+   "produitOrigine": 658797
+  },
+  "815452": {
+   "carteId": 270163,
+   "setOrigine": "Astral-Radiance",
+   "numero": "155",
+   "cleR2": "tcgdex/Astral-Radiance/155-270163.webp",
+   "produitOrigine": 658816
+  },
+  "815456": {
+   "carteId": 278861,
+   "setOrigine": "Scarlet-Violet",
+   "numero": "081",
+   "cleR2": "tcgdex/Scarlet-Violet/081-278861.webp",
+   "produitOrigine": 689766
+  },
+  "815457": {
+   "carteId": 295754,
+   "setOrigine": "Paradox-Rift",
+   "numero": "070",
+   "cleR2": "tcgdex/Paradox-Rift/070-295754.webp",
+   "produitOrigine": 740562
+  },
+  "815460": {
+   "carteId": 303235,
+   "setOrigine": "Twilight-Masquerade",
+   "numero": "141",
+   "cleR2": "tcgdex/Twilight-Masquerade/141-303235.webp",
+   "produitOrigine": 769315
+  },
+  "815463": {
+   "carteId": 309629,
+   "setOrigine": "Shrouded-Fable",
+   "numero": "038",
+   "cleR2": "tcgdex/Shrouded-Fable/038-309629.webp",
+   "produitOrigine": 780933
+  },
+  "815465": {
+   "carteId": 268759,
+   "setOrigine": "Astral-Radiance",
+   "numero": "046",
+   "cleR2": "tcgdex/Astral-Radiance/046-268759.webp",
+   "produitOrigine": 658586
+  },
+  "815466": {
+   "carteId": 294664,
+   "setOrigine": "Paradox-Rift",
+   "numero": "056",
+   "cleR2": "tcgdex/Paradox-Rift/056-294664.webp",
+   "produitOrigine": 740547
+  },
+  "815468": {
+   "carteId": 248285,
+   "setOrigine": "Paldea-Evolved",
+   "numero": "172",
+   "cleR2": "tcgdex/Paldea-Evolved/172-248285.webp",
+   "produitOrigine": 715647
+  },
+  "815470": {
+   "carteId": 279038,
+   "setOrigine": "Scarlet-Violet",
+   "numero": "170",
+   "cleR2": "tcgdex/Scarlet-Violet/170-279038.webp",
+   "produitOrigine": 702466
+  },
+  "815471": {
+   "carteId": 217135,
+   "setOrigine": "Scarlet-Violet",
+   "numero": "181",
+   "cleR2": "tcgdex/Scarlet-Violet/181-217135.webp",
+   "produitOrigine": 702477
+  },
+  "815472": {
+   "carteId": 148517,
+   "setOrigine": "Scarlet-Violet",
+   "numero": "196",
+   "cleR2": "tcgdex/Scarlet-Violet/196-148517.webp",
+   "produitOrigine": 702492
+  },
+  "815474": {
+   "carteId": 301231,
+   "setOrigine": "Temporal-Forces",
+   "numero": "157",
+   "cleR2": "tcgdex/Temporal-Forces/157-301231.webp",
+   "produitOrigine": 760787
+  },
+  "815475": {
+   "carteId": 274715,
+   "setOrigine": "Silver-Tempest",
+   "numero": "156",
+   "cleR2": "tcgdex/Silver-Tempest/156-274715.webp",
+   "produitOrigine": 682203
+  },
+  "815477": {
+   "carteId": 301760,
+   "setOrigine": "Temporal-Forces",
+   "numero": "159",
+   "cleR2": "tcgdex/Temporal-Forces/159-301760.webp",
+   "produitOrigine": 760789
+  },
+  "815478": {
+   "carteId": 292937,
+   "setOrigine": "Obsidian-Flames",
+   "numero": "196",
+   "cleR2": "tcgdex/Obsidian-Flames/196-292937.webp",
+   "produitOrigine": 725276
+  },
+  "815480": {
+   "carteId": 265796,
+   "setOrigine": "Brilliant-Stars",
+   "numero": "151",
+   "cleR2": "tcgdex/Brilliant-Stars/151-265796.webp",
+   "produitOrigine": 608697
+  },
+  "815482": {
+   "carteId": 303233,
+   "setOrigine": "Twilight-Masquerade",
+   "numero": "077",
+   "cleR2": "tcgdex/Twilight-Masquerade/077-303233.webp",
+   "produitOrigine": 769251
+  },
+  "815485": {
+   "carteId": 90438,
+   "setOrigine": "Scarlet-Violet",
+   "numero": "176",
+   "cleR2": "tcgdex/Scarlet-Violet/176-90438.webp",
+   "produitOrigine": 702472
+  },
+  "815486": {
+   "carteId": 248285,
+   "setOrigine": "Paldea-Evolved",
+   "numero": "172",
+   "cleR2": "tcgdex/Paldea-Evolved/172-248285.webp",
+   "produitOrigine": 715647
+  },
+  "815488": {
+   "carteId": 282264,
+   "setOrigine": "Paldea-Evolved",
+   "numero": "185",
+   "cleR2": "tcgdex/Paldea-Evolved/185-282264.webp",
+   "produitOrigine": 715660
+  },
+  "815489": {
+   "carteId": 279030,
+   "setOrigine": "Scarlet-Violet",
+   "numero": "183",
+   "cleR2": "tcgdex/Scarlet-Violet/183-279030.webp",
+   "produitOrigine": 702479
+  },
+  "815491": {
+   "carteId": 87404,
+   "setOrigine": "Scarlet-Violet",
+   "numero": "186",
+   "cleR2": "tcgdex/Scarlet-Violet/186-87404.webp",
+   "produitOrigine": 702482
+  },
+  "815492": {
+   "carteId": 126657,
+   "setOrigine": "Scarlet-Violet",
+   "numero": "168",
+   "cleR2": "tcgdex/Scarlet-Violet/168-126657.webp",
+   "produitOrigine": 702464
+  },
+  "815493": {
+   "carteId": 126639,
+   "setOrigine": "Scarlet-Violet",
+   "numero": "187",
+   "cleR2": "tcgdex/Scarlet-Violet/187-126639.webp",
+   "produitOrigine": 702483
+  },
+  "815494": {
+   "carteId": 295756,
+   "setOrigine": "Paradox-Rift",
+   "numero": "180",
+   "cleR2": "tcgdex/Paradox-Rift/180-295756.webp",
+   "produitOrigine": 740723
+  },
+  "815495": {
+   "carteId": 269315,
+   "setOrigine": "Astral-Radiance",
+   "numero": "136",
+   "cleR2": "tcgdex/Astral-Radiance/136-269315.webp",
+   "produitOrigine": 658797
+  },
+  "815496": {
+   "carteId": 301231,
+   "setOrigine": "Temporal-Forces",
+   "numero": "157",
+   "cleR2": "tcgdex/Temporal-Forces/157-301231.webp",
+   "produitOrigine": 760787
+  },
+  "815497": {
+   "carteId": 295755,
+   "setOrigine": "Paradox-Rift",
+   "numero": "163",
+   "cleR2": "tcgdex/Paradox-Rift/163-295755.webp",
+   "produitOrigine": 740704
+  },
+  "815498": {
+   "carteId": 221814,
+   "setOrigine": "Astral-Radiance",
+   "numero": "140",
+   "cleR2": "tcgdex/Astral-Radiance/140-221814.webp",
+   "produitOrigine": 658801
+  },
+  "815499": {
+   "carteId": 272680,
+   "setOrigine": "Lost-Origin",
+   "numero": "162",
+   "cleR2": "tcgdex/Lost-Origin/162-272680.webp",
+   "produitOrigine": 674171
+  },
+  "815500": {
+   "carteId": 295383,
+   "setOrigine": "Temporal-Forces",
+   "numero": "149",
+   "cleR2": "tcgdex/Temporal-Forces/149-295383.webp",
+   "produitOrigine": 760779
+  },
+  "815501": {
+   "carteId": 294404,
+   "setOrigine": "Paradox-Rift",
+   "numero": "179",
+   "cleR2": "tcgdex/Paradox-Rift/179-294404.webp",
+   "produitOrigine": 740722
+  },
+  "815502": {
+   "carteId": 272682,
+   "setOrigine": "Lost-Origin",
+   "numero": "161",
+   "cleR2": "tcgdex/Lost-Origin/161-272682.webp",
+   "produitOrigine": 674170
+  },
+  "815504": {
+   "carteId": 265796,
+   "setOrigine": "Brilliant-Stars",
+   "numero": "151",
+   "cleR2": "tcgdex/Brilliant-Stars/151-265796.webp",
+   "produitOrigine": 608697
   }
  }
 }
