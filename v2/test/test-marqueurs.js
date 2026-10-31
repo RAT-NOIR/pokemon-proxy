@@ -12,7 +12,10 @@ const section3 = contrat.split(/^## 3\./m)[1].split(/^## 4\./m)[0];
 const lignes = section3.split(/\r?\n/).filter(l => /^\| `[A-Z0-9_]+` \|/.test(l)).map(l => l.split('|').slice(1, -1).map(c => c.trim()));
 const types = lignes.map(c => c[0].replace(/`/g, ''));
 H.v('1a. la table du §3 du contrat et le module disent les MÊMES types, dans le MÊME ordre (ordre d\'affichage)', types, [...MQ.NOMS_TYPES]);
-H.v('1b. 24 types (la liste fermée du contrat)', types.length, 24);
+H.v('1b. 25 types (la liste fermée du contrat)', types.length, 25);
+H.v('1b bis. GUICHET 31/10 : SHADOWLESS « Sans ombre (Shadowless) » / « Shadowless » ; FINITION_NON_VISIBLE « Finition non visible » / « Finish not shown », en dernier, sans paramètre',
+    [MQ.rendre('SHADOWLESS', {}), MQ.rendre('FINITION_NON_VISIBLE', {}), MQ.NOMS_TYPES[MQ.NOMS_TYPES.length - 1], MQ.TYPES.find(t => t.type === 'FINITION_NON_VISIBLE').params.length],
+    [{ fr: 'Sans ombre (Shadowless)', en: 'Shadowless' }, { fr: 'Finition non visible', en: 'Finish not shown' }, 'FINITION_NON_VISIBLE', 0]);
 const sansParam = lignes.filter(c => c[1] === '—');
 H.v('1c. chaque type sans paramètre : le libellé FR et EN du contrat est EXACTEMENT celui du module',
     sansParam.map(c => [c[0].replace(/`/g, ''), c[2], c[3]]), MQ.TYPES.filter(t => t.params.length === 0).map(t => [t.type, t.libelle.fr, t.libelle.en]));

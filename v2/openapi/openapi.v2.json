@@ -4330,7 +4330,8 @@
               "ORIGINS",
               "SNOWFLAKE",
               "COSMO",
-              "MCDONALDS"
+              "MCDONALDS",
+              "FINITION_NON_VISIBLE"
             ]
           },
           "params": {
@@ -4471,7 +4472,7 @@
           },
           "marqueurs": {
             "$ref": "#/components/schemas/Marqueurs",
-            "description": "AJOUT FACULTATIF (CONTRAT-MARQUEURS.md), les bandeaux d'affichage du produit, à dessiner AU-DESSUS du visuel (les images stockées restent PROPRES). Liste fermée de 24 types, dans l'ordre d'affichage du contrat, sans doublon de type, 0 à 4 éléments ; chaque `libelle` (FR et EN, 40 caractères au plus) est rendu par l'API. `[]` = prouvé sans marqueur ; null = on ne sait pas (jamais « aucun marqueur »). Dérivés de ce qui est prouvé (variante, marques, famille de set) et des marqueurs écrits par le catalogue avec leur preuve ; `variante` et `marques` ne changent pas. Servi aussi sur `carte`, `candidats[]` et `impressions[]`."
+            "description": "AJOUT FACULTATIF (CONTRAT-MARQUEURS.md), les bandeaux d'affichage du produit, à dessiner AU-DESSUS du visuel (les images stockées restent PROPRES). Liste fermée de 25 types, dans l'ordre d'affichage du contrat, sans doublon de type, 0 à 4 éléments ; chaque `libelle` (FR et EN, 40 caractères au plus) est rendu par l'API. `[]` = prouvé sans marqueur ; null = on ne sait pas (jamais « aucun marqueur »). Dérivés de ce qui est prouvé (variante, marques, famille de set) et des marqueurs écrits par le catalogue avec leur preuve ; `variante` et `marques` ne changent pas. Servi aussi sur `carte`, `candidats[]` et `impressions[]`."
           },
           "version": {
             "type": [

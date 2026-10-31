@@ -39,7 +39,7 @@ Un gabarit à paramètre facultatif a trois formes, essayées dans l'ordre ; la 
 | `WCD` | `annee`, `joueur`? | Deck Championnats du monde {annee} · {joueur} — courte : Deck Mondiaux {annee} · {joueur} — sans joueur : Deck Championnats du monde {annee} | World Championships Deck {annee} · {joueur} — courte : Worlds Deck {annee} · {joueur} — sans joueur : World Championships Deck {annee} | set `WCD-<aaaa>` |
 | `NON_LEGAL` | — | Non autorisée en tournoi | Not tournament legal | set `WCD-<aaaa>` ; `JUMBO` |
 | `EDITION_1` | — | 1re édition | 1st Edition | variante `premiere-edition` prouvée |
-| `SHADOWLESS` | — | Sans ombre | Shadowless | catalogue seulement |
+| `SHADOWLESS` | — | Sans ombre (Shadowless) | Shadowless | catalogue seulement |
 | `STAFF` | — | Tampon Staff | Staff stamp | marque `staff` prouvée |
 | `PRERELEASE` | — | Tampon Avant-première | Prerelease stamp | marque `prerelease` prouvée |
 | `LEAGUE` | — | Tampon Ligue | League stamp | marque `league` prouvée |
@@ -59,13 +59,14 @@ Un gabarit à paramètre facultatif a trois formes, essayées dans l'ordre ; la 
 | `SNOWFLAKE` | — | Tampon Flocon | Snowflake stamp | marque `snowflake` prouvée |
 | `COSMO` | — | Holo Cosmos | Cosmos holo | marque `cosmo` prouvée |
 | `MCDONALDS` | — | Promo McDonald's | McDonald's promo | set `McDonalds-*` |
+| `FINITION_NON_VISIBLE` | — | Finition non visible | Finish not shown | catalogue seulement |
 
 Les types viennent de la demande de l'éditeur (JUMBO, WCD, STAFF, PRERELEASE, LEAGUE, CHAMPIONSHIP, EDITION_1, NON_LEGAL), de la liste fermée des marques de l'API (`v2/identifier/marques-tampon.js`) et des familles relevées par le catalogue dans `couverture\S8\TAMPONS\` (play-pokemon, trick-or-trade, battle-academy, celebrations-25, mcdonalds, pokemon-center, origins, edition-1, wcd). `SHADOWLESS` est la banderole Cardmarket du vintage occidental.
 
 ## 4. Qui produit les marqueurs
 1. **L'API les DÉRIVE** de ce qui est déjà prouvé, et de rien d'autre : la variante prouvée (`varianteAvecPreuve`, `marques`), et le set (`slugSet`) pour les seules familles du §3 où TOUS les produits du set portent ce marqueur. Elle ne lit **jamais** une image pour poser un marqueur.
 2. **Le catalogue peut les ÉCRIRE** dans `cartes_produits.marqueurs` (même forme, sans `libelle`) avec `marqueursPreuve` (une phrase : la source et ce qu'elle montre). L'API valide chaque élément contre la table du §3 : un élément invalide est écarté et compté, jamais réparé. **Un marqueur dérivé l'emporte** sur un marqueur écrit du même type qui le contredit (année WCD différente, par ex.) ; la contradiction est comptée et signalée au catalogue.
-3. Les « catalogue seulement » (`SHADOWLESS`, `ANNIVERSAIRE_25`, `POKEMON_CENTER`, `ORIGINS`) n'existent que par une écriture du catalogue avec sa preuve.
+3. Les « catalogue seulement » (`SHADOWLESS`, `ANNIVERSAIRE_25`, `POKEMON_CENTER`, `ORIGINS`, `FINITION_NON_VISIBLE`) n'existent que par une écriture du catalogue avec sa preuve.
 
 ## 5. Ce que l'API en fait (décision de l'éditeur, 27/10) — SANS RIEN LIRE DANS L'IMAGE pour les poser
 - Deux produits **au même dessin** (même fiche, même visuel, ou visuel emprunté l'un à l'autre) **qui ne diffèrent que par leurs marqueurs** forment un **groupe à départager**.
