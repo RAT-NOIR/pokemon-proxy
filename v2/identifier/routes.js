@@ -803,7 +803,18 @@ function traiterIdentifier(cfg, deps = {}) {
                 durees: { ...T.exporter(), ...(typeof traceScan.catalogueIndex === 'boolean' ? { catalogueIndex: traceScan.catalogueIndex } : {}) },                                                       // TEMPS-ETAPES : les durées par étape (ms, entiers), additif et interne — jamais servi ; `total` court jusqu'à CETTE écriture
                 creeLe: maintenant, expireLe: new Date(maintenant.getTime() + cfg.retention.analysesMois * 30.5 * 86400e3)
             });
-        } catch (e) { journalErreur('analyses', e); } };
+        } catch (e) {
+            journalErreur('analyses', e);
+            // PROBABLE (relecture 1, M2) : le prix a été montré et le crédit DÉBITÉ ; sans ligne `analyses` le client ne pourrait ni confirmer ni dire « aucune » (503 analyse-absente) : le crédit est RENDU ici (panne de NOTRE côté,
+            // hors plafond) et la question est close — jamais un 503 sans remboursement.
+            if (sortie.probable && !admin && credit) {
+                try {
+                    const r = await argent.rembourser(porteur, credit, 'panne-SERVEUR', { scanId, compteur: 'panne' });
+                    if (r && r.rendu) await col('questions_v2').updateOne({ _id: `${scanId}:0`, etat: 'en-attente' }, { $set: { etat: 'remboursee', rembourse: true, regleeLe: new Date() } });
+                    else console.error(`🔴 [v2 identifier] scan ${scanId} : écriture analyses en échec ET probable NON rendu (${(r && r.raisonNonRembourse) || 'erreur'}) — à la réconciliation`);
+                } catch (e2) { journalErreur('remboursement du probable sans analyse', e2); }
+            }
+        } };
         const ecrireAnnonce = async () => { try { await conserverAnnonce(String(scanId), { titre: annonce.titre, description: annonce.description, expurgeeParServeur: annonce.expurgeeParServeur }, cfg); } catch (e) { journalErreur('annonces', e); } };
         if (te.finParallele) await T.mesurer('base', () => Promise.all([ecrireAnalyse(), ecrireAnnonce()]));
         else { await T.mesurer('base', ecrireAnalyse); await T.mesurer('base', ecrireAnnonce); }

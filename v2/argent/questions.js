@@ -37,9 +37,19 @@ async function passerEnProbable(porteur, { scanId, carte = 0 } = {}, cfg) {
         if (!q || q.lot === true) return { ok: false };
         if (q.probable === true) return { ok: q.etat === 'en-attente' };
         if (q.etat !== 'en-attente') return { ok: false };
-        const r = await col('questions_v2').updateOne({ ...sien, etat: 'en-attente', probable: { $ne: true } }, { $set: { probable: true } });
-        if ((r.modifiedCount ?? r.matchedCount ?? 0) < 1) return { ok: false };
-        await col('mouvements').updateOne({ ...base(porteur), type: 'debit', scanId, etat: 'reserve' }, { $set: { etat: 'debite' } });
+        // ORDRE SÛR (relecture 1, I1) : le MOUVEMENT d'abord (reserve -> debite, contrôlé), puis le marqueur ; si le marqueur ne s'écrit pas, le mouvement est REMIS à reserve. Après une panne, le grand livre
+        // et la question disent la même chose : une question ordinaire, crédit réservé (jamais un marqueur probable sur un mouvement réservé, ni l'inverse).
+        const filtreMv = { ...base(porteur), type: 'debit', scanId };
+        const m = await col('mouvements').updateOne({ ...filtreMv, etat: 'reserve' }, { $set: { etat: 'debite' } });
+        if ((m.matchedCount ?? m.modifiedCount ?? 0) < 1) return { ok: false };
+        let marque = false;
+        try { const r = await col('questions_v2').updateOne({ ...sien, etat: 'en-attente', probable: { $ne: true } }, { $set: { probable: true } }); marque = (r.matchedCount ?? r.modifiedCount ?? 0) >= 1; }
+        catch (e) { console.error(`🔴 [v2 probable] marqueur non écrit (${(e && (e.code || e.name)) || 'erreur'}) — le mouvement est remis à reserve`); }
+        if (!marque) {
+            try { await col('mouvements').updateOne({ ...filtreMv, etat: 'debite' }, { $set: { etat: 'reserve' } }); }
+            catch (e) { console.error(`🔴 [v2 probable] mouvement NON remis à reserve (${(e && (e.code || e.name)) || 'erreur'}) — scan ${scanId} : débité, question ordinaire (son remboursement reste possible) — à la réconciliation`); }
+            return { ok: false };
+        }
         return { ok: true };
     } catch (e) { console.error(`🔴 [v2 probable] passage en probable refusé (${(e && (e.code || e.name)) || 'erreur'})`); return { ok: false }; }
 }
@@ -106,9 +116,11 @@ async function regler(q, motif, cfg, maintenant, sortie = {}) {
         return col('questions_v2').findOneAndUpdate({ _id: q._id, etat: 'en-reglement' }, { $set: { etat: 'repondue', rembourse: false, regleeLe: maintenant } }, { returnDocument: 'after' });
     }
     if (q.probable === true) {
-        const rp = await rembourser(porteur, q.credit, motif, { scanId: q.scanId, compteur: 'constate-question', jourDe: q.poseeLe, maintenant }, cfg);
+        // décision de l'éditeur (31/10) : un compteur PROPRE (`probable-aucune`), ni les constats ni les déclarations ; le refus au plafond DIT son message (`declaration`, raison `plafond-probable`)
+        const rp = await rembourser(porteur, q.credit, motif, { scanId: q.scanId, compteur: 'probable-aucune', jourDe: q.poseeLe, maintenant }, cfg);
+        if (rp.declaration) sortie.declaration = rp.declaration;
         return col('questions_v2').findOneAndUpdate({ _id: q._id, etat: 'en-reglement' },
-            { $set: { etat: rp.rendu ? 'remboursee' : 'non-remboursee', rembourse: rp.rendu, raisonNonRembourse: rp.rendu ? null : rp.raisonNonRembourse, regleeLe: maintenant } }, { returnDocument: 'after' });
+            { $set: { etat: rp.rendu ? 'remboursee' : 'non-remboursee', rembourse: rp.rendu, raisonNonRembourse: rp.rendu ? null : rp.raisonNonRembourse, regleeLe: maintenant, ...(rp.declaration ? { declaration: rp.declaration } : {}) } }, { returnDocument: 'after' });
     }
     // PLAFOND-DECLARE : « aucune », « ne-sait-pas » et l'abandon sont des DÉCLARATIONS du client (l'abandon est une déclaration par l'absence : sans lui, ne jamais répondre rendrait le plafond contournable)
     const r = await rembourser(porteur, q.credit, motif, { scanId: q.scanId, compteur: 'question', jourDe: q.poseeLe, maintenant }, cfg);

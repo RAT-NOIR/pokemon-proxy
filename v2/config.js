@@ -27,6 +27,14 @@ const booleen = (nom, v, defaut) => {
     throw new Error(`configuration invalide : ${nom}="${v}" (attendu 0 ou 1)`);
 };
 
+// Variable décimale dans [0, 1] (absente ou vide = défaut). Toute autre valeur rend la configuration invalide.
+const decimal01 = (nom, v, defaut) => {
+    if (v === undefined || v === '') return defaut;
+    const n = /^(0|1|0\.\d{1,4})$/.test(String(v)) ? Number(v) : NaN;
+    if (!Number.isFinite(n)) throw new Error(`configuration invalide : ${nom}="${v}" (attendu un nombre de 0 à 1)`);
+    return n;
+};
+
 // PLAFOND-DECLARE : quatre variables n'ont plus d'objet (les pannes et les introuvables ne sont plus plafonnés ; question et sans-prix partagent le compteur des déclarations). Posées, elles ne rendent
 // JAMAIS la configuration invalide (un 503 pour un réglage mort serait pire que le réglage) : UN avertissement par processus, qui NOMME les variables et n'affiche jamais leur valeur.
 const VARIABLES_SANS_OBJET = Object.freeze(['V2_PLAFOND_PANNES', 'V2_PLAFOND_QUESTIONS', 'V2_SANS_PRIX_JOUR', 'V2_JUMEAUX_REMBOURSES_JOUR']);
@@ -120,6 +128,8 @@ function lireConfig(env = process.env) {
         // Au-delà d'un plafond : pas de remboursement (motif `plafond-jour`).
         plafonds: { declares: { sansCompte: entier('V2_DECLARES_SANS_COMPTE', env.V2_DECLARES_SANS_COMPTE, 1), gratuit: entier('V2_DECLARES_GRATUIT', env.V2_DECLARES_GRATUIT, 3), pro: entier('V2_DECLARES_PRO', env.V2_DECLARES_PRO, 30) },
                     constates: { sansCompte: entier('V2_CONSTATES_SANS_COMPTE', env.V2_CONSTATES_SANS_COMPTE, 20), gratuit: entier('V2_CONSTATES_GRATUIT', env.V2_CONSTATES_GRATUIT, 50), pro: entier('V2_CONSTATES_PRO', env.V2_CONSTATES_PRO, 100) },
+                    // PROBABLE (décision de l'éditeur, 31/10) : « aucune » sur un probable a son PROPRE compteur `probable-aucune`, séparé des constats et des déclarations : sans compte 1, gratuit 3, Pro 30 par jour de Paris.
+                    probables: { sansCompte: entier('V2_PROBABLE_AUCUNE_SANS_COMPTE', env.V2_PROBABLE_AUCUNE_SANS_COMPTE, 1), gratuit: entier('V2_PROBABLE_AUCUNE_GRATUIT', env.V2_PROBABLE_AUCUNE_GRATUIT, 3), pro: entier('V2_PROBABLE_AUCUNE_PRO', env.V2_PROBABLE_AUCUNE_PRO, 30) },
                     lotTropGrand: entier('V2_LOT_TROP_GRAND_JOUR', env.V2_LOT_TROP_GRAND_JOUR, 10) },
         // FREIN-CONSTATES : le plafond GLOBAL de dépense quotidienne du modèle (tous porteurs confondus, jour de Paris), en dollars. Atteint, l'appel au modèle n'a plus lieu (v2/argent/depense-modele.js).
         // `appelEstimeUsd` : le coût PRUDENT d'un appel quand la réponse du fournisseur n'en donne pas (le coût mesuré d'une identification est de 0,0032 à 0,0037 $).
@@ -221,6 +231,10 @@ function lireConfig(env = process.env) {
         // débitée à l'affichage. ÉTEINT par défaut (0), « 0 » ou « 1 » seulement : la réponse est celle d'avant, octet pour octet. Servi seulement aux extensions >= versionMinProbable (2.0.1).
         probable: booleen('V2_PROBABLE', env.V2_PROBABLE, false),
         versionMinProbable: '2.0.1',
+        // Le COSINUS MINIMAL du 1er candidat (lot PROBABLE, tour 1) : si la vérité est hors de la liste, aucun candidat n'a le visuel de la photo, donc même le meilleur cosinus est bas. Un 1er candidat dont le cosinus est
+        // CONNU et sous ce seuil ne devient pas probable (la question reste réservée). Seuil choisi sur le RÉGLAGE seul (v2/mesures/mesurer-probable-production.js), vérifié sur les ordinaires et les tamponnées. 0 = garde éteinte.
+        // Sans cosinus (pas de vecteur, photo non redressée, visuel emprunté) la garde se tait : la lecture seule décide, comme mesuré.
+        probableCosinusMin: decimal01('V2_PROBABLE_COSINUS_MIN', env.V2_PROBABLE_COSINUS_MIN, 0),
         // TEMPS-ETAPES (identifier/temps-etapes.js) : quatre coupes de TEMPS qui ne changent aucune décision, chacune ÉTEINTE par défaut (0) : la route est alors celle d'avant, octet pour octet.
         // voisinsUneFois : la recherche des voisins une fois par requête ; empreinteTot : la recherche et la garde des zones partent pendant l'attente du modèle ; finParallele : les lectures/écritures annexes de la fin de requête partent ensemble.
         // orbUtile : la règle G (recherche des voisins + garde des zones, donc l'ORB) n'est pas consultée quand la chaîne a rendu un INTROUVABLE — elle ne peut rien y changer (arbitrage-g.js, promotion-g.js) ; la réponse dit alors `empreinte: { utilisee: false, code: 'muette' }`.

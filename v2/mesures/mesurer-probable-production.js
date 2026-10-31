@@ -118,10 +118,32 @@ const pct = (a, b) => (b ? (100 * a / b).toFixed(1) + ' %' : 'n/a');
     }
     const VARIANTES = { 'garde des groupes + jumbo par le titre ALLUMÉS (état d\'aujourd\'hui)': { jumboTitre: true, gardeMarqueurs: true }, 'marqueurs éteints (état livré d\'avant)': { jumboTitre: false, gardeMarqueurs: false } };
     const FAMS = ['reglage', 'tamponnee', 'ordinaire'];
-    const sortie = {}, detail = {};
-    for (const [nom, drapeaux] of Object.entries(VARIANTES)) {
+    const sortie = {}, detail = {}; let THETA = null;
+    // TOUR 1 : le COSINUS MINIMAL du 1er candidat. Passe 1 et 2 : seuil 0 (garde éteinte), on garde le DÉTAIL de chaque probable. Le seuil est CHOISI sur le RÉGLAGE seul (le plus petit qui retire tous les faux du réglage ayant un cosinus),
+    // puis la passe « __garde » rejoue la FONCTION DE PRODUCTION avec `probableCosinusMin` = ce seuil, appliqué aux ordinaires et aux tamponnées sans le réajuster.
+    const FAMX = ['reglage', 'tamponnee', 'ordinaire'];
+    function courbe(probables) {
+        const pf = (f, p) => probables.filter(x => x.fam === f && p(x)), cos = x => typeof x.cosPremier === 'number';
+        console.log('\nCOURBE du cosinus minimal du 1er candidat (par famille : probables JUSTES perdus / FAUX évités ; sans cosinus la garde se tait) :');
+        for (const th of [0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8]) console.log(`  θ=${th.toFixed(2)} ` + FAMX.map(f => `${f} -${pf(f, x => x.juste && cos(x) && x.cosPremier < th).length}j/+${pf(f, x => !x.juste && cos(x) && x.cosPremier < th).length}f`).join(' · '));
+        for (const f of FAMX) console.log(`  ${f}: probables ${pf(f, () => true).length} (justes ${pf(f, x => x.juste).length}, faux ${pf(f, x => !x.juste).length}) ; sans cosinus : justes ${pf(f, x => x.juste && !cos(x)).length}, faux ${pf(f, x => !x.juste && !cos(x)).length} ; cosPremier des faux : ${JSON.stringify(pf(f, x => !x.juste).map(x => x.cosPremier === null || x.cosPremier === undefined ? null : +x.cosPremier.toFixed(3)))} ; min des justes ${(() => { const v = pf(f, x => x.juste && cos(x)).map(x => x.cosPremier); return v.length ? Math.min(...v).toFixed(3) : 'n/a'; })()}`);
+        const fauxReg = pf('reglage', x => !x.juste && cos(x)), fauxRegSans = pf('reglage', x => !x.juste && !cos(x)).length;
+        if (!fauxReg.length) return null;
+        const th = Math.floor(Math.max(...fauxReg.map(x => x.cosPremier)) * 100) / 100 + 0.01;
+        console.log(`  SEUIL CHOISI SUR LE RÉGLAGE SEUL : ${th.toFixed(2)} (le plus petit à 0,01 près qui retire tous les ${fauxReg.length} faux du réglage ayant un cosinus ; ${fauxRegSans} faux du réglage sans cosinus restent hors de portée)`);
+        console.log('  appliqué tel quel : ' + FAMX.map(f => `${f} -${pf(f, x => x.juste && cos(x) && x.cosPremier < th).length} justes perdus / +${pf(f, x => !x.juste && cos(x) && x.cosPremier < th).length} faux évités (faux restants ${pf(f, x => !x.juste && !(cos(x) && x.cosPremier < th)).length})`).join(' · '));
+        // gardes 2 à 4 de la relecture, À TITRE INDICATIF (rien de codé)
+        const ecart = x => (cos(x) && typeof x.cosSecond === 'number' ? x.cosPremier - x.cosSecond : null);
+        const gMin = Math.min(...pf('reglage', x => x.juste && ecart(x) !== null).map(ecart));
+        const g = { [`2. écart cosinus 1er-2e >= ${gMin.toFixed(3)} (le plus petit écart d'un juste du réglage)`]: x => ecart(x) !== null && ecart(x) < gMin, '3. au moins 2 champs concordants': x => x.ok < 2, '4. au plus 2 candidats': x => x.nCand > 2 };
+        for (const [nomG, retire] of Object.entries(g)) console.log(`  garde ${nomG} : ` + FAMX.map(f => `${f} -${pf(f, x => x.juste && retire(x)).length}j/+${pf(f, x => !x.juste && retire(x)).length}f`).join(' · '));
+        return th;
+    }
+    for (const [nom0, drapeaux0] of [...Object.entries(VARIANTES), ['__garde', null]]) {
+        let nom = nom0, drapeaux = drapeaux0;
+        if (nom0 === '__garde') { if (THETA === null) break; const premier = Object.keys(VARIANTES)[0]; drapeaux = VARIANTES[premier]; nom = `${premier} + COSINUS MINIMAL ${THETA.toFixed(2)} (fonction de production, probableCosinusMin)`; cfg.probableCosinusMin = THETA; } else cfg.probableCosinusMin = 0;
         const compte = Object.fromEntries(FAMS.map(f => [f, { denom: 0, surJuste: 0, surVariante: 0, surFaux: 0, surAutre: 0, probJuste: 0, probFaux: 0, probFauxHors: 0, questions: 0, questionsAvec: 0, question1: 0, introuvables: 0, probInconnu: 0 }]));
-        const probFaux = [], probables = [], changes = []; let tracees = 0;
+        const probFaux = [], probables = [], changes = [], raisons = {}; let tracees = 0;
         for (const { L, ctx, corps, r } of livres) {
             if (L.banc === 'hors-banc') continue;
             let res = r, trace = null;
@@ -145,18 +167,22 @@ const pct = (a, b) => (b ? (100 * a / b).toFixed(1) + ' %' : 'n/a');
             if (res && !et.stocke) {
                 const p = nav[L.cle.split(':')[0]];
                 const entree = { versionExtension: '2.0.1', empreintes: p && p.redressee === true && Array.isArray(p.emb) ? { modele: MODELE, rejet: null, entrees: [{ photo: 0, vecteur: EV.encoderVecteur(Float32Array.from(p.emb)), redressee: true, carte: null }] } : null };
-                pr = muet(() => consulterProbable({ cfg, entree, resultat: res, corpsChaine: corps, produits: ctx.produits, version: V, traceMarqueurs: trace, etat }));
+                const diag = {};
+                pr = muet(() => consulterProbable({ cfg, entree, resultat: res, corpsChaine: corps, produits: ctx.produits, version: V, traceMarqueurs: trace, etat, diag }));
+                raisons[diag.raison || 'aucune'] = (raisons[diag.raison || 'aucune'] || 0) + 1;
             }
             m.questions++;
             if (et.choix.includes(L.verite)) m.questionsAvec++;
             if (pr) {
-                probables.push({ cle: L.cle, fam: L.famille, verite: L.verite, probable: pr.idProduct });
+                probables.push({ cle: L.cle, fam: L.banc === 'reglage' ? 'reglage' : L.famille, verite: L.verite, probable: pr.idProduct, juste: pr.idProduct === L.verite, horsCandidats: Number.isInteger(L.verite) && !et.choix.includes(L.verite), ...pr.detail });
                 if (!Number.isInteger(L.verite)) m.probInconnu++;
                 else if (pr.idProduct === L.verite) m.probJuste++;
                 else { m.probFaux++; if (!et.choix.includes(L.verite)) m.probFauxHors++; probFaux.push({ cle: L.cle, fam: L.famille, verite: L.verite, probable: pr.idProduct, choix: et.choix, groupe: !!(trace && trace.garde) }); }
             }
         }
         sortie[nom] = compte; detail[nom] = { probFaux, probables };
+        console.log(`  (${nom}) d'où vient le cosinus, par QUESTION jugée : ${JSON.stringify(raisons)}`);
+        if (nom0 === Object.keys(VARIANTES)[0]) { const t = courbe(probables); if (t !== null) THETA = t; }
         console.log(`\n## ${nom} — cartes dont les marqueurs ont changé le résultat : ${changes.length} ; cartes où la fonction a laissé une trace : ${tracees}`);
         const tot = { denom: 0 };
         for (const f of [...FAMS, 'controle']) {

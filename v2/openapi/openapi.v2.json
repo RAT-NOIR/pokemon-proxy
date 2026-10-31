@@ -5885,9 +5885,10 @@
             ],
             "enum": [
               "plafond-declarations",
+              "plafond-probable",
               null
             ],
-            "description": "CODE (jamais une phrase) : `null` quand rendue ; `plafond-declarations` quand refusée. L'extension écrit le texte."
+            "description": "CODE (jamais une phrase) : `null` quand rendue ; `plafond-declarations` quand refusée ; `plafond-probable` (lot PROBABLE) quand « aucune » sur un probable est refusée parce que le compteur PROPRE des « aucune » de probable du jour est plein (sans compte 1, gratuit 3, Pro 30) : le crédit reste débité, le message est dit. L'extension écrit le texte."
           },
           "plafondJour": {
             "type": "integer",
