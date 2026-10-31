@@ -24,6 +24,14 @@ function groupeParLesDonnees(version, ids) {
     } catch { return true; }
 }
 
+/** Le candidat `id` est-il de MÊME DESSIN qu'un autre candidat ? Ce qui ne se lit pas (version absente, exception) est un groupe : défaut fermé. */
+function dansUnGroupe(version, id, ids) {
+    try {
+        if (!version || typeof version.entree !== 'function') return true;
+        return ids.some(autre => autre !== id && GM.memeDessin(version, id, autre, { avecEmprunt: true }));
+    } catch { return true; }
+}
+
 /**
  * @returns null (aucun probable) | { idProduct, signal, contredits, detail }
  */
@@ -59,8 +67,12 @@ function consulterProbable({ cfg, entree, resultat, corpsChaine, produits, versi
             }
         } catch { cosinus = null; }
     }
-    const d = P.decider({ ids, produits, lu, cosinus, groupe, cosinusMin: cfg.probableCosinusMin, vecteurExige: cfg.probableVecteurExige === true });
+    // GARDES FERMÉES : les valeurs de la configuration sont passées TELLES QUELLES ; `decider` ne lève une garde que sur `false` explicite (vecteur) ou un nombre fini (seuil, 0 explicite l'éteint)
+    const d = P.decider({ ids, produits, lu, cosinus, groupe, cosinusMin: cfg.probableCosinusMin, vecteurExige: cfg.probableVecteurExige });
     if (!d) return null;
+    // TOUR 3, I3 INCONDITIONNEL : un probable est INTERDIT dès que le candidat désigné est dans un groupe de même dessin (même fiche et même visuel, ou visuel emprunté), QUEL QUE SOIT l'état des drapeaux (marqueurs, vecteur exigé,
+    // cosinus minimal) et même si la lecture contredit l'autre version : l'image ne prouve pas un marqueur, et la lecture seule ne suffit pas ici. Défaut fermé : une version qui ne sait pas le dire, ou qui lève, = groupe.
+    if (estGroupe(traceMarqueurs) || dansUnGroupe(version, d.idProduct, ids)) return null;
     // I2 : « un probable affiché AVEC un prix » — le candidat désigné doit porter un prix servi (même règle que le repli de prix : un guide daté avec un prix). Sinon la question reste réservée comme avant.
     const c = cartes[0].candidats.find(x => x && x.idProduct === d.idProduct);
     if (!c || PR.depuisGuide(c.prixGuide, 'tendance-seule') === null) return null;
@@ -80,4 +92,4 @@ function avecNiveau(analyse, probable) {
     return { ...analyse, cartes: analyse.cartes.map((c, i) => ({ ...c, ...niveauDe(c, analyse.cartes.length === 1 && i === 0 ? probable : null) })) };
 }
 
-module.exports = { groupeParLesDonnees, consulterProbable, avecNiveau, niveauDe, actif, estGroupe };
+module.exports = { dansUnGroupe, groupeParLesDonnees, consulterProbable, avecNiveau, niveauDe, actif, estGroupe };

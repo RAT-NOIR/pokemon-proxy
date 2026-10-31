@@ -15,7 +15,7 @@ let nIp = 0; const ip = () => { nIp++; return { 'x-forwarded-for': `10.17.${Math
 let nCle = 0; const cle = () => `banc-probable-${Date.now().toString(36)}-${++nCle}`;
 const raw = n => mongoose.connection.db.collection(n);
 const E = require('../chargeur/etat'); const { creerConstructeur } = require('../chargeur/version'); const VB = require('./_visuels-banc');
-const P1 = 897001, P2 = 897002, P3 = 897003, P4 = 897004, P5 = 897005, P6 = 897006, META5 = 992105, EXP = 992001, META1 = 992101, META2 = 992102, META3 = 992103, META4 = 992104;
+const P1 = 897001, P2 = 897002, P3 = 897003, P4 = 897004, P5 = 897005, P6 = 897006, P7 = 897007, META5 = 992105, EXP = 992001, META1 = 992101, META2 = 992102, META3 = 992103, META4 = 992104;
 let ecartsContrat = 0;
 
 async function inst(essais = 30) {
@@ -68,6 +68,10 @@ const ids = c0 => c0.candidats.map(c => c.idProduct).sort();
         await raw('numeros_cartes').insertOne({ idProduct: id, idExpansion: EXP, numero: '12', numeroUrl: 'PRB12', codeSet: 'PRB', nomFr: 'Pikachu', slug: `Pikachu-PRB12-${id}`, slugSet: 'Banc-Set', source: 'cardmarket', certitude: 'exacte' });
         await raw('guide_prix').insertOne({ idProduct: id, avg: 1.1, low: 0.5, trend: 1.0, avg1: 1.0, avg7: 1.0, avg30: 1.1, guideDu: new Date('2026-10-04') });
     }
+    // P7 : le MÊME dessin que P5 (même fiche, même visuel), mais le numéro 15 : la lecture « 12 » le CONTREDIT et désigne P5 (TOUR 3 : un groupe interdit le probable même ainsi)
+    await raw('catalogue_produits').insertOne({ idProduct: P7, name: 'Pikachu', idExpansion: EXP, idMetacard: META5 });
+    await raw('numeros_cartes').insertOne({ idProduct: P7, idExpansion: EXP, numero: '15', numeroUrl: 'PRB15', codeSet: 'PRB', nomFr: 'Pikachu', slug: `Pikachu-PRB15-${P7}`, slugSet: 'Banc-Set', source: 'cardmarket', certitude: 'exacte' });
+    await raw('guide_prix').insertOne({ idProduct: P7, avg: 1.1, low: 0.5, trend: 1.0, avg1: 1.0, avg7: 1.0, avg30: 1.1, guideDu: new Date('2026-10-04') });
     // P4 : le même numéro que P1, MAIS aucune ligne de guide de prix (I2)
     await raw('catalogue_produits').insertOne({ idProduct: P4, name: 'Pikachu', idExpansion: EXP, idMetacard: META4 });
     await raw('numeros_cartes').insertOne({ idProduct: P4, idExpansion: EXP, numero: '12', numeroUrl: 'PRB12', codeSet: 'PRB', nomFr: 'Pikachu', slug: `Pikachu-PRB12-${P4}`, slugSet: 'Banc-Set', source: 'cardmarket', certitude: 'exacte' });
@@ -75,6 +79,7 @@ const ids = c0 => c0.candidats.map(c => c.idProduct).sort();
     for (const [id, meta, numero] of [[P1, META1, '12'], [P2, META2, '15'], [P3, META3, '12'], [P4, META4, '12']]) b.entree(VB.doc(id, { idMetacard: meta, numero, variante: 'normale', total: '131', vignette: { cle: `banc/probable-${id}.webp`, w: 300, h: 420 } }));
     b.entree(VB.doc(P5, { idMetacard: META5, numero: '12', variante: 'normale', total: '131', vignette: { cle: 'banc/probable-groupe.webp', w: 300, h: 420 } }));
     b.entree(VB.doc(P6, { idMetacard: META5, numero: '12', variante: 'jumbo', total: '131', vignette: { cle: 'banc/probable-groupe.webp', w: 300, h: 420 } }));
+    b.entree(VB.doc(P7, { idMetacard: META5, numero: '12', variante: 'jumbo', total: '131', vignette: { cle: 'banc/probable-groupe.webp', w: 300, h: 420 } }));
     E.installer(b.finir());
 
     const express = require('express'); const pret = require('../pret');
@@ -92,7 +97,11 @@ const ids = c0 => c0.candidats.map(c => c.idProduct).sort();
             await req.credit.v2.poserQuestion(req, { scanId: req.scanIdImpose, raison: 'egalite-sans-enjeu', candidats: [P4, P2] });
             return res.json({ success: true, scanId: sid, question: { etat: 'en-attente', delaiHeures: 24 }, ...enTete, candidats: [cand(P4, '12'), cand(P2, '15')], carte: { idProduct: P4, nomProduit: 'Pikachu', nom: 'Pikachu', numero: '12', setCode: 'PRB', total: '131', rarete: null, langue: 'EN', ambigu: true }, lectureGarde: lecture('12', [P4, P2]) });
         }
-        if (mode === 'groupe' || mode === 'groupe-lecture') {      // I3 : une paire jumbo/normale du même dessin ; 'groupe-lecture' : la lecture « 15 » contredit… aucun des deux (même numéro 12) : la lecture ne les sépare JAMAIS
+        if (mode === 'groupe-lecture') {      // TOUR 3, I3 : le MÊME dessin (P5 / P7), la lecture « 12 » contredit P7 (15) et désigne P5 : sans l'interdiction du groupe, ce serait un probable par la lecture seule
+            await req.credit.v2.poserQuestion(req, { scanId: req.scanIdImpose, raison: 'egalite-sans-enjeu', candidats: [P5, P7] });
+            return res.json({ success: true, scanId: sid, question: { etat: 'en-attente', delaiHeures: 24 }, ...enTete, candidats: [cand(P5, '12'), cand(P7, '15')], carte: { idProduct: P5, nomProduit: 'Pikachu', nom: 'Pikachu', numero: '12', setCode: 'PRB', total: '131', rarete: null, langue: 'EN', ambigu: true }, lectureGarde: lecture('12', [P5, P7]) });
+        }
+        if (mode === 'groupe') {      // I3 : une paire jumbo/normale du même dessin, que la lecture ne sépare pas (même numéro 12)
             await req.credit.v2.poserQuestion(req, { scanId: req.scanIdImpose, raison: 'egalite-sans-enjeu', candidats: [P5, P6] });
             return res.json({ success: true, scanId: sid, question: { etat: 'en-attente', delaiHeures: 24 }, ...enTete, candidats: [cand(P5, '12'), cand(P6, '12')], carte: { idProduct: P5, nomProduit: 'Pikachu', nom: 'Pikachu', numero: '12', setCode: 'PRB', total: '131', rarete: null, langue: 'EN', ambigu: true }, lectureGarde: lecture('12', [P5, P6]) });
         }
@@ -173,6 +182,13 @@ const ids = c0 => c0.candidats.map(c => c.idProduct).sort();
         const sg = await monter(lireConfig({ ...base, V2_PROBABLE: '1', V2_GARDE_MARQUEURS: String(g), V2_JUMBO_TITRE: String(j) }));
         const x = await scan(sg, 'groupe', '2.0.1');
         H.v(`6. I3 : V2_GARDE_MARQUEURS=${g} V2_JUMBO_TITRE=${j} : la paire jumbo/normale reste une question (niveau question, crédit RÉSERVÉ), jamais un probable`, [x.c0.statut, x.c0.niveau, x.c0.probable, await livre(x)], ['a-trancher', 'question', null, RESERVE]);
+        await sg.fermer();
+    }
+    // ── 6b. TOUR 3 : I3 INCONDITIONNEL — les gardes du cosinus ÉTEINTES (vecteur non exigé, cosinus minimal 0) et la lecture qui SÉPARE les deux versions d'un même dessin : jamais un probable, quelle que soit la combinaison des drapeaux des marqueurs
+    for (const [g, j] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+        const sg = await monter(lireConfig({ ...base, V2_PROBABLE: '1', V2_PROBABLE_VECTEUR_EXIGE: '0', V2_PROBABLE_COSINUS_MIN: '0', V2_GARDE_MARQUEURS: String(g), V2_JUMBO_TITRE: String(j) }));
+        const x = await scan(sg, 'groupe-lecture', '2.0.1'), t = await scan(sg, 'probable', '2.0.1');
+        H.v(`6b. TOUR 3 : gardes du cosinus ouvertes, V2_GARDE_MARQUEURS=${g} V2_JUMBO_TITRE=${j} : une paire de même dessin que la lecture sépare reste une question (jamais un probable, crédit RÉSERVÉ) ; le témoin (deux dessins distincts) est un probable`, [x.c0.niveau, x.c0.probable, await livre(x), t.c0.niveau], ['question', null, RESERVE, 'probable']);
         await sg.fermer();
     }
     // ── 7. I2 : le candidat désigné n'a AUCUN prix de guide : pas de probable, la question d'avant, crédit RÉSERVÉ

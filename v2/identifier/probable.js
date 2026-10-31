@@ -10,6 +10,7 @@ const GC = require('./garde-contradiction');
 const VERSION_MIN_PROBABLE = '2.0.1';
 const SIGNAL = 'A';
 const EPS = 1e-9;
+const COSINUS_MIN_DEFAUT = 0.38;      // la garde retenue sur le RÉGLAGE seul (tour 2) ; la même valeur que le défaut de v2/config.js
 
 /** Les versions « x.y.z » comparées numériquement. null si l'une est illisible (une garde s'écrit par ce qu'elle autorise : illisible = pas servi). */
 function versionAuMoins(version, minimum = VERSION_MIN_PROBABLE) {
@@ -28,8 +29,11 @@ function versionAuMoins(version, minimum = VERSION_MIN_PROBABLE) {
  * @param groupe    vrai pour une question de GROUPE (même dessin) : le cosinus n'entre pas dans le classement
  * @returns null (aucun probable) | { idProduct, signal, contredits }
  */
-function decider({ ids, produits, lu, cosinus = null, groupe = false, cosinusMin = 0, vecteurExige = false } = {}) {
+function decider({ ids, produits, lu, cosinus = null, groupe = false, cosinusMin, vecteurExige } = {}) {
     try {
+        // GARDES FERMÉES PAR DÉFAUT (une garde s'écrit par ce qu'elle AUTORISE) : le vecteur est exigé SAUF si `vecteurExige === false` (explicite) ; le seuil est 0,38 SAUF si `cosinusMin` est un nombre fini (0 explicite l'éteint).
+        // Un champ absent, null, NaN ou illisible ne lève jamais une garde.
+        const exige = vecteurExige !== false, minimum = Number.isFinite(cosinusMin) ? cosinusMin : COSINUS_MIN_DEFAUT;
         if (!lu || !Array.isArray(ids) || ids.length < 2 || ids.length > 3 || !ids.every(Number.isInteger) || new Set(ids).size !== ids.length || !(produits instanceof Map)) return null;
         const cands = ids.map(id => {
             const ligne = produits.get(id) || null, st = ligne ? GC.statuts(lu, ligne) : null;
@@ -54,8 +58,8 @@ function decider({ ids, produits, lu, cosinus = null, groupe = false, cosinusMin
         if (cmp(premier, second) === 0) return null;                                       // ex aequo exact en tête : aucun candidat ne se détache
         if (!(premier.ko === 0 && premier.ok >= 1)) return null;                           // la lecture concorde avec le 1er et ne le contredit pas
         if (!tri.slice(1).every(c => c.ko >= 1)) return null;                              // ... et contredit TOUS les autres
-        if (vecteurExige === true && premier.cos === null) return null;                    // VECTEUR EXIGÉ : un probable demande un cosinus MESURÉ pour le 1er candidat (sinon la question reste réservée)
-        if (Number.isFinite(cosinusMin) && cosinusMin > 0 && premier.cos !== null && premier.cos < cosinusMin) return null;     // le COSINUS MINIMAL : un 1er candidat dont le visuel est trop loin de la photo (cosinus connu) n'est pas désigné
+        if (exige && premier.cos === null) return null;                                    // VECTEUR EXIGÉ : un probable demande un cosinus MESURÉ pour le 1er candidat (sinon la question reste réservée)
+        if (minimum > 0 && premier.cos !== null && premier.cos < minimum) return null;    // le COSINUS MINIMAL : un 1er candidat dont le visuel est trop loin de la photo (cosinus connu) n'est pas désigné
         return { idProduct: premier.id, signal: SIGNAL, contredits: tri.slice(1).map(c => c.id), detail: { nCand: cands.length, ok: premier.ok, ko: premier.ko, cosPremier: premier.cos, cosSecond: second.cos } };
     } catch { return null; }
 }
