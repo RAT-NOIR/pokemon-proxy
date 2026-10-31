@@ -110,5 +110,31 @@ t('cleProduit injectable ; une clé nulle côté produit est une discordance', (
     assert.ok(r.discordances.some(d => d.type === 'produit-sans-cle'));
 });
 
+console.log('— CALIBRATION : la règle SAIT dire non (numéro Cardmarket caché, vérité connue) — un set fabriqué faux doit tomber');
+// set de calibration : 4 groupes de 2 variantes ; la vérité (numéro Cardmarket) est connue puis CACHÉE à la règle, puis confrontée à ce qu'elle rend
+const VRAI = [['0101', '甲', 1, '01'], ['0102', '甲', 2, '01'], ['0201', '乙', 3, '02'], ['0202', '乙', 4, '02'], ['0301', '丙', 5, '03'], ['0302', '丙', 6, '03'], ['0401', '丁', 7, '04'], ['0402', '丁', 8, '04']];
+const NOMEN = { 甲: 'Vulpix', 乙: 'Eevee', 丙: 'Ponyta', 丁: 'Abra' };
+const produitsConnus = VRAI.map(([, z, id, g]) => P(id, NOMEN[z], g));
+const cache = produitsConnus.map(p => ({ idProduct: p.idProduct, name: p.name }));
+const groupe = n => String(n).slice(0, 2);
+t('calibration : set vrai, numéros cachés -> admis ET chaque attribution égale la vérité connue (0 faux)', () => {
+    const r = prouverParSet({ source: VRAI.map(([n, z]) => S(n, z)), produits: cache, traduire, groupeDe: groupe });
+    assert.strictEqual(r.admis, true, r.raison);
+    let faux = 0; for (const a of r.attributions) { const v = produitsConnus.find(p => p.idProduct === a.idProduct); if (a.numero !== v.numero) faux++; }
+    assert.strictEqual(r.attributions.length, 8); assert.strictEqual(faux, 0);
+});
+t('calibration : set FABRIQUÉ FAUX (un nom changé dans la source) -> tombe, numéros cachés ou non', () => {
+    const faux = VRAI.map(([n, z]) => S(n, n === '0302' ? '丁' : z));
+    assert.strictEqual(prouverParSet({ source: faux, produits: cache, traduire, groupeDe: groupe }).admis, false);
+    assert.strictEqual(prouverParSet({ source: faux, produits: produitsConnus, traduire, groupeDe: groupe }).admis, false);
+});
+t('calibration : set FABRIQUÉ FAUX (deux groupes échangés dans la source) -> tombe SEULEMENT avec le numéro Cardmarket en témoin : limite écrite, le témoin reste obligatoire', () => {
+    const echange = VRAI.map(([n, z]) => S(n.startsWith('02') ? '03' + n.slice(2) : n.startsWith('03') ? '02' + n.slice(2) : n, z));
+    // les noms de la source sont inchangés, seuls les numéros de groupe sont échangés : le nom seul ne voit rien
+    assert.strictEqual(prouverParSet({ source: echange, produits: cache, traduire, groupeDe: groupe }).admis, true);
+    // avec le numéro Cardmarket en témoin, le groupe échangé est refusé
+    assert.strictEqual(prouverParSet({ source: echange, produits: produitsConnus, traduire, groupeDe: groupe }).admis, false);
+});
+
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);

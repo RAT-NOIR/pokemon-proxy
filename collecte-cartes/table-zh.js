@@ -84,6 +84,36 @@ function lireEspecesPokeApi(csv) {
     return { table: Object.fromEntries(vus), stats: { entrees: vus.size, ambigus: ambigus.size } };
 }
 
+/**
+ * NOMS D'ESPÈCES, 2e source INDÉPENDANTE : Wikidata (CC0), libellés zh-hk / zh-hant / zh-hans, joints par le N° DE POKÉDEX NATIONAL (propriété P1685) — JAMAIS par un nom de produit Cardmarket.
+ * Entrée : le JSON de résultats SPARQL { results: { bindings: [{ n, hk?, hant?, hans? }] } } (ou tout export qui s'y ramène). La provenance est OBLIGATOIRE : { licence, luLe }.
+ * Un libellé partagé par deux numéros est RETIRÉ (ambigu) ; un numéro qui n'est pas un entier est ignoré et compté.
+ */
+function lireEspecesWikidata(json, { licence, luLe } = {}) {
+    if (!licence || !luLe) throw new Error('lireEspecesWikidata : la licence et la date de lecture sont obligatoires (provenance de la table)');
+    const vus = new Map(), ambigus = new Set(); let illisibles = 0;
+    for (const b of (json && json.results && json.results.bindings) || []) {
+        const brut = b.n && b.n.value;
+        if (!/^\d+$/.test(String(brut ?? ''))) { illisibles++; continue; }
+        const cle = 'D' + Number(brut);
+        for (const champ of ['hk', 'hant', 'hans']) {
+            const zh = b[champ] && String(b[champ].value).normalize('NFKC').replace(/\s+/g, '');
+            if (!zh) continue;
+            if (vus.has(zh) && vus.get(zh) !== cle) ambigus.add(zh); else vus.set(zh, cle);
+        }
+    }
+    for (const a of ambigus) vus.delete(a);
+    return { table: Object.fromEntries(vus), stats: { entrees: vus.size, ambigus: ambigus.size, numerosIllisibles: illisibles }, meta: { source: 'Wikidata', licence, luLe } };
+}
+
+/** PokeAPI OU Wikidata : un nom connu d'une seule source est admis ; connu des deux pour deux espèces différentes, il est RETIRÉ (contradiction), jamais arbitré. */
+function fusionnerEspeces(a, b) {
+    const sortie = new Map(Object.entries(a)), retires = new Set();
+    for (const [zh, cle] of Object.entries(b)) { if (sortie.has(zh) && sortie.get(zh) !== cle) retires.add(zh); else sortie.set(zh, cle); }
+    for (const r of retires) sortie.delete(r);
+    return { table: Object.fromEntries(sortie), stats: { entrees: sortie.size, contradictions: retires.size } };
+}
+
 /** Traducteur : un nom en lettres latines est son propre nom ; une ESPÈCE vient de la table PokeAPI ; tout le reste (Dresseurs, objets, énergies) de la table TCGdex/base (clés « N… » seulement). Sinon null = intraduisible. */
 function fabriquerTraducteur({ tableEspeces = {}, tableAutres = {}, cleProduit }) {
     const LATIN = /^[\x20-\x7EÀ-ɏ'’·\-:.&!]+$/;
@@ -98,4 +128,4 @@ function fabriquerTraducteur({ tableEspeces = {}, tableAutres = {}, cleProduit }
         return a && a[0] === 'N' ? a : null;
     };
 }
-module.exports = { baseZh, lireCarteTs, agregerTable, fabriquerCleProduit, fabriquerTraducteur, lireEspecesPokeApi, cleDex, cleNom };
+module.exports = { baseZh, lireCarteTs, agregerTable, fabriquerCleProduit, fabriquerTraducteur, lireEspecesPokeApi, lireEspecesWikidata, fusionnerEspeces, cleDex, cleNom };

@@ -56,5 +56,38 @@ t('la table TCGdex n\'est JAMAIS utilisée pour une espèce : une entrée « D�
     const tr = T.fabriquerTraducteur({ tableEspeces: {}, tableAutres: { 甲: 'D25' }, cleProduit: () => null });
     assert.strictEqual(tr('甲'), null);
 });
+// ---- Wikidata (CC0) : libellés zh-hk / zh-hant / zh-hans joints par le N° DE POKÉDEX, jamais par un nom de produit (décision du testeur, 2026-10-31) ----
+const bind = (n, o) => ({ n: { value: String(n) }, ...Object.fromEntries(Object.entries(o).map(([k, v]) => [k, { value: v }])) });
+t('lireEspecesWikidata : zh-hk, zh-hant, zh-hans vers le n° de Pokédex ; la licence et la date de lecture sont portées par la table', () => {
+    const r = T.lireEspecesWikidata({ results: { bindings: [bind(133, { hk: '伊貝', hant: '伊布', hans: '伊布' }), bind(25, { hk: '比卡超' })] } }, { licence: 'CC0', luLe: '2026-10-31' });
+    assert.strictEqual(r.table['伊貝'], 'D133');
+    assert.strictEqual(r.table['伊布'], 'D133');
+    assert.strictEqual(r.table['比卡超'], 'D25');
+    assert.deepStrictEqual(r.meta, { source: 'Wikidata', licence: 'CC0', luLe: '2026-10-31' });
+});
+t('lireEspecesWikidata : un libellé partagé par deux numéros est RETIRÉ ; un numéro illisible est ignoré et compté', () => {
+    const r = T.lireEspecesWikidata({ results: { bindings: [bind(1, { hk: '同' }), bind(2, { hk: '同' }), bind('abc', { hk: '壞' }), bind(4, { hk: '小火龍' })] } }, { licence: 'CC0', luLe: 'x' });
+    assert.strictEqual(r.table['同'], undefined);
+    assert.strictEqual(r.table['壞'], undefined);
+    assert.strictEqual(r.table['小火龍'], 'D4');
+    assert.strictEqual(r.stats.ambigus, 1);
+    assert.strictEqual(r.stats.numerosIllisibles, 1);
+});
+t('lireEspecesWikidata : refuse de lire sans licence ni date (la provenance n\'est pas facultative)', () => {
+    assert.throws(() => T.lireEspecesWikidata({ results: { bindings: [] } }, {}), /licence/);
+});
+t('fusionnerEspeces : PokeAPI OU Wikidata ; un nom qui désigne deux espèces selon les deux sources est RETIRÉ', () => {
+    const r = T.fusionnerEspeces({ 甲: 'D1', 乙: 'D2' }, { 乙: 'D2', 丙: 'D3', 甲: 'D9' });
+    assert.strictEqual(r.table['乙'], 'D2');
+    assert.strictEqual(r.table['丙'], 'D3');
+    assert.strictEqual(r.table['甲'], undefined);
+    assert.strictEqual(r.stats.contradictions, 1);
+});
+t('ISOLEMENT : aucune table « produit Cardmarket au même numéro » n\'existe plus (circulaire, refusée)', () => {
+    assert.ok(!require('fs').existsSync(require('path').join(__dirname, 'proposer-table-zh.js')));
+    assert.strictEqual(T.fabriquerTraducteur.length <= 1, true);
+    const tr = T.fabriquerTraducteur({ tableEspeces: {}, tableAutres: {}, cleProduit: () => 'Dx', tableProposee: { 甲: 'D25' } });
+    assert.strictEqual(tr('甲'), null);   // un paramètre inconnu ne traduit rien
+});
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);

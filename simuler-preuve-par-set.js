@@ -16,15 +16,17 @@ const lire = f => JSON.parse(fs.readFileSync(f, 'utf8').replace(/^\uFEFF/, ''));
 const SETS = Object.fromEntries(fs.readdirSync(path.join(DOSSIER, 'cache', 'sets')).map(f => { const j = lire(path.join(DOSSIER, 'cache', 'sets', f)); return [j.etiquette, j]; }));
 const LABELS = fs.existsSync(path.join(DOSSIER, 'labels.json')) ? lire(path.join(DOSSIER, 'labels.json')) : {};
 const TW = lire(path.join(DOSSIER, 'table-zh-tw.json')).table;
-const ESPECES = TZ.lireEspecesPokeApi(fs.readFileSync(path.join(DOSSIER, 'pokeapi', 'pokemon_species_names.csv'), 'utf8'));
+const POKEAPI = TZ.lireEspecesPokeApi(fs.readFileSync(path.join(DOSSIER, 'pokeapi', 'pokemon_species_names.csv'), 'utf8'));
+// 2e source INDÉPENDANTE des espèces : Wikidata (CC0), n° de Pokédex ; lue seulement si le fichier daté existe (la source n'a pas pu être récoltée le 2026-10-31 : voir RESUME)
+let ESPECES = POKEAPI;
+const WD = path.join(DOSSIER, 'wikidata', 'especes-zh.json');
+if (fs.existsSync(WD)) { const w = TZ.lireEspecesWikidata(lire(WD), { licence: 'CC0', luLe: fs.readFileSync(path.join(DOSSIER, 'wikidata', 'LU-LE.txt'), 'utf8').slice(0, 10) }); const m = TZ.fusionnerEspeces(POKEAPI.table, w.table); ESPECES = { table: m.table, stats: { ...POKEAPI.stats, wikidata: w.stats, fusion: m.stats } }; console.log('Wikidata (' + w.meta.licence + ', lu le ' + w.meta.luLe + ') :', JSON.stringify(w.stats)); } else console.log('Wikidata : AUCUN fichier — la table des espèces est PokeAPI seule');
 console.log('table des espèces PokeAPI (BSD-3-Clause, lue le ' + fs.readFileSync(path.join(DOSSIER, 'pokeapi', 'LU-LE.txt'), 'utf8').slice(0, 10) + ') :', JSON.stringify(ESPECES.stats));
 const DEXIDS = lire('C:/Users/Yung/Desktop/pokemon-proxy/pokedex-dexids.json');
 const cleProduit = TZ.fabriquerCleProduit(DEXIDS);
 const pairesSource = Object.fromEntries(Object.entries(LABELS).filter(([, v]) => v && v.en).map(([zh, v]) => [zh.normalize('NFKC').replace(/\s+/g, ''), v.en]));
 const traduireBase = TZ.fabriquerTraducteur({ tableEspeces: ESPECES.table, tableAutres: TW, cleProduit });
-// --proposee : ajoute la table PROPOSÉE (deux sources d'accord, proposer-table-zh.js). ⚠️ circulaire pour juger les NUMÉROS (le témoin Cardmarket a servi à la prouver) : n'est montrée que pour dire quels sets cesseraient de tomber.
-const PROP = ARGS.proposee ? lire(path.join(DOSSIER, 'table-proposee.json')).acceptees : {};
-const traduire = n => traduireBase(n) ?? (PROP[String(n).normalize('NFKC').replace(/\s+/g, '')]?.cle ?? null);
+const traduire = traduireBase;   // PokeAPI (+ Wikidata si présent) pour les espèces, TCGdex/base pour le reste — AUCUNE table tirée de Cardmarket
 // L'ORACLE (hypothèse, jamais appliquée) : le libellé anglais que la source publie sur la page de la carte. Il sert à CATÉGORISER les noms intraduisibles et à tester si un set ne tombe que pour cette raison.
 const nz = s => String(s).normalize('NFKC').replace(/\s+/g, '');
 const oracle = nomZh => { const en = pairesSource[nz(nomZh)]; return en ? cleProduit(en) : null; };
@@ -71,7 +73,6 @@ const resumerDiscordances = d => { const t = {}; for (const x of d) t[x.type] = 
                 const cats = {}; for (const n of intr) (cats[categorie(n)] ||= []).push(n + (pairesSource[nz(n)] ? '=' + pairesSource[nz(n)] : ''));
                 const r2 = prouverParSet({ source, produits: cache, traduire: n => traduire(n) ?? oracle(n), cleProduit, groupeDe: cible.groupeDe || null });
                 sortie.nomsIntraduisibles = intr.length; sortie.parCategorie = cats; sortie.avecLibelles = r2.admis ? 'ADMIS' : r2.raison;
-                if (r2.admis) { rr = r2; tradRR = n => traduire(n) ?? oracle(n); mode = 'libellés de la source (HYPOTHÈSE de calibration)'; }
                 console.log('   noms intraduisibles distincts : ' + intr.length + ' · si on les traduisait par le libellé de la source (hypothèse) : ' + (r2.admis ? 'le set serait ADMIS => il ne tombe QUE pour cette raison' : 'toujours refusé — ' + r2.raison));
                 for (const [k, v] of Object.entries(cats)) console.log('      ' + k + ' (' + v.length + ') : ' + v.slice(0, 30).join(', '));
                 const ex = r.discordances.filter(d => d.type !== 'effectif').slice(0, 4).map(d => `${d.type} ${d.numero ?? ''} ${d.nomZh ?? d.name ?? ''}`.trim());
