@@ -96,7 +96,8 @@ function lireEspecesWikidata(json, { licence, luLe } = {}) {
         const brut = b.n && b.n.value;
         if (!/^\d+$/.test(String(brut ?? ''))) { illisibles++; continue; }
         const cle = 'D' + Number(brut);
-        for (const champ of ['hk', 'hant', 'hans']) {
+        // libellés de Wikidata par variante de chinois : zh-hk, zh-hant, zh-hans, et les variantes régionales (zh-mo « 比卡超 » porte le nom de Hong Kong/Macao quand zh-hk n'est qu'un repli), zh
+        for (const champ of ['hk', 'hant', 'hans', 'cn', 'tw', 'mo', 'sg', 'my', 'zh']) {
             const zh = b[champ] && String(b[champ].value).normalize('NFKC').replace(/\s+/g, '');
             if (!zh) continue;
             if (vus.has(zh) && vus.get(zh) !== cle) ambigus.add(zh); else vus.set(zh, cle);
