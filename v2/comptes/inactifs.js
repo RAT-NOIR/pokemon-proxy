@@ -31,7 +31,18 @@ function reference(c) {
 /** La date à laquelle le compte devient supprimable par INACTIVITÉ (référence + `inactiviteAns`), ou `null`. */
 function echeance(c, cfg) { const r = reference(c); return r ? plusAns(r, cfg.comptes.inactiviteAns) : null; }
 /** Un compte est-il concerné par la règle d'inactivité ? Écrit par ce qu'il AUTORISE : confirmé, hors banc, sans abonnement vivant. */
-const concerne = c => Boolean(c) && c.verifie === true && !estBanc(c) && !(c.abonnement && c.abonnement.actif === true);
+const concerne = c => Boolean(c) && c.verifie === true && !estBanc(c) && !(c.abonnement && c.abonnement.actif === true) && sansCreditsAchetes(c);
+/**
+ * R2 (tour 1) : un compte qui porte des crédits ACHETÉS (poche `solde.achete`) n'est jamais supprimé pour inactivité : ils ont été payés. Écrit par ce qu'on AUTORISE : poche absente ou exactement 0.
+ * Toute autre valeur — positive, négative, NaN, texte, objet — est « illisible » et ferme (on ne supprime pas ce qu'on ne sait pas lire).
+ */
+function sansCreditsAchetes(c) {
+    const s = c.solde;
+    if (s === undefined || s === null) return true;                  // aucune poche : jamais d'achat
+    if (typeof s !== 'object') return false;
+    const a = s.achete;
+    return a === undefined || a === null || (typeof a === 'number' && a === 0);
+}
 /** L'avertissement du compte est-il valable pour son cycle actuel (envoyé APRÈS la dernière référence) ? */
 function avertissementValable(c) {
     const a = c && c.avertissementSuppression, r = reference(c);
@@ -90,6 +101,7 @@ async function avertirInactifs({ cfg, courrier, maintenant = new Date(), aBlanc 
         } catch (e) {
             await col('comptes').updateOne({ _id: compte._id, avertissementEnCoursLe: maintenant }, { $unset: { avertissementEnCoursLe: '' } }).catch(() => { /* le bail expire seul */ });
             if (e && e.name === 'BrevoPlafond') { sortie.plafond = true; break; }
+            if (e && e.name === 'BrevoStatut429') { sortie.arret = 'BrevoStatut429'; sortie.echecs++; console.error('❌ [v2 inactifs] Brevo répond « trop de requêtes » (BrevoStatut429) — la passe s\'arrête, le reste attend la suivante'); break; }   // insister auprès d'un serveur qui dit « trop » aggrave
             sortie.echecs++;
             console.error(`❌ [v2 inactifs] avertissement non envoyé (${(e && e.name) || 'Error'})`);      // le nom de l'erreur seul : jamais l'adresse ni le message du pilote
             continue;

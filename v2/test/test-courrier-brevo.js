@@ -20,6 +20,7 @@ function fauxServeur(reponses) {   // reponses : fonction (n, req) → { statut,
             const r = reponses(vus.length, req);
             if (r === 'silence') return;                              // ne répond jamais
             if (r === 'coupure') return req.socket.destroy();
+            if (r === 'corps-sans-fin' || r === 'corps-sans-fin-503') { res.writeHead(r === 'corps-sans-fin' ? 201 : 503, { 'content-type': 'application/json' }); return res.write('{"message":'); }   // l'en-tête part, le corps ne finit jamais
             res.writeHead(r.statut, { 'content-type': 'application/json' }); res.end(JSON.stringify(r.corps || {}));
         });
     });
@@ -104,6 +105,15 @@ const lever = async f => { try { await f(); return null; } catch (e) { return e;
         const p6 = creerCourrierBrevo({ cle: CLE, url: s6.url, reessaiMs: 0, delaiMs: 150 });
         const t0 = Date.now(); e = await lever(() => p6.envoyerVerification(MAIL, LIEN)); const ms = Date.now() - t0;
         H.v('serveur muet : le délai BORNE l\'attente (2 essais de 150 ms), puis BrevoDelai', [s6.vus.length, e && e.name, ms >= 280 && ms < 2500], [2, 'BrevoDelai', true]); await s6.fermer();
+        // TOUR 1 (R3) : le délai couvre aussi la LECTURE du corps ; un corps qui ne finit jamais fait échouer l'envoi par délai, sans bloquer (et sans réessai : l'envoi a pu être accepté)
+        const s6b = await fauxServeur(() => 'corps-sans-fin');
+        const p6b = creerCourrierBrevo({ cle: CLE, url: s6b.url, reessaiMs: 0, delaiMs: 150 });
+        const t1 = Date.now(); e = await lever(() => p6b.envoyerVerification(MAIL, LIEN)); const ms2 = Date.now() - t1;
+        H.v('R3 : corps de réponse sans fin : BrevoDelai, borné (< 2,5 s), UNE requête (pas de doublon après un 2xx)', [e && e.name, ms2 < 2500, s6b.vus.length], ['BrevoDelai', true, 1]); await s6b.fermer();
+        const s6c = await fauxServeur(() => 'corps-sans-fin-503');
+        const p6c = creerCourrierBrevo({ cle: CLE, url: s6c.url, reessaiMs: 0, delaiMs: 150 });
+        const t2 = Date.now(); e = await lever(() => p6c.envoyerVerification(MAIL, LIEN)); const ms3 = Date.now() - t2;
+        H.v('   un 503 au corps sans fin : le statut gagne (BrevoStatut503), un réessai, borné', [e && e.name, s6c.vus.length, ms3 < 2500], ['BrevoStatut503', 2, true]); await s6c.fermer();
         const mort = await fauxServeur(() => ({ statut: 201 })); const urlMorte = mort.url; await mort.fermer();
         const p7 = creerCourrierBrevo({ cle: CLE, url: urlMorte, reessaiMs: 0 });
         e = await lever(() => p7.envoyerVerification(MAIL, LIEN));

@@ -31,6 +31,18 @@ const { creerPlafondJour, jourDeParis } = require('../comptes/plafond-courriels'
     maintenant = new Date('2026-11-12T09:00:00Z');
     H.v('un nouveau jour repart de zéro', await P.reserver('avertissement'), true);
     H.v('le jour est celui de Paris', [jourDeParis(new Date('2026-11-12T22:30:00Z')), jourDeParis(new Date('2026-07-12T22:30:00Z'))], ['2026-11-12', '2026-07-13']);
+    // TOUR 1 (R1) : au premier envoi du jour, un doublon de clé (deux upserts simultanés sur un jour neuf) ne vaut PAS « plein » : un second essai de l'incrément conditionnel décide
+    maintenant = new Date('2026-11-13T09:00:00Z');
+    const reel = () => db.col('courriels_jour');
+    const avecDoublons = (k) => { let reste = k; return () => ({ findOneAndUpdate: async (...a) => { if (reste > 0) { reste--; throw Object.assign(new Error('E11000'), { code: 11000 }); } return reel().findOneAndUpdate(...a); } }); };
+    await reel().insertOne({ _id: jourDeParis(maintenant), n: 3 });
+    const P1 = creerPlafondJour({ max: 10, reserveSecurite: 3, maintenant: () => maintenant, colonne: avecDoublons(1) });
+    H.v('R1 : un 11000 simulé au premier upsert, compteur SOUS la limite (3 sur 10) : envoi accepté, compteur à 4', [await P1.reserver('securite'), (await reel().findOne({ _id: jourDeParis(maintenant) })).n], [true, 4]);
+    const P2 = creerPlafondJour({ max: 10, reserveSecurite: 3, maintenant: () => maintenant, colonne: avecDoublons(2) });
+    H.v('   deux 11000 de suite : seul l\'échec du SECOND essai vaut plafond (et le compteur ne bouge pas)', [await P2.reserver('securite'), (await reel().findOne({ _id: jourDeParis(maintenant) })).n], [false, 4]);
+    await reel().updateOne({ _id: jourDeParis(maintenant) }, { $set: { n: 10 } });
+    const P3 = creerPlafondJour({ max: 10, reserveSecurite: 3, maintenant: () => maintenant });
+    H.v('   compteur réellement à la limite : toujours « plein »', await P3.reserver('securite'), false);
     // des paramètres absurdes sont refusés à la construction
     const refus = [{ max: 0, reserveSecurite: 0 }, { max: 10, reserveSecurite: 10 }, { max: 10, reserveSecurite: -1 }, { max: 'x', reserveSecurite: 1 }].map(o => { try { creerPlafondJour(o); return 'accepté'; } catch { return 'refusé'; } });
     H.v('plafond ≤ 0, réserve ≥ plafond ou négative, texte : refusés', refus, ['refusé', 'refusé', 'refusé', 'refusé']);

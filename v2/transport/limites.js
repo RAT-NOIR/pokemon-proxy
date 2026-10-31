@@ -63,4 +63,11 @@ function limiteur({ nom, max, fenetreMs, cle, horloge }) {
         }
     };
 }
-module.exports = { consommer, reserver, limiteur, empreinteIp, fixerHorloge };
+/** BREVO tour 1 (R4) : rend la prise de `reserver` (un courriel refusé par le plafond du jour n'a rien envoyé : l'adresse garde sa place de 24 h). Sans effet si la prise a déjà expiré. */
+async function liberer(cle) { await col('limites').updateOne({ cle: `${cle}|reservation` }, { $set: { expireLe: new Date(0) } }); }
+/** Rend UNE unité à un compteur de `consommer` (même fenêtre) : un courriel refusé par le plafond du jour ne compte pas parmi les demandes de l'heure. Jamais sous 0. */
+async function rendre(cle, { fenetreMs, maintenant = new Date() }) {
+    const debut = Math.floor(maintenant.getTime() / fenetreMs) * fenetreMs;
+    await col('limites').updateOne({ cle: `${cle}|${debut}`, n: { $gt: 0 } }, { $inc: { n: -1 } });
+}
+module.exports = { consommer, reserver, liberer, rendre, limiteur, empreinteIp, fixerHorloge };

@@ -42,13 +42,17 @@ function creerCourrierBrevo({ cle, env = process.env, url = URL_BREVO, delaiMs =
         const ctl = new AbortController(); const minuteur = setTimeout(() => ctl.abort(), delaiMs);
         let res;
         try { res = await fetchImpl(url, { method: 'POST', headers: { 'api-key': laCle, 'content-type': 'application/json', accept: 'application/json' }, body: corps, signal: ctl.signal, redirect: 'manual' }); }
-        catch (e) { throw erreur(ctl.signal.aborted ? 'BrevoDelai' : 'BrevoReseau'); }
-        finally { clearTimeout(minuteur); }
-        try { await res.arrayBuffer(); } catch { /* le corps n'est jamais lu ni gardé */ }
-        if (res.status >= 200 && res.status < 300) return;
+        catch (e) { clearTimeout(minuteur); throw erreur(ctl.signal.aborted ? 'BrevoDelai' : 'BrevoReseau'); }
+        // Le délai couvre AUSSI la lecture du corps (R3) : un corps qui ne finit jamais est coupé par le même signal. Le corps n'est jamais gardé.
+        const ok = res.status >= 200 && res.status < 300;
+        try { await res.arrayBuffer(); }
+        catch {
+            if (ok) { const e = erreur(ctl.signal.aborted ? 'BrevoDelai' : 'BrevoReseau'); e.apresReponse = true; throw e; }   // l'envoi a pu être accepté : pas de réessai (pas de doublon)
+        } finally { clearTimeout(minuteur); }
+        if (ok) return;
         throw erreur(`BrevoStatut${res.status}`);
     }
-    const retentable = e => e.name === 'BrevoReseau' || e.name === 'BrevoDelai' || /^BrevoStatut5\d\d$/.test(e.name);
+    const retentable = e => !e.apresReponse && (e.name === 'BrevoReseau' || e.name === 'BrevoDelai' || /^BrevoStatut5\d\d$/.test(e.name));
     async function poster(classe, adresse, contenu) {
         if (!adresseValide(adresse)) throw erreur('BrevoAdresse');
         if (plafond && !(await plafond.reserver(classe))) { dire(classe); throw erreur('BrevoPlafond'); }

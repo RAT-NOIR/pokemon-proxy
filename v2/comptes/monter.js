@@ -10,7 +10,10 @@ module.exports = {
             registre.fournir('turnstile', { verifier: (jeton, ip) => verifierTurnstile(jeton, ip) });
         }
         if (absent('courrier')) {
-            if (!process.env.BREVO_API_KEY) registre.fournir('courrier', require('./courrier').creerCourrierMemoire());   // sans clé : mémoire seulement
+            if (!process.env.BREVO_API_KEY) {
+                registre.fournir('courrier', require('./courrier').creerCourrierMemoire());   // sans clé : mémoire seulement — mais JAMAIS en silence (tour 1) : aucune valeur de secret dans la ligne
+                console.warn('⚠️ [v2] courrier : pilote mémoire, aucun courriel ne partira (BREVO_API_KEY absente)');
+            }
             else {
                 // BREVO : avec la clé, le pilote Brevo, sous le plafond du jour (V2_COURRIELS_JOUR). Une construction qui échoue (banc isolé, clé illisible) laisse le courrier NON fourni (503), comme avant le pilote :
                 // jamais un repli sur la mémoire avec une clé posée, qui ferait croire à un envoi. Le NOM de l'erreur seul est journalisé.

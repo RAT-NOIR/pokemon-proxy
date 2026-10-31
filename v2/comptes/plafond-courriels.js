@@ -11,7 +11,7 @@ const jourDeParis = (d = new Date()) => FORMAT_JOUR.format(d);
 /** Réserve par défaut : 20 % du plafond, jamais le plafond entier (au moins une place d'avertissement n'est pas exigée : un plafond de 1 n'en a aucune). */
 const reserveParDefaut = max => Math.min(Math.ceil(max * 0.2), max - 1);
 
-function creerPlafondJour({ max, reserveSecurite = reserveParDefaut(max), maintenant = () => new Date() } = {}) {
+function creerPlafondJour({ max, reserveSecurite = reserveParDefaut(max), maintenant = () => new Date(), colonne = () => col('courriels_jour') } = {}) {
     if (!Number.isInteger(max) || max < 1) throw new Error('plafond de courriels invalide');
     if (!Number.isInteger(reserveSecurite) || reserveSecurite < 0 || reserveSecurite >= max) throw new Error('réserve de courriels de sécurité invalide');
     return {
@@ -21,13 +21,17 @@ function creerPlafondJour({ max, reserveSecurite = reserveParDefaut(max), mainte
             if (classe !== 'securite' && classe !== 'avertissement') throw new Error('classe de courriel inconnue');
             const limite = classe === 'securite' ? max : max - reserveSecurite;
             const jour = jourDeParis(maintenant());
-            try {
-                await col('courriels_jour').findOneAndUpdate({ _id: jour, n: { $lt: limite } }, { $inc: { n: 1 } }, { upsert: true });
-                return true;
-            } catch (e) {
-                if (e && e.code === 11000) return false;       // le jour existe et son compteur a atteint la limite de la classe
-                throw e;
+            // R1 : un 11000 a DEUX causes — le compteur du jour est plein (le filtre ne trouve rien, l'upsert se heurte à l'_id), OU deux premiers envois du jour se sont croisés (l'autre a créé le document entre-temps).
+            // On rejoue donc UNE fois l'incrément conditionnel : seul l'échec du second essai vaut « plein ».
+            for (let essai = 0; essai < 2; essai++) {
+                try {
+                    await colonne().findOneAndUpdate({ _id: jour, n: { $lt: limite } }, { $inc: { n: 1 } }, { upsert: true });
+                    return true;
+                } catch (e) {
+                    if (!(e && e.code === 11000)) throw e;
+                }
             }
+            return false;       // deux fois de suite : le jour existe et son compteur a atteint la limite de la classe
         }
     };
 }

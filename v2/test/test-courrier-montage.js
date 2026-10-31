@@ -15,13 +15,17 @@ const arret = () => { purge.arreterPurge(); inactifs.arreterAvertissements(); };
     const bancAvant = process.env.BANC_ISOLE, cleAvant = process.env.BREVO_API_KEY;
     try {
         delete process.env.BREVO_API_KEY;
+        console.warn = console.error = (...a) => traces.push(a.join(' '));
         let mn = fabrique(); monte(cfg, mn);
         H.v('sans clé : le pilote MÉMOIRE (reel: false)', [registre.obtenir('courrier').reel, typeof registre.obtenir('courrier').envoyes], [false, 'object']);
+        const LIGNE = /courrier : pilote mémoire, aucun courriel ne partira/;
+        H.v('   TOUR 1 : le repli n\'est plus silencieux : une ligne de journal le dit au démarrage', traces.filter(t => LIGNE.test(t)).length, 1);
+        traces.length = 0;
         H.v('   la passe d\'avertissement n\'est PAS armée (seule la purge pose ses deux minuteurs)', mn.poses, [['differe', 60000], ['intervalle', 3600000]]); arret();
 
         process.env.BREVO_API_KEY = CLE;
-        console.warn = console.error = (...a) => traces.push(a.join(' '));
         mn = fabrique(); monte(cfg, mn); arret();
+        H.v('   avec une clé (fictive), la ligne « pilote mémoire » n\'apparaît PAS', traces.some(t => LIGNE.test(t)), false);
         let manque = null; try { registre.obtenir('courrier'); } catch (e) { manque = e.message; }
         H.v('avec la clé sur un banc isolé : le pilote Brevo est REFUSÉ, le courrier reste non fourni (503), jamais la mémoire', [/non fourni/.test(manque || ''), traces.some(t => t.includes('BrevoBancInterdit')), traces.join('\n').includes(CLE)], [true, true, false]);
 

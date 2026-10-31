@@ -139,6 +139,23 @@ const ans = (d, k) => { const x = new Date(d); x.setUTCFullYear(x.getUTCFullYear
     const r8 = await I.avertirInactifs({ cfg, courrier: courrierLent, maintenant: NOW });
     H.v('un compte reconnecté avant la passe n\'est plus sélectionné (son échéance a reculé de 3 ans)', [r8.avertis, r8.echecs], [0, 0]);
 
+    // ---- TOUR 1 (R2) : un compte qui porte des crédits ACHETÉS n'est ni concerné ni supprimable (défaut fermé) ----
+    const avert = { le: ans(NOW, -1), prevuLe: ans(NOW, -1) };
+    const vieux = (solde) => c({ derniereConnexionLe: ans(NOW, -4), solde, avertissementSuppression: avert });
+    H.v('R2 : achete > 0 => ni concerné ni supprimable', [I.concerne(vieux({ accueil: 0, achete: 5 })), sp(vieux({ accueil: 0, achete: 5 }), NOW)], [false, false]);
+    H.v('   poche illisible (texte, négatif, NaN, objet, booléen) => fermé aussi', [{ achete: 'x' }, { achete: -1 }, { achete: NaN }, { achete: {} }, { achete: true }].map(s => I.concerne(vieux(s)) || sp(vieux(s), NOW)), [false, false, false, false, false]);
+    H.v('   achete 0, absent ou solde absent : le compte reste concerné et supprimable (la règle ne devient pas un « jamais »)', [{ achete: 0 }, {}, undefined].map(s => [I.concerne(vieux(s)), sp(vieux(s), NOW)]), [[true, true], [true, true], [true, true]]);
+    const achat = await faire(5, { solde: { accueil: 0, achete: 3 } });
+    envoyes.length = 0; await I.avertirInactifs({ cfg, courrier, maintenant: NOW });
+    H.v('   la passe ne l\'avertit pas non plus (un avertissement promettrait une suppression que la règle refuse)', [envoyes.some(e => e.email === achat.email), (await relire(achat._id)).avertissementSuppression === undefined], [false, true]);
+
+    // ---- TOUR 1 (R3) : un 429 de Brevo ARRÊTE la passe, comme le plafond ----
+    const q1 = await faire(5), q2 = await faire(5), q3 = await faire(5);
+    let appels429 = 0;
+    const trop = { reel: true, async envoyerAvertissement() { appels429++; throw Object.assign(new Error('Brevo 429'), { name: 'BrevoStatut429' }); } };
+    piege(); const r429 = await I.avertirInactifs({ cfg, courrier: trop, maintenant: NOW }); Object.assign(console, orig);
+    H.v('R3 : 429 de Brevo : la passe S\'ARRÊTE au premier refus (1 appel, pas jusqu\'à 100), rien n\'est marqué, l\'arrêt est dit', [appels429, r429.avertis, r429.arret, (await Promise.all([q1, q2, q3].map(x => relire(x._id)))).every(x => x.avertissementSuppression === undefined)], [1, 0, 'BrevoStatut429', true]);
+
     // ---- les journaux ne contiennent aucune adresse ----
     H.vrai(`aucun journal des passes (${traces.length} lignes) ne contient une adresse ni le message du pilote`, !traces.join('\n').includes('exemple.fr') && !traces.join('\n').includes('Brevo 503'));
     await H.fermerBac(); H.bilan();
