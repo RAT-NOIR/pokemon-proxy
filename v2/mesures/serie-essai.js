@@ -15,10 +15,16 @@
 //   · le corps de /api/identifier est celui du CONTRAT 2 : `contrat: 2` (sans lui l'aiguilleur renvoie vers la route héritée : 401), title, description, prixVinted, devise, langueInterface ; le banc le juge par `verifierEntree` de la production ;
 //   · GARDE ANTI-VINTED : l'adresse d'image de l'annonce est factice (exigée par la forme) ; un scan ne compte que si `analyse.photoRecue === true`. Sinon (champ absent, faux, pas d'`analyse`) la série S'ARRÊTE à l'instant : le serveur a pu télécharger l'adresse chez Vinted ;
 //   · le carnet porte, en plus de l'estimation, une ligne « résultat » par scan (statut HTTP, analyse présente, photo rattachée), sans coût ;
-//   · une série se rejoue à l'identique : l'échantillon est tiré d'une graine écrite (--graine=) sur les lignes triées par clé, dans cet ordre-là.
+//   · une série se rejoue à l'identique : l'échantillon est tiré d'une graine écrite (--graine=) sur les lignes triées par clé, dans cet ordre-là ;
+//   · MODE --g-probable (31/10, ordre n°12) : le client fait ce que fait l'extension >= 2.0.1 : il annonce `versionExtension` 2.0.1 et `capacitesClient: ['mesures-1']` ; quand la réponse est une QUESTION portant un `complement`, il produit les
+//     mesures demandées avec les fonctions de PRODUCTION (serie-probable.js::produireMesures : ratmarket/zones.js, carte-redressee.js, validerResultats) sur la carte redressée (--cartes=) et les visuels de référence LOCAUX (--scans=, lecture seule),
+//     puis POST /api/identifier/mesures avec `accepteProbable: true`. Chaque verdict est JUGÉ contre la vérité du banc (sûr juste/FAUX, probable juste/FAUX, question) ; le client DÉCLARE (confirmation d'un probable juste, la vérité parmi les
+//     candidats, « aucune » sinon ; --sans-declarations les coupe) ; ARRÊT IMMÉDIAT au premier probable FAUX ou sûr FAUX, avant le scan suivant (code de sortie 10 / 11, ligne fautive au carnet et au rapport). Il ne touche à AUCUNE variable
+//     du service. Sans l'option, rien de ce qui précède n'existe : le client est celui d'avant, octet pour octet (banc test-serie-essai.js).
 // Usage : node v2/mesures/serie-essai.js --resultats=<resultats-*.json> --nav=<nav-bancs.json> --photos=<dossier des photos des bancs, <clé de photo>.jpg|png|webp> --n=<N> --graine=<entier> --plafond-usd=<USD> --carnet=<fichier.jsonl>
-//         [--cartes=<dossier des cartes redressées, <clé de photo>.jpg>] [--env=<fichier .env>] [--pause-s=6] [--cout-estime-usd=0.0037] [--modele-id=… --modele-sha256=…] [--sortie=<rapport.json>] [--base=https://rat-market-api-essai.onrender.com]
+//         [--cartes=<dossier des cartes redressées, <clé de photo>.jpg>] [--g-probable [--scans=<dossier>,<dossier>] [--tampons=<json>] [--version-extension=2.0.1] [--sans-declarations]] [--env=<fichier .env>] [--pause-s=6] [--cout-estime-usd=0.0037] [--modele-id=… --modele-sha256=…] [--sortie=<rapport.json>] [--base=https://rat-market-api-essai.onrender.com]
 const fs = require('fs'), path = require('path'), crypto = require('crypto');
+const SP = require('./serie-probable');
 
 const HOTE_ESSAI = 'rat-market-api-essai.onrender.com';
 const NOM_IDENTIFIANT = 'V2_ESSAI_BANC_IDENTIFIANT', NOM_MOT_DE_PASSE = 'V2_ESSAI_BANC_MOT_DE_PASSE';
@@ -114,7 +120,7 @@ function lignesLocales(R) {
         const brut = apres.has(x.cle) ? apres.get(x.cle) : null;
         const sur = brut !== null ? produitDe(brut) !== null : (x.et && x.et.type === 'sur');
         const produit = brut !== null ? produitDe(brut) : (x.et && x.et.type === 'sur' ? (x.et.produit ?? x.et.idProduct ?? null) : null);
-        return { cle: x.cle, verite: x.verite ?? null, localSur: sur, localProduit: produit };
+        return { cle: x.cle, banc: x.banc, verite: x.verite ?? null, localSur: sur, localProduit: produit };
     });
 }
 
@@ -162,6 +168,16 @@ async function serie(o, deps = {}) {
     if (!(typeof coutEstimeUsd === 'number' && Number.isFinite(coutEstimeUsd) && coutEstimeUsd > 0)) throw new Arret('--cout-estime-usd doit être un nombre > 0');
     const carnet = ouvrirCarnet(o.carnet, { plafondUsd: o.plafondUsd, coutEstimeUsd });
     const modele = o.modele || MODELE_DEFAUT;
+    // MODE --g-probable : tout ce qu'il faut pour MESURER est jugé avant la première requête (une série qui ne saurait pas produire ses mesures dépenserait pour rien)
+    const gp = o.gProbable === true, declarer = o.declarations !== false;
+    const versionClient = gp ? (o.versionExtension === undefined ? SP.VERSION_PROBABLE : o.versionExtension) : null;
+    let lireReference = null;
+    if (gp) {
+        if (typeof versionClient !== 'string' || !/^\d+\.\d+\.\d+$/.test(versionClient)) throw new Arret('--version-extension doit être de la forme x.y.z');
+        if (!o.cartes) throw new Arret('--g-probable exige --cartes= (la carte redressée de chaque ligne : les mesures du client se calculent dessus)');
+        lireReference = deps.lireReference || (Array.isArray(o.scans) && o.scans.length ? SP.lecteurDeReferences(o.scans) : null);
+        if (!lireReference) throw new Arret('--g-probable exige --scans= (les dossiers des visuels de référence, lecture seule : <sha1 de la clé>.webp)');
+    }
     const nav = o.nav && o.nav.photos ? o.nav.photos : {};
     const EV = require('../identifier/empreinte-vecteur');
     const candidates = lignesLocales(o.resultats).filter(l => nav[clePhoto(l.cle)] && Array.isArray(nav[clePhoto(l.cle)].emb) && trouverFichier(o.photos, clePhoto(l.cle)));
@@ -206,16 +222,75 @@ async function serie(o, deps = {}) {
 
     const hashSerie = passe => crypto.createHash('sha1').update(`${o.graine}|${lignes.map(l => l.cle).join(',')}${passe > 1 ? `|passe${passe}` : ''}`).digest('hex').slice(0, 10);
     const stamp = (deps.maintenant || Date.now)().toString(36);
+
+    /**
+     * MODE --g-probable : ce qui suit la première réponse de /api/identifier. JAMAIS d'exception : un refus du serveur (401, 429) est rendu dans `arretReseau` (la série s'arrête APRÈS avoir écrit la ligne, le premier verdict
+     * n'est pas perdu). Étapes : (1) juger le premier verdict ; (2) si c'est une QUESTION qui porte un complément, produire les mesures (fonctions de production) et faire le second envoi avec accepteProbable:true ;
+     * (3) juger le verdict FINAL ; (4) déclarer comme l'extension le ferait ; (5) si un probable FAUX ou un sûr FAUX a été rendu : la ligne fautive, au carnet, avant que la série ne s'arrête.
+     */
+    const statutDeArret = raison => (/\(401\)/.test(raison) ? 401 : /^429 /.test(raison) ? 429 : null);       // le statut HTTP que dit un arrêt du client (null : une redirection, pas un statut)
+    const suiteProbable = async ({ l, rang, serieId, etiquette, carteB64, issue, premierMs }) => {
+        const scanId = typeof issue.scanId === 'string' ? issue.scanId : null, verite = l.verite;
+        const classe1 = SP.classerCarte(issue.analyse && Array.isArray(issue.analyse.cartes) ? issue.analyse.cartes[0] : null), j1 = SP.jugerVerdict(classe1, verite);
+        let classe = classe1, j = j1, chemin = classe1.niveau === 'probable' ? 'PROBABLE' : classe1.niveau === 'question' ? 'QUESTION' : 'PREMIER';
+        let secondEnvoi = null, mesuresClient = null, declaration = null, arretReseau = null;
+        const cle = suffixe => `serie-${serieId}-${rang}-${etiquette}-${suffixe}`;
+        carnet.noter({ serie: serieId, rang, cle: l.cle, premierVerdict: { verdict: j1.verdict, niveau: classe1.niveau, ms: premierMs } });
+        const cplt = issue.complement;
+        if (!SP.fautif(j1.verdict) && classe1.niveau === 'question' && scanId && cplt && typeof cplt === 'object' && typeof cplt.jeton === 'string' && Array.isArray(cplt.mesures) && cplt.mesures.length > 0) {
+            if (!carteB64) secondEnvoi = { envoye: false, raison: 'carte-absente' };
+            else {
+                const prod = await SP.produireMesures({ demande: cplt.mesures, carteB64, lireReference, zones: deps.zones || require('../../ratmarket/zones'), carteRedressee: deps.carteRedressee || require('../identifier/carte-redressee'), validerResultats: require('../identifier/calcul-client').validerResultats });
+                if (!prod.ok) secondEnvoi = { envoye: false, raison: prod.raison };
+                else {
+                    mesuresClient = prod.resultats;
+                    try {
+                        const m = await appeler('/api/identifier/mesures', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': cle('m') }, body: JSON.stringify({ scanId, jeton: cplt.jeton, opencv: o.opencv || 'serie-essai-node', accepteProbable: true, resultats: prod.resultats }) });
+                        if (m.statut === 401) throw new Arret('jeton refusé (401) sur /api/identifier/mesures : le jeton d\'installation n\'est plus accepté ; série arrêtée');
+                        if (m.statut === 429) throw new Arret(`429 sur /api/identifier/mesures (reessayerDans ${m.retryApres ?? '?'}) : la série s'arrête, sans boucle`);
+                        secondEnvoi = { envoye: true, statut: m.statut, ...(m.statut === 200 && m.corps ? { change: m.corps.change === true } : {}) };
+                        if (m.statut === 200 && m.corps && m.corps.change === true) {
+                            const c2 = SP.classerCarte(m.corps.carte);
+                            if (c2.niveau === 'probable' || c2.niveau === 'sur') { classe = c2; j = SP.jugerVerdict(c2, verite); chemin = c2.niveau === 'probable' ? 'G-GROUPE' : 'G-PROMOTION'; }
+                        }
+                    } catch (e) {
+                        if (e instanceof Arret) { arretReseau = e.raison; secondEnvoi = { envoye: true, statut: statutDeArret(e.raison) }; }
+                        else secondEnvoi = { envoye: true, statut: null, erreur: (e && (e.code || e.name)) || 'erreur' };
+                    }
+                }
+            }
+        }
+        // les déclarations du client (celles de l'extension) : même après un faux (« aucune » sur un probable faux) ; jamais si le serveur vient de refuser
+        const decl = declarer && !arretReseau ? SP.declarationDe(classe, j.verdict, verite) : null;
+        if (decl && scanId) {
+            try {
+                const rp = await appeler('/api/identifier/reponse', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': cle('r') }, body: JSON.stringify({ scanId, carte: 0, choix: decl.choix }) });
+                if (rp.statut === 401) throw new Arret('jeton refusé (401) sur /api/identifier/reponse : le jeton d\'installation n\'est plus accepté ; série arrêtée');
+                if (rp.statut === 429) throw new Arret(`429 sur /api/identifier/reponse (reessayerDans ${rp.retryApres ?? '?'}) : la série s'arrête, sans boucle`);
+                declaration = { ...decl, statut: rp.statut };
+            } catch (e) {
+                if (e instanceof Arret) { arretReseau = e.raison; declaration = { ...decl, statut: statutDeArret(e.raison) }; }
+                else declaration = { ...decl, statut: null, erreur: (e && (e.code || e.name)) || 'erreur' };
+            }
+        }
+        let fautifLigne = null;
+        if (SP.fautif(j.verdict)) {
+            fautifLigne = { type: j.verdict, cle: l.cle, scanId, chemin, produit: classe.produit, candidats: classe1.candidats.length ? classe1.candidats : classe.candidats, verite, niveauPremier: classe1.niveau, premierMs,
+                mesuresClient: chemin === 'G-GROUPE' || chemin === 'G-PROMOTION' ? mesuresClient : null, declaration };
+            carnet.noter({ serie: serieId, rang, cle: l.cle, fautif: fautifLigne });                                            // écrite AU CARNET avant de rendre la main : un arrêt brutal ne la perd pas
+        }
+        return { verdictPremier: j1.verdict, verdict: j.verdict, chemin, produit: classe.produit, candidats: classe.candidats.length ? classe.candidats : classe1.candidats, secondEnvoi, declaration, fautif: fautifLigne, arretReseau };
+    };
     /** UNE passe sur les lignes (même ordre à chaque passe), avec le jeton gardé en MÉMOIRE ; le carnet est commun. */
     const jouer = async (passe, versionMin) => {
         const resultats = [], durees = [], erreurs = [];
-        let arret = null, deSuite = 0, rang = 0;
+        let arret = null, deSuite = 0, rang = 0, fautifLigne = null;
         const serieId = hashSerie(passe), etiquetteCle = passe > 1 ? `${stamp}p${passe}` : stamp;
         for (const l of lignes) {
             rang++;
             if (!carnet.peutDepenser()) { arret = `plafond atteint (${carnet.total().toFixed(4)} USD déjà inscrits, plafond ${o.plafondUsd}) : arrêt avant le scan ${rang}`; break; }
             const cp = clePhoto(l.cle), ph = trouverFichier(o.photos, cp), debut = horloge();
-            let issue = null;
+            let issue = null, carteB64 = null, premierMs = null, suite = null;
             try {
                 const octets = fs.readFileSync(ph.fichier);
                 const up = await appeler('/api/photo', { method: 'POST', headers: { 'Content-Type': ph.type, 'Content-Length': String(octets.length) }, body: octets });
@@ -226,7 +301,8 @@ async function serie(o, deps = {}) {
                 const entree = { photo: 0, vecteur: EV.encoderVecteur(Float32Array.from(p.emb)), redressee: p.redressee === true };
                 if (o.cartes) { const cf = trouverFichier(o.cartes, cp); if (cf) entree.carte = fs.readFileSync(cf.fichier).toString('base64'); }
                 // `contrat: 2` : sans lui l'aiguilleur (monter.js) renvoie vers la route HÉRITÉE, qui répond 401. Les autres champs sont ceux que la v2 attend (verifierEntree).
-                const corps = { contrat: 2, versionExtension: versionMin, marche: 'vinted.fr', title: '', description: '', prixVinted: null, devise: null, langueInterface: 'fr', imageUrls: [IMAGE_ANNONCE], photoIds: [{ index: 0, photoId: up.corps.photoId }], empreintes: [entree], modeleEmpreinte: { id: modele.id, sha256: modele.sha256 } };
+                carteB64 = entree.carte || null;
+                const corps = { contrat: 2, versionExtension: gp ? versionClient : versionMin, ...(gp ? { capacitesClient: ['mesures-1'] } : {}), marche: 'vinted.fr', title: '', description: '', prixVinted: null, devise: null, langueInterface: 'fr', imageUrls: [IMAGE_ANNONCE], photoIds: [{ index: 0, photoId: up.corps.photoId }], empreintes: [entree], modeleEmpreinte: { id: modele.id, sha256: modele.sha256 } };
                 carnet.inscrire({ serie: serieId, rang, cle: l.cle, graine: o.graine, ...(passe > 1 ? { passe } : {}) });                 // inscrit AVANT l'appel payant : un arrêt brutal ne laisse pas un scan hors carnet
                 // DÈS QUE LA PHOTO EST DÉPOSÉE, la garde s'écrit par ce qu'elle AUTORISE : un SEUL chemin continue la série — « 200 avec `analyse.photoRecue === true` ». Toute autre issue (statut non 200, 429, corps vide, pas d'`analyse`, photoRecue absent ou faux,
                 // exception, délai, redirection) ARRÊTE la série : on ne peut pas savoir si le serveur est retombé sur l'adresse factice de l'annonce, donc chez Vinted. Jamais de nouvel essai.
@@ -240,6 +316,10 @@ async function serie(o, deps = {}) {
                 if (id.statut !== 200 || !id.corps) throw incertaine(`identifier-${id.statut}`);
                 if (!(analyse && analyse.photoRecue === true)) throw new Arret('photo non rattachée : le serveur a pu retomber sur l\'adresse de l\'annonce ; série arrêtée');
                 issue = id.corps;
+                if (gp) {                                                                                                         // sans l'option : AUCUNE lecture d'horloge de plus, le client est celui d'avant
+                    premierMs = horloge() - debut;                                                                                // le PREMIER VERDICT : le dépôt de la photo + la première réponse de /api/identifier
+                    suite = await suiteProbable({ l, rang, serieId, etiquette: etiquetteCle, carteB64, issue, premierMs });      // jamais d'exception : un refus du serveur est rendu dans `suite.arretReseau`
+                }
             } catch (e) {
                 if (e instanceof Arret) { arret = e.raison; break; }
                 erreurs.push({ cle: l.cle, code: (e && (e.code || e.name)) || 'erreur' });
@@ -250,8 +330,12 @@ async function serie(o, deps = {}) {
             deSuite = 0;
             const ms = horloge() - debut; durees.push(ms);
             const s = sureDe(issue);
-            resultats.push({ cle: l.cle, ms, essaiSur: s.sur, essaiProduit: s.produit, localSur: l.localSur, localProduit: l.localProduit, verite: l.verite });
+            resultats.push({ cle: l.cle, ms, essaiSur: s.sur, essaiProduit: s.produit, localSur: l.localSur, localProduit: l.localProduit, verite: l.verite,
+                ...(suite ? { famille: SP.familleDe(l, o.releveTampons), avecVerite: l.verite !== null && l.verite !== undefined, premierMs, verdictPremier: suite.verdictPremier, verdict: suite.verdict, chemin: suite.chemin, produit: suite.produit, candidats: suite.candidats, secondEnvoi: suite.secondEnvoi, declaration: suite.declaration } : {}) });
             log(`  ${rang}/${lignes.length} ${l.cle} : ${ms} ms, essai ${s.sur ? `sûr ${s.produit}` : 'pas sûr'}, local ${l.localSur ? `sûr ${l.localProduit}` : 'pas sûr'}`);
+            if (suite) log(`      premier verdict ${premierMs} ms, total ${ms} ms, chemin ${suite.chemin} : ${suite.verdictPremier} -> ${suite.verdict}${suite.secondEnvoi ? ` (second envoi : ${JSON.stringify(suite.secondEnvoi)})` : ''}${suite.declaration ? ` ; déclaré « ${suite.declaration.choix} »` : ''}`);
+            if (suite && suite.fautif) { fautifLigne = suite.fautif; arret = `ARRÊT FAUTE ${suite.fautif.type} sur ${l.cle} (chemin ${suite.fautif.chemin}, produit ${suite.fautif.produit}, candidats [${suite.fautif.candidats.join(',')}], vérité ${suite.fautif.verite}, scan ${suite.fautif.scanId}) : série arrêtée avant le scan suivant`; break; }
+            if (suite && suite.arretReseau) { arret = suite.arretReseau; break; }
             if (rang < lignes.length && o.pauseS > 0) await pause(o.pauseS * 1000);
         }
         const stats = statistiques(durees), comparaison = comparer(resultats);
@@ -260,7 +344,14 @@ async function serie(o, deps = {}) {
         if (erreurs.length) log(`erreurs : ${JSON.stringify(erreurs)}`);
         log(arret ? `ARRÊT : ${arret}` : 'série terminée');
         log(`dépense inscrite au carnet : ${carnet.total().toFixed(4)} USD sur un plafond de ${o.plafondUsd}`);
-        return { arret, resultats, durees, stats, comparaison, erreurs, capacites, jetonEmpreinteAnnonce: capacites.includes('empreinte'), depenseUsd: carnet.total(), serie: serieId, lignes: lignes.map(l => l.cle) };
+        let rapportProbable = null;
+        if (gp) {
+            rapportProbable = SP.rapportSerie(resultats, { statistiques });
+            const T_ = rapportProbable.total;
+            log(`rapport probable (dénominateur : ${T_.avecVerite} lignes à vérité sur ${T_.lignes}) : sûrs ${T_.surJuste} justes / ${T_.surFaux} FAUX · probables ${T_.probableJuste} justes / ${T_.probableFaux} FAUX · questions ${T_.questionDansCandidats} (vérité dans les candidats) / ${T_.questionHorsCandidats} (hors) · introuvables ${T_.introuvable} · sans vérité ${T_.sansVerite} · réponse directe juste ${T_.reponseDirecteJuste} %`);
+            log(`premier verdict : n ${rapportProbable.premierVerdict.n}, p50 ${rapportProbable.premierVerdict.p50} ms, p95 ${rapportProbable.premierVerdict.p95} ms ; total : p50 ${rapportProbable.dureeTotale.p50} ms, p95 ${rapportProbable.dureeTotale.p95} ms`);
+        }
+        return { arret, resultats, durees, stats, comparaison, erreurs, capacites, jetonEmpreinteAnnonce: capacites.includes('empreinte'), depenseUsd: carnet.total(), serie: serieId, lignes: lignes.map(l => l.cle), ...(gp ? { fautif: fautifLigne, rapportProbable } : {}) };
     };
 
     const r1 = await jouer(1, ping.corps.versionMinExtension);
@@ -298,14 +389,20 @@ if (require.main === module) {
         const necessaire = n => { const v = arg(n); if (!v) throw new Arret(`argument --${n}= manquant`); return v; };
         const resultats = JSON.parse(fs.readFileSync(necessaire('resultats'), 'utf8')), nav = JSON.parse(fs.readFileSync(necessaire('nav'), 'utf8'));
         const modele = arg('modele-id') && arg('modele-sha256') ? { id: arg('modele-id'), sha256: arg('modele-sha256') } : MODELE_DEFAUT;
-        const ecrire = (fichier, r) => fs.writeFileSync(fichier, JSON.stringify({ serie: r.serie, lignes: r.lignes, stats: r.stats, comparaison: r.comparaison, erreurs: r.erreurs, arret: r.arret, depenseUsd: r.depenseUsd, jetonEmpreinteAnnonce: r.jetonEmpreinteAnnonce, resultats: r.resultats }, null, 1));
+        const ecrire = (fichier, r) => fs.writeFileSync(fichier, JSON.stringify({ serie: r.serie, lignes: r.lignes, stats: r.stats, comparaison: r.comparaison, erreurs: r.erreurs, arret: r.arret, depenseUsd: r.depenseUsd, jetonEmpreinteAnnonce: r.jetonEmpreinteAnnonce, resultats: r.resultats, ...(r.rapportProbable ? { fautif: r.fautif, rapportProbable: r.rapportProbable } : {}) }, null, 1));
         const signal = arg('deuxieme-apres-signal');
         if (signal && !arg('sortie2')) throw new Arret('--deuxieme-apres-signal exige --sortie2= (la sortie de la série 2)');
-        const r = await serie({ base: arg('base') || undefined, resultats, nav, photos: necessaire('photos'), cartes: arg('cartes'), n: num('n', NaN), graine: num('graine', NaN), plafondUsd: num('plafond-usd', NaN), carnet: arg('carnet'),
+        // MODE --g-probable : les dossiers des visuels de référence (lecture seule), le relevé des tampons (famille « tamponnee »), les déclarations ; les valeurs par défaut sont celles de extraire-mesures-groupe.js
+        const gProbable = process.argv.includes('--g-probable');
+        const DOSSIER_ARCHIVES = 'C:/Users/Yung/rat-market-travail/api/';
+        const scans = gProbable ? (arg('scans') ? arg('scans').split(',').filter(Boolean) : [DOSSIER_ARCHIVES + 'index-empreintes-essai/images', DOSSIER_ARCHIVES + 'index-empreintes/images', DOSSIER_ARCHIVES + 'modele-visuel-hors-ligne/cache-archive/img']) : undefined;
+        const fTampons = gProbable ? (arg('tampons') || DOSSIER_ARCHIVES + 'tampons/controle-tampons-2026-10-18.json') : null;
+        const releveTampons = fTampons ? new Set(JSON.parse(fs.readFileSync(fTampons, 'utf8')).lignes.flatMap(l => l.scans.flatMap(s => s.cartes.map(k => k.cle)))) : undefined;
+        const r = await serie({ base: arg('base') || undefined, resultats, nav, photos: necessaire('photos'), cartes: arg('cartes'), gProbable: gProbable || undefined, scans, releveTampons, declarations: process.argv.includes('--sans-declarations') ? false : undefined, versionExtension: arg('version-extension') || undefined, n: num('n', NaN), graine: num('graine', NaN), plafondUsd: num('plafond-usd', NaN), carnet: arg('carnet'),
             fichierEnv: arg('env') || process.env.V2_ESSAI_ENV || null, pauseS: num('pause-s', 6), coutEstimeUsd: arg('cout-estime-usd') === null ? undefined : num('cout-estime-usd', NaN), modele, env: process.env,
             deuxiemeApresSignal: signal || undefined, attenteMaxMin: num('attente-max-min', 120), apresSerie1: async r1 => { if (arg('sortie')) ecrire(arg('sortie'), r1); } });
         if (arg('sortie') && !signal) ecrire(arg('sortie'), r);
         if (signal && r.deuxieme) ecrire(arg('sortie2'), r.deuxieme);
-        process.exit(r.arret || (r.deuxieme && r.deuxieme.arret) ? 1 : 0);
+        process.exit(gProbable ? SP.codeSortie(r) : (r.arret || (r.deuxieme && r.deuxieme.arret) ? 1 : 0));          // 10 = probable FAUX, 11 = sûr FAUX (voir serie-probable.js), 1 = autre arrêt
     })().catch(e => { console.error(e instanceof Arret ? `ARRÊT : ${e.raison}` : `ERREUR ${e && (e.code || e.name)}`); process.exit(e instanceof Arret ? 2 : 1); });
 }
