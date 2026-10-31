@@ -137,7 +137,9 @@ async function executer({ argv, ouvrirLecture, ouvrirEcriture, chargerBase = () 
             if (absents.length) { err(`❌ ARRÊT : ${absents.length} idProduct de --seulement ne sont plus attribués par un set admis (${absents.slice(0, 8).join(', ')}) — rien n'est écrit`); return 1; }
             aPlanifier = entrees.filter(e => seulement.has(e.idProduct));
         }
-        const plan = RG.planifierRattachement({ entrees: aPlanifier, lecture, variantes: argv.includes('--refuser-variantes') ? 'refuser' : 'groupe' });
+        const plan = RG.planifierRattachement({ entrees: aPlanifier, lecture, variantes: argv.includes('--refuser-variantes') ? 'refuser' : 'groupe', expansionDe: RG.nomExpansionGemPack });
+        const utilises = Object.fromEntries(Object.entries(plan.expansionsNommees).filter(([slug]) => plan.lignes.some(l => l.slugSet === slug)));
+        if (Object.keys(utilises).length) log(`   ℹ️ nom d'expansion des impressions (les sets n'en portent pas : bulba.expansion null ; le set de la base n'est PAS modifié) : ${JSON.stringify(utilises)}`);
         plan.refus = [...refusSets.filter(r => !seulement || seulement.has(r.idProduct)).map(r => ({ ...r, categorie: 'set' })), ...plan.refus];
         // le périmètre : SEULES les lignes que le rattachement a rendues posables s'écrivent ici (les lignes de la voie ordinaire relèvent de ecrire-fiches-preuve-set.js)
         const hors = plan.lignes.filter(l => !plan.rattaches.includes(l.idProduct));

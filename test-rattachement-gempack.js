@@ -88,6 +88,35 @@ t('NON : un groupe dont les produits désignent DEUX cartes (attaques différent
     assert.strictEqual(p.lignes.length, 0); assert.strictEqual(p.ajoutsSets.size, 0);
     assert.ok(p.refus.every(r => /désigne 2 cartes/.test(r.raison)), JSON.stringify(p.refus));
 });
+// ── le set Gem Pack réel n'a PAS de `bulba.expansion` (null) : l'impression n'a aucun nom d'expansion à porter ──
+const setSansNom = { ...set, bulba: { expansion: null } };
+const lectureSansNom = (cartes, prods) => ({ ...lecture(cartes, prods), sets: new Map([[SET, setSansNom]]) });
+t('un set SANS nom d\'expansion (bulba.expansion null) : sans nom donné, l\'impression n\'est pas posable — refus tel quel (la production dit non)', () => {
+    const p = RG.planifierRattachement({ entrees: prodsPonyta.map(entree), lecture: lectureSansNom([ponyta], prodsPonyta), le: LE });
+    assert.strictEqual(p.lignes.length, 0); assert.strictEqual(p.ajoutsSets.size, 0);
+    assert.ok(p.refus.every(r => /nom d'expansion/.test(r.raison)), JSON.stringify(p.refus.map(r => r.raison)));
+});
+t('avec `expansionDe` : le nom est posé sur une COPIE du set (le set réel ne bouge pas), l\'impression porte ce nom, et il est dit dans le plan', () => {
+    const l = lectureSansNom([ponyta], prodsPonyta);
+    const p = RG.planifierRattachement({ entrees: prodsPonyta.map(entree), lecture: l, le: LE, expansionDe: s => (s._id === SET ? 'Gem Pack Vol. T' : null) });
+    assert.strictEqual(p.lignes.length, 3, JSON.stringify(p.refus));
+    assert.strictEqual(p.impressions[0].imp.expansion, 'Gem Pack Vol. T');
+    assert.deepStrictEqual(p.expansionsNommees, { [SET]: 'Gem Pack Vol. T' });
+    assert.strictEqual(l.sets.get(SET).bulba.expansion, null);        // le set de la lecture est INTACT
+});
+t('`expansionDe` ne remplace JAMAIS un nom d\'expansion déjà porté par le set', () => {
+    const p = RG.planifierRattachement({ entrees: prodsPonyta.map(entree), lecture: lecture([ponyta], prodsPonyta), le: LE, expansionDe: () => 'Autre Nom' });
+    assert.strictEqual(p.impressions[0].imp.expansion, EXPANSION); assert.deepStrictEqual(p.expansionsNommees, {});
+});
+t('nomExpansionGemPack : « Gem Pack Vol 4 » (nom d\'affichage Cardmarket) -> « Gem Pack Vol. 4 » (forme des impressions déjà au catalogue) ; rien d\'autre ne se devine', () => {
+    assert.strictEqual(RG.nomExpansionGemPack({ nomAffichage: 'Gem Pack Vol 4' }), 'Gem Pack Vol. 4');
+    assert.strictEqual(RG.nomExpansionGemPack({ nomAffichage: 'Gem Pack Vol 6', bulba: { expansion: null } }), 'Gem Pack Vol. 6');
+    assert.strictEqual(RG.nomExpansionGemPack({ nomAffichage: 'Gem Pack Vol5' }), 'Gem Pack Vol. 5');   // la graphie réelle du set de Vol. 5 (slug « Gem-Pack-Vol5 »)
+    assert.strictEqual(RG.nomExpansionGemPack({ nomAffichage: 'Gem Pack Volume 5' }), null);
+    assert.strictEqual(RG.nomExpansionGemPack({ nomAffichage: 'Collect 151' }), null);
+    assert.strictEqual(RG.nomExpansionGemPack({ nomAffichage: 'Gem Pack Vol 12' }), 'Gem Pack Vol. 12');
+    assert.strictEqual(RG.nomExpansionGemPack({}), null);
+});
 t('option « refuser les variantes » : un groupe de plusieurs produits est refusé (« variantes indiscernables »), le produit unique passe', () => {
     const p = R([ponyta, pinsir], [...prodsPonyta, prodPinsir], { variantes: 'refuser' });
     assert.deepStrictEqual(p.lignes.map(l => l.idProduct), [200]);

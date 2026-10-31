@@ -23,7 +23,17 @@ const MOTIF_VARIANTES = 'variantes-indiscernables';
  * @param {{entrees: object[], lecture: object, le?: Date, variantes?: 'groupe'|'refuser', planifier?: Function}} o   `entrees` : celles du planificateur (entreesDesSetsAdmis) ; `lecture` : celle de poser-fiches-voie-deux-sources.lire
  * @returns {{lignes: object[], impressions: object[], R: object, detail: object[], ajoutsSets: Map<number,string[]>, trous: object[], refus: object[], denominateurs: object}}
  */
-function planifierRattachement({ entrees, lecture, le = new Date(), variantes = 'groupe', planifier = V.planifierVoie }) {
+function planifierRattachement({ entrees, lecture: lectureRecue, le = new Date(), variantes = 'groupe', planifier = V.planifierVoie, expansionDe = null }) {
+    // LE NOM D'EXPANSION de l'impression : un set Gem Pack n'en porte pas (`bulba.expansion` null : pas de page Bulbapedia) et la production refuse alors toute impression (« le set n'a pas UN nom d'expansion »).
+    // `expansionDe(set)` le donne, sur une COPIE de la lecture (le set réel ne bouge pas) ; il ne remplace JAMAIS un nom que le set porte déjà. Il est dit dans le plan (`expansionsNommees`).
+    const expansionsNommees = {};
+    const lecture = !expansionDe ? lectureRecue : { ...lectureRecue, sets: new Map([...lectureRecue.sets].map(([id, s]) => {
+        if (typeof s.bulba?.expansion === 'string' && s.bulba.expansion) return [id, s];
+        const nom = expansionDe(s);
+        if (typeof nom !== 'string' || !nom) return [id, s];
+        expansionsNommees[id] = nom;
+        return [id, { ...s, bulba: { ...(s.bulba || {}), expansion: nom } }];
+    })) };
     const numeroDe = new Map(); for (const prods of lecture.produits.values()) for (const p of prods) numeroDe.set(p.idProduct, p.numero ?? null);
     const idsDuSet = new Map();            // `${slug}|${groupe}` -> tous les produits du catalogue de ce groupe (le dénominateur des variantes)
     for (const prods of lecture.produits.values()) for (const p of prods) { const kk = `${p.slugSet}|${k(p.numero)}`; (idsDuSet.get(kk) || idsDuSet.set(kk, []).get(kk)).push(p.idProduct); }
@@ -100,7 +110,13 @@ function planifierRattachement({ entrees, lecture, le = new Date(), variantes = 
     const refusParMotif = {};
     for (const r of refus) { const c = r.raison.replace(/\(.*?\)/g, '(…)').replace(/«[^»]*»/g, '«…»').replace(/\d+/g, '#').slice(0, 120); refusParMotif[c] = (refusParMotif[c] || 0) + 1; }
     const denominateurs = { produits: entrees.length, dejaFichees: dejaFichees.size, aRattacher: candidats.length, fiches: lignes.length, uniques, variantesIndiscernables: indiscernables, refuses: refus.length, refusParMotif };
-    return { lignes, impressions, R: r2.R.aPoser.size || r1.R.aPoser.size ? { aPoser: new Map([...r1.R.aPoser, ...r2.R.aPoser]), groupes: new Map([...r1.R.groupes, ...r2.R.groupes]), refus: [...r1.R.refus, ...r2.R.refus] } : r2.R, detail: [...r1.detail, ...r2.detail], ajoutsSets, trous, refus: refus.sort((a, b) => a.idProduct - b.idProduct), denominateurs, rattaches: [...rattaches].sort((a, b) => a - b), dejaPoses: [...dejaPoses] };
+    return { lignes, impressions, R: r2.R.aPoser.size || r1.R.aPoser.size ? { aPoser: new Map([...r1.R.aPoser, ...r2.R.aPoser]), groupes: new Map([...r1.R.groupes, ...r2.R.groupes]), refus: [...r1.R.refus, ...r2.R.refus] } : r2.R, detail: [...r1.detail, ...r2.detail], ajoutsSets, expansionsNommees, trous, refus: refus.sort((a, b) => a.idProduct - b.idProduct), denominateurs, rattaches: [...rattaches].sort((a, b) => a - b), dejaPoses: [...dejaPoses] };
 }
 
-module.exports = { planifierRattachement, MOTIF_VARIANTES };
+/** « Gem Pack Vol 4 » (nom d'affichage tiré de Cardmarket) -> « Gem Pack Vol. 4 », la forme des impressions Gem Pack déjà au catalogue (Vol. 1 et Vol. 2). Tout autre nom : null (rien ne se devine). */
+function nomExpansionGemPack(set) {
+    const m = /^Gem Pack Vol ?(\d{1,2})$/.exec(String(set?.nomAffichage ?? '').trim());
+    return m ? `Gem Pack Vol. ${Number(m[1])}` : null;
+}
+
+module.exports = { planifierRattachement, nomExpansionGemPack, MOTIF_VARIANTES };

@@ -21,7 +21,7 @@ async function lire({ cartesDb, prodDb, expansions }) {
     const { produitsDeLExpansion } = require('./collecte-cartes/jointure');
     const cartes = await cartesDb.collection('cartes').find({}, { projection: { nomEn: 1, niveau: 1, 'attaques.nom': 1, impressions: 1, sets: 1, liens: 1, 'images.set': 1, 'images.numero': 1, ficheSimple: 1, 'bulba.titre': 1 } }).toArray();
     if (!cartes.length) throw new Error('lecture vide : aucune carte (grappe fausse ?)');
-    const sets = new Map((await cartesDb.collection('sets').find({}, { projection: { tirage: 1, region: 1, idExpansion: 1, 'bulba.expansion': 1 } }).toArray()).map(s => [s._id, s]));
+    const sets = new Map((await cartesDb.collection('sets').find({}, { projection: { tirage: 1, region: 1, idExpansion: 1, 'bulba.expansion': 1, nomAffichage: 1 } }).toArray()).map(s => [s._id, s]));   // nomAffichage : lu par rattachement-gempack (nom d'expansion d'un set sans page)
     if (!sets.size) throw new Error('lecture vide : aucun set (grappe fausse ?)');
     const lignes = await cartesDb.collection('cartes_produits').find({}, { projection: { carteId: 1, idProduct: 1, slugSet: 1, numeroFiche: 1, preuve: 1 } }).toArray();
     if (!lignes.length) throw new Error('lecture vide : aucune ligne cartes_produits (grappe fausse ?)');
