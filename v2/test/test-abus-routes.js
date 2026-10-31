@@ -820,6 +820,8 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             V2_SUPPRESSION_COMPTE_HEURE: [c => c.limites.suppressionParCompteHeure, 10, '0', 'leve'], V2_RENVOI_COMPTE_HEURE: [c => c.limites.renvoiParCompteHeure, 3, '0', 'leve'],
             V2_URL_VERIFICATION: [c => c.urls.verification, 'https://rat-market.fr/fr/verification', 'http://rat-market.fr/x', 'leve'], V2_URL_REINIT: [c => c.urls.reinit, 'https://rat-market.fr/fr/reinitialisation', 'http://rat-market.fr/x', 'leve'],
             V2_EMPREINTE_JOURS: [c => c.empreinte.jours, 365, '0', 'leve'],
+            V2_COURRIELS_JOUR: [c => c.courriels.jour, 250, '301', 'leve'], V2_AVERTISSEMENTS_INACTIFS: [c => c.courriels.avertissementsInactifs, false, '2', 'leve'],   // BREVO : plafond du jour (Brevo gratuit : 300) ; la passe d'avertissement des inactifs, éteinte par défaut
+            V2_COURRIEL_DE: [c => c.courriels.de, 'no-reply@rat-market.fr', 'pas une adresse', 'leve'], V2_COURRIEL_REPONSE: [c => c.courriels.repondreA, 'ratmarket.contact@gmail.com', 'pas une adresse', 'leve'],
             V2_ORIGINE_EXTENSION_DEV: [c => c.origines.extensionDev, null, 'chrome-extension://intrus', { ferme: c => c.origines.extensionDev === null }, PROD],   // honorée SEULEMENT sur test_scratch : en production elle est ignorée
             V2_DESCRIPTION_CONSERVEE: [c => c.annonce.conservee, false, '2', 'leve'], V2_DESCRIPTION_AU_MODELE: [c => c.annonce.auModele, false, '2', 'leve'],
             V2_MARCHES: [c => c.marches.length, 27, '%%', { ferme: c => !c.marches.includes('vinted.fr') }],   // un marché mal écrit : plus aucun marché réel (422 pour tous), jamais un marché de plus
