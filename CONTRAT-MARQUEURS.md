@@ -78,5 +78,13 @@ Les types viennent de la demande de l'éditeur (JUMBO, WCD, STAFF, PRERELEASE, L
 ## 6. Le cas des WCD empruntés (décision de l'éditeur, 27/10)
 Un produit WCD dont le visuel est celui de la carte d'origine (emprunt du catalogue, lot `emprunt-2026-10`) s'affiche **avec le marqueur `WCD` (et `NON_LEGAL`), SANS la mention « visuel d'un autre tirage »**. La classe EMPRUNTÉ reste en interne (l'API ne s'en sert jamais comme référence d'image).
 
+## 6 bis. Les JUMBO et Base Set : plus aucun visuel d'un autre tirage sans le dire (décision du coordinateur, 27/10 ; lot JUMBO-VISUEL)
+Un produit JUMBO partage la fiche de la carte normale de son set, donc son scan. Le catalogue a comparé à l'œil chaque JUMBO à ce scan (liste jugée par `v2/chargeur/jumbos-visuel.js`, construction `--jumbos-visuel=<fichier>`) :
+- **JUMBO identique à sa carte** (illustration, texte, numéro) : classe EMPRUNTÉ (interne : exclue des règles d'image) ; il s'affiche avec le visuel de la carte **et** les bandeaux `JUMBO` + `NON_LEGAL`, **SANS la mention** « visuel d'un autre tirage » (comme les WCD empruntés, §6).
+- **JUMBO différent** (logo de set imprimé, badge, trame holo…), **illisible** (traité comme différent) ou **joint à tort à une autre fiche** : le scan de la carte normale n'est PAS le sien, **aucun visuel ne lui est servi** (`visuel: null`, `visuelMention: null` ; un visuel absent est honnête). Il reste candidat, avec ses bandeaux `JUMBO` + `NON_LEGAL` : le groupe { JUMBO, normale } et la garde des groupes (§5) tiennent. **Ce n'est pas une exclusion** (une exclusion retirerait aussi le produit des partages : la carte normale redeviendrait affirmable sur la photo d'un Jumbo). Archive : colonne des masqués, format 5.
+- **Base Set, fiches Pokémon n° 1 à 69** : leur scan est « Édition 1 » (TCGdex), servi à tous les produits de la fiche (Cardmarket ne dit pas lequel des V1…Vn est la 1re édition). Ces produits affichent la mention `visuelMention` = « Visuel d'un autre tirage », **sauf** un produit PROUVÉ 1re édition (marqueur `EDITION_1`, dérivé ou écrit avec sa preuve), qui l'affiche sans mention. Aucune exclusion : l'identification ne change pas.
+- Un JUMBO que la liste du catalogue ne nomme pas est servi comme avant (compté, listé à la construction).
+
 ## 7. Historique
+- v1.1 (2026-10-27) : §6 bis (JUMBO identiques empruntés sans mention, JUMBO différents sans visuel, mention Base Set). Aucun type ni paramètre ajouté.
 - v1 (2026-10-27) : première version.

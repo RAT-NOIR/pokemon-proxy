@@ -85,10 +85,12 @@ let rejetsNonGeres = 0; process.on('unhandledRejection', () => { rejetsNonGeres+
         etat: { estimeIA: null, confianceIA: null, defautsVus: [], declareVendeur: null, declareCardmarket: null, retenu: null },
         candidats: [{ idProduct: id, nom: 'Tropius', numero: '001', set: 'Banc Set', prix: 1, photoUrl: null }], classement: [], guidePrix: {}, reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: null }, codeLangue: 2 });
     let chargeEnCours = false;
+    let indexNote = null;   // I1 : ce que la chaîne fabriquée note dans le scan (comme index-nom.js le fait pour la recherche par nom)
     let chaine = null, delaiChaine = 0, durees = { lecture: 2050, etat: 40, catalogue: 504, image: 3 };
     const chaineFabriquee = async (req, res) => {
         if (delaiChaine) { chargeEnCours = true; try { await attendre(delaiChaine); } finally { chargeEnCours = false; } }
         if (req.dureesChaine && durees) Object.assign(req.dureesChaine, durees);
+        if (indexNote !== null) require('../../sources').noterDansLeScan('catalogueIndex', indexNote);
         const { mode, ids } = chaine;
         if (mode === 'exception') throw new Error('panne de la chaîne');
         if (mode === 'affirmee') return res.json({ ...lecture(ids[0]), scanId: String(req.scanIdImpose) });
@@ -140,7 +142,7 @@ let rejetsNonGeres = 0; process.on('unhandledRejection', () => { rejetsNonGeres+
         const o = await jouer(svOff, { mode: 'affirmee', ids: [A.ID_A] }, vec(5));
         const d = o.durees;
         H.vrai('A1. la ligne `analyses` porte `durees`', d && typeof d === 'object');
-        H.vrai('A2. … rien que des entiers >= 0 (cpu : un objet d\'entiers), clés de la liste fermée + cpu / gc / rssMo', d && Object.entries(d).every(([k, x]) => (k === 'cpu' ? Object.values(x).every(y => Number.isInteger(y) && y >= 0) : Number.isInteger(x) && x >= 0)) && Object.keys(d).every(k => ['cpu', 'gc', 'rssMo'].includes(k) || TE.ETAPES.includes(k)));
+        H.vrai('A2. … rien que des entiers >= 0 (cpu : un objet d\'entiers), clés de la liste fermée + cpu / gc / rssMo', d && Object.entries(d).every(([k, x]) => (k === 'cpu' ? Object.values(x).every(y => Number.isInteger(y) && y >= 0) : (k === 'catalogueIndex' ? typeof x === 'boolean' : Number.isInteger(x) && x >= 0))) && Object.keys(d).every(k => ['cpu', 'gc', 'rssMo', 'catalogueIndex'].includes(k) || TE.ETAPES.includes(k)));
         H.v('A3. les durées annoncées par la chaîne héritée sont reprises (lecture, état, catalogue, image)', [d.lecture, d.etat, d.catalogue, d.image], [2050, 40, 504, 3]);
         H.vrai('A4. la chaîne, l\'empreinte (le vecteur est joint), la recherche des voisins et la base sont comptées ; le total les contient', d.chaine >= 0 && d.empreinte >= 0 && d.voisins >= 0 && d.base >= 0 && d.total >= d.chaine);
         H.vrai('A5. rien d\'autre qu\'un objet de nombres : aucune chaîne, aucune adresse, aucun jeton (le JSON ne contient que des chiffres et des noms de la liste)', /^[\d{}":,a-zA-Z]+$/.test(JSON.stringify(d)) && !JSON.stringify(d).includes(IMAGE) && !JSON.stringify(d).includes('http'));
@@ -154,6 +156,13 @@ let rejetsNonGeres = 0; process.on('unhandledRejection', () => { rejetsNonGeres+
         const sans = await jouer(svOff, { mode: 'affirmee', ids: [A.ID_A] }, {});
         durees = avant;
         H.vrai('A8. une chaîne qui n\'annonce rien : la ligne porte quand même `durees` (chaîne, total), sans lecture ni catalogue', sans.durees && sans.durees.total >= 0 && !('lecture' in sans.durees) && !('catalogue' in sans.durees));
+        // I1 : le scan dit s'il a été servi par l'index du catalogue (true), ou si une recherche est retombée sur le balayage (false) ; rien noté = pas de clé
+        H.vrai('A10. aucune recherche par nom dans le scan : pas de clé catalogueIndex', !('catalogueIndex' in sans.durees));
+        indexNote = true;  const oui = await jouer(svOff, { mode: 'affirmee', ids: [A.ID_A] }, vec(5));
+        indexNote = false; const non = await jouer(svOff, { mode: 'affirmee', ids: [A.ID_A] }, vec(5));
+        indexNote = null;
+        H.v('A11. servi par l\'index : catalogueIndex = true', oui.durees.catalogueIndex, true);
+        H.v('A12. retombé sur le balayage : catalogueIndex = false', non.durees.catalogueIndex, false);
         H.vrai('A9. sans vecteur, ni recherche de voisins ni étape empreinte', !('voisins' in sans.durees) && !('empreinte' in sans.durees) && sans.recherches === 0);
     }
 

@@ -14,7 +14,7 @@ const CLES_FICHIER = Object.freeze(['decision', 'source', 'le', 'produits']);
 const objetSimple = x => x !== null && typeof x === 'object' && !Array.isArray(x) && Object.getPrototypeOf(x) === Object.prototype;
 const entierPositif = x => Number.isSafeInteger(x) && x > 0;
 const refus = raison => ({ ok: false, raison });
-const dateValide = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) === s;
+const dateValide = s => { if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false; const t = new Date(`${s}T00:00:00Z`).getTime(); return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === s; };      // `toISOString` LÈVE sur une date impossible (2026-13-40) : la garde ne lève jamais
 const parMotifVide = () => Object.fromEntries(MOTIFS.map(m => [m, 0]));
 
 /**
@@ -112,7 +112,7 @@ function suivre(exclusions) {
  */
 function comparerMarques(complete, exclue, exclus) {
     const sans = (l, ids) => { const r = Array.isArray(l) ? l.filter(x => !ids.has(x)) : null; return r && r.length > 1 ? r : null; };
-    const norme = (v, id) => { const e = v.entree(id); if (!e) return null; const { produitsPartages, ...reste } = e; return JSON.stringify([reste, sans(produitsPartages, exclus), v.partagesDe(id), v.jumeauxDe(id), v.prixMelange(id), v.empruntDe(id)]); };
+    const norme = (v, id) => { const e = v.entree(id); if (!e) return null; const { produitsPartages, ...reste } = e; return JSON.stringify([reste, sans(produitsPartages, exclus), v.partagesDe(id), v.jumeauxDe(id), v.prixMelange(id), v.empruntDe(id), v.masqueDe(id)]); };       // JUMBO-VISUEL : l'exclusion d'un voisin ne change pas non plus le masque d'un produit
     let perdus = 0; const ids = [];
     for (const id of exclue.identifiants()) {
         if (norme(complete, id) !== norme(exclue, id)) { perdus++; if (ids.length < 20) ids.push(id); }

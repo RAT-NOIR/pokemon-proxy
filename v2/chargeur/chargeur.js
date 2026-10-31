@@ -90,6 +90,7 @@ function executerDepuisFichier({ lireFichier, secret, nonScelleBanc = false }) {
 
 let avertiSansEmprunts = false;           // MARQUE-EMPRUNT : idem pour l'absence de la colonne des emprunts
 let avertiSansEcrits = false;             // ARCHIVE-4 : idem pour l'absence de la colonne des marqueurs écrits
+let avertiSansMasques = false;            // JUMBO-VISUEL : idem pour l'absence de la colonne des masqués
 let avertiSansMarquages = false;         // m5 : l'avertissement « archive sans la colonne des marquages » n'est écrit qu'une fois par processus
 
 function creerChargeur(opts = {}) {
@@ -121,6 +122,8 @@ function creerChargeur(opts = {}) {
             if (v && v.comptes && v.comptes.emprunts !== undefined) repli.push(`visuels empruntés ${v.comptes.emprunts}${comptes.empruntsParNature ? ` (autre tirage ${comptes.empruntsParNature['autre-tirage']}, substitut d'un autre set ${comptes.empruntsParNature.substitut})` : ''}`);
             // ARCHIVE-4 : les marqueurs ÉCRITS par le catalogue, portés par l'archive (par type), ou l'absence de la colonne (les marqueurs écrits ne sont alors pas servis)
             if (v && v.comptes && v.comptes.ecrits) repli.push(`marqueurs écrits ${v.comptes.ecrits.entrees} produit(s), ${v.comptes.ecrits.elements} élément(s) (${Object.entries(v.comptes.ecrits.parType).map(([k, n]) => `${k} ${n}`).join(', ') || 'aucun'})`);
+            // JUMBO-VISUEL : les produits dont aucun visuel n'est servi (colonne des masqués), ou l'absence de la colonne
+            if (v && v.comptes && v.comptes.masques !== undefined) repli.push(`visuels masqués ${v.comptes.masques}${comptes.masquesProduits !== undefined ? ` (décidés ${comptes.masquesProduits})` : ''}`);
             if (comptes.repliRefuse) repli.push(`sans image d'un autre tirage ${comptes.repliRefuse.total} (${Object.entries(comptes.repliRefuse.parFamille).filter(([, n]) => n).map(([k, n]) => `${k} ${n}`).join(', ') || 'aucune'})`);
             if (comptes.exclus !== undefined) repli.push(`exclus de l'identification ${comptes.exclus} (${Object.entries(comptes.exclusParMotif || {}).map(([k, n]) => `${k} ${n}`).join(', ')}) · partages perdus ${comptes.partagesPerdus}`);
             if (Array.isArray(comptes.familleHorsListe) && comptes.familleHorsListe.length) repli.push(`FAMILLES HORS LISTE FERMÉE ${comptes.familleHorsListe.join(', ')}`);
@@ -144,6 +147,17 @@ function creerChargeur(opts = {}) {
             // restent servis ; ceux que le catalogue écrit, dont les Jumbo, ne le sont pas) et le journal le dit une fois
             if (prev && prev.colonneEcrits && !v.colonneEcrits) throw new Echec(`la version chargée n'a pas la colonne des marqueurs écrits alors que celle en place l'a — ${dit}`);
             if (!v.colonneEcrits && !avertiSansEcrits) { avertiSansEcrits = true; journal('⚠️ [v2 chargeur] la version chargée n\'a PAS la colonne des marqueurs écrits (archive d\'avant le format 4) : les marqueurs que le catalogue écrit (Jumbo…) ne sont pas servis, seuls les marqueurs dérivés le sont'); }
+            // JUMBO-VISUEL : même règle pour la colonne des masqués (format 5) : une version qui ne sait pas quels produits n'ont AUCUN visuel à servir ne remplace jamais une version qui le sait (le JUMBO différent retrouverait le scan de la
+            // carte normale) ; sans version en place, elle s'installe (le service d'avant) et le journal le dit une fois
+            if (prev && prev.colonneMasques && !v.colonneMasques) throw new Echec(`la version chargée n'a pas la colonne des masqués alors que celle en place l'a — ${dit}`);
+            // I3 (relecture) : la garde porte sur le CONTENU, pas seulement sur la présence — le calcul dans l'API (fil.js) écrit une colonne VIDE faute de liste : elle ne remplace jamais une version qui masque davantage de produits
+            // TOUR 2 : on compare les ENSEMBLES, pas le nombre — tout produit masqué dans la version en place reste masqué dans la nouvelle, ou n'y a plus d'entrée (masqueDe null) ; un masqué en plus est permis.
+            if (prev && prev.colonneMasques && v.colonneMasques) {
+                for (const id of prev.identifiants()) {
+                    if (prev.masqueDe(id) === true && v.masqueDe(id) === false) throw new Echec(`le produit ${id} masqué dans la version en place n'est plus masqué dans la version chargée : un JUMBO différent retrouverait le scan de la carte normale (la version en place est gardée) — ${dit}`);
+                }
+            }
+            if (!v.colonneMasques && !avertiSansMasques) { avertiSansMasques = true; journal('⚠️ [v2 chargeur] la version chargée n\'a PAS la colonne des masqués (archive d\'avant le format 5) : aucun visuel n\'est masqué, un JUMBO différent de sa carte garde le scan de la carte normale tant qu\'une archive récente ne l\'aura pas apportée'); }
             if (prev) {
                 // une archive plus ANCIENNE que celle en place (rejouée à l'envers) est refusée ; sa date et son âge sont journalisés au chargement
                 if (v.chargeLe < prev.chargeLe) throw new Echec(`archive plus ancienne que celle en place (${v.chargeLe.toISOString()} < ${prev.chargeLe.toISOString()})`);

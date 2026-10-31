@@ -9,7 +9,10 @@ const { creerConstructeur } = require('./version');
 // catalogue sans visuel) ; chaque voisin dont un partenaire de partage est exclu l'inscrit dans sa propre liste (`b.partageAvec`), puis `comparerMarques` PROUVE que toute marque d'un produit non exclu est celle de
 // la construction complète : `partagesPerdus` doit valoir 0, sinon la construction est REFUSÉE. Les liens de fiche, les jumeaux, les prix mélangés et la carte du catalogue passent par d'autres rappels du sink et
 // NE BOUGENT PAS ; un voisin qui partageait la même entrée d'image garde la sienne (l'exclusion porte sur l'idProduct). Sans `exclusions`, rien n'est suivi, rien n'est ajouté aux comptes : la sortie est celle d'avant.
-async function calculer({ sets, docs, lignes, metacarte, regle, decider = a => require('./decision').decider(a), exclusions = null, verdictsEmprunts = null }) {
+// JUMBO-VISUEL — `jumbosVisuel` : null, ou la Map idProduct → 'emprunt' | 'sans-visuel' du fichier du catalogue (jumbos-visuel.js). Un JUMBO « emprunt » entre dans la colonne des emprunts (sans mention, sous son bandeau) ; un JUMBO
+// « sans-visuel » reste une ENTRÉE COMPLÈTE (marqueurs, partages, groupe { JUMBO, normale }) mais est inscrit dans la colonne des masqués (format 5) : aucun visuel ne lui est servi. Ce n'est PAS une exclusion : l'exclusion retirerait
+// aussi le produit des partages. Un masqué EXCLU par la liste d'exclusions n'a plus d'entrée donc n'est plus masqué (la marque suit l'entrée). Un nommé sans marqueur JUMBO dans le catalogue refuse la construction.
+async function calculer({ sets, docs, lignes, metacarte, regle, decider = a => require('./decision').decider(a), exclusions = null, verdictsEmprunts = null, jumbosVisuel = null }) {
     const X = require('./exclusions');
     // MARQUE-EMPRUNT / VERDICTS : « exclu » rejoint les exclusions (motif visuel-faux ; un motif explicite de la liste prime) ; « juste » rend l'emprunt VÉRIFIÉ (il ne va pas dans la colonne des emprunts) ; null ou aucune ligne : l'emprunt reste non vérifié
     const verdicts = verdictsEmprunts instanceof Map ? verdictsEmprunts : null, parVerdict = new Set(), verifies = new Set();
@@ -21,15 +24,22 @@ async function calculer({ sets, docs, lignes, metacarte, regle, decider = a => r
         if (m.size) exclusions = m;
     }
     const suivi = exclusions === null || exclusions === undefined ? null : X.suivre(exclusions);
-    const b = creerConstructeur({ marquages: true, emprunts: true, ecrits: true });       // MARQUE-EMPRUNT : la colonne des emprunts (format 3) est toujours écrite, vide s'il n'y en a pas ; REPLI-REIMPRESSIONS : la colonne des marquages (format 2) est toujours écrite, même quand aucun produit n'est marqué (« aucun » est une réponse, l'absence de colonne n'en est pas une)
-    const complet = suivi ? creerConstructeur({ marquages: true, emprunts: true, ecrits: true }) : null;
-    const r = await decider({ sets, docs, lignes, metacarte, regle, cederLaMain: true, sink: {
+    const masquesDecides = new Set(), jumbosClasses = new Set();                                       // JUMBO-VISUEL : un JUMBO classé par la liste (emprunt) ou un masqué n'est jamais « vérifié » par un verdict d'emprunt (leur classe vient de la liste du catalogue)
+    const b = creerConstructeur({ marquages: true, emprunts: true, ecrits: true, masques: true });       // JUMBO-VISUEL : la colonne des masqués (format 5) est toujours écrite, vide s'il n'y en a pas ; MARQUE-EMPRUNT : la colonne des emprunts (format 3) est toujours écrite, vide s'il n'y en a pas ; REPLI-REIMPRESSIONS : la colonne des marquages (format 2) est toujours écrite, même quand aucun produit n'est marqué (« aucun » est une réponse, l'absence de colonne n'en est pas une)
+    const complet = suivi ? creerConstructeur({ marquages: true, emprunts: true, ecrits: true, masques: true }) : null;
+    const r = await decider({ sets, docs, lignes, metacarte, regle, cederLaMain: true, ...(jumbosVisuel ? { jumbosVisuel } : {}), sink: {
+        // JUMBO-VISUEL : la marque d'un masqué exclu ne va pas dans l'archive (plus d'entrée) ; le constructeur complet la garde (comparerMarques)
+        jumbo: id => { jumbosClasses.add(id); },
+        masque: id => { masquesDecides.add(id); if (complet) complet.masque(id); if (!(exclusions && exclusions.has(id))) b.masque(id); },
         entree: e => { if (complet) complet.entree(e); return suivi && suivi.retenir(e) ? undefined : b.entree(e); },
         lien: (s, c, i) => { if (complet) complet.lien(s, c, i); return b.lien(s, c, i); },
         jumeau: j => { if (complet) complet.jumeau(j); return b.jumeau(j); },
         melange: id => { if (complet) complet.melange(id); return b.melange(id); },
         // MARQUE-EMPRUNT : la marque d'un produit exclu ne va pas dans l'archive (il n'y a plus d'entrée) ; le constructeur complet la garde (comparerMarques)
-        emprunt: id => { if (verdicts && verdicts.get(id) === 'juste') { verifies.add(id); return; } if (complet) complet.emprunt(id); if (!(exclusions && exclusions.has(id))) b.emprunt(id); } } });
+        emprunt: id => { if (verdicts && verdicts.get(id) === 'juste' && !jumbosClasses.has(id) && !masquesDecides.has(id)) { verifies.add(id); return; } if (complet) complet.emprunt(id); if (!(exclusions && exclusions.has(id))) b.emprunt(id); } } });
+    // JUMBO-VISUEL : une liste incohérente avec le catalogue (un nommé sans marqueur JUMBO) ne se sert pas en silence — la validation d'entrée refuserait son entrée sans mention, et un autre repli servirait le scan d'une autre carte
+    const jv = r.denominateurs.jumbosVisuel;
+    if (jv && jv.sansMarqueur.length) throw Object.assign(new Error('archive refusée'), { motif: `jumbos : ${jv.sansMarqueur.length} produit(s) nommé(s) par la liste sans marqueur JUMBO dans le catalogue (${jv.sansMarqueur.slice(0, 20).join(', ')}) : aucune construction` });
     const bilan = suivi ? suivi.bilan() : null;
     let marqueesDeLArchive = null;
     if (bilan) {
@@ -62,10 +72,13 @@ async function calculer({ sets, docs, lignes, metacarte, regle, decider = a => r
     const empruntsDecides = (r.denominateurs.emprunts ?? 0) - verifies.size, empruntsColonne = version ? (version.comptes.emprunts ?? 0) : 0;
     const exacte = !bilan && e.refusees === 0 && e.doublonsContradictoires === 0;
     if (version && (exacte ? empruntsColonne !== empruntsDecides : empruntsColonne > empruntsDecides)) throw new Error(`emprunts : produits empruntés par la décision ${empruntsDecides} ≠ dans la colonne ${empruntsColonne} — aucune version construite`);
+    // JUMBO-VISUEL : les masqués de la décision face à la colonne. Même règle que les emprunts : égalité quand rien ne peut légitimement retirer une entrée ; sinon la colonne ne peut qu'être plus petite.
+    const masquesDecidesN = jv ? jv.sansVisuel : 0, masquesColonne = version && version.comptes.masques !== undefined ? version.comptes.masques : 0;
+    if (version && (exacte ? masquesColonne !== masquesDecidesN : masquesColonne > masquesDecidesN)) throw new Error(`masqués : produits masqués par la décision ${masquesDecidesN} ≠ dans la colonne ${masquesColonne} — aucune version construite`);
     // ARCHIVE-4 : les produits décidés avec des marqueurs écrits face à la colonne. Égalité exigée quand rien ne peut légitimement retirer une entrée ou un marqueur (aucune exclusion, entrée refusée, doublon, contradiction) ; sinon la colonne ne peut qu'être plus petite.
     const ecritsDecides = r.denominateurs.marqueursEcrits ? r.denominateurs.marqueursEcrits.entrees : 0, ecritsColonne = version && version.comptes.ecrits ? version.comptes.ecrits.entrees : 0;
     const exacteEcrits = exacte && e.doublons === 0 && e.ecritsContradictoires === 0;
     if (version && (exacteEcrits ? ecritsColonne !== ecritsDecides : ecritsColonne > ecritsDecides)) throw new Error(`marqueurs écrits : produits décidés ${ecritsDecides} ≠ dans la colonne ${ecritsColonne} — aucune version construite`);
-    return { version, comptes: { ...comptes, marqueursEcrits: { ...r.denominateurs.marqueursEcrits, colonne: version && version.comptes.ecrits ? version.comptes.ecrits : null, contradictoires: e.ecritsContradictoires }, melangeProduits: marquesLignes, melangeColonne: dansColonne, empruntsProduits: empruntsDecides, empruntsColonne, empruntsVerifies: verifies.size, empruntsExclusParVerdict: bilan ? [...parVerdict].filter(id => !bilan.sansVisuel.some(x => x.idProduct === id)).length : 0, verdictsSansEmprunt: verdicts ? [...verdicts].filter(([id, v]) => v === 'juste' && !verifies.has(id)).length : 0, empruntsParNature: r.denominateurs.empruntsParNature, marquees: marqueesDeLArchive || r.denominateurs.marquees, repliRefuse: r.denominateurs.repliRefuse, familleHorsListe: r.denominateurs.familleHorsListe, basseDefinitionExclue: r.denominateurs.basseDefinitionExclue, partageIncoherent: r.denominateurs.partageIncoherent, varianteSansPreuve: r.denominateurs.varianteSansPreuve, varianteHorsListe: r.denominateurs.varianteHorsListe }, denominateurs: r.denominateurs };
+    return { version, comptes: { ...comptes, marqueursEcrits: { ...r.denominateurs.marqueursEcrits, colonne: version && version.comptes.ecrits ? version.comptes.ecrits : null, contradictoires: e.ecritsContradictoires }, melangeProduits: marquesLignes, melangeColonne: dansColonne, masquesProduits: masquesDecidesN, masquesColonne, jumbosVisuel: jv || null, baseSet: r.denominateurs.baseSet || null, empruntsProduits: empruntsDecides, empruntsColonne, empruntsVerifies: verifies.size, empruntsExclusParVerdict: bilan ? [...parVerdict].filter(id => !bilan.sansVisuel.some(x => x.idProduct === id)).length : 0, verdictsSansEmprunt: verdicts ? [...verdicts].filter(([id, v]) => v === 'juste' && !verifies.has(id)).length : 0, empruntsParNature: r.denominateurs.empruntsParNature, marquees: marqueesDeLArchive || r.denominateurs.marquees, repliRefuse: r.denominateurs.repliRefuse, familleHorsListe: r.denominateurs.familleHorsListe, basseDefinitionExclue: r.denominateurs.basseDefinitionExclue, partageIncoherent: r.denominateurs.partageIncoherent, varianteSansPreuve: r.denominateurs.varianteSansPreuve, varianteHorsListe: r.denominateurs.varianteHorsListe }, denominateurs: r.denominateurs };
 }
 module.exports = { calculer };

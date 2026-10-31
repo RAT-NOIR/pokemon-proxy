@@ -18,11 +18,28 @@ const forme = d => /^[A-Za-z]{3}$/.test(d);
 const codeErr = e => (e && (e.code || e.name)) || 'erreur';   // B8 : jamais e.message au journal ni dans `raison` (un chemin de fichier, une URL, une erreur de pilote)
 
 // Jour civil et heure à Paris (l'heure d'été se gère seule)
+// PERF-SCAN P3 : le formateur est construit UNE fois (le reconstruire à chaque appel coûte ~0,2 ms de calcul, étirés ~7 fois sur 0,15 vCPU ; sortie identique).
+const FORMAT_PARIS = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' });
 function parisDe(maintenant) {
-    const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' })
-        .formatToParts(maintenant).map(x => [x.type, x.value]));
+    const p = Object.fromEntries(FORMAT_PARIS.formatToParts(maintenant).map(x => [x.type, x.value]));
     return { jour: `${p.year}-${p.month}-${p.day}`, heure: Number(p.hour) };
 }
+
+// PERF-SCAN P3 — le CACHE du taux du jour. Chaque scan d'une annonce en devise étrangère relisait `taux` en base (une requête triée par devise et par date) alors que la valeur d'un (devise, jour de Paris) ne change que par
+// l'ÉCRITURE des taux (le déclencheur de 16 h 00 ou la graine de démarrage, ci-dessous) : borné (64 entrées), daté (120 s), vidé par cette écriture. Clé = (devise, jour de Paris). Une panne (exception) n'est jamais gardée ;
+// un taux absent ou trop vieux l'est (c'est une réponse). SUR DEMANDE seulement : `versEUR`/`regleVerdict` ne passent par un cache que si l'appelant en donne un (`opts.cache`) ; sans lui, la lecture directe d'avant — les bancs
+// qui écrivent dans `taux` à la main entre deux lectures n'en sont pas affectés. La route de l'identification passe `cacheDuModule`.
+const DUREE_CACHE_TAUX_MS = 120 * 1000;
+function creerCacheTaux({ ttlMs = DUREE_CACHE_TAUX_MS, maintenant = Date.now, max = 64 } = {}) {
+    const m = new Map(); let epoque = 0;       // l'époque monte à chaque oubli : une lecture commencée avant ne pose pas sa valeur après (course avec l'écriture des taux)
+    return {
+        epoque() { return epoque; },
+        lire(cle) { const e = m.get(cle); if (!e) return undefined; if (maintenant() - e.le >= ttlMs) { m.delete(cle); return undefined; } return e.v; },
+        poser(cle, v, ep) { if (ep !== undefined && ep !== epoque) return; if (!m.has(cle) && m.size >= max) m.delete(m.keys().next().value); m.set(cle, { v, le: maintenant() }); },
+        oublier() { epoque++; m.clear(); }
+    };
+}
+const CACHE_TAUX = creerCacheTaux();
 const joursEntre = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000);
 
 // Pure, ne lève jamais : un XML tronqué ne donne que les <Cube …/> complets, et rien du tout sans date complète.
@@ -50,28 +67,38 @@ function lireTauxBCE(xml, { journal = journalDefaut } = {}) {
 
 const NUL = () => ({ versEUR: null, tauxDate: null });
 // { versEUR, tauxDate } ; EUR sans lire la base ; taux absent, devise inconnue ou taux de plus de 7 jours => versEUR null. Ne lève jamais.
-async function versEUR(devise, { maintenant = new Date(), col = null, journal = journalDefaut } = {}) {
+async function versEUR(devise, { maintenant = new Date(), col = null, journal = journalDefaut, cache = null } = {}) {
     try {
         if (typeof devise !== 'string' || !forme(devise.trim())) return NUL();
         const d = devise.trim().toUpperCase();
         if (d === 'EUR') return { versEUR: 1, tauxDate: null };
         const { jour } = parisDe(maintenant);
+        const memo = cache;                                                      // sans `cache` explicite : la lecture directe, comme avant (la route passe `cacheDuModule`)
+        const cle = `${d}|${jour}`;
+        if (memo) { const gardee = memo.lire(cle); if (gardee !== undefined) return { ...gardee }; }
+        const ep = memo ? memo.epoque() : undefined;
         const c = col || colDefaut('taux');
         const doc = await c.find({ devise: d, date: { $lte: jour } }).sort({ date: -1 }).limit(1).next();
-        if (!doc || !(Number.isFinite(doc.rate) && doc.rate > 0) || typeof doc.date !== 'string') return NUL();
-        if (joursEntre(doc.date, jour) > AGE_MAX_JOURS) return NUL();
-        return { versEUR: arrondi6(1 / doc.rate), tauxDate: doc.date };
+        let r;
+        if (!doc || !(Number.isFinite(doc.rate) && doc.rate > 0) || typeof doc.date !== 'string') r = NUL();
+        else if (joursEntre(doc.date, jour) > AGE_MAX_JOURS) r = NUL();
+        else r = { versEUR: arrondi6(1 / doc.rate), tauxDate: doc.date };
+        if (memo) memo.poser(cle, { ...r }, ep);
+        return r;
     } catch (e) { try { journal(`lecture du taux de ${devise} impossible : ${codeErr(e)}`); } catch { /* muet */ } return NUL(); }
 }
 
 async function regleVerdict(devise, opts = {}) { return { ...REGLE, ...(await versEUR(devise, opts)) }; }
+// PERF-SCAN P3 : le cache du module, vidé par l'écriture des taux ; exposé pour les bancs.
+const oublierTaux = () => CACHE_TAUX.oublier();
+const cacheDuModule = CACHE_TAUX;
 
 // Réessai BORNÉ (CLAUDE.md §38). Marque du jour { devise:'__lu', date:jour, essais, dernierEssaiLe, ok } ; jamais avant 16 h 00 Paris.
 // Un essai n'est permis que si ok !== true, essais < 3 et dernier essai il y a au moins 1 h ; le pas (compter l'essai) est UN updateOne
 // conditionnel, atomique : deux appels concurrents n'obtiennent pas tous deux le droit de lire. Un succès pose ok:true et clôt le jour ;
 // un échec garde la marque (compteur d'essais) : une BCE en panne coûte au plus 3 requêtes par jour.
 const ESSAIS_MAX = 3, PAUSE_ENTRE_ESSAIS_MS = 3600 * 1000;
-async function rafraichirTaux({ fetch: lire = globalThis.fetch, maintenant = new Date(), col = null, journal = journalDefaut } = {}) {
+async function rafraichirTaux({ fetch: lire = globalThis.fetch, maintenant = new Date(), col = null, journal = journalDefaut, cache = null } = {}) {
     try {
         const { jour, heure } = parisDe(maintenant);
         if (heure < HEURE_LECTURE_PARIS) return { lu: false, raison: 'avant 16 h 00 Paris' };
@@ -83,7 +110,7 @@ async function rafraichirTaux({ fetch: lire = globalThis.fetch, maintenant = new
             { $inc: { essais: 1 }, $set: { dernierEssaiLe: maintenant } });
         if (!pris || pris.modifiedCount !== 1) return { lu: false, essaiRefuse: true, raison: 'pas d\'essai permis aujourd\'hui (déjà lu, pause de 1 h, ou 3 essais faits)' };
         try {
-            const r = await lireEtStocker({ lire, maintenant, col: c, journal });
+            const r = await lireEtStocker({ lire, maintenant, col: c, journal, cache });
             // Le jour n'est clos que si le fichier est celui du jour de Paris : celui de la veille, servi entre 16 h 00 et la publication, laisse la marque ouverte (réessai permis après la pause).
             if (r.date === jour) await c.updateOne({ devise: MARQUE, date: jour }, { $set: { ok: true } });
             return { ...r, requete: true };
@@ -94,7 +121,7 @@ async function rafraichirTaux({ fetch: lire = globalThis.fetch, maintenant = new
 // La lecture elle-même (une seule source : URL_BCE) et l'écriture des taux ; lève en cas d'échec (le code, jamais l'URL ni le message). Journal : la date lue et le nombre de devises.
 // Un fichier non plausible n'est JAMAIS écrit : date future (par rapport au jour de Paris), aucune devise valable (les devises au taux non numérique ou ≤ 0 sont ignorées une à une par lireTauxBCE).
 // Les erreurs levées après le départ de la requête portent `requeteParti` (le déclencheur ne compte une tentative que si une requête est partie).
-async function lireEtStocker({ lire, maintenant, col, journal }) {
+async function lireEtStocker({ lire, maintenant, col, journal, cache = null }) {
     const marque = e => Object.assign(e, { requeteParti: true });
     let r;
     try { r = await lire(URL_BCE, { headers: { accept: 'application/xml' }, signal: AbortSignal.timeout(15000) }); } catch (e) { throw marque(e instanceof Error ? e : new Error('x')); }
@@ -104,7 +131,8 @@ async function lireEtStocker({ lire, maintenant, col, journal }) {
     const { date, taux } = lireTauxBCE(texte, { journal });
     if (!date) throw marque(Object.assign(new Error('aucun taux lisible dans le fichier'), { code: 'taux-aucun-taux-lisible' }));
     if (date > parisDe(maintenant).jour) throw marque(Object.assign(new Error('date future'), { code: 'taux-date-future' }));
-    for (const [devise, x] of Object.entries(taux)) await col.updateOne({ devise, date }, { $set: { devise, date, rate: x, luLe: maintenant } }, { upsert: true });
+    try { for (const [devise, x] of Object.entries(taux)) await col.updateOne({ devise, date }, { $set: { devise, date, rate: x, luLe: maintenant } }, { upsert: true }); }
+    finally { CACHE_TAUX.oublier(); if (cache) cache.oublier(); }          // PERF-SCAN P3 : les taux viennent de changer (même à moitié) : la valeur gardée n'est plus celle de la base
     try { journal(`taux de la BCE lus : date ${date}, ${Object.keys(taux).length} devises`); } catch { /* muet */ }
     return { lu: true, date, devises: Object.keys(taux).length };
 }
@@ -112,14 +140,14 @@ async function lireEtStocker({ lire, maintenant, col, journal }) {
 // Lecture de DÉMARRAGE (la « graine » d'un service neuf ou réveillé) : si aucun taux n'est en base, ou si le plus récent est plus vieux que AGE_MAX_JOURS, une lecture tout de suite,
 // à n'importe quelle heure (la BCE sert alors le dernier fichier publié). Elle ne touche pas à la marque du jour : la lecture de 16 h reste due. Ne lève jamais.
 const RAISON_RECENT = 'taux récent en base';
-async function amorcerTaux({ fetch: lire = globalThis.fetch, maintenant = new Date(), col = null, journal = journalDefaut } = {}) {
+async function amorcerTaux({ fetch: lire = globalThis.fetch, maintenant = new Date(), col = null, journal = journalDefaut, cache = null } = {}) {
     try {
         const { jour } = parisDe(maintenant);
         const c = col || colDefaut('taux');
         const dernier = await c.find({ devise: { $ne: MARQUE }, date: { $type: 'string', $lte: jour } }).sort({ date: -1 }).limit(1).next();   // une date future (jamais écrite par ce code) ne compte pas comme « récent »
         if (dernier && joursEntre(dernier.date, jour) <= AGE_MAX_JOURS) return { lu: false, requete: false, raison: RAISON_RECENT };
-        return { ...(await lireEtStocker({ lire, maintenant, col: c, journal })), requete: true };
+        return { ...(await lireEtStocker({ lire, maintenant, col: c, journal, cache })), requete: true };
     } catch (e) { try { journal(`lecture de démarrage des taux échouée : ${codeErr(e)}`); } catch { /* muet */ } return { lu: false, requete: Boolean(e && e.requeteParti), raison: codeErr(e) }; }
 }
 
-module.exports = { lireTauxBCE, versEUR, regleVerdict, rafraichirTaux, amorcerTaux, parisDe, joursEntre, MARQUE, RAISON_RECENT, URL_BCE, REGLE, AGE_MAX_JOURS, HEURE_LECTURE_PARIS };
+module.exports = { creerCacheTaux, cacheDuModule, oublierTaux, lireTauxBCE, versEUR, regleVerdict, rafraichirTaux, amorcerTaux, parisDe, joursEntre, MARQUE, RAISON_RECENT, URL_BCE, REGLE, AGE_MAX_JOURS, HEURE_LECTURE_PARIS };
