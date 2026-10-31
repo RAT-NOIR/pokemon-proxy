@@ -5,14 +5,14 @@
 **Modèle de code existant** : « Ma collection » (`v2/collection/`, CONTRAT §1.8), les comptes (`v2/comptes/`, sessions, `turnstile.js`), l'idempotence (`v2/transport/idempotence.js`).
 
 ## 0. Ce qui doit être arbitré AVANT le lot (remonté au coordinateur)
-1. **La place en base.** La grappe de production est à ~439 Mo sur 512 (dont `references_image` ~372 Mo). Le site estime ~40 Ko par compte typique, ~200 Mo à 1 000 comptes actifs. **Rien de ce lot ne peut s'écrire dans la grappe de production en l'état.** Options : (a) libérer de la place (le levier est `references_image`), (b) une grappe dédiée « communauté » (gratuite, séparée, avec sa propre variable), (c) passage en Flex. L'API recommande **(b)** : la communauté ne partage pas le sort de la reconnaissance. Décision de l'éditeur.
-2. **La recompression côté serveur** (§4) charge la mémoire du service (offre gratuite, 512 Mo). Amendement proposé ci-dessous (bornes de pixels plus basses) ; à confirmer.
-3. **Le mot « DEBIT »** : le site réutilise le code `DEBIT` pour les limites de débit. Ces routes ne facturent RIEN (`facturation: null`) ; le code ne veut dire ici que « trop de requêtes ». À garder (aucun nouveau code) ou à renommer : décision de contrat.
+1. **La place en base.** La grappe de production est à ~439 Mo sur 512 (dont `references_image` ~372 Mo). Le site estime ~40 Ko par compte typique, ~200 Mo à 1 000 comptes actifs. **Rien de ce lot ne peut s'écrire dans la grappe de production en l'état.** Options : (a) libérer de la place (le levier est `references_image`), (b) une grappe dédiée « communauté » (gratuite, séparée, avec sa propre variable), (c) passage en Flex. L'API recommande **(b)** : la communauté ne partage pas le sort de la reconnaissance. **À l'arbitrage de l'éditeur** (remonté par le coordinateur).
+2. **La recompression côté serveur** (§4) charge la mémoire du service (offre gratuite, 512 Mo). Amendement proposé ci-dessous (bornes de pixels plus basses) : **proposition à mesurer, rien d'écrit ni de figé** ; à confirmer par une mesure.
+3. **Limite de débit : code `LIMITE_DEBIT` (arbitrage du coordinateur).** `DEBIT` est refusé pour une limite de débit : il reste réservé à ce qui facture ou débite. Ces routes ne facturent RIEN (`facturation: null`) ; une limite de débit rend un **`429` avec le code propre `LIMITE_DEBIT`** et `reessayerDans`. Nouveau code à ajouter à la liste fermée du §6 du contrat et à `CODES_ERREUR` du site au lot d'implémentation. Partout où le texte ci-dessous dit « DEBIT » pour une limite, lire `LIMITE_DEBIT`.
 4. **Aucune de ces routes ne touche la facturation ni le « sûr »** de l'identification. Si l'éditeur veut un jour lier l'atelier à un quota payant, c'est un autre lot.
 
 ## 1. Principes communs (inchangés par rapport à la demande du site)
-- Session `rm_session`, `credentials: "include"`, `Origin` + `X-Rat-Market` sur toute écriture. Ordre des refus : `SESSION` → `ORIGINE` → `VERIFICATION` → `DEBIT`.
-- Erreurs : la forme `ReponseErreur` du §6 du contrat, `facturation: null`. Nouveaux codes : `INTROUVABLE` (404), `INTERDIT` (403), `FICHIER` (413/415/422), plus les `detail` listés par le site.
+- Session `rm_session`, `credentials: "include"`, `Origin` + `X-Rat-Market` sur toute écriture. Ordre des refus : `SESSION` → `ORIGINE` → `VERIFICATION` → `LIMITE_DEBIT`.
+- Erreurs : la forme `ReponseErreur` du §6 du contrat, `facturation: null`. Nouveaux codes : `INTROUVABLE` (404), `INTERDIT` (403), `FICHIER` (413/415/422), `LIMITE_DEBIT` (429), plus les `detail` listés par le site.
 - **404 uniforme** : un objet privé, en attente, refusé, retiré ou absent répond le même `INTROUVABLE` à tout lecteur qui n'en est pas l'auteur (jamais un 403 qui dit qu'il existe).
 - CORS : une liste fermée d'origines (celles du site), `Allow-Credentials`, jamais `*` avec les cookies. Le fichier `v2/transport/cors.js` est un chantier en cours : le lot l'étendra APRÈS sa fusion.
 - Lectures publiques : sans cookie, `Cache-Control: public, max-age=60` (le délai « 1 h après un lot » du site ne concerne pas ces routes), aucune donnée du lecteur.
@@ -39,7 +39,7 @@ Forme `[a-z0-9_-]{3,20}`, unique (index unique sur la forme normalisée), liste 
 
 ## 4. Dépôt des images (R2) — amendement API majeur
 La demande du site envoie l'image BRUTE à `POST /api/illustrations` (octets via l'API). **Amendement API : dépôt par URL présignée, en deux temps, les octets du client ne transitent pas par l'API.**
-1. `POST /api/illustrations/depot` `{ type: "image/jpeg"|"image/png"|"image/webp", octets: <entier> }` → `201 { depotId, urlDepot, expireDans: 300 }`. Refus avant tout : `octets` > borne (`413 FICHIER trop-lourde`), type hors liste (`415 FICHIER format`), `CONFLIT borne-illustrations` (30 stockées + dépôts en cours), `DEBIT`.
+1. `POST /api/illustrations/depot` `{ type: "image/jpeg"|"image/png"|"image/webp", octets: <entier> }` → `201 { depotId, urlDepot, expireDans: 300 }`. Refus avant tout : `octets` > borne (`413 FICHIER trop-lourde`), type hors liste (`415 FICHIER format`), `CONFLIT borne-illustrations` (30 stockées + dépôts en cours), `LIMITE_DEBIT`.
    - `urlDepot` : URL R2 présignée en **PUT**, valable **5 minutes**, **une seule clé** `depot/<ref compte>/<depotId>` dans le bucket privé, avec `Content-Type` et `Content-Length` **signés** (R2 ne propose pas de politique de taille en POST : la taille déclarée est signée, donc exacte, et revérifiée au temps 2).
    - Le préfixe `depot/` porte une **règle de cycle de vie R2 de 24 h** : un dépôt jamais finalisé s'efface seul.
 2. `POST /api/illustrations/depot/{depotId}/finaliser` : l'API lit l'objet **depuis R2** (jamais depuis le client), vérifie taille réelle = taille déclarée, **signature binaire du format** (le `Content-Type` du client ne fait pas foi), refuse l'image animée (WebP/PNG animés), **40 Mpx** au plus (lu dans l'en-tête avant décodage, `limitInputPixels` du décodeur), puis **recompresse obligatoirement** : orientation EXIF appliquée, réencodage WebP (2 400 px grand côté, qualité ~82), vignette 480 px, **toutes métadonnées retirées**, couleur dominante. Écrit `prive/<ref compte>/<id>.webp` et `-480.webp`, **supprime l'objet brut**, répond `201 { illustration }` de la demande du site.
@@ -51,7 +51,7 @@ La demande du site envoie l'image BRUTE à `POST /api/illustrations` (octets via
 - **Ce que l'API ne fait pas** : récupérer une image à partir d'une URL fournie par l'utilisateur (SSRF), accepter du SVG, du GIF ou tout format hors JPEG/PNG/WebP, conserver l'octet reçu.
 
 ## 5. Quotas (par compte et par IP)
-Même mécanisme que « Ma collection » (limiteur existant, fenêtre glissante, `DEBIT` + `reessayerDans`). Défauts proposés (variables, réglables, posés sans mesure d'usage, comme dans la demande du site) :
+Même mécanisme que « Ma collection » (limiteur existant, fenêtre glissante, `429 LIMITE_DEBIT` + `reessayerDans`). Défauts proposés (variables, réglables, posés sans mesure d'usage, comme dans la demande du site) :
 | geste | par compte | par IP |
 |---|---|---|
 | écritures de classeur (`POST`/`PUT`/`DELETE`) | 120 / heure | 300 / heure |
