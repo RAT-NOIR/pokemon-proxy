@@ -44,26 +44,27 @@ const { assurerMoyens, decisionMoyen } = require('./collecte-cartes/moyen');
     console.log(`DÉNOMINATEUR${sets ? ` (sets : ${sets.join(', ')})` : ''} : ${D.entrees} entrées cartes.images · ${D.avecCle} avec cleR2`);
     console.log(`   exclues : ${D['basse-definition']} basseDefinition · ${D['trop-petite']} sous le seuil de largeur · ${D['largeur-inconnue']} à largeur inconnue (non traitées : le site compare à w)`);
     console.log(`   éligibles : ${D.ok} entrées (${cles.ok.size} images distinctes) · ${D.okAvecMoyen} portent déjà un moyen · ${D.okSansMoyen} à faire (${cles.a_faire.size} images distinctes) · ${D.moyenSurExclue} entrées exclues portent un moyen (à retirer)`);
-    const R = await assurerMoyens(db, { bucket, sets, limite: arg('limite') ? Number(arg('limite')) : Infinity, parallele: Number(arg('parallele') || 6), ecrire, reverifier: process.argv.includes('--reverifier') });
+    // 🔑 UNE INTERRUPTION NE PERD PAS LA REVALIDATION (relecture du scan moyen, I2) : chaque set est INSCRIT dans revalidations-en-attente.json AVANT l'écriture de ses entrées (surEcriture,
+    // synchrone) ; la revalidation de fin de run vide ce fichier (`viderAttente`, seulement après un 200). Un run tué, une coupure, une panne Mongo laissent donc les sets inscrits, et
+    // `node collecte-cartes/revalider-site.js --en-attente` (ou la relance de cet outil, qui vide l'attente en fin de run même sans rien à faire) les revalide. Ctrl-C / SIGTERM : arrêt propre entre deux images.
+    const { mettreEnAttente, viderAttente } = revalider ? require('./collecte-cartes/revalider-site') : {};
+    let arretDemande = false;
+    for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { arretDemande = true; console.error(`   ⏹️ ${sig} : arrêt entre deux images, la revalidation des sets déjà inscrits suivra`); });
+    const surEcriture = revalider ? async ss => { mettreEnAttente({ le: new Date().toISOString(), quoi: 'generer-moyens', sets: ss }); } : null;
+    const R = await assurerMoyens(db, { bucket, sets, limite: arg('limite') ? Number(arg('limite')) : Infinity, parallele: Number(arg('parallele') || 6), ecrire, reverifier: process.argv.includes('--reverifier'), surEcriture, arreter: () => arretDemande });
     const duree = ((Date.now() - t0) / 1000).toFixed(0);
     if (!ecrire) {
-        console.log(`   SIMULATION (rien lu sur R2, rien écrit) : ${R.cles} images à examiner, dont ${R.depuisDocument} à recopier depuis leur document · ${R.perimees} moyens périmés à refaire · ${R.retirees} à retirer · ${R.sets.length} sets touchés`);
+        console.log(`   SIMULATION (rien lu sur R2, rien écrit) : ${R.cles} images à examiner, dont ${R.depuisDocument} à recopier depuis leur document · ${R.perimees} moyens périmés à refaire · ${R.retirees} à retirer · ${R.collisions} clés refusées pour collision de clé de moyen · ${R.sets.length} sets touchés`);
         if (R.sets.length) console.log(`   sets : ${R.sets.slice(0, 30).join(', ')}${R.sets.length > 30 ? ` … (+${R.sets.length - 30})` : ''}`);
     } else {
         console.log(`   ✅ ${R.entrees} entrées · ${R.cles} images · fabriquées ${R.fabriquees} (${(R.octets / 1e6).toFixed(1)} Mo) · refaites ${R.refaites} · reprises du document ${R.depuisDocument} · retirées ${R.retirees} · déjà sur R2 ${R.deja} · échecs ${R.echecs.length} · ${R.sets.length} sets · ${duree} s`);
         if (R.sets.length && !revalider) console.log(`   ⚠️ --sans-revalidation : ${R.sets.length} sets changés NON revalidés — ${R.sets.join(', ')}`);
-        if (R.sets.length && revalider) {
-            const { revaliderSets, mettreEnAttente } = require('./collecte-cartes/revalider-site');
-            try {
-                const rv = await revaliderSets(R.sets, { journal: console });
-                console.log(`   revalidation : ${rv.appels} appel(s), ${rv.sets} set(s)`);
-            } catch (e) {
-                // les sets ne se perdent pas : ils attendent dans revalidations-en-attente.json, rejoué par `node collecte-cartes/revalider-site.js --en-attente`
-                const n = mettreEnAttente({ le: new Date().toISOString(), quoi: 'generer-moyens', sets: R.sets, erreur: e.message.slice(0, 200) });
-                console.error(`   🔴 revalidation ÉCHOUÉE (${e.message.slice(0, 90)}) : ${R.sets.length} sets mis en attente (${n} lot(s) en attente)`);
-                process.exitCode = 1;
-            }
+        if (revalider) {
+            // TOUJOURS, même si ce run n'a rien écrit : une attente laissée par un run précédent interrompu est revalidée ici
+            try { await viderAttente({ journal: console }); }
+            catch (e) { console.error(`   🔴 revalidation ÉCHOUÉE (${e.message.slice(0, 90)}) : les sets restent dans revalidations-en-attente.json — node collecte-cartes/revalider-site.js --en-attente`); process.exitCode = 1; }
         }
+        if (arretDemande) process.exitCode = 1;
         const apres = await db.collection('cartes').aggregate([{ $unwind: '$images' }, { $group: { _id: null, n: { $sum: 1 }, avec: { $sum: { $cond: [{ $ifNull: ['$images.moyen', false] }, 1, 0] } } } }]).toArray();
         console.log(`   RELU : ${apres[0]?.avec}/${apres[0]?.n} entrées portent un moyen`);
         if (R.echecs.length) process.exitCode = 1;

@@ -89,7 +89,13 @@ const moyenAJour = doc => (doc?.moyen?.cleR2 && doc.sha256 && doc.moyen.de) ? do
  * `noms` : les collections (le banc de bout en bout écrit dans test_scratch) ; `r2` : injectable (le banc) ; `sets` : plusieurs sets d'une vague.
  * @returns {Promise<{ entrees, cles, depuisDocument, fabriquees, refaites, retirees, deja, echecs: {cleR2, erreur}[], sets: string[], octets, exclues: object }>}
  */
-async function assurerMoyens(db, { bucket, slug = null, sets = null, parallele = 6, limite = Infinity, journal = console, ecrire = true, reverifier = false, noms = { cartes: 'cartes', images: 'images' }, arreter = () => false, r2 = null } = {}) {
+// `surEcriture(sets)` (async, optionnelle) : appelée avec les sets NEUFS d'une écriture, AVANT d'écrire leurs entrées (une fois par set). L'appelant y consigne la revalidation due (generer-moyens.js :
+// revalidations-en-attente.json) : si le processus meurt ensuite, le set est déjà inscrit, et une relance qui saute les entrées déjà faites ne le perd pas. Si elle lève, rien n'est écrit pour cette image.
+// 🔑 LA CLÉ D'UN MOYEN EST DÉRIVÉE (`cleMoyen` retire l'extension) : deux clés d'original qui ne diffèrent que par l'extension auraient LA MÊME clé de moyen ; la plus petite (ordre des chaînes) la garde, les autres
+// sont refusées et nommées (« collision »), jamais écrasées l'une par l'autre.
+const EXTENSIONS = ['webp', 'png', 'jpg', 'jpeg', 'gif', 'avif'];
+const souche = c => c.replace(/\.[^./]+$/, '');
+async function assurerMoyens(db, { bucket, slug = null, sets = null, parallele = 6, limite = Infinity, journal = console, ecrire = true, reverifier = false, noms = { cartes: 'cartes', images: 'images' }, arreter = () => false, r2 = null, surEcriture = null } = {}) {
     if (!bucket) throw new Error('assurerMoyens : bucket R2 obligatoire');
     const R2 = r2 || require('./r2');
     const perimetre = slug ? new Set([slug]) : (Array.isArray(sets) && sets.length ? new Set(sets) : null);
@@ -99,41 +105,56 @@ async function assurerMoyens(db, { bucket, slug = null, sets = null, parallele =
     const dansPerimetre = e => !perimetre || perimetre.has(e.set);
     const sousSeuil = { $or: [{ basseDefinition: true }, { w: { $lt: LARGEUR_MIN_MOYEN } }] };
     const filtre = { images: { $elemMatch: { cleR2: { $type: 'string' }, ...(perimetre ? { set: perimetre.size === 1 ? [...perimetre][0] : { $in: [...perimetre] } } : {}),
-        $or: [{ moyen: { $exists: false }, w: { $gte: LARGEUR_MIN_MOYEN }, basseDefinition: { $ne: true } }, { moyen: { $exists: true }, ...sousSeuil }, ...(reverifier ? [{ moyen: { $exists: true } }] : [])] } } };
-    const aFaire = new Map();   // cleR2 -> { action: 'faire'|'verifier', cibles: [{ carteId, set }] }
-    const aRetirer = [];        // { carteId, set, cleR2, raison }
+        $or: [{ moyen: null, w: { $gte: LARGEUR_MIN_MOYEN }, basseDefinition: { $ne: true } }, { moyen: { $exists: true }, ...sousSeuil }, ...(reverifier ? [{ moyen: { $exists: true } }] : [])] } } };   // `moyen: null` = absent OU null
+    const aFaire = new Map();   // cleR2 -> { action: 'faire'|'verifier', cibles: [{ carteId, set, entree }] }
+    let aRetirer = [];          // { carteId, set, cleR2, raison } — seulement basse-definition / trop-petite : les deux cas que l'arrayFilter de retrait SÉLECTIONNE
     for await (const d of C.find(filtre, { projection: { images: 1 } })) {
         for (const e of d.images || []) {
             if (!dansPerimetre(e) || typeof e.cleR2 !== 'string') continue;
             const dec = decisionMoyen(e);
-            if (!dec.faire) { if (e.moyen) aRetirer.push({ carteId: d._id, set: e.set, cleR2: e.cleR2, raison: dec.raison }); continue; }
+            if (!dec.faire) { if (e.moyen && (dec.raison === 'basse-definition' || dec.raison === 'trop-petite')) aRetirer.push({ carteId: d._id, set: e.set, cleR2: e.cleR2, raison: dec.raison }); continue; }
             if (e.moyen && !reverifier) continue;
             const a = aFaire.get(e.cleR2) || aFaire.set(e.cleR2, { action: e.moyen ? 'verifier' : 'faire', cibles: [] }).get(e.cleR2);
             if (!e.moyen) a.action = 'faire';
-            a.cibles.push({ carteId: d._id, set: e.set, avait: !!e.moyen });
+            a.cibles.push({ carteId: d._id, set: e.set, entree: { cleR2: e.cleR2, w: e.w, h: e.h } });
             B.entrees++;
         }
         if (aFaire.size >= limite) break;
     }
-    const cles = [...aFaire.keys()].slice(0, limite);
+    const cles = [...aFaire.keys()].sort().slice(0, limite);
+    if (Number.isFinite(limite)) aRetirer = aRetirer.slice(0, limite);   // --limite borne aussi les retraits
     B.entrees = cles.reduce((n, k) => n + aFaire.get(k).cibles.length, 0);
     const docs = new Map();
-    for (let i = 0; i < cles.length; i += 1000) for (const d of await I.find({ cleR2: { $in: cles.slice(i, i + 1000) } }, { projection: { cleR2: 1, sha256: 1, moyen: 1 } }).toArray()) { if (!docs.has(d.cleR2) || d.etat === 'ok') docs.set(d.cleR2, d); }
+    for (let i = 0; i < cles.length; i += 1000) for (const d of await I.find({ cleR2: { $in: cles.slice(i, i + 1000) } }, { projection: { cleR2: 1, sha256: 1, moyen: 1, etat: 1 } }).toArray()) { if (!docs.has(d.cleR2) || d.etat === 'ok') docs.set(d.cleR2, d); }
+    // les collisions de clé de moyen : parmi les clés de la vague ET parmi les documents `images` qui existent déjà (une sœur hors vague compte)
+    const refusees = new Map();   // cleR2 -> message
+    {
+        const parSouche = new Map();
+        for (const k of cles) (parSouche.get(souche(k)) || parSouche.set(souche(k), new Set()).get(souche(k))).add(k);
+        const variantes = [];
+        for (const s of parSouche.keys()) for (const x of EXTENSIONS) variantes.push(`${s}.${x}`);
+        for (let i = 0; i < variantes.length; i += 1000) for (const d of await I.find({ cleR2: { $in: variantes.slice(i, i + 1000) } }, { projection: { cleR2: 1 } }).toArray()) parSouche.get(souche(d.cleR2))?.add(d.cleR2);
+        for (const [s, groupe] of parSouche) { const gagnante = [...groupe].sort()[0]; for (const k of groupe) if (k !== gagnante && aFaire.has(k)) refusees.set(k, `collision : ${k} et ${gagnante} donnent la même clé de moyen (${cleMoyen(k)}) — la seconde est refusée`); }
+    }
+    B.collisions = refusees.size;
     if (!ecrire) {
         const aVerifier = cles.filter(k => aFaire.get(k).action === 'verifier');
         const perimees = cles.filter(k => moyenAJour(docs.get(k)) === false);
         return { ...B, cles: cles.length, aVerifier: aVerifier.length, perimees: perimees.length, retirees: aRetirer.length, depuisDocument: cles.filter(k => aFaire.get(k).action === 'faire' && moyenAJour(docs.get(k)) !== false && docs.get(k)?.moyen?.cleR2).length,
-            sets: [...new Set([...cles.flatMap(k => aFaire.get(k).cibles.map(x => x.set)), ...aRetirer.map(x => x.set)])] };
+            sets: [...new Set([...cles.filter(k => !refusees.has(k)).flatMap(k => aFaire.get(k).cibles.map(x => x.set)), ...aRetirer.map(x => x.set)])] };
     }
     if (!cles.length && !aRetirer.length) return { ...B, cles: 0, traitees: 0, interrompu: false, sets: [] };   // rien à faire : pas d'appel R2
     await R2.verifierBucket(bucket);   // le bucket vit en juridiction UE : l'endpoint générique répond « Access Denied » (r2.js)
+    const declares = new Set();
+    const declarer = async ss => { const neufs = [...new Set(ss)].filter(s => !declares.has(s)); if (!neufs.length) return; if (surEcriture) await surEcriture(neufs); for (const s of neufs) declares.add(s); };
     // 1) les retraits (rien à lire sur R2)
     for (const r of aRetirer) {
         if (arreter()) break;
         try {
+            await declarer([r.set]);
             const cond = r.raison === 'basse-definition' ? { 'e.basseDefinition': true } : { 'e.w': { $lt: LARGEUR_MIN_MOYEN } };
-            await C.updateOne({ _id: r.carteId }, { $unset: { 'images.$[e].moyen': '' } }, { arrayFilters: [{ 'e.cleR2': r.cleR2, 'e.set': r.set, 'e.moyen': { $exists: true }, ...cond }] });
-            B.retirees++; B.sets.add(r.set);
+            const u = await C.updateOne({ _id: r.carteId }, { $unset: { 'images.$[e].moyen': '' } }, { arrayFilters: [{ 'e.cleR2': r.cleR2, 'e.set': r.set, 'e.moyen': { $exists: true }, ...cond }] });
+            if ((u?.modifiedCount ?? 1) > 0) { B.retirees++; B.sets.add(r.set); }
         } catch (e) { B.echecs.push({ cleR2: r.cleR2, erreur: e.message }); }
     }
     // 2) les poses, recopies et refontes
@@ -143,30 +164,35 @@ async function assurerMoyens(db, { bucket, slug = null, sets = null, parallele =
             const cle = cles[i++];
             try {
                 const doc = docs.get(cle), a = aFaire.get(cle), aJour = moyenAJour(doc);
+                if (refusees.has(cle)) throw new Error(refusees.get(cle));
                 if (a.action === 'verifier' && aJour !== false) continue;   // à jour, ou impossible à dire : on ne touche pas à une entrée qui a déjà un moyen
                 let mo = null, refaire = aJour === false;
-                if (!refaire && doc?.moyen?.cleR2) { mo = pourEntree(doc.moyen); B.depuisDocument++; }
-                else {
+                // ce que le SITE ferait du moyen (moyenAdmis, sur chaque entrée) : un moyen qu'il ignorerait ne s'écrit pas
+                const ignores = m => a.cibles.filter(c => !moyenAdmis(c.entree, m)).length;
+                const refus = (m, n) => new Error(`moyen ${m.w}×${m.h} ignoré par le site pour ${n} entrée(s) (largeur 300–500, au plus 85 %, proportion à 2 % de l'entrée) — rien écrit`);
+                if (!refaire && doc?.moyen?.cleR2 === cleMoyen(cle)) {
+                    mo = pourEntree(doc.moyen);
+                    const n = ignores(mo); if (n) throw refus(mo, n);
+                    B.depuisDocument++;
+                } else {
                     const orig = await R2.lireBinaire(bucket, cle);
                     const f = await fabriquerMoyen(orig);
                     const cm = cleMoyen(cle);
-                    const w = await R2.deposerBinaire(bucket, cm, f.buffer, 'image/webp', { ecraser: refaire });
-                    let dims = { w: f.w, h: f.h };
-                    if (w.ecrit) { if (refaire) B.refaites++; else B.fabriquees++; B.octets += f.octets; }
-                    else {   // la clé existait déjà (reprise d'un passage interrompu) : on enregistre les dimensions du fichier RÉELLEMENT présent
-                        const m = await sharp(await R2.lireBinaire(bucket, cm)).metadata();
-                        if (!(m.width >= LARGEUR_SITE_MIN && m.width <= LARGEUR_SITE_MAX) || !proportionAdmise(f.source, { w: m.width, h: m.height })) throw new Error(`la clé ${cm} existe déjà et porte un fichier de ${m.width}×${m.height} qui n'est pas ce moyen`);
-                        dims = { w: m.width, h: m.height }; B.deja++;
-                    }
-                    mo = { cleR2: cm, ...dims };
+                    mo = { cleR2: cm, w: f.w, h: f.h };
+                    const n = ignores(mo); if (n) throw refus(mo, n);   // AVANT le dépôt
+                    // ecraser:true (r2.js ne l'accepte que sous moyens/) : un moyen est DÉRIVÉ, un fichier sans provenance prouvée se refait — jamais « repris tel quel »
+                    await R2.deposerBinaire(bucket, cm, f.buffer, 'image/webp', { ecraser: true });
+                    if (refaire) B.refaites++; else B.fabriquees++;
+                    B.octets += f.octets;
                     if (doc) await I.updateOne(doc._id !== undefined ? { _id: doc._id } : { cleR2: cle }, { $set: { moyen: { ...mo, de: doc.sha256 ?? null } } });
                 }
+                await declarer(a.cibles.map(c => c.set));   // la revalidation due est consignée AVANT l'écriture des entrées
                 const faites = new Set();   // une carte à deux entrées de même image : UNE écriture les couvre toutes deux
                 for (const { carteId, set } of a.cibles) {
                     const k = String(carteId);
                     if (!faites.has(k)) {
                         faites.add(k);
-                        await C.updateOne({ _id: carteId }, { $set: { 'images.$[e].moyen': mo } }, { arrayFilters: [{ 'e.cleR2': cle, ...(refaire ? {} : { 'e.moyen': { $exists: false } }), 'e.basseDefinition': { $ne: true } }] });
+                        await C.updateOne({ _id: carteId }, { $set: { 'images.$[e].moyen': mo } }, { arrayFilters: [{ 'e.cleR2': cle, ...(refaire ? {} : { 'e.moyen': null }), 'e.basseDefinition': { $ne: true } }] });
                     }
                     B.sets.add(set);
                 }
