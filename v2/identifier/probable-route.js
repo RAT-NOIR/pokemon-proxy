@@ -67,7 +67,7 @@ function cosinusDesCandidats({ cfg, entree, ids, version, etat = require('./etat
  *   I2 : un prix de guide servi · extension >= versionMinProbable · 2 ou 3 candidats, le désigné parmi eux.
  * Le débit (I1, atomique) n'est PAS ici : il passe par argent.passerEnProbable, la fonction existante de PROBABLE.
  */
-function designerTeteDeGroupe({ cfg, versionExtension, tete, ids, version, groupeMarqueurs, cosinus, prixGuide }) {
+function designerTeteDeGroupe({ cfg, versionExtension, tete, ids, version, groupeMarqueurs, cosinus, prixGuide, garde }) {
     try {
         if (!(cfg && cfg.probable === true && cfg.gGroupe === true)) return { refus: 'drapeaux' };
         if (!P.versionAuMoins(versionExtension, cfg.versionMinProbable)) return { refus: 'version-extension' };
@@ -76,6 +76,9 @@ function designerTeteDeGroupe({ cfg, versionExtension, tete, ids, version, group
         if (dansUnGroupe(version, tete, ids)) return { refus: 'groupe' };                           // I3
         if (!P.cosinusAdmis(Number.isFinite(cosinus) ? cosinus : null, { cosinusMin: cfg.probableCosinusMin, vecteurExige: cfg.probableVecteurExige })) return { refus: 'cosinus' };
         if (PR.depuisGuide(prixGuide, 'tendance-seule') === null) return { refus: 'sans-prix' };    // I2
+        // LA LECTURE DE LA PHOTO : la garde (2) de la promotion de G (promotion-g.js::evaluerGarde, rendue par calcul-client-route.js::gardeDeLaLecture), avec la MEME exigence que arbitrerAvecPromotion :
+        // jugeable ET non contredite. Contredite, indecise ou lecture illisible : la question reste.
+        if (!(garde && typeof garde === 'object' && garde.jugeable === true && garde.contredit === false)) return { refus: 'lecture' };
         return { idProduct: tete, signal: 'G' };
     } catch { return { refus: 'erreur' }; }
 }

@@ -68,10 +68,12 @@ let ecartsContrat = 0;
         etat: { estimeIA: null, confianceIA: null, defautsVus: [], declareVendeur: null, declareCardmarket: null, retenu: null },
         candidats: [{ idProduct: id, nom: 'Tropius', numero: '001', set: 'Banc Set', prix: 1, photoUrl: null }], classement: [], guidePrix: {}, reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: null }, codeLangue: 2 });
     const IDS = [A.ID_P, A.ID_A];
+    let numeroLu = '001';          // la lecture de la photo (lectureGarde) : '001' concorde avec P et A ; autre chose les CONTREDIT tous les deux
     const chaine = async (req, res) => {
         await req.credit.v2.poserQuestion(req, { scanId: req.scanIdImpose, raison: 'egalite-sans-enjeu', candidats: IDS });
         const l = lecture(IDS[0]);
-        return res.json({ ...l, scanId: String(req.scanIdImpose), question: { etat: 'en-attente', delaiHeures: 24 }, carte: { ...l.carte, ambigu: true }, candidats: IDS.map(id => ({ idProduct: id, nom: 'Tropius', numero: '001', set: 'Banc Set', prix: 1, photoUrl: null })) });
+        return res.json({ ...l, scanId: String(req.scanIdImpose), lectureGarde: { numero: numeroLu, total: '064', setCode: 'PBL', symboleSet: null, langue: 'FR', attaque: null, attaqueConfiance: null, carteTcgdexId: null, totalHorsTailleDeSet: false, vivierIds: IDS },
+            question: { etat: 'en-attente', delaiHeures: 24 }, carte: { ...l.carte, numero: numeroLu, ambigu: true }, candidats: IDS.map(id => ({ idProduct: id, nom: 'Tropius', numero: '001', set: 'Banc Set', prix: 1, photoUrl: null })) });
     };
     const appFabrique = async cfgApp => {
         const app = express(); app.set('trust proxy', true); app.use(express.json({ limit: '2400kb' }));
@@ -86,11 +88,12 @@ let ecartsContrat = 0;
     const analyseDe = scanId => raw('analyses').findOne({ _id: new mongoose.Types.ObjectId(scanId) });
     const questionDe = scanId => raw('questions_v2').findOne({ _id: `${scanId}:0` });
     /** un scan complet : identifier puis (si un complément est servi) le second envoi. */
-    async function jouer(sv, { corpsReq = {}, res = resultats, envoi = true } = {}) {
+    async function jouer(sv, { corpsReq = {}, res = resultats, envoi = true, accepte = true } = {}) {
         const x = await inst(); const r = await poster(sv.url, x.jeton, corps(requete(corpsReq))); await attendre(30);
         const j = r.json || {}; const c = j.complement || null;
         let m = null;
-        if (envoi && c) m = await envoyer(sv.url, x.jeton, { scanId: j.scanId, jeton: c.jeton, opencv: '5.0.0-banc', resultats: res(c.mesures) });
+        // `accepteProbable: true` : le client DÉCLARE qu'il sait lire une carte a-trancher dans un `change: true` (sans lui, un probable n'est jamais servi au second envoi)
+        if (envoi && c) m = await envoyer(sv.url, x.jeton, { scanId: j.scanId, jeton: c.jeton, opencv: '5.0.0-banc', resultats: res(c.mesures), ...(accepte === true ? { accepteProbable: true } : accepte !== false ? { accepteProbable: accepte } : {}) });
         return { ...x, r, j, c, m, mj: m && m.json, c0: j.analyse && j.analyse.cartes[0] };
     }
     const sv = {}; for (const [k, cfgK] of [['rien', cfgRien], ['probable', cfgProbable], ['groupe', cfgGroupe], ['deux', cfgDeux]]) sv[k] = await appFabrique(cfgK);
@@ -136,7 +139,7 @@ let ecartsContrat = 0;
         const an = await analyseDe(x.j.scanId);
         H.v(`3. ${nom} : la question reste (change false), crédit RÉSERVÉ, aucun marqueur probable`, [x.mj && x.mj.change, await livre(x), an.cartes[0].probable ?? null, (await questionDe(x.j.scanId)).probable ?? false, an.complementMesures.ordreGroupe && an.complementMesures.ordreGroupe.probable], [false, RESERVE, null, false, `refus:${motif}`]);
     };
-    const vieux = await (async () => { const x = await inst(); const r = await poster(sv.deux.url, x.jeton, corps({ ...requete(), versionExtension: '2.0.0' })); const j = r.json, c = j.complement; const m = await envoyer(sv.deux.url, x.jeton, { scanId: j.scanId, jeton: c.jeton, resultats: resultats(c.mesures) }); return { ...x, j, m, mj: m.json }; })();
+    const vieux = await (async () => { const x = await inst(); const r = await poster(sv.deux.url, x.jeton, corps({ ...requete(), versionExtension: '2.0.0' })); const j = r.json, c = j.complement; const m = await envoyer(sv.deux.url, x.jeton, { scanId: j.scanId, jeton: c.jeton, resultats: resultats(c.mesures), accepteProbable: true }); return { ...x, j, m, mj: m.json }; })();
     await refus('extension 2.0.0 (< 2.0.1)', vieux, 'version-extension');
     // I2 : P sans ligne de guide de prix
     const gP = await raw('guide_prix').findOne({ idProduct: A.ID_P }); await raw('guide_prix').deleteOne({ idProduct: A.ID_P });
@@ -147,7 +150,7 @@ let ecartsContrat = 0;
     {
         const x = await inst(); const r = await poster(sv.deux.url, x.jeton, corps(requete())); const j = r.json, c = j.complement;
         await raw('analyses').updateOne({ _id: new mongoose.Types.ObjectId(j.scanId) }, { $set: { 'cartes.0.probable': { idProduct: A.ID_A, signal: 'A' } } });
-        const m = await envoyer(sv.deux.url, x.jeton, { scanId: j.scanId, jeton: c.jeton, resultats: resultats(c.mesures) });
+        const m = await envoyer(sv.deux.url, x.jeton, { scanId: j.scanId, jeton: c.jeton, resultats: resultats(c.mesures), accepteProbable: true });
         const an = await analyseDe(j.scanId);
         H.v('3. PROBABLE avait déjà désigné A : la tête P ne le remplace pas (change false, crédit RÉSERVÉ, le probable de PROBABLE est intact)', [m.json.change, await livre(x), an.cartes[0].probable, an.complementMesures.ordreGroupe.probable], [false, RESERVE, { idProduct: A.ID_A, signal: 'A' }, 'refus:deja-designe-ou-repondu']);
     }
@@ -162,6 +165,43 @@ let ecartsContrat = 0;
     const svCos = await appFabrique(cfgDe({ V2_PROBABLE: '1', V2_G_GROUPE: '1', V2_PROBABLE_COSINUS_MIN: '1' }));
     const cosx = await jouer(svCos); await svCos.fermer();
     H.v('3. cosinus minimal 1 (le cosinus mesuré de P est sous 1) ou égal : si refusé, la question reste ; sinon c\'est un probable — le banc dit lequel', [cosx.mj.change, (await analyseDe(cosx.j.scanId)).complementMesures.ordreGroupe.probable], [false, 'refus:cosinus']);
+
+    // ── TOUR 1, réserve 1 : LA LECTURE DE LA PHOTO peut REFUSER la tête (la garde de la promotion de G, une seule fonction)
+    numeroLu = '002';
+    const contredite = await jouer(sv.deux);
+    numeroLu = '001';
+    await refus('LECTURE : la tête aux zones gagnantes est CONTREDITE par le numéro lu (002 contre 001)', contredite, 'lecture');
+    H.v('3. … et les zones étaient bien gagnantes (la tête était posée) : l\'ordre journalisé garde P, seule la lecture a refusé', [(await analyseDe(contredite.j.scanId)).complementMesures.ordreGroupe.tete], [A.ID_P]);
+
+    // ── TOUR 1, réserve 2 : UN CLIENT DÉBITÉ VOIT TOUJOURS CE QU'IL A PAYÉ
+    const argent2 = registre.obtenir('argent'); const routesMod = require('../identifier/routes');
+    {
+        const vraieF = routesMod.facturationDe; routesMod.facturationDe = () => { throw new Error('panne de facturation'); };
+        let x; try { x = await jouer(sv.deux); } finally { routesMod.facturationDe = vraieF; }
+        H.v('3. APRÈS le débit, la facturation lève : la carte probable est quand même servie avec la facturation du débit (debite 1), jamais change false sur un crédit débité', [x.mj.change, x.mj.carte && x.mj.carte.niveau, x.mj.facturation && x.mj.facturation.debite, await livre(x)], [true, 'probable', 1, PAYE]);
+    }
+    {
+        const vraieS = argent2.solde; argent2.solde = async () => { throw new Error('panne du solde'); };
+        let x; try { x = await jouer(sv.deux); } finally { argent2.solde = vraieS; }
+        H.v('3. APRÈS le débit, la lecture du solde lève : la carte et la facturation sont servies, sans solde', [x.mj.change, x.mj.carte && x.mj.carte.niveau, x.mj.facturation.debite, 'solde' in x.mj, await livre(x)], [true, 'probable', 1, false, PAYE]);
+    }
+    {
+        // le retrait du marqueur échoue APRÈS un débit refusé : la question reste (change false), le crédit RÉSERVÉ — jamais débité sans carte ; le marqueur résiduel est journalisé
+        const vraieP = argent2.passerEnProbable; argent2.passerEnProbable = async () => ({ ok: false });
+        const dbr = mongoose.connection.db, vraieCol = dbr.collection.bind(dbr);
+        dbr.collection = nom => { const c = vraieCol(nom); return /analyses$/.test(nom) ? new Proxy(c, { get(t, p) { if (p === 'updateOne') return async (f, ...r) => { if (f && f['cartes.0.probable.signal']) throw new Error('retrait en échec'); return t.updateOne(f, ...r); }; const v2 = t[p]; return typeof v2 === 'function' ? v2.bind(t) : v2; } }) : c; };
+        let x; try { x = await jouer(sv.deux); } finally { argent2.passerEnProbable = vraieP; dbr.collection = vraieCol; }
+        H.v('3. le RETRAIT du marqueur échoue après un débit refusé : change false, crédit RÉSERVÉ (jamais débité sans carte)', [x.mj.change, await livre(x), (await questionDe(x.j.scanId)).probable ?? false], [false, RESERVE, false]);
+    }
+
+    // ── TOUR 1, réserve 3 : un probable n'est servi au second envoi QUE si le client le DÉCLARE (`accepteProbable: true`)
+    for (const [nom, val] of [['absent', false], ['« true » en texte', 'true'], ['1', 1], ['« faux »', 'faux']]) {
+        const x = await jouer(sv.deux, { accepte: val });
+        const an = await analyseDe(x.j.scanId);
+        H.v(`3. accepteProbable ${nom} : le comportement d'avant, octet pour octet comme la référence (question, change false), aucun débit, aucune carte probable`, [norm(x.mj) === norm(ref0.mj), await livre(x), an.cartes[0].probable ?? null, (await questionDe(x.j.scanId)).probable ?? false, an.complementMesures.ordreGroupe.tete], [true, RESERVE, null, false, A.ID_P]);
+    }
+    const accepte = await jouer(sv.deux, { accepte: true });
+    H.v('3. accepteProbable true (avec la version >= 2.0.1) : le chemin actuel, un probable débité une fois', [accepte.mj.change, accepte.mj.carte.niveau, await livre(accepte)], [true, 'probable', PAYE]);
 
     // ── 4. le contrat d'ensemble
     H.v('4. toutes les réponses valident leur schéma', ecartsContrat, 0);

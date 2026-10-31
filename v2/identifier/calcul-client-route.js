@@ -86,6 +86,16 @@ async function juger(args) {
         return { ...j, ordreGroupe: GG.ordonnerGroupe({ groupe: args.cm.groupe, zones: k => zones.get(k) ?? null, ecartMin: args.ecartMin }) };
     } catch (e) { journalErreur('g-groupe', e); return j; }
 }
+/**
+ * LA GARDE DE LA LECTURE de la photo (garde (2)) pour un produit que le second envoi s'apprête à FAIRE PASSER (promotion de G, ou tête du groupe devenue probable) : UNE fonction, lue par les deux chemins.
+ * Les lignes du catalogue du produit, des candidats et du vivier de la chaîne, puis PG.evaluerGarde. @returns {{garde: object} | {issue: 'catalogue-indisponible'}}
+ */
+async function gardeDeLaLecture({ cm, produit, catalogue }) {
+    const lus = new Map();
+    const ids = [...new Set([...cm.ids, produit, ...((cm.corps.lectureGarde && Array.isArray(cm.corps.lectureGarde.vivierIds)) ? cm.corps.lectureGarde.vivierIds.filter(Number.isInteger).slice(0, 400) : [])])];
+    try { for (const [k, p] of await catalogue.lire(ids)) lus.set(k, p); } catch (e) { journalErreur('catalogue (garde)', e); return { issue: 'catalogue-indisponible' }; }
+    return { garde: PG.evaluerGarde({ corps: cm.corps, gagnant: produit, produits: lus }) };
+}
 async function jugerG({ cm, resultats, catalogue }) {
     try {
         const v = MC.validerResultats(cm.mesures, resultats);
@@ -102,10 +112,9 @@ async function jugerG({ cm, resultats, catalogue }) {
         catch (e) { return { issue: e === ABSENTE ? 'muette' : 'regle-en-erreur' }; }
         if (!d || d.issue !== 'affirmee' || !Number.isInteger(d.produit)) return { issue: 'sans-affirmation' };
         if (!cm.ids.includes(d.produit)) return { issue: 'hors-question' };                // le client ne peut désigner qu'un candidat de la question
-        const lus = new Map();
-        const ids = [...new Set([...cm.ids, d.produit, ...((cm.corps.lectureGarde && Array.isArray(cm.corps.lectureGarde.vivierIds)) ? cm.corps.lectureGarde.vivierIds.filter(Number.isInteger).slice(0, 400) : [])])];
-        try { for (const [k, p] of await catalogue.lire(ids)) lus.set(k, p); } catch (e) { journalErreur('catalogue (garde)', e); return { issue: 'catalogue-indisponible' }; }
-        const garde = PG.evaluerGarde({ corps: cm.corps, gagnant: d.produit, produits: lus });
+        const g = await gardeDeLaLecture({ cm, produit: d.produit, catalogue });
+        if (g.issue) return { issue: g.issue };
+        const garde = g.garde;
         const arb = PG.arbitrerAvecPromotion({ issue: 'question', ids: cm.ids }, d, { garde, depuisIntrouvable: false });
         if (arb.action !== 'promouvoir') return { issue: (arb.desaccord && arb.desaccord.retenue) || arb.action };
         return { promouvoir: arb.ids[0], concordante: arb.concordante === true };
@@ -118,7 +127,8 @@ async function jugerG({ cm, resultats, catalogue }) {
  * (I1) passe par argent.passerEnProbable. Le marqueur d'analyse est écrit AVANT le débit et retiré si le débit échoue : jamais un débit sans marqueur. Ne lève jamais.
  * @returns {{reponse: {carte, facturation, solde?, offre?}} | {refus: string}}
  */
-async function devenirProbable({ cfg, argent, porteur, scanId, an, entree, cm, ordre, maintenant }) {
+async function devenirProbable({ cfg, argent, porteur, scanId, an, entree, cm, ordre, catalogue }) {
+    let debite = false, reponse = null;
     try {
         if (!cm.probableG || typeof cm.probableG !== 'object') return { refus: 'sans-donnees' };
         const c0 = an.cartes[0];
@@ -126,15 +136,18 @@ async function devenirProbable({ cfg, argent, porteur, scanId, an, entree, cm, o
         const ids = entree.question.choix.map(x => x && x.idProduct);
         const prod = (an.produits || []).find(p => p && p.idProduct === ordre.tete);
         const cos = cm.probableG.cosinus && typeof cm.probableG.cosinus === 'object' ? cm.probableG.cosinus[String(ordre.tete)] : null;
+        // LA LECTURE DE LA PHOTO peut REFUSER la tête : la MÊME garde que la promotion de G (gardeDeLaLecture -> PG.evaluerGarde), pas une copie
+        const g = await gardeDeLaLecture({ cm, produit: ordre.tete, catalogue });
+        if (g.issue) return { refus: g.issue };
         const d = PR.designerTeteDeGroupe({ cfg, versionExtension: cm.probableG.versionExtension, tete: ordre.tete, ids, version: require('../chargeur/etat').version(), groupeMarqueurs: cm.probableG.groupeMarqueurs,
-            cosinus: typeof cos === 'number' ? cos : null, prixGuide: prod ? prod.prixGuide : null });
+            cosinus: typeof cos === 'number' ? cos : null, prixGuide: prod ? prod.prixGuide : null, garde: g.garde });
         if (!Number.isInteger(d.idProduct)) return { refus: d.refus || 'refus' };
-        const { carteRepondue, facturationDe } = require('./routes');
+        const { carteRepondue } = require('./routes');
         const { avecRepliAnalyse } = require('./prix-repli');
         const { avecNiveau } = PR;
         const brute = carteRepondue(an, entree, 0, 'ne-sait-pas', null);
         const carte = brute && avecNiveau({ cartes: [avecRepliAnalyse(brute)] }, d).cartes[0];
-        if (!carte) return { refus: 'carte' };
+        if (!carte) return { refus: 'carte' };                                        // la carte est fabriquée AVANT le débit : jamais un débit sans carte servable
         const admin = Boolean(an.facturation && an.facturation.motif === 'administrateur');
         const m = await col('analyses').updateOne({ _id: scanId, 'cartes.0.probable': { $exists: false } }, { $set: { 'cartes.0.probable': { idProduct: d.idProduct, signal: d.signal } } });
         if (!m || (m.matchedCount ?? m.modifiedCount ?? 0) < 1) return { refus: 'marqueur' };
@@ -144,12 +157,23 @@ async function devenirProbable({ cfg, argent, porteur, scanId, an, entree, cm, o
             try { await col('analyses').updateOne({ _id: scanId, 'cartes.0.probable.signal': d.signal }, { $unset: { 'cartes.0.probable': '' } }); } catch (e) { journalErreur('marqueur probable retiré', e); }
             return { refus: 'debit' };
         }
-        const facturation = facturationDe('question', { admin, rendu: false, question: true, probable: true, cause: null });
+        // ⚠️ À PARTIR D'ICI LE CRÉDIT EST DÉBITÉ : le client voit TOUJOURS ce qu'il a payé. Tout ce qui suit est gardé séparément, une panne se journalise et ne retire ni la carte ni la facturation.
+        debite = true;
+        let facturation;
+        try { facturation = require('./routes').facturationDe('question', { admin, rendu: false, question: true, probable: true, cause: null }); }
+        catch (e) { journalErreur('facturation du probable', e); facturation = fabriquerFacturation(admin ? { motif: 'administrateur', rembourse: false } : { debite: 1, reserve: 0, rembourse: false, motif: 'question' }); }
         let solde, offre;
         try { solde = await argent.solde(porteur); } catch (e) { journalErreur('solde', e); }
         try { offre = await offreSur(porteur, argent); } catch (e) { journalErreur('offre', e); }
-        return { reponse: { carte, facturation, ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) } };
-    } catch (e) { journalErreur('probable de groupe', e); return { refus: 'erreur' }; }
+        reponse = { carte, facturation, ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) };
+        return { reponse };
+    } catch (e) {
+        journalErreur('probable de groupe', e);
+        // une exception APRÈS le débit : la carte et la facturation sont déjà prêtes quand elles existent, elles sont servies ; jamais « change: false » sur un crédit débité
+        if (debite && reponse) return { reponse };
+        if (debite) console.error(`🔴 [v2 mesures] scan ${scanId} : crédit débité (probable de groupe) et réponse non fabriquée — à la réconciliation`);
+        return { refus: 'erreur' };
+    }
 }
 
 function traiterMesures(cfg, deps = {}) {
@@ -191,8 +215,8 @@ function traiterMesures(cfg, deps = {}) {
         if (!Number.isInteger(j.promouvoir)) {
             // G-GROUPE → PROBABLE (V2_G_GROUPE ET V2_PROBABLE) : la tête posée par g-groupe.js est une désignation CANDIDATE du niveau « probable » ; toutes les gardes de PROBABLE s'appliquent, le débit passe par
             // argent.passerEnProbable (la fonction de PROBABLE). Un refus laisse la question réservée : le résultat d'avant, `change: false`.
-            if (cfg.gGroupe === true && cfg.probable === true && j.ordreGroupe && j.ordreGroupe.change === true) {
-                const p = await devenirProbable({ cfg, argent, porteur, scanId, an, entree, cm, ordre: j.ordreGroupe, maintenant: maintenant() });
+            if (cfg.gGroupe === true && cfg.probable === true && b.accepteProbable === true && j.ordreGroupe && j.ordreGroupe.change === true) {
+                const p = await devenirProbable({ cfg, argent, porteur, scanId, an, entree, cm, ordre: j.ordreGroupe, catalogue });
                 if (p.reponse) { await noter('probable-groupe', { ...j.ordreGroupe, probable: 'servi' }); return res.status(200).json({ success: true, scanId: b.scanId, change: true, ...p.reponse }); }
                 return inchange(j.issue || 'inchange', { ...j.ordreGroupe, probable: `refus:${p.refus}` });
             }

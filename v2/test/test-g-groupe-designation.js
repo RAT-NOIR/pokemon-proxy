@@ -13,7 +13,8 @@ const version = VB.construire([
     VB.doc(6, { idMetacard: 16, grande: { cle: 'k6', w: 600, h: 840 } })], [], { emprunts: true });
 const cfg = { probable: true, gGroupe: true, versionMinProbable: '2.0.1', probableCosinusMin: 0.38, probableVecteurExige: true };
 const PRIX = { date: '2026-10-04', tendance: 1.0 };
-const ok = (o = {}) => PRO.designerTeteDeGroupe({ cfg, versionExtension: '2.0.1', tete: 1, ids: [1, 2], version, groupeMarqueurs: false, cosinus: 0.9, prixGuide: PRIX, ...o });
+const GARDE_OK = { jugeable: true, contredit: false, concordante: true, resume: null };
+const ok = (o = {}) => PRO.designerTeteDeGroupe({ cfg, versionExtension: '2.0.1', tete: 1, ids: [1, 2], version, groupeMarqueurs: false, cosinus: 0.9, prixGuide: PRIX, garde: GARDE_OK, ...o });
 const refus = (o, motif) => H.v(o.nom, ok(o.args), { refus: motif });
 
 (async () => {
@@ -56,6 +57,14 @@ const refus = (o, motif) => H.v(o.nom, ok(o.args), { refus: motif });
     refus({ nom: '7a. I2 : pas de prix de guide', args: { prixGuide: null } }, 'sans-prix');
     refus({ nom: '7b. I2 : un guide sans date', args: { prixGuide: { tendance: 1 } } }, 'sans-prix');
     refus({ nom: '7c. I2 : un guide daté sans prix', args: { prixGuide: { date: '2026-10-04' } } }, 'sans-prix');
+    // LA LECTURE DE LA PHOTO (TOUR 1) : la garde (2) de la promotion de G, avec la même exigence
+    refus({ nom: '7d. lecture : la tête est CONTREDITE par la lecture', args: { garde: { jugeable: true, contredit: true, concordante: false, resume: 'numéro' } } }, 'lecture');
+    refus({ nom: '7e. lecture : indécise (contredit null) : la question reste', args: { garde: { jugeable: true, contredit: null, concordante: false, resume: null } } }, 'lecture');
+    refus({ nom: '7f. lecture : non jugeable (lecture illisible)', args: { garde: { jugeable: false, contredit: null, concordante: false, resume: null } } }, 'lecture');
+    refus({ nom: '7f2. lecture : non jugeable MAIS contredit false (forme incohérente) : refusée', args: { garde: { jugeable: false, contredit: false, concordante: false, resume: null } } }, 'lecture');
+    refus({ nom: '7g. lecture : garde absente', args: { garde: undefined } }, 'lecture');
+    refus({ nom: '7h. lecture : garde mal formée (texte)', args: { garde: 'ok' } }, 'lecture');
+    H.v('7i. lecture : jugeable et non contredite, même non concordante : admise (comme la promotion de G)', ok({ garde: { jugeable: true, contredit: false, concordante: false, resume: null } }).idProduct, 1);
     // jamais d'exception
     H.v('8. des entrées absurdes : jamais d\'exception, toujours un refus', [undefined, null, {}, { cfg }, { cfg, versionExtension: '2.0.1', tete: 1, ids: 'x' }].map(a => { try { return Object.keys(PRO.designerTeteDeGroupe(a || {}))[0]; } catch { return 'LEVE'; } }), ['refus', 'refus', 'refus', 'refus', 'refus']);
 

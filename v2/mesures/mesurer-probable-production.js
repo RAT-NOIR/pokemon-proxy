@@ -182,7 +182,7 @@ const pct = (a, b) => (b ? (100 * a / b).toFixed(1) + ' %' : 'n/a');
     }
     // G-GROUPE → PROBABLE sur une question que PROBABLE n'a pas désignée : le complément que le client recevrait (fournisseur sans ORB, ensemble fermé + zones du groupe), les mesures calculées par les fonctions de
     // pixels de production, G d'abord (s'il affirme, la question devient un sûr : hors de ce lot), la tête de g-groupe.js, puis les gardes de PROBABLE. Rend { raison } ou { tete, designe }.
-    async function teteDeGroupe(L, res, et, trace) {
+    async function teteDeGroupe(L, res, et, trace, corps, ctx) {
         const { VE, CR, Z, MC, GG, PRO, cache } = GGX;
         const scanId = L.cle.split(':')[0], p = nav[scanId], jpg = path.join(CARTES, scanId + '.jpg');
         if (!(p && p.redressee === true && Array.isArray(p.emb))) return { raison: 'photo-non-redressee' };
@@ -224,7 +224,7 @@ const pct = (a, b) => (b ? (100 * a / b).toFixed(1) + ' %' : 'n/a');
         const entree = { versionExtension: '2.0.1', empreintes: { modele: MODELE, rejet: null, entrees: [{ photo: 0, vecteur: EV.encoderVecteur(Float32Array.from(p.emb)), redressee: true, carte: null }] } };
         const cosDe = PRO.cosinusDesCandidats({ cfg, entree, ids: et.choix, version: V, etat });
         const cand = res.analyse.cartes[0].candidats.find(x => x && x.idProduct === og.tete);
-        const d = PRO.designerTeteDeGroupe({ cfg: { ...cfg, gGroupe: true }, versionExtension: '2.0.1', tete: og.tete, ids: et.choix, version: V, groupeMarqueurs: PRO.estGroupe(trace), cosinus: cosDe ? cosDe(og.tete) : null, prixGuide: cand ? cand.prixGuide : null });
+        const d = PRO.designerTeteDeGroupe({ cfg: { ...cfg, gGroupe: true }, versionExtension: '2.0.1', tete: og.tete, ids: et.choix, version: V, groupeMarqueurs: PRO.estGroupe(trace), cosinus: cosDe ? cosDe(og.tete) : null, prixGuide: cand ? cand.prixGuide : null, garde: rq('v2/identifier/promotion-g').evaluerGarde({ corps, gagnant: og.tete, produits: ctx.produits }) });
         return Number.isInteger(d.idProduct) ? { tete: og.tete, designe: true, ecart: og.ecart } : { raison: `refus:${d.refus}`, tete: og.tete };
     }
     const raisonsG = {}, tetesG = [], raisonParCle = {};
@@ -269,7 +269,7 @@ const pct = (a, b) => (b ? (100 * a / b).toFixed(1) + ' %' : 'n/a');
                 else { m.probFaux++; if (!et.choix.includes(L.verite)) m.probFauxHors++; probFaux.push({ cle: L.cle, fam: L.famille, verite: L.verite, probable: pr.idProduct, choix: et.choix, groupe: !!(trace && trace.garde) }); }
             } else if (GGX && nom0 === '__garde' && res && !et.stocke) {
                 // G-GROUPE : la tête du groupe, SEULEMENT sur une question que PROBABLE n'a pas désignée
-                let g; try { g = await teteDeGroupe(L, res, et, trace); } catch (e) { g = { raison: `exception:${String(e && (e.code || e.name))}` }; }
+                let g; try { g = await teteDeGroupe(L, res, et, trace, corps, ctx); } catch (e) { g = { raison: `exception:${String(e && (e.code || e.name))}` }; }
                 const kr = g.designe ? 'DESIGNE' : g.raison; raisonsG[kr] = (raisonsG[kr] || 0) + 1; raisonParCle[L.cle] = kr;
                 if (g.designe) {
                     const famille = L.banc === 'reglage' ? 'reglage' : L.famille;
