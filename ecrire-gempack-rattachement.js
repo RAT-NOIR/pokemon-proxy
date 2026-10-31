@@ -150,7 +150,7 @@ async function executer({ argv, ouvrirLecture, ouvrirEcriture, chargerBase = () 
             const ids = new Set(entrees.filter(e => e.idExpansion === s.exp).map(e => e.idProduct));
             const lg = lignesRatt.filter(l => l.idExpansion === s.exp), tr = plan.trous.filter(x => lg.some(l => l.idProduct === x.idProduct)), rf = plan.refus.filter(r => ids.has(r.idProduct));
             const causes = {}; for (const r of rf) { const c = r.raison.replace(/\(.*?\)/g, '(…)').replace(/«[^»]*»/g, '«…»').replace(/\d+/g, '#').slice(0, 110); causes[c] = (causes[c] || 0) + 1; }
-            log(`\n   ${s.nom} : produits admis ${ids.size} · déjà fichés ${plan.dejaPoses.length >= 0 ? entrees.filter(e => e.idExpansion === s.exp && lecture.lignes.some(l => l.idProduct === e.idProduct)).length : 0} · À RATTACHER ET POSABLES ${lg.length} (uniques ${lg.length - tr.length}, variantes indiscernables ${tr.length}) · refusés ${rf.length}`);
+            log(`\n   ${s.nom} : produits admis ${ids.size} · déjà fichés ${RG.dejaFichesDuSet(entrees, lecture.lignes, s.exp)} · À RATTACHER ET POSABLES ${lg.length} (uniques ${lg.length - tr.length}, variantes indiscernables ${tr.length}) · refusés ${rf.length}`);
             for (const [c, n] of Object.entries(causes).sort((a, b) => b[1] - a[1]).slice(0, 8)) log(`      ${String(n).padStart(4)} · ${c}`);
         }
         const d = plan.denominateurs;

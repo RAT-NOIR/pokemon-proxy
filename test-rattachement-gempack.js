@@ -14,7 +14,9 @@ const entree = p => ({ idProduct: p.idProduct, idExpansion: EXP, slugSet: SET, s
 const set = { _id: SET, tirage: 'zh-hans', idExpansion: [EXP], bulba: { expansion: EXPANSION } };
 const lecture = (cartes, prods, lignes = []) => ({ cartes, sets: new Map([[SET, set]]), produits: new Map([[EXP, prods]]), NC: new Map(prods.map(p => [p.idProduct, { numero: p.numero }])), lignes });
 const LE = new Date('2026-10-31T00:00:00Z');
-const R = (cartes, prods, opts = {}) => RG.planifierRattachement({ entrees: (opts.entrees || prods).map(entree), lecture: lecture(cartes, prods, opts.lignes || []), le: LE, ...(opts.variantes ? { variantes: opts.variantes } : {}) });
+// une ligne VOISINE existante du set donne la CONVENTION de numeroFiche du set (décision du coordinateur, tour 1) : par défaut, numéro de groupe posé
+const voisine = (numeroFiche = '99', id = 1) => ({ _id: `${id}|${id}`, carteId: id, idProduct: id, slugSet: SET, numeroFiche });
+const R = (cartes, prods, opts = {}) => RG.planifierRattachement({ entrees: (opts.entrees || prods).map(entree), lecture: lecture(cartes, prods, [...(opts.sansVoisine ? [] : [voisine()]), ...(opts.lignes || [])]), le: LE, ...(opts.variantes ? { variantes: opts.variantes } : {}) });
 
 const ponyta = carte(10, 'Ponyta', ['Double Headbutt'], 500), pinsir = carte(11, 'Pinsir', ['Slow Crunch'], 501), eevee = carte(12, 'Eevee', ['Ascension'], 502);
 const prodsPonyta = [1, 2, 3].map(i => produit(100 + i, 'Ponyta [Double Headbutt]', '01', 500));       // un groupe de 3 variantes indiscernables
@@ -25,7 +27,7 @@ t('un groupe de variantes dont la carte n\'est pas membre : fiche de groupe + ap
     assert.strictEqual(p.lignes.length, 3, JSON.stringify(p.refus));
     assert.deepStrictEqual([...p.ajoutsSets], [[10, [SET]]]);
     assert.strictEqual(p.impressions.length, 1); assert.strictEqual(p.impressions[0].imp.numero, '01');
-    assert.deepStrictEqual(p.denominateurs, { produits: 3, dejaFichees: 0, aRattacher: 3, fiches: 3, uniques: 0, variantesIndiscernables: 3, refuses: 0, refusParMotif: {} });
+    assert.deepStrictEqual(p.denominateurs, { produits: 3, dejaFichees: 0, aRattacher: 3, fiches: 3, uniques: 0, variantesIndiscernables: 3, refuses: 0, refusParMotif: {}, conventions: { [SET]: 'groupe' } });
     assert.deepStrictEqual(p.trous.map(x => x.idProduct).sort(), [101, 102, 103]);
     assert.ok(p.trous.every(x => x.motif === 'variantes-indiscernables'));
     assert.ok(p.lignes.every(l => l.numeroFiche === '01'));   // le numéro de GROUPE de Cardmarket, jamais un rang V1..V7
@@ -90,7 +92,7 @@ t('NON : un groupe dont les produits désignent DEUX cartes (attaques différent
 });
 // ── le set Gem Pack réel n'a PAS de `bulba.expansion` (null) : l'impression n'a aucun nom d'expansion à porter ──
 const setSansNom = { ...set, bulba: { expansion: null } };
-const lectureSansNom = (cartes, prods) => ({ ...lecture(cartes, prods), sets: new Map([[SET, setSansNom]]) });
+const lectureSansNom = (cartes, prods) => ({ ...lecture(cartes, prods, [voisine()]), sets: new Map([[SET, setSansNom]]) });
 t('un set SANS nom d\'expansion (bulba.expansion null) : sans nom donné, l\'impression n\'est pas posable — refus tel quel (la production dit non)', () => {
     const p = RG.planifierRattachement({ entrees: prodsPonyta.map(entree), lecture: lectureSansNom([ponyta], prodsPonyta), le: LE });
     assert.strictEqual(p.lignes.length, 0); assert.strictEqual(p.ajoutsSets.size, 0);
@@ -105,7 +107,7 @@ t('avec `expansionDe` : le nom est posé sur une COPIE du set (le set réel ne b
     assert.strictEqual(l.sets.get(SET).bulba.expansion, null);        // le set de la lecture est INTACT
 });
 t('`expansionDe` ne remplace JAMAIS un nom d\'expansion déjà porté par le set', () => {
-    const p = RG.planifierRattachement({ entrees: prodsPonyta.map(entree), lecture: lecture([ponyta], prodsPonyta), le: LE, expansionDe: () => 'Autre Nom' });
+    const p = RG.planifierRattachement({ entrees: prodsPonyta.map(entree), lecture: lecture([ponyta], prodsPonyta, [voisine()]), le: LE, expansionDe: () => 'Autre Nom' });
     assert.strictEqual(p.impressions[0].imp.expansion, EXPANSION); assert.deepStrictEqual(p.expansionsNommees, {});
 });
 t('nomExpansionGemPack : « Gem Pack Vol 4 » (nom d\'affichage Cardmarket) -> « Gem Pack Vol. 4 » (forme des impressions déjà au catalogue) ; rien d\'autre ne se devine', () => {
@@ -116,6 +118,36 @@ t('nomExpansionGemPack : « Gem Pack Vol 4 » (nom d\'affichage Cardmarket) -> �
     assert.strictEqual(RG.nomExpansionGemPack({ nomAffichage: 'Collect 151' }), null);
     assert.strictEqual(RG.nomExpansionGemPack({ nomAffichage: 'Gem Pack Vol 12' }), 'Gem Pack Vol. 12');
     assert.strictEqual(RG.nomExpansionGemPack({}), null);
+});
+// ── la CONVENTION de numeroFiche du set (tour 1) ──
+const lecN = (lignesVoisines, cartes, prods) => ({ ...lecture(cartes, prods, lignesVoisines) });
+t('set dont les lignes EXISTANTES ont toutes numeroFiche null (Vol. 5) : les nouvelles lignes ont numeroFiche null, AUCUNE impression n\'est posée, l\'appartenance et les trous restent', () => {
+    const p = RG.planifierRattachement({ entrees: prodsPonyta.map(entree), lecture: lecN([voisine(null, 1), voisine(null, 2)], [ponyta], prodsPonyta), le: LE });
+    assert.strictEqual(p.lignes.length, 3, JSON.stringify(p.refus));
+    assert.ok(p.lignes.every(l => l.numeroFiche === null));
+    assert.strictEqual(p.impressions.length, 0); assert.strictEqual(p.R.aPoser.size, 0);
+    assert.strictEqual(p.ajoutsSets.size, 1); assert.strictEqual(p.trous.length, 3);
+    assert.deepStrictEqual(p.denominateurs.conventions, { [SET]: 'null' });
+});
+t('set dont les lignes existantes portent un numeroFiche (Vol. 4, 6) : numéro de groupe + impression, comme leurs voisines', () => {
+    const p = R([ponyta], prodsPonyta);
+    assert.ok(p.lignes.every(l => l.numeroFiche === '01')); assert.strictEqual(p.impressions.length, 1);
+    assert.deepStrictEqual(p.denominateurs.conventions, { [SET]: 'groupe' });
+});
+t('NON : lignes existantes MÉLANGÉES (null et non null) — le set est refusé en entier et la raison le dit', () => {
+    const p = RG.planifierRattachement({ entrees: prodsPonyta.map(entree), lecture: lecN([voisine(null, 1), voisine('05', 2)], [ponyta], prodsPonyta), le: LE });
+    assert.strictEqual(p.lignes.length, 0); assert.strictEqual(p.ajoutsSets.size, 0);
+    assert.ok(p.refus.length === 3 && p.refus.every(r => /mélangées/.test(r.raison)), JSON.stringify(p.refus));
+});
+t('NON : aucune ligne existante dans le set — la convention est inconnue, refus (une garde qui ne peut pas conclure bloque)', () => {
+    const p = R([ponyta], prodsPonyta, { sansVoisine: true });
+    assert.strictEqual(p.lignes.length, 0);
+    assert.ok(p.refus.every(r => /aucune ligne existante/.test(r.raison)), JSON.stringify(p.refus));
+});
+t('dejaFichesDuSet : compte les entrées d\'une expansion qui ont une ligne (la valeur n\'est jamais « toujours vraie »)', () => {
+    const entrees = [{ idProduct: 1, idExpansion: 9 }, { idProduct: 2, idExpansion: 9 }, { idProduct: 3, idExpansion: 8 }];
+    assert.strictEqual(RG.dejaFichesDuSet(entrees, [{ idProduct: 1 }, { idProduct: 3 }], 9), 1);
+    assert.strictEqual(RG.dejaFichesDuSet(entrees, [], 9), 0);
 });
 t('option « refuser les variantes » : un groupe de plusieurs produits est refusé (« variantes indiscernables »), le produit unique passe', () => {
     const p = R([ponyta, pinsir], [...prodsPonyta, prodPinsir], { variantes: 'refuser' });

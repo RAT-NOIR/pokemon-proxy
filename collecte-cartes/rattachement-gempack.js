@@ -60,7 +60,21 @@ function planifierRattachement({ entrees, lecture: lectureRecue, le = new Date()
     const refuserGroupe = (cs, raison) => { for (const c of cs) refuser(c.idProduct, 'rattachement', raison); cs.length = 0; };
     const cartesParGroupe = new Map();     // carteId -> groupes qui la désignent
     for (const [kk, cs] of groupes) { for (const id of new Set(cs.map(c => c.carteId))) (cartesParGroupe.get(`${cs[0].slug}|${id}`) || cartesParGroupe.set(`${cs[0].slug}|${id}`, new Set()).get(`${cs[0].slug}|${id}`)).add(kk); }
+    // LA CONVENTION de numeroFiche du SET (décision du coordinateur, tour 1) : celle de ses lignes EXISTANTES. Toutes null -> null (et aucune impression : pas de numéro là où le set n'en a pas) ;
+    // toutes posées -> numéro de groupe ; mélangées ou aucune ligne -> le set est REFUSÉ (une garde qui ne peut pas conclure bloque).
+    const conventions = {};
+    for (const [, cs] of groupes) {
+        const slug = cs[0].slug; if (conventions[slug]) continue;
+        const ls = (lectureRecue.lignes || []).filter(l => l.slugSet === slug), nul = l => l.numeroFiche == null || String(l.numeroFiche).trim() === '';
+        conventions[slug] = !ls.length ? 'inconnue' : ls.every(nul) ? 'null' : ls.every(l => !nul(l)) ? 'groupe' : 'mixte';
+    }
     for (const [kk, cs] of groupes) {
+        const conv = conventions[cs[0].slug];
+        if (conv === 'mixte') { refuserGroupe(cs, `les lignes existantes du set ${cs[0].slug} sont mélangées (numeroFiche null et non null) : la convention du set ne se devine pas, le set est refusé`); continue; }
+        if (conv === 'inconnue') { refuserGroupe(cs, `aucune ligne existante dans le set ${cs[0].slug} : la convention de numeroFiche est inconnue, le set est refusé`); continue; }
+    }
+    for (const [kk, cs] of groupes) {
+        if (!cs.length) continue;
         const ids = [...new Set(cs.map(c => c.carteId))];
         if (ids.length !== 1) { refuserGroupe(cs, `le groupe ${cs[0].groupe} désigne ${ids.length} cartes différentes (${ids.join(', ')}) : une association ambiguë est un refus`); continue; }
         const dessinent = cartesParGroupe.get(`${cs[0].slug}|${ids[0]}`);
@@ -103,14 +117,22 @@ function planifierRattachement({ entrees, lecture: lectureRecue, le = new Date()
     const trous = [], rattaches = new Set(r2.lignes.map(l => l.idProduct));
     let uniques = 0, indiscernables = 0;
     for (const l of lignes) {
-        const nb = (idsDuSet.get(`${l.slugSet}|${k(l.numeroFiche)}`) || []).length;
-        if (nb > 1) { indiscernables++; trous.push({ idProduct: l.idProduct, motif: MOTIF_VARIANTES, groupe: String(l.numeroFiche), slugSet: l.slugSet, produitsDuGroupe: nb, preuve: { rang: 'indiscernable', groupe: String(l.numeroFiche), produitsDuGroupe: nb, raison: 'les produits du groupe portent le même nom, la même métacarte et le même numéro de groupe ; aucune source indépendante ne nomme leur finition' } }); }
+        const groupeL = String(numeroDe.get(l.idProduct) ?? l.numeroFiche ?? '');     // le GROUPE Cardmarket, même quand numeroFiche est null (convention du set)
+        const nb = (idsDuSet.get(`${l.slugSet}|${k(groupeL)}`) || []).length;
+        if (nb > 1) { indiscernables++; trous.push({ idProduct: l.idProduct, motif: MOTIF_VARIANTES, groupe: groupeL, slugSet: l.slugSet, produitsDuGroupe: nb, preuve: { rang: 'indiscernable', groupe: groupeL, produitsDuGroupe: nb, raison: 'les produits du groupe portent le même nom, la même métacarte et le même numéro de groupe ; aucune source indépendante ne nomme leur finition' } }); }
         else uniques++;
     }
     const refusParMotif = {};
     for (const r of refus) { const c = r.raison.replace(/\(.*?\)/g, '(…)').replace(/«[^»]*»/g, '«…»').replace(/\d+/g, '#').slice(0, 120); refusParMotif[c] = (refusParMotif[c] || 0) + 1; }
-    const denominateurs = { produits: entrees.length, dejaFichees: dejaFichees.size, aRattacher: candidats.length, fiches: lignes.length, uniques, variantesIndiscernables: indiscernables, refuses: refus.length, refusParMotif };
-    return { lignes, impressions, R: r2.R.aPoser.size || r1.R.aPoser.size ? { aPoser: new Map([...r1.R.aPoser, ...r2.R.aPoser]), groupes: new Map([...r1.R.groupes, ...r2.R.groupes]), refus: [...r1.R.refus, ...r2.R.refus] } : r2.R, detail: [...r1.detail, ...r2.detail], ajoutsSets, expansionsNommees, trous, refus: refus.sort((a, b) => a.idProduct - b.idProduct), denominateurs, rattaches: [...rattaches].sort((a, b) => a - b), dejaPoses: [...dejaPoses] };
+    // APPLICATION DE LA CONVENTION : un set aux lignes existantes toutes null reçoit des lignes numeroFiche null et AUCUNE impression (pas de numéro là où le set n'en a pas)
+    const slugsNuls = new Set(Object.entries(conventions).filter(([, c]) => c === 'null').map(([s]) => s));
+    const expNulles = new Set([...slugsNuls].map(s => lecture.sets.get(s)?.bulba?.expansion).filter(Boolean));
+    const lignesFinales = lignes.map(l => (rattaches.has(l.idProduct) && slugsNuls.has(l.slugSet) ? { ...l, numeroFiche: null } : l));
+    const filtrerImps = m => new Map([...m].map(([id, imps]) => [id, imps.filter(i => !(i.tirage === 'zh-hans' && expNulles.has(i.expansion)))]).filter(([, imps]) => imps.length));
+    const impressionsFinales = impressions.filter(x => !(x.imp.tirage === 'zh-hans' && expNulles.has(x.imp.expansion)));
+    const Rbrut = r2.R.aPoser.size || r1.R.aPoser.size ? { aPoser: new Map([...r1.R.aPoser, ...r2.R.aPoser]), groupes: new Map([...r1.R.groupes, ...r2.R.groupes]), refus: [...r1.R.refus, ...r2.R.refus] } : r2.R;
+    const denominateurs = { produits: entrees.length, dejaFichees: dejaFichees.size, aRattacher: candidats.length, fiches: lignes.length, uniques, variantesIndiscernables: indiscernables, refuses: refus.length, refusParMotif, conventions };
+    return { lignes: lignesFinales, impressions: impressionsFinales, R: { ...Rbrut, aPoser: filtrerImps(Rbrut.aPoser) }, detail: [...r1.detail, ...r2.detail], ajoutsSets, expansionsNommees, trous, refus: refus.sort((a, b) => a.idProduct - b.idProduct), denominateurs, rattaches: [...rattaches].sort((a, b) => a - b), dejaPoses: [...dejaPoses] };
 }
 
 /** « Gem Pack Vol 4 » (nom d'affichage tiré de Cardmarket) -> « Gem Pack Vol. 4 », la forme des impressions Gem Pack déjà au catalogue (Vol. 1 et Vol. 2). Tout autre nom : null (rien ne se devine). */
@@ -119,4 +141,10 @@ function nomExpansionGemPack(set) {
     return m ? `Gem Pack Vol. ${Number(m[1])}` : null;
 }
 
-module.exports = { planifierRattachement, nomExpansionGemPack, MOTIF_VARIANTES };
+/** Les produits d'une expansion qui ont déjà une ligne (le dénominateur « déjà fichés » d'un set). */
+function dejaFichesDuSet(entrees, lignes, exp) {
+    const avec = new Set(lignes.map(l => l.idProduct));
+    return entrees.filter(e => e.idExpansion === exp && avec.has(e.idProduct)).length;
+}
+
+module.exports = { planifierRattachement, nomExpansionGemPack, dejaFichesDuSet, MOTIF_VARIANTES };
