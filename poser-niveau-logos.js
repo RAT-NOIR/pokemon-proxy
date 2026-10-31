@@ -18,7 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const { simuler, aReclasser, CHAMPS } = require('./collecte-cartes/niveau-logos');
 
-const HOTES_EXCLUS = /pokecardex|cardmarket|vinted|cardcodex/i;
+const HOTES_EXCLUS = /pokecardex|cardmarket|vinted|cardcodex|malie/i;
 /**
  * Les lignes de la table des concordances, gardées par ce qu'elles AUTORISENT : `set`, `fichier` (tel qu'écrit en base), et `concordance` complète — `hote` (hors sources
  * exclues), `url`, `mesure`, `le` (AAAA-MM-JJ), `regardee: true`. Une seule ligne fautive, un fichier en double, ou une table vide : REFUS (rien ne se lit à moitié).
@@ -30,7 +30,7 @@ function concordancesDesLignes(lignes) {
     for (const [i, l] of lignes.entries()) {
         const c = l?.concordance ?? {};
         const ok = typeof l?.set === 'string' && l.set && typeof l.fichier === 'string' && l.fichier
-            && typeof c.hote === 'string' && c.hote && !HOTES_EXCLUS.test(c.hote) && typeof c.url === 'string' && c.url
+            && typeof c.hote === 'string' && c.hote && typeof c.url === 'string' && c.url && ![c.hote, c.url, c.page ?? ''].some(x => HOTES_EXCLUS.test(x))
             && typeof c.mesure === 'string' && c.mesure && /^\d{4}-\d{2}-\d{2}$/.test(c.le ?? '') && c.regardee === true;
         if (!ok) throw new Error(`ligne ${i} de la table des concordances refusée (set, fichier, concordance.hote hors sources exclues, url, mesure, le AAAA-MM-JJ, regardee: true) : ${JSON.stringify(l).slice(0, 200)}`);
         if (out.has(l.fichier)) throw new Error(`fichier en double dans la table des concordances : ${l.fichier}`);
@@ -81,7 +81,8 @@ if (require.main === module) (async () => {
     const sets = await S.find({}, { projection: proj }).toArray();
     if (!sets.length) throw new Error('collection sets vide : base fausse');
     const { officielsManuels, lignes } = officielsDesTables();
-    const concordances = concordancesDesTables();
+    // la table des concordances ne sert QU'AU reclassement : le mode additif garde exactement son comportement d'avant (relecture du 31/10)
+    const concordances = A.reclasser ? concordancesDesTables() : new Map();
     const ctx = { officielsManuels, concordances };
     if (A.reclasser) {
         const plan = aReclasser(sets, ctx);

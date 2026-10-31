@@ -103,7 +103,7 @@ function aReclasser(sets, ctx = {}) {
         const e = cle ? s[racine]?.[cle] : s[racine];
         if (!e || typeof e !== 'object' || e.niveau !== 'inconnu' || !SOURCES_MANUELLES.has(e.source)) continue;
         const c = ctx.concordances?.get(e.fichier);
-        if (!c || classer(champ, e, s, ctx).niveau !== 'officiel') continue;
+        if (!c || c.set !== s._id || classer(champ, e, s, ctx).niveau !== 'officiel') continue;
         out.push({ _id: s._id, chemin: champ, avant: 'inconnu', apres: 'officiel', fichier: e.fichier, concordance: c.concordance });
     }
     return out;

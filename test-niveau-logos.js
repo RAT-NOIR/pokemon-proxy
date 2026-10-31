@@ -77,15 +77,16 @@ verifier('simulation : le dénominateur (sets lus, champs de logo vus) est rendu
     verifier('concordance : ne vaut que pour un dépôt (manuel, apport-manuel), pas pour une autre source', niveau('logo', { source: 'ptcg-assets', fichier: 'Logo JP/NEO3.png' }, {}, ctx), 'inconnu');
     // le reclassement : un champ ÉCRIT « inconnu » que la concordance rend « officiel » — et rien d'autre
     const sets2 = [
-        { _id: 'A', logo: { source: 'manuel', fichier: 'Logo JP/NEO3.png', niveau: 'inconnu' } },
+        { _id: 'Awakening-Legends', logo: { source: 'manuel', fichier: 'Logo JP/NEO3.png', niveau: 'inconnu' } },
         { _id: 'B', logo: { source: 'manuel', fichier: 'Logo JP/NEO4.png', niveau: 'inconnu' } },
         { _id: 'C', logo: { source: 'tcgdex:en', sha1: 'a', niveau: 'inconnu' } },
         { _id: 'D', logo: { source: 'manuel', fichier: 'Logo JP/NEO3.png' } },
         { _id: 'E', logo: { source: 'manuel', fichier: 'Logo JP/NEO3.png', niveau: 'officiel' } }
     ];
     const r = N.aReclasser(sets2, ctx);
-    verifier('reclassement : seulement un niveau ÉCRIT « inconnu » levé par la concordance (pas un champ sans niveau, pas un autre motif, pas un officiel)', r.map(x => [x._id, x.chemin, x.avant, x.apres, x.fichier]), [['A', 'logo', 'inconnu', 'officiel', 'Logo JP/NEO3.png']]);
+    verifier('reclassement : seulement un niveau ÉCRIT « inconnu » levé par la concordance (pas un champ sans niveau, pas un autre motif, pas un officiel)', r.map(x => [x._id, x.chemin, x.avant, x.apres, x.fichier]), [['Awakening-Legends', 'logo', 'inconnu', 'officiel', 'Logo JP/NEO3.png']]);
     verifier('reclassement : porte la ligne de concordance (la preuve)', r[0]?.concordance?.hote, 'www.serebii.net');
+    verifier('reclassement : la ligne doit nommer CE set (même fichier sous un autre set : non reclassé)', N.aReclasser([{ _id: 'Autre-Set', logo: { source: 'manuel', fichier: 'Logo JP/NEO3.png', niveau: 'inconnu' } }], ctx), []);
     // la table lue : une garde écrite par ce qu'elle AUTORISE
     const P = require('./poser-niveau-logos');
     const lire = lignes => { try { return P.concordancesDesLignes(lignes).size; } catch (e) { return `refus: ${e.message.slice(0, 40)}`; } };
@@ -97,9 +98,11 @@ verifier('simulation : le dénominateur (sets lus, champs de logo vus) est rendu
         lire([{ ...L, concordance: { ...L.concordance, mesure: undefined } }]),
         lire([{ ...L, concordance: { ...L.concordance, hote: 'www.pokecardex.com' } }]),
         lire([{ ...L, concordance: { ...L.concordance, hote: 'www.cardmarket.com' } }]),
+        lire([{ ...L, concordance: { ...L.concordance, url: 'https://cdn.example/pokecardex/x.png' } }]),
+        lire([{ ...L, concordance: { ...L.concordance, page: 'https://malie.io/x' } }]),
         lire([{ ...L, set: '' }]),
         lire([L, L]),
-        lire([])].map(x => typeof x === 'string' && x.startsWith('refus')), [true, true, true, true, true, true, true, true, true]);
+        lire([])].map(x => typeof x === 'string' && x.startsWith('refus')), [true, true, true, true, true, true, true, true, true, true, true]);
     verifier('arguments : --reclasser accepté seul (simulation) et avec --ecrire --attendu', [P.analyserArguments(['--reclasser']).erreurs, P.analyserArguments(['--reclasser', '--ecrire', '--attendu=15']).reclasser], [[], true]);
 }
 console.log(`\n${ok} passés, ${ko} en échec`);
