@@ -11,6 +11,7 @@ const fs = require('fs'), path = require('path');
 const { prouverParSet } = require('./preuve-par-set');
 const { cleNumero } = require('./jointure');
 const TZ = require('./table-zh');
+const AHK = require('./anciens-noms-hk');
 
 const SOURCE = 'preuve-par-set';
 const groupeGem = n => String(n).slice(0, 2);
@@ -107,6 +108,14 @@ function chargerSources(dossier, { variantes = null } = {}) {
         ESPECES = { table: m.table, stats: { ...POKEAPI.stats, wikidata: w.stats, fusion: m.stats } };
         journal.push('Wikidata (' + w.meta.licence + ', lu le ' + w.meta.luLe + (variantes ? ', variantes ' + variantes.join('/') : '') + ') : ' + JSON.stringify(w.stats));
     } else journal.push('Wikidata : AUCUN fichier — la table des espèces est PokeAPI seule');
+    // ANCIENS NOMS DE HONG KONG (52poke ET zh.wikipedia, concordance par n° de Pokédex — collecte-cartes/anciens-noms-hk.js) : absents de PokeAPI et de Wikidata
+    const FHK = path.join(dossier, 'anciens-noms-hk', 'anciens-noms-hk.json');
+    if (fs.existsSync(FHK)) {
+        const hk = AHK.lireAnciensNomsHk(lire(FHK));
+        const m = TZ.fusionnerEspeces(ESPECES.table, hk.table, hk.contestes);
+        ESPECES = { table: m.table, stats: { ...ESPECES.stats, anciensNomsHk: hk.stats, fusionHk: m.stats } };
+        journal.push('anciens noms de Hong Kong (' + hk.meta.sources.map(s => s.source + ' ' + s.licence + ' lu le ' + s.luLe).join(' + ') + ') : ' + JSON.stringify(hk.stats));
+    } else journal.push('anciens noms de Hong Kong : AUCUN fichier — aucune traduction des noms de Hong Kong');
     journal.push('table des espèces PokeAPI (BSD-3-Clause, lue le ' + fs.readFileSync(path.join(dossier, 'pokeapi', 'LU-LE.txt'), 'utf8').slice(0, 10) + ') : ' + JSON.stringify(ESPECES.stats));
     const DEXIDS = lire(path.join(__dirname, '..', 'pokedex-dexids.json'));
     const cleProduit = TZ.fabriquerCleProduit(DEXIDS);
