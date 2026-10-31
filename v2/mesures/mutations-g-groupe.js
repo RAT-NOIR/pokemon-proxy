@@ -1,0 +1,100 @@
+'use strict';
+// LE JEU DE MUTATIONS DE G-GROUPE (ordonner un groupe de 2 à 5 candidats par les zones mesurées par le client). Rejouable : `node v2/mesures/mutations-g-groupe.js` (tout) ou `--seulement=<fragment du nom>`.
+// Même principe que mutations-lot-sans-prix.js (accroche-mutant.js) : on CASSE une garde à la fois dans une COPIE du fichier faite dans le dossier temporaire (le dépôt n'est jamais touché), on lance le banc qui la protège,
+// et il DOIT devenir rouge. Un mutant qui reste vert est « survivant ». Jamais lancé par lancer-tout.js. Aucune base : les deux bancs sont purs.
+const fs = require('fs'), os = require('os'), path = require('path'), { spawnSync } = require('child_process');
+const V = path.join(__dirname, '..');
+const BANCS = 'test';
+const GG = 'identifier/g-groupe.js', ROUTE = 'identifier/calcul-client-route.js';
+const PROB = 'identifier/probable-route.js', PRBL = 'identifier/probable.js', ROUTES = 'identifier/routes.js';
+const B1 = 'test-g-groupe.js', B2 = 'test-g-groupe-route.js', B3 = 'test-g-groupe-probable.js', B4 = 'test-g-groupe-designation.js';
+
+// [nom, fichier (relatif à v2/), ancre (une seule occurrence), remplacement, banc, équivalent? (raison)]
+const MUTANTS = [
+    ['l\'avance exigée est stricte (le seuil n\'est plus inclus)', GG, 'if (ecart < ecartMin) return non(\'ecart-insuffisant\');', 'if (ecart <= ecartMin) return non(\'ecart-insuffisant\');', B1],
+    ['aucune avance n\'est exigée', GG, 'if (ecart < ecartMin) return non(\'ecart-insuffisant\');', 'if (ecart < 0) return non(\'ecart-insuffisant\');', B1],
+    ['le plancher d\'inliers de la tête n\'est plus exigé', GG, 'if (tete.inliers < plancher) return non(\'plancher\');', 'if (false) return non(\'plancher\');', B1],
+    ['une mesure illisible vaut zéro inlier (au lieu d\'arrêter la règle)', GG, 'if (!zonesLisibles(zn)) return non(\'mesure-absente\');', 'if (!zonesLisibles(zn)) { mesure.set(c.cle, 0); continue; }', B1],
+    ['un candidat sans visuel connu ne bloque plus', GG, 'if (groupe.some(c => typeof c.cle !== \'string\' || c.cle === \'\')) return non(\'visuel-inconnu\');', '', B1],
+    ['deux candidats au visuel de tête : on en choisit un', GG, 'if (groupe.filter(c => c.cle === tete.cle).length > 1) return non(\'ex-aequo-visuel\');', '', B1],
+    ['le tri est inversé (le moins aligné en tête)', GG, 'sort((a, b) => b.inliers - a.inliers || a.i - b.i)', 'sort((a, b) => a.inliers - b.inliers || a.i - b.i)', B1],
+    ['un seuil nul est accepté', GG, 'ecartMin > 0)', 'ecartMin >= 0)', B1],
+    ['le groupe n\'est plus borné à cinq', GG, 'groupe.length > GROUPE_MAX', 'groupe.length > 99', B1],
+    ['un inliers au-delà du contrat est lisible', GG, 'zn.inliers <= INLIERS_MAX', 'zn.inliers <= 1e9', B1],
+    ['l\'avance se mesure au PIRE des autres (au lieu du meilleur)', GG, 'const second = autres[0];', 'const second = autres[autres.length - 1];', B1],
+    ['un visuel emprunté ou un emprunt inconnu est un visuel propre', GG, 'if (version.empruntDe(id) !== false) return null;', 'if (version.empruntDe(id) === true) return null;', B1],
+    ['la demande peut dépasser le maximum du contrat d\'une mesure', GG, 'deja.length + ajout.length > max ? null : ajout', 'deja.length + ajout.length > max + 1 ? null : ajout', B1],
+    ['une zone hors de [-1, 1] est lisible', GG, 'const nombre = (x, lo, hi) => typeof x === \'number\' && Number.isFinite(x) && x >= lo && x <= hi;', 'const nombre = (x, lo, hi) => typeof x === \'number\' && Number.isFinite(x);', B1],
+    // le branchement
+    ['le drapeau est ignoré dans la demande (toujours allumé)', ROUTE, 'if (cfg.gGroupe === true) {', 'if (true) {', B2],
+    ['le drapeau est ignoré dans le jugement (toujours calculé)', ROUTE, 'args.gGroupe !== true ||', 'false ||', B2],
+    ['le jeton ne signe plus la liste étendue', ROUTE, 'MC.signerJeton({ scanId: String(scanId), mesures, refs: refsJeton, exp }', 'MC.signerJeton({ scanId: String(scanId), mesures: ens.mesures, refs: refsJeton, exp }', B2],
+    ['les références n\'incluent plus les visuels du groupe', ROUTE, 'refsDemande = [...refsDemande, ...gr.map(c => c.cle).filter((k, i, a) => !refsDemande.includes(k) && a.indexOf(k) === i)];', '', B2],
+    ['le groupe n\'est plus stocké pour le second envoi', ROUTE, '...(groupe ? { groupe } : {}),', '', B2],
+    ['le jugement ne valide plus les résultats avant d\'ordonner', ROUTE, 'if (!MC.validerResultats(args.cm.mesures, args.resultats).ok) return j;', '', B2],
+    ['le seuil de la configuration est remplacé par une constante', ROUTE, 'ecartMin: args.ecartMin })', 'ecartMin: 100 })', B2],
+    ['une demande de G vide ne peut plus porter le groupe', ROUTE, 'if (mesures.length === 0) return null;', 'if (ens.mesures.length === 0) return null;', B2],
+    // TOUR 1 : la lecture de la photo, le client débité, le probable déclaré
+    ['LECTURE : la désignation ne lit plus la garde de la lecture', PROB, "if (!(garde && typeof garde === 'object' && garde.jugeable === true && garde.contredit === false)) return { refus: 'lecture' };", '', B4],
+    ['LECTURE : une lecture indécise (contredit null) est admise', PROB, 'garde.jugeable === true && garde.contredit === false)) return', 'garde.jugeable === true && garde.contredit !== true)) return', B4],
+    ['LECTURE : une lecture non jugeable est admise', PROB, 'garde.jugeable === true && garde.contredit === false)) return', 'garde.contredit === false)) return', B4],
+    ['LECTURE : la route passe une garde toujours verte au lieu de celle de la lecture', ROUTE, 'prixGuide: prod ? prod.prixGuide : null, garde: g.garde });', 'prixGuide: prod ? prod.prixGuide : null, garde: { jugeable: true, contredit: false } });', B3],
+    ['CLIENT DÉBITÉ : la facturation qui lève après le débit retire la carte', ROUTE, "journalErreur('facturation du probable', e); facturation = fabriquerFacturation(admin ? { motif: 'administrateur', rembourse: false } : { debite: 1, reserve: 0, rembourse: false, motif: 'question' });", "journalErreur('facturation du probable', e); throw e;", B3],
+    ['CLIENT DÉBITÉ : le solde qui lève après le débit retire la carte', ROUTE, "try { solde = await argent.solde(porteur); } catch (e) { journalErreur('solde', e); }\n        try { offre = await offreSur(porteur, argent); } catch (e) { journalErreur('offre', e); }\n        reponse =", "solde = await argent.solde(porteur);\n        try { offre = await offreSur(porteur, argent); } catch (e) { journalErreur('offre', e); }\n        reponse =", B3],
+    ['PROBABLE DÉCLARÉ : un client qui ne le demande pas reçoit quand même le probable', ROUTE, 'cfg.probable === true && b.accepteProbable === true && j.ordreGroupe', 'cfg.probable === true && j.ordreGroupe', B3],
+    ['PROBABLE DÉCLARÉ : n\'importe quelle valeur truthy suffit', ROUTE, 'b.accepteProbable === true && j.ordreGroupe', 'b.accepteProbable && j.ordreGroupe', B3],
+    // G-GROUPE -> PROBABLE (désignation et débit)
+    ['la désignation ignore les drapeaux', PROB, "if (!(cfg && cfg.probable === true && cfg.gGroupe === true)) return { refus: 'drapeaux' };", '', B4],
+    ['la désignation ignore la version de l\'extension', PROB, "if (!P.versionAuMoins(versionExtension, cfg.versionMinProbable)) return { refus: 'version-extension' };", '', B4],
+    ['la désignation ne vérifie plus que la tête est un candidat', PROB, "|| !ids.includes(tete)) return { refus: 'candidats' };", ") return { refus: 'candidats' };", B4],
+    ['I3 : une trace de marqueurs absente n\'est plus un groupe', PROB, "if (groupeMarqueurs !== false) return { refus: 'groupe' };", "if (groupeMarqueurs === true) return { refus: 'groupe' };", B4],
+    ['I3 : le groupe des données n\'est plus lu', PROB, "if (dansUnGroupe(version, tete, ids)) return { refus: 'groupe' };", '', B4],
+    ['vecteur exigé et cosinus minimal : plus lus', PROB, "if (!P.cosinusAdmis(Number.isFinite(cosinus) ? cosinus : null, { cosinusMin: cfg.probableCosinusMin, vecteurExige: cfg.probableVecteurExige })) return { refus: 'cosinus' };", '', B4],
+    ['I2 : le prix de guide servi n\'est plus exigé', PROB, "if (PR.depuisGuide(prixGuide, 'tendance-seule') === null) return { refus: 'sans-prix' };", '', B4],
+    ['le vecteur n\'est plus exigé (cosinusAdmis)', PRBL, 'if (exige && !connu) return false;', '', B4],
+    ['le cosinus minimal n\'est plus lu (cosinusAdmis)', PRBL, 'if (minimum > 0 && connu && cos < minimum) return false;', '', B4],
+    ['le passage en probable (débit atomique) est sauté', ROUTE, 'const r = await argent.passerEnProbable(porteur, { scanId, carte: 0 }); ok = Boolean(r && r.ok);', 'ok = true;', B3],
+    ['le marqueur n\'est pas retiré quand le débit échoue', ROUTE, "await col('analyses').updateOne({ _id: scanId, 'cartes.0.probable.signal': d.signal }, { $unset: { 'cartes.0.probable': '' } });", '', B3],
+    ['V2_PROBABLE n\'est plus exigé pour devenir probable', ROUTE, 'cfg.gGroupe === true && cfg.probable === true && b.accepteProbable === true', 'cfg.gGroupe === true && b.accepteProbable === true', B3, 'redondant par construction : probableG n\'est stocké que si V2_PROBABLE est allumé et designerTeteDeGroupe relit les deux drapeaux — la garde est doublée, aucun cas observable ne les sépare'],
+    ['un probable déjà désigné par PROBABLE peut être remplacé', ROUTE, "if (c0.probable || c0.reponse) return { refus: 'deja-designe-ou-repondu' };", '', B3],
+    ['le prix de guide lu est celui d\'un autre produit (le premier)', ROUTE, 'const prod = (an.produits || []).find(p => p && p.idProduct === ordre.tete);', 'const prod = (an.produits || [])[0];', B3],
+    ['les données du premier envoi (probableG) ne sont plus gardées', ROUTE, '...(groupe && probableG && cfg.probable === true ? { probableG } : {}) }', '}', B3],
+    ['le premier envoi ne calcule plus les cosinus (probableG vide)', ROUTES, 'if (cfg.gGroupe === true && cfg.probable === true) {', 'if (false) {', B3],
+    ['un ensemble nul de G ne porte plus le groupe (le client ne mesure plus rien)', ROUTE, 'if (!ens && cfg.gGroupe !== true) return null;', 'if (!ens) return null;', B2],
+    ['le maximum du contrat n\'est plus respecté', ROUTE, 'max: MC.MESURES_MAX', 'max: 99', B2],
+];
+
+function rejouer({ seulement = null, journal = console.log } = {}) {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-mutants-gg-'));
+    const resultats = [];
+    try {
+        MUTANTS.forEach(([nom, fichier, ancre, neuf, banc, equivalent], i) => {
+            if (seulement && !nom.includes(seulement)) return;
+            const cible = path.join(V, fichier), texte = fs.readFileSync(cible, 'utf8').replace(/\r\n/g, '\n'), ancreN = ancre.replace(/\r\n/g, '\n'), neufN = neuf.replace(/\r\n/g, '\n');
+            const n = texte.split(ancreN).length - 1;
+            if (n !== 1) { resultats.push({ nom, verdict: 'ANCRE', detail: `${n} occurrence(s)` }); journal(`?? ANCRE (${n} occurrence(s))  ${nom}`); return; }
+            const copie = path.join(tmp, `m${i}.js`); fs.writeFileSync(copie, texte.replace(ancreN, () => neufN));
+            const r = spawnSync(process.execPath, ['-r', path.join(V, BANCS, '_espion-fs-armer.js'), '-r', path.join(__dirname, 'accroche-mutant.js'), path.join(V, BANCS, banc)], {
+                cwd: path.join(V, '..'), encoding: 'utf8', timeout: 200000, maxBuffer: 64 * 1024 * 1024, env: { ...process.env, RM_MUTANT_CIBLE: cible, RM_MUTANT_SOURCE: copie, NODE_OPTIONS: `--require ${path.join(__dirname, 'accroche-mutant.js')}` } });
+            const m = /(\d+) réussis, (\d+) échoués/.exec(r.stdout || '');
+            const rouge = r.status !== 0 || (m && Number(m[2]) > 0);
+            const verdict = rouge ? 'TUÉ' : equivalent ? 'ÉQUIVALENT' : 'SURVIVANT';
+            resultats.push({ nom, verdict, banc, bilan: m ? `${m[1]}/${m[2]}` : 'pas de bilan' });
+            journal(`${verdict.padEnd(10)} ${nom}  [${banc}] ${m ? `${m[1]} réussis, ${m[2]} échoués` : 'pas de bilan'}${equivalent && !rouge ? ` — ${equivalent}` : ''}`);
+        });
+    } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+    return resultats;
+}
+function ancresCassees() {
+    return MUTANTS.filter(([, fichier, ancre]) => fs.readFileSync(path.join(V, fichier), 'utf8').replace(/\r\n/g, '\n').split(ancre.replace(/\r\n/g, '\n')).length - 1 !== 1).map(m => m[0]);
+}
+module.exports = { MUTANTS, rejouer, ancresCassees };
+
+if (require.main === module) {
+    const arg = process.argv.slice(2);
+    if (arg.some(a => !/^--seulement=.{1,60}$/.test(a)) || arg.length > 1) { console.error('ARRÊT : seul --seulement=<fragment du nom> est admis'); process.exit(1); }
+    const res = rejouer({ seulement: arg[0] ? arg[0].slice(12) : null });
+    const compte = v => res.filter(r => r.verdict === v).length;
+    console.log(`\n${res.length} mutants : ${compte('TUÉ')} tués, ${compte('ÉQUIVALENT')} équivalent(s) déclaré(s), ${compte('SURVIVANT')} survivant(s), ${compte('ANCRE')} ancre(s) cassée(s)`);
+    process.exit(compte('SURVIVANT') + compte('ANCRE') ? 1 : 0);
+}

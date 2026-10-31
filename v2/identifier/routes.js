@@ -159,7 +159,7 @@ const mongoose = require('mongoose');
 const registre = require('../registre');
 const { fauxRes } = require('./captureres');
 const { adapter, codeLangueDe, prixLiveDe, affirmerParLaRoute } = require('./adaptateur');
-const { consulterProbable, avecNiveau, actif: niveauServi } = require('./probable-route');   // PROBABLE : le niveau « probable » (V2_PROBABLE, éteint : jamais appelée), et `niveau` servi aux extensions >= 2.0.1
+const { consulterProbable, avecNiveau, actif: niveauServi, cosinusDesCandidats, estGroupe } = require('./probable-route');   // PROBABLE : le niveau « probable » (V2_PROBABLE, éteint : jamais appelée), et `niveau` servi aux extensions >= 2.0.1
 const { appliquerMarqueurs } = require('./garde-marqueurs');       // MARQUEURS : le jumbo par le titre et la garde des groupes, derrière V2_JUMBO_TITRE et V2_GARDE_MARQUEURS (éteints : jamais appelée)
 const { fournisseurParDefaut, idsAffirmes, idsACharger } = require('./jumeaux');
 const { idsDeLaGarde } = require('./garde-contradiction');
@@ -651,7 +651,18 @@ function traiterIdentifier(cfg, deps = {}) {
                     // CALCUL-CLIENT : une QUESTION que la règle G aurait pu trancher avec des mesures que le serveur ne calcule pas (V2_ORB_SERVEUR=0) — on demande ces mesures au client qui l'annonce. Jamais quand G a
                     // déjà changé le résultat ou contredit la chaîne, jamais sur autre chose qu'une question (le second envoi ne peut que PROMOUVOIR). Un échec ici n'enlève rien : le premier verdict reste, sans complément.
                     if (resultat.issue === 'question' && cfg.mesuresClient === true && entree.mesuresClient === true && empreinteInfo && empreinteInfo.attente && !desaccordG && !empreinteInfo.influence) {
-                        try { complement = require('./calcul-client-route').preparerComplement({ cfg, scanId, attente: empreinteInfo.attente, corpsChaine: c, resultat, maintenant: typeof deps.maintenant === 'function' ? deps.maintenant() : Date.now() }); }
+                        try {
+                            // G-GROUPE → PROBABLE (les DEUX drapeaux seulement) : ce que le second envoi relira pour désigner la tête du groupe — version de l'extension, trace des groupes (marqueurs), cosinus de chaque candidat
+                            // (la même fonction que PROBABLE : probable-route.js::cosinusDesCandidats). Éteint, rien n'est lu et rien n'est passé.
+                            let probableG = null;
+                            if (cfg.gGroupe === true && cfg.probable === true) {
+                                const idsQ = ((resultat.analyse && resultat.analyse.cartes && resultat.analyse.cartes[0] && resultat.analyse.cartes[0].candidats) || []).map(x => x && x.idProduct).filter(Number.isInteger);
+                                const cosDe = cfg.empreinteExtension === true && entree.empreintes && version0 && typeof version0.entree === 'function' ? cosinusDesCandidats({ cfg, entree, ids: idsQ, version: version0, memo: te.voisinsUneFois === true }) : null;
+                                probableG = { versionExtension: typeof entree.versionExtension === 'string' ? entree.versionExtension : null, groupeMarqueurs: estGroupe(traceMarqueurs),
+                                    cosinus: Object.fromEntries(idsQ.map(id => { const x = cosDe ? cosDe(id) : null; return [String(id), Number.isFinite(x) ? x : null]; })) };
+                            }
+                            complement = require('./calcul-client-route').preparerComplement({ cfg, scanId, attente: empreinteInfo.attente, corpsChaine: c, resultat, maintenant: typeof deps.maintenant === 'function' ? deps.maintenant() : Date.now(), probableG });
+                        }
                         catch (e) { journalErreur('complément des mesures', e); complement = null; }
                     }
                 }

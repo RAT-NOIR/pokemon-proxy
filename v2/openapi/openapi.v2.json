@@ -6222,6 +6222,11 @@
             "maxLength": 60,
             "description": "La version d'OpenCV.js du client (journalisée)."
           },
+          "accepteProbable": {
+            "type": "boolean",
+            "x-conditionnel": "V2_PROBABLE et V2_G_GROUPE",
+            "description": "AJOUT FACULTATIF : le client DÉCLARE qu'il sait lire une carte `a-trancher` portant `niveau: \"probable\"` dans un `change: true`. Sans ce champ à `true` EXACTEMENT (absent, `false`, texte, nombre : ignoré, jamais un refus), le serveur ne sert jamais un probable au second envoi : la question reste, `change: false`, aucun débit. Lu SEULEMENT si `V2_PROBABLE=1` ET `V2_G_GROUPE=1` ; la version de l'extension (>= 2.0.1) reste exigée en plus."
+          },
           "resultats": {
             "type": "array",
             "maxItems": 12,
@@ -6248,7 +6253,7 @@
           },
           "change": {
             "type": "boolean",
-            "description": "`false` : le premier verdict reste (résultats rejetés, règle sans affirmation, candidat hors de la question, réponse déjà donnée…), sans autre champ. `true` : la carte est montée en `identifiee` ; la question réservée est réglée comme une réponse par ce candidat (un seul débit)."
+            "description": "`false` : le premier verdict reste (résultats rejetés, règle sans affirmation, candidat hors de la question, réponse déjà donnée…), sans autre champ. `true` : la carte est montée en `identifiee` ; la question réservée est réglée comme une réponse par ce candidat (un seul débit). Avec `V2_PROBABLE=1` ET `V2_G_GROUPE=1` seulement (éteints : jamais), `true` peut aussi porter la carte `a-trancher` de la question avec `niveau: \"probable\"` et `probable` (la tête que les mesures du client désignent, toutes les gardes de PROBABLE passées) ; le crédit est alors débité à l'affichage, comme un probable de `/api/identifier`."
           },
           "carte": {
             "$ref": "#/components/schemas/CarteAnalysee"

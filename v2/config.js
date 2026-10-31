@@ -264,6 +264,11 @@ function lireConfig(env = process.env) {
         //   règle G : une mesure demandée fait se taire G (« muette »), sauf que le client peut la fournir par le complément.
         mesuresClient: booleen('V2_MESURES_CLIENT', env.V2_MESURES_CLIENT, false),
         orbServeur: booleen('V2_ORB_SERVEUR', env.V2_ORB_SERVEUR, true),
+        // G-GROUPE (lot du 31/10) : ordonner le groupe de 2 à 5 candidats d'une question par les zones que le client mesure (identifier/g-groupe.js). ÉTEINT par défaut (0) : la demande de mesures et la route sont celles
+        // d'avant, octet pour octet. N'agit que si V2_MESURES_CLIENT l'est aussi (le second envoi en est le porteur). Il ne promeut rien : la décision est journalisée dans `complementMesures.ordreGroupe`, jamais servie.
+        // gGroupeEcart : l'avance minimale, en inliers, du candidat de tête sur le meilleur des autres (seuil inclus), choisie sur le RÉGLAGE seul (v2/mesures/analyser-g-groupe.js).
+        gGroupe: booleen('V2_G_GROUPE', env.V2_G_GROUPE, false),
+        gGroupeEcart: entier('V2_G_GROUPE_ECART', env.V2_G_GROUPE_ECART, 50, 1, 300),
         // TAUX-BCE (B4) : le déclencheur quotidien des taux de change de la BCE (identifier/taux-declencheur.js). ÉTEINT par défaut (0) : aucune minuterie, aucune lecture, comme avant.
         // À 1 : une lecture au démarrage si aucun taux n'est en base ou s'il est plus vieux que AGE_MAX_JOURS, puis une par jour après 16 h Paris.
         tauxBce: booleen('V2_TAUX_BCE', env.V2_TAUX_BCE, false),

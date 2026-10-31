@@ -36,6 +36,54 @@ function dansUnGroupe(version, id, ids) {
 }
 
 /**
+ * Les cosinus des candidats (photo ↔ visuel PROPRE), à partir du vecteur de l'extension et de l'index en place ; null si le vecteur manque, est refusé, ou si la photo n'est pas redressée. UNE définition : consulterProbable
+ * et la désignation de G-GROUPE (preparerComplement) la lisent toutes deux. @returns (idProduct) => number | null, ou null
+ */
+function cosinusDesCandidats({ cfg, entree, ids, version, etat = require('./etat-empreintes'), memo = false, note = () => { } }) {
+    try {
+        const voulu = cfg.modeleEmpreinte && cfg.modeleEmpreinte.id && cfg.modeleEmpreinte.sha256 ? { id: cfg.modeleEmpreinte.id, sha256: cfg.modeleEmpreinte.sha256 } : null;
+        const p = preparerVecteur({ entree, voulu, etat, memo });
+        if (!p.ok) note(`vecteur-${p.code}`); else if (p.e0.redressee !== true) note('non-redressee'); else note('cosinus');
+        if (p.ok && p.e0.redressee === true) {
+            const empr = emprunteDe(version), cles = new Map();
+            for (const id of ids) {
+                const e = version.entree(id);
+                // un visuel EMPRUNTÉ (marqué par la colonne des emprunts, ou porteur d'une mention d'un autre tirage) n'a pas de visuel propre. « Inconnu » (null) n'est pas « emprunté » : la mesure du lot compte propre
+                // tout visuel sans mention (une entrée sans mention est le scan du tirage), c'est ce que le seuil du cosinus a été calibré sur.
+                const emprunte = (empr && empr(id) === true) || Boolean(e && e.mention && !estMentionDAffichage(e));
+                if (e && !emprunte && e.grande && typeof e.grande.cle === 'string' && e.grande.cle) cles.set(id, e.grande.cle);
+            }
+            return P.cosinusDes({ ids, cles, similarites: ordre => p.courant.index.similarites(p.v.vecteur, ordre), redressee: true });
+        }
+        return null;
+    } catch { return null; }
+}
+
+/**
+ * G-GROUPE → PROBABLE : une tête posée par g-groupe.js (second envoi des mesures) devient une désignation candidate du niveau « probable » SEULEMENT si TOUTES les gardes de PROBABLE passent, relues ici
+ * sur ce que le premier envoi a gardé (`probableG` : version de l'extension, trace des groupes, cosinus du désigné) et sur la ligne `analyses` (le prix de guide servi). Écrite par ce qu'elle AUTORISE : un seul
+ * chemin mène à { idProduct }, tout le reste est { refus: <motif> } — jamais une exception, jamais « je ne sais pas » pris pour « oui ».
+ *   I3 : le désigné n'est dans aucun groupe de même dessin (marqueurs, ou données : une entrée absente de l'archive = groupe) · VECTEUR EXIGÉ et COSINUS ≥ minimum (P.cosinusAdmis, la même définition que decider) ·
+ *   I2 : un prix de guide servi · extension >= versionMinProbable · 2 ou 3 candidats, le désigné parmi eux.
+ * Le débit (I1, atomique) n'est PAS ici : il passe par argent.passerEnProbable, la fonction existante de PROBABLE.
+ */
+function designerTeteDeGroupe({ cfg, versionExtension, tete, ids, version, groupeMarqueurs, cosinus, prixGuide, garde }) {
+    try {
+        if (!(cfg && cfg.probable === true && cfg.gGroupe === true)) return { refus: 'drapeaux' };
+        if (!P.versionAuMoins(versionExtension, cfg.versionMinProbable)) return { refus: 'version-extension' };
+        if (!Array.isArray(ids) || ids.length < 2 || ids.length > 3 || !ids.every(Number.isInteger) || new Set(ids).size !== ids.length || !ids.includes(tete)) return { refus: 'candidats' };
+        if (groupeMarqueurs !== false) return { refus: 'groupe' };                                  // vrai OU absent OU illisible : un groupe (défaut fermé)
+        if (dansUnGroupe(version, tete, ids)) return { refus: 'groupe' };                           // I3
+        if (!P.cosinusAdmis(Number.isFinite(cosinus) ? cosinus : null, { cosinusMin: cfg.probableCosinusMin, vecteurExige: cfg.probableVecteurExige })) return { refus: 'cosinus' };
+        if (PR.depuisGuide(prixGuide, 'tendance-seule') === null) return { refus: 'sans-prix' };    // I2
+        // LA LECTURE DE LA PHOTO : la garde (2) de la promotion de G (promotion-g.js::evaluerGarde, rendue par calcul-client-route.js::gardeDeLaLecture), avec la MEME exigence que arbitrerAvecPromotion :
+        // jugeable ET non contredite. Contredite, indecise ou lecture illisible : la question reste.
+        if (!(garde && typeof garde === 'object' && garde.jugeable === true && garde.contredit === false)) return { refus: 'lecture' };
+        return { idProduct: tete, signal: 'G' };
+    } catch { return { refus: 'erreur' }; }
+}
+
+/**
  * @returns null (aucun probable) | { idProduct, signal, contredits, detail }
  */
 function consulterProbable({ cfg, entree, resultat, corpsChaine, produits, version, traceMarqueurs = null, lot = false, etat = require('./etat-empreintes'), memo = false, diag = null }) {
@@ -52,24 +100,7 @@ function consulterProbable({ cfg, entree, resultat, corpsChaine, produits, versi
     let cosinus = null;
     if (groupe) note('groupe');
     else if (!(cfg.empreinteExtension === true && entree.empreintes && version && typeof version.entree === 'function')) note('sans-vecteur');
-    if (!groupe && cfg.empreinteExtension === true && entree.empreintes && version && typeof version.entree === 'function') {
-        try {
-            const voulu = cfg.modeleEmpreinte && cfg.modeleEmpreinte.id && cfg.modeleEmpreinte.sha256 ? { id: cfg.modeleEmpreinte.id, sha256: cfg.modeleEmpreinte.sha256 } : null;
-            const p = preparerVecteur({ entree, voulu, etat, memo });
-            if (!p.ok) note(`vecteur-${p.code}`); else if (p.e0.redressee !== true) note('non-redressee'); else note('cosinus');
-            if (p.ok && p.e0.redressee === true) {
-                const empr = emprunteDe(version), cles = new Map();
-                for (const id of ids) {
-                    const e = version.entree(id);
-                    // un visuel EMPRUNTÉ (marqué par la colonne des emprunts, ou porteur d'une mention d'un autre tirage) n'a pas de visuel propre. « Inconnu » (null) n'est pas « emprunté » : la mesure du lot compte propre
-                    // tout visuel sans mention (une entrée sans mention est le scan du tirage), c'est ce que le seuil du cosinus a été calibré sur.
-                    const emprunte = (empr && empr(id) === true) || Boolean(e && e.mention && !estMentionDAffichage(e));
-                    if (e && !emprunte && e.grande && typeof e.grande.cle === 'string' && e.grande.cle) cles.set(id, e.grande.cle);
-                }
-                cosinus = P.cosinusDes({ ids, cles, similarites: ordre => p.courant.index.similarites(p.v.vecteur, ordre), redressee: true });
-            }
-        } catch { cosinus = null; }
-    }
+    if (!groupe && cfg.empreinteExtension === true && entree.empreintes && version && typeof version.entree === 'function') cosinus = cosinusDesCandidats({ cfg, entree, ids, version, etat, memo, note });
     // GARDES FERMÉES : les valeurs de la configuration sont passées TELLES QUELLES ; `decider` ne lève une garde que sur `false` explicite (vecteur) ou un nombre fini (seuil, 0 explicite l'éteint)
     const d = P.decider({ ids, produits, lu, cosinus, groupe, cosinusMin: cfg.probableCosinusMin, vecteurExige: cfg.probableVecteurExige });
     if (!d) return null;
@@ -95,4 +126,4 @@ function avecNiveau(analyse, probable) {
     return { ...analyse, cartes: analyse.cartes.map((c, i) => ({ ...c, ...niveauDe(c, analyse.cartes.length === 1 && i === 0 ? probable : null) })) };
 }
 
-module.exports = { dansUnGroupe, groupeParLesDonnees, consulterProbable, avecNiveau, niveauDe, actif, estGroupe };
+module.exports = { dansUnGroupe, groupeParLesDonnees, consulterProbable, cosinusDesCandidats, designerTeteDeGroupe, avecNiveau, niveauDe, actif, estGroupe };
