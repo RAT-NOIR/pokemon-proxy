@@ -33,7 +33,9 @@ const TYPES = Object.freeze([
     fixe('STAFF', 'Tampon Staff', 'Staff stamp'),
     fixe('PRERELEASE', 'Tampon Avant-première', 'Prerelease stamp'),
     fixe('LEAGUE', 'Tampon Ligue', 'League stamp'),
+    fixe('LEAGUE_CUP', 'Tampon League Cup', 'League Cup stamp'),                       // GUICHET 31/10, contrat v2 : catalogue seulement (Yellow A tamponnés League Cup)
     fixe('CHAMPIONSHIP', 'Tampon Championnat', 'Championship stamp'),
+    fixe('REGIONAL', 'Tampon Championnat régional', 'Regional Championship stamp'),   // GUICHET 31/10, contrat v2 : catalogue seulement ; CHAMPIONSHIP reste celui des championnats nationaux et mondiaux
     { type: 'PLACE', params: ['rang'], obligatoires: ['rang'],
       formes: p => ({ fr: [p.rang === 1 ? 'Tampon {rang}re place' : 'Tampon {rang}e place'], en: [`{rang}${SUFFIXE_RANG_EN[p.rang - 1]} Place stamp`] }) },
     fixe('PROFESSOR', 'Tampon Professor Program', 'Professor Program stamp'),
