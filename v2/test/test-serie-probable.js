@@ -17,7 +17,7 @@ const TOUS_LES_SECRETS = [SECRET, JETON_INST, JETON_LIE, COOKIE, JETON_MESURES];
 const ENV_BANC = { V2_ESSAI_BANC_IDENTIFIANT: IDENTIFIANT, V2_ESSAI_BANC_MOT_DE_PASSE: SECRET };
 const dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'serie-probable-'));
 const photos = path.join(dossier, 'photos'), cartes = path.join(dossier, 'cartes'); fs.mkdirSync(photos); fs.mkdirSync(cartes);
-const CLES = ['k1', 'k2', 'k3', 'k4', 'k5', 'k6', 'k7', 'k8'];
+const CLES = ['k1', 'k2', 'k3', 'k4', 'k5', 'k6', 'k7', 'k8', 'k9', 'k10', 'k11', 'k12'];
 for (const k of CLES) { fs.writeFileSync(path.join(photos, k + '.jpg'), Buffer.from(`photo-${k}`)); fs.writeFileSync(path.join(cartes, k + '.jpg'), Buffer.from(`carte-${k}`)); }
 const nav = { photos: Object.fromEntries(CLES.map((k, i) => [k, { emb: Array.from({ length: 256 }, (_, j) => (j === i ? 1 : 0)), redressee: true }])) };
 const VERITE = Object.fromEntries(CLES.map((k, i) => [k, 101 + i]));
@@ -227,12 +227,48 @@ const corpsDe = (s, c) => chemins(s, c).map(a => JSON.parse(a.corps));
         for (const [nom, statut, motif] of [['401', 401, /jeton refusé \(401\) sur \/api\/identifier\/mesures/], ['429', 429, /429 sur \/api\/identifier\/mesures/]]) {
             const s = fauxServeur([{ premier: carteATrancher([idv(0), autre(0)]), complement: COMPLEMENT(), mesures: () => ({ status: statut, json: async () => ({ success: false }), headers: { get: () => '30' } }) }, { premier: carteSure(idv(1)) }]);
             const r = await S.serie(base({ n: 2 }), deps(s));
-            H.v(`second envoi refusé (${nom}) : la série s'arrête, sans réessai ni boucle, aucun scan de plus`, [motif.test(r.arret || ''), chemins(s, '/api/identifier/mesures').length, chemins(s, '/api/photo').length], [true, 1, 1]);
+            H.v(`second envoi refusé (${nom}) : la série s'arrête, sans réessai ni boucle, aucun scan de plus, AUCUNE déclaration sur ce scan`, [motif.test(r.arret || ''), chemins(s, '/api/identifier/mesures').length, chemins(s, '/api/photo').length, chemins(s, '/api/identifier/reponse').length], [true, 1, 1, 0]);
         }
-        for (const [nom, statut] of [['409 (déjà envoyé)', 409], ['410 (expiré)', 410], ['500', 500]]) {
+        for (const [nom, statut] of [['409 (déjà envoyé)', 409], ['410 (expiré)', 410]]) {
             const s = fauxServeur([{ premier: carteATrancher([idv(0), autre(0)]), complement: COMPLEMENT(), mesures: () => ({ status: statut, json: async () => ({ success: false }), headers: { get: () => null } }) }, { premier: carteSure(idv(1)) }]);
             const r = await S.serie(base({ n: 2 }), deps(s));
             H.v(`second envoi en ${nom} : le premier verdict reste, la série continue`, [r.arret, r.resultats.map(x => x.verdict), r.resultats[0].secondEnvoi.statut], [null, ['question-dans-candidats', 'sur-juste'], statut]);
+        }
+        // I1 : seuls 200, 409 et 410 laissent continuer ; toute autre issue ARRÊTE avant toute déclaration (le serveur a pu poser le marqueur probable avant de répondre)
+        for (const [nom, mesures] of [['503', () => ({ status: 503, json: async () => ({ success: false }), headers: { get: () => null } })], ['500', () => ({ status: 500, json: async () => ({}), headers: { get: () => null } })], ['400', () => ({ status: 400, json: async () => ({}), headers: { get: () => null } })],
+            ['exception réseau', () => { throw new Error('ECONNRESET'); }], ['délai dépassé', () => { throw Object.assign(new Error('délai'), { name: 'TimeoutError' }); }], ['200 illisible (corps vide)', () => ({ status: 200, json: async () => { throw new Error('pas de corps'); }, headers: { get: () => null } })]]) {
+            const s = fauxServeur([{ premier: carteATrancher([idv(0), autre(0)]), complement: COMPLEMENT(), mesures }, { premier: carteSure(idv(1)) }]);
+            const r = await S.serie(base({ n: 2 }), deps(s));
+            H.v(`second envoi en ${nom} : issue incertaine, la série S'ARRÊTE (code 1), aucune déclaration, aucun scan de plus`, [/issue incertaine après le second envoi/.test(r.arret || ''), SP.codeSortie(r), chemins(s, '/api/identifier/reponse').length, chemins(s, '/api/photo').length, r.resultats.length], [true, 1, 0, 1, 1]);
+        }
+        // (a) un complément porté par une carte SÛRE ou PROBABLE n'est jamais mesuré ni envoyé
+        for (const [nom, premier] of [['sûre', carteSure(idv(0))], ['probable', carteATrancher([idv(0), autre(0)], idv(0))]]) {
+            const s = fauxServeur([{ premier, complement: COMPLEMENT() }]); const d = deps(s); await S.serie(base({ n: 1 }), d);
+            H.v(`un complément sur une carte ${nom} : aucune mesure produite, aucun second envoi`, [chemins(s, '/api/identifier/mesures').length, d.journalPx.length], [0, 0]);
+        }
+        // I2 : le rapport dit ce que la série a EXERCÉ ; 10 questions sans complément = alerte et arrêt (code 12)
+        {
+            const v12 = S.echantillon(S.lignesLocales(resultats), 12, GRAINE).map(l => idDe(l.cle));
+            const scen = Array.from({ length: 12 }, (_, i) => ({ premier: carteATrancher([v12[i], v12[i] + 1000]) }));
+            const s = fauxServeur(scen); const d = deps(s); const r = await S.serie(base({ n: 12 }), d);
+            H.v('10 questions de suite sans complément : ALERTE et arrêt (code 12), pas de onzième scan', [chemins(s, '/api/photo').length, SP.codeSortie(r), /aucun complément sur les 10 premières questions/.test(r.arret || ''), d.logs.some(x => /ALERTE.*complément/.test(x))], [10, 12, true, true]);
+            const s2 = fauxServeur(scen.map((x, i) => (i === 9 ? { ...x, complement: COMPLEMENT() } : x))); const r2 = await S.serie(base({ n: 12 }), deps(s2));
+            H.v('   un complément parmi les 10 premières questions : la série continue', [chemins(s2, '/api/photo').length, r2.arret], [12, null]);
+            const s3 = fauxServeur([{ premier: carteSure(idv(0)) }, ...scen.slice(0, 5)]); const r3 = await S.serie(base({ n: 6 }), deps(s3));
+            H.v('   moins de 10 questions (les sûrs ne comptent pas) : pas d\'alerte', [r3.arret, chemins(s3, '/api/photo').length], [null, 6]);
+        }
+        H.v('rapport : compteurs d\'exercice (questions, compléments, seconds envois faits, change:true, non faits par raison) et « lignes à vérité N/total » imprimé', [Q.second, dA.logs.some(x => /lignes à vérité : 7\/7/.test(x))], [{ questions: 4, complements: 3, envoyes: 3, changeTrue: 1, nonEnvoyes: { 'reference-absente': 0, 'carte-absente': 0, autre: 0 } }, true]);
+        { const s = fauxServeur([{ premier: carteATrancher([idv(0), autre(0)]), complement: COMPLEMENT() }, { premier: carteATrancher([idv(1), autre(1)]), complement: COMPLEMENT() }]), d = deps(s, { lireReference: ref => (ref === 'ref/deux.webp' ? null : lire(ref)) });
+          const r = await S.serie(base({ n: 2 }), d);
+          H.v('   les seconds envois non faits sont comptés PAR RAISON', r.rapportProbable.second, { questions: 2, complements: 2, envoyes: 0, changeTrue: 0, nonEnvoyes: { 'reference-absente': 2, 'carte-absente': 0, autre: 0 } }); }
+        // I3 : --g-probable et --deuxieme-apres-signal ne se combinent pas
+        { const s = fauxServeur([]); const r = await essaie(() => S.serie(base({ deuxiemeApresSignal: 'signal.txt' }), deps(s)));
+          H.v('--g-probable + --deuxieme-apres-signal : refusé avant TOUTE requête', [/deuxieme-apres-signal/.test(r.arret || ''), s.appels.length], [true, 0]); }
+        // (c) les secrets ne sont dans AUCUNE sortie d'une série fautive (ligne fautive : carnet, résultat, journaux)
+        for (const [nom, scen] of [['probable FAUX par G', fautes[1][1]], ['sûr FAUX par promotion de G', fautes[3][1]]]) {
+            const s = fauxServeur(scen); const d = deps(s); const b = base({ n: 1 }); const r = await S.serie(b, d);
+            const sortie = JSON.stringify(r) + JSON.stringify(r.fautif) + d.logs.join('\n') + fs.readFileSync(b.carnet, 'utf8');
+            H.vrai(`aucun secret ni jeton de mesures dans une série fautive (${nom}), ligne fautive comprise`, !!r.fautif && fs.readFileSync(b.carnet, 'utf8').includes('"fautif"') && TOUS_LES_SECRETS.every(x => !sortie.includes(x)));
         }
         { const s = fauxServeur([{ premier: carteATrancher([idv(0), autre(0)]), complement: COMPLEMENT(), mesures: b => ({ status: 200, json: async () => ({ success: true, scanId: b.scanId, change: false }), headers: { get: () => null } }) }]);
           const r = await S.serie(base({ n: 1 }), deps(s));

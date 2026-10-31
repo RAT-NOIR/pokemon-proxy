@@ -109,10 +109,21 @@ function rapportSerie(lignes, { statistiques }) {
         }
     }
     for (const c of Object.values(R)) c.reponseDirecteJuste = pct(c.surJuste + c.probableJuste, c.avecVerite);
-    return { ...R, premierVerdict: statistiques(lignes.filter(l => Number.isFinite(l.premierMs)).map(l => l.premierMs)), dureeTotale: statistiques(lignes.filter(l => Number.isFinite(l.ms)).map(l => l.ms)) };
+    // l'EXERCICE du choix de groupe : combien de questions, de compléments, de seconds envois faits, de change:true, et pourquoi les autres n'ont pas eu lieu
+    const second = { questions: 0, complements: 0, envoyes: 0, changeTrue: 0, nonEnvoyes: { 'reference-absente': 0, 'carte-absente': 0, autre: 0 } };
+    for (const l of lignes) {
+        if (l.premierNiveau !== 'question') continue;
+        second.questions++;
+        if (l.complementRecu) second.complements++;
+        const e = l.secondEnvoi;
+        if (e && e.envoye === true) { second.envoyes++; if (e.change === true) second.changeTrue++; }
+        else if (e && e.envoye === false) second.nonEnvoyes[e.raison === 'reference-absente' || e.raison === 'carte-absente' ? e.raison : 'autre']++;
+    }
+    return { ...R, second, premierVerdict: statistiques(lignes.filter(l => Number.isFinite(l.premierMs)).map(l => l.premierMs)), dureeTotale: statistiques(lignes.filter(l => Number.isFinite(l.ms)).map(l => l.ms)) };
 }
 
 /** Le code de sortie du processus. */
-const codeSortie = r => (r && r.fautif ? (r.fautif.type === 'probable-faux' ? CODE_PROBABLE_FAUX : CODE_SUR_FAUX) : r && r.arret ? 1 : 0);
+const CODE_SANS_COMPLEMENT = 12;
+const codeSortie = r => (r && r.fautif ? (r.fautif.type === 'probable-faux' ? CODE_PROBABLE_FAUX : CODE_SUR_FAUX) : r && r.alerte ? CODE_SANS_COMPLEMENT : r && r.arret ? 1 : 0);
 
-module.exports = { classerCarte, jugerVerdict, fautif, declarationDe, familleDe, lecteurDeReferences, produireMesures, rapportSerie, codeSortie, VERSION_PROBABLE, CODE_PROBABLE_FAUX, CODE_SUR_FAUX, FAMILLES };
+module.exports = { classerCarte, jugerVerdict, fautif, declarationDe, familleDe, lecteurDeReferences, produireMesures, rapportSerie, codeSortie, VERSION_PROBABLE, CODE_PROBABLE_FAUX, CODE_SUR_FAUX, CODE_SANS_COMPLEMENT, FAMILLES };

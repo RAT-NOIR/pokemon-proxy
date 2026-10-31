@@ -173,6 +173,7 @@ async function serie(o, deps = {}) {
     const versionClient = gp ? (o.versionExtension === undefined ? SP.VERSION_PROBABLE : o.versionExtension) : null;
     let lireReference = null;
     if (gp) {
+        if (o.deuxiemeApresSignal) throw new Arret('--g-probable ne se combine pas avec --deuxieme-apres-signal (le code de sortie et l\'arrêt au premier faux ne couvrent que la série 1)');
         if (typeof versionClient !== 'string' || !/^\d+\.\d+\.\d+$/.test(versionClient)) throw new Arret('--version-extension doit être de la forme x.y.z');
         if (!o.cartes) throw new Arret('--g-probable exige --cartes= (la carte redressée de chaque ligne : les mesures du client se calculent dessus)');
         lireReference = deps.lireReference || (Array.isArray(o.scans) && o.scans.length ? SP.lecteurDeReferences(o.scans) : null);
@@ -229,6 +230,8 @@ async function serie(o, deps = {}) {
      * (3) juger le verdict FINAL ; (4) déclarer comme l'extension le ferait ; (5) si un probable FAUX ou un sûr FAUX a été rendu : la ligne fautive, au carnet, avant que la série ne s'arrête.
      */
     const statutDeArret = raison => (/\(401\)/.test(raison) ? 401 : /^429 /.test(raison) ? 429 : null);       // le statut HTTP que dit un arrêt du client (null : une redirection, pas un statut)
+    const incertainApresSecond = code => `${code} : issue incertaine après le second envoi sur /api/identifier/mesures : série arrêtée avant toute déclaration sur ce scan (le serveur a pu poser le marqueur probable avant de répondre)`;
+    const statutIncertain = raison => { const m = /^statut (\d{3})/.exec(raison); return m ? Number(m[1]) : null; };
     const suiteProbable = async ({ l, rang, serieId, etiquette, carteB64, issue, premierMs }) => {
         const scanId = typeof issue.scanId === 'string' ? issue.scanId : null, verite = l.verite;
         const classe1 = SP.classerCarte(issue.analyse && Array.isArray(issue.analyse.cartes) ? issue.analyse.cartes[0] : null), j1 = SP.jugerVerdict(classe1, verite);
@@ -248,14 +251,16 @@ async function serie(o, deps = {}) {
                         const m = await appeler('/api/identifier/mesures', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': cle('m') }, body: JSON.stringify({ scanId, jeton: cplt.jeton, opencv: o.opencv || 'serie-essai-node', accepteProbable: true, resultats: prod.resultats }) });
                         if (m.statut === 401) throw new Arret('jeton refusé (401) sur /api/identifier/mesures : le jeton d\'installation n\'est plus accepté ; série arrêtée');
                         if (m.statut === 429) throw new Arret(`429 sur /api/identifier/mesures (reessayerDans ${m.retryApres ?? '?'}) : la série s'arrête, sans boucle`);
+                        // écrite par ce qu'elle AUTORISE : seuls 200 (corps lisible), 409 et 410 laissent continuer ; tout autre statut ou corps illisible ARRÊTE (le serveur a pu poser le marqueur probable avant de répondre)
+                        if (!(m.statut === 409 || m.statut === 410 || (m.statut === 200 && m.corps && typeof m.corps === 'object'))) throw new Arret(incertainApresSecond(m.statut === 200 ? '200 sans corps lisible' : `statut ${m.statut}`));
                         secondEnvoi = { envoye: true, statut: m.statut, ...(m.statut === 200 && m.corps ? { change: m.corps.change === true } : {}) };
                         if (m.statut === 200 && m.corps && m.corps.change === true) {
                             const c2 = SP.classerCarte(m.corps.carte);
                             if (c2.niveau === 'probable' || c2.niveau === 'sur') { classe = c2; j = SP.jugerVerdict(c2, verite); chemin = c2.niveau === 'probable' ? 'G-GROUPE' : 'G-PROMOTION'; }
                         }
                     } catch (e) {
-                        if (e instanceof Arret) { arretReseau = e.raison; secondEnvoi = { envoye: true, statut: statutDeArret(e.raison) }; }
-                        else secondEnvoi = { envoye: true, statut: null, erreur: (e && (e.code || e.name)) || 'erreur' };
+                        if (e instanceof Arret) { arretReseau = e.raison; secondEnvoi = { envoye: true, statut: statutDeArret(e.raison) ?? statutIncertain(e.raison) }; }
+                        else { const code = (e && (e.code || e.name)) || 'erreur'; arretReseau = incertainApresSecond(`exception ${code}`); secondEnvoi = { envoye: true, statut: null, erreur: code }; }
                     }
                 }
             }
@@ -279,12 +284,12 @@ async function serie(o, deps = {}) {
                 mesuresClient: chemin === 'G-GROUPE' || chemin === 'G-PROMOTION' ? mesuresClient : null, declaration };
             carnet.noter({ serie: serieId, rang, cle: l.cle, fautif: fautifLigne });                                            // écrite AU CARNET avant de rendre la main : un arrêt brutal ne la perd pas
         }
-        return { verdictPremier: j1.verdict, verdict: j.verdict, chemin, produit: classe.produit, candidats: classe.candidats.length ? classe.candidats : classe1.candidats, secondEnvoi, declaration, fautif: fautifLigne, arretReseau };
+        return { premierNiveau: classe1.niveau, complementRecu: Boolean(cplt && typeof cplt === 'object' && typeof cplt.jeton === 'string' && Array.isArray(cplt.mesures) && cplt.mesures.length > 0), verdictPremier: j1.verdict, verdict: j.verdict, chemin, produit: classe.produit, candidats: classe.candidats.length ? classe.candidats : classe1.candidats, secondEnvoi, declaration, fautif: fautifLigne, arretReseau };
     };
     /** UNE passe sur les lignes (même ordre à chaque passe), avec le jeton gardé en MÉMOIRE ; le carnet est commun. */
     const jouer = async (passe, versionMin) => {
         const resultats = [], durees = [], erreurs = [];
-        let arret = null, deSuite = 0, rang = 0, fautifLigne = null;
+        let arret = null, deSuite = 0, rang = 0, fautifLigne = null, questionsVues = 0, complementsVus = 0, alerte = false;
         const serieId = hashSerie(passe), etiquetteCle = passe > 1 ? `${stamp}p${passe}` : stamp;
         for (const l of lignes) {
             rang++;
@@ -331,11 +336,15 @@ async function serie(o, deps = {}) {
             const ms = horloge() - debut; durees.push(ms);
             const s = sureDe(issue);
             resultats.push({ cle: l.cle, ms, essaiSur: s.sur, essaiProduit: s.produit, localSur: l.localSur, localProduit: l.localProduit, verite: l.verite,
-                ...(suite ? { famille: SP.familleDe(l, o.releveTampons), avecVerite: l.verite !== null && l.verite !== undefined, premierMs, verdictPremier: suite.verdictPremier, verdict: suite.verdict, chemin: suite.chemin, produit: suite.produit, candidats: suite.candidats, secondEnvoi: suite.secondEnvoi, declaration: suite.declaration } : {}) });
+                ...(suite ? { famille: SP.familleDe(l, o.releveTampons), avecVerite: l.verite !== null && l.verite !== undefined, premierMs, premierNiveau: suite.premierNiveau, complementRecu: suite.complementRecu, verdictPremier: suite.verdictPremier, verdict: suite.verdict, chemin: suite.chemin, produit: suite.produit, candidats: suite.candidats, secondEnvoi: suite.secondEnvoi, declaration: suite.declaration } : {}) });
             log(`  ${rang}/${lignes.length} ${l.cle} : ${ms} ms, essai ${s.sur ? `sûr ${s.produit}` : 'pas sûr'}, local ${l.localSur ? `sûr ${l.localProduit}` : 'pas sûr'}`);
             if (suite) log(`      premier verdict ${premierMs} ms, total ${ms} ms, chemin ${suite.chemin} : ${suite.verdictPremier} -> ${suite.verdict}${suite.secondEnvoi ? ` (second envoi : ${JSON.stringify(suite.secondEnvoi)})` : ''}${suite.declaration ? ` ; déclaré « ${suite.declaration.choix} »` : ''}`);
             if (suite && suite.fautif) { fautifLigne = suite.fautif; arret = `ARRÊT FAUTE ${suite.fautif.type} sur ${l.cle} (chemin ${suite.fautif.chemin}, produit ${suite.fautif.produit}, candidats [${suite.fautif.candidats.join(',')}], vérité ${suite.fautif.verite}, scan ${suite.fautif.scanId}) : série arrêtée avant le scan suivant`; break; }
             if (suite && suite.arretReseau) { arret = suite.arretReseau; break; }
+            if (suite && suite.premierNiveau === 'question') {                                           // l'EXERCICE du choix de groupe : une série « 0 faux » sans aucun complément ne mesure rien (V2_MESURES_CLIENT / V2_ORB_SERVEUR de l'essai)
+                questionsVues++; if (suite.complementRecu) complementsVus++;
+                if (questionsVues === 10 && complementsVus === 0) { alerte = true; arret = 'aucun complément sur les 10 premières questions : le choix de groupe n\'est pas exercé (V2_MESURES_CLIENT=1 et V2_ORB_SERVEUR=0 sont-elles posées sur l\'essai ?) : série arrêtée'; log(`ALERTE : ${arret}`); break; }
+            }
             if (rang < lignes.length && o.pauseS > 0) await pause(o.pauseS * 1000);
         }
         const stats = statistiques(durees), comparaison = comparer(resultats);
@@ -348,10 +357,12 @@ async function serie(o, deps = {}) {
         if (gp) {
             rapportProbable = SP.rapportSerie(resultats, { statistiques });
             const T_ = rapportProbable.total;
-            log(`rapport probable (dénominateur : ${T_.avecVerite} lignes à vérité sur ${T_.lignes}) : sûrs ${T_.surJuste} justes / ${T_.surFaux} FAUX · probables ${T_.probableJuste} justes / ${T_.probableFaux} FAUX · questions ${T_.questionDansCandidats} (vérité dans les candidats) / ${T_.questionHorsCandidats} (hors) · introuvables ${T_.introuvable} · sans vérité ${T_.sansVerite} · réponse directe juste ${T_.reponseDirecteJuste} %`);
+            const X_ = rapportProbable.second;
+            log(`lignes à vérité : ${T_.avecVerite}/${T_.lignes} · questions ${X_.questions}, compléments demandés ${X_.complements}, seconds envois faits ${X_.envoyes}, réponses change:true ${X_.changeTrue}, non faits : référence locale absente ${X_.nonEnvoyes['reference-absente']}, carte absente ${X_.nonEnvoyes['carte-absente']}, autre ${X_.nonEnvoyes.autre}`);
+            log(`rapport probable : sûrs ${T_.surJuste} justes / ${T_.surFaux} FAUX · probables ${T_.probableJuste} justes / ${T_.probableFaux} FAUX · questions ${T_.questionDansCandidats} (vérité dans les candidats) / ${T_.questionHorsCandidats} (hors) · introuvables ${T_.introuvable} · sans vérité ${T_.sansVerite} · réponse directe juste ${T_.reponseDirecteJuste} %`);
             log(`premier verdict : n ${rapportProbable.premierVerdict.n}, p50 ${rapportProbable.premierVerdict.p50} ms, p95 ${rapportProbable.premierVerdict.p95} ms ; total : p50 ${rapportProbable.dureeTotale.p50} ms, p95 ${rapportProbable.dureeTotale.p95} ms`);
         }
-        return { arret, resultats, durees, stats, comparaison, erreurs, capacites, jetonEmpreinteAnnonce: capacites.includes('empreinte'), depenseUsd: carnet.total(), serie: serieId, lignes: lignes.map(l => l.cle), ...(gp ? { fautif: fautifLigne, rapportProbable } : {}) };
+        return { arret, resultats, durees, stats, comparaison, erreurs, capacites, jetonEmpreinteAnnonce: capacites.includes('empreinte'), depenseUsd: carnet.total(), serie: serieId, lignes: lignes.map(l => l.cle), ...(gp ? { fautif: fautifLigne, alerte, rapportProbable } : {}) };
     };
 
     const r1 = await jouer(1, ping.corps.versionMinExtension);
