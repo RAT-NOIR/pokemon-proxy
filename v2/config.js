@@ -217,6 +217,10 @@ function lireConfig(env = process.env) {
         // jumboTitre : une question exactement { Jumbo, sans Jumbo } de même fiche et de même visuel devient le sûr du Jumbo quand le TITRE de l'annonce nomme un terme de la liste fermée sans négation (jamais la version normale).
         gardeMarqueurs: booleen('V2_GARDE_MARQUEURS', env.V2_GARDE_MARQUEURS, false),
         jumboTitre: booleen('V2_JUMBO_TITRE', env.V2_JUMBO_TITRE, false),
+        // PROBABLE (31/10) : le niveau « probable » — une question dont un candidat se détache (identifier/probable.js, signal A) est servie avec `niveau: "probable"` et `probable: { idProduct, aConfirmer: true }`,
+        // débitée à l'affichage. ÉTEINT par défaut (0), « 0 » ou « 1 » seulement : la réponse est celle d'avant, octet pour octet. Servi seulement aux extensions >= versionMinProbable (2.0.1).
+        probable: booleen('V2_PROBABLE', env.V2_PROBABLE, false),
+        versionMinProbable: '2.0.1',
         // TEMPS-ETAPES (identifier/temps-etapes.js) : quatre coupes de TEMPS qui ne changent aucune décision, chacune ÉTEINTE par défaut (0) : la route est alors celle d'avant, octet pour octet.
         // voisinsUneFois : la recherche des voisins une fois par requête ; empreinteTot : la recherche et la garde des zones partent pendant l'attente du modèle ; finParallele : les lectures/écritures annexes de la fin de requête partent ensemble.
         // orbUtile : la règle G (recherche des voisins + garde des zones, donc l'ORB) n'est pas consultée quand la chaîne a rendu un INTROUVABLE — elle ne peut rien y changer (arbitrage-g.js, promotion-g.js) ; la réponse dit alors `empreinte: { utilisee: false, code: 'muette' }`.

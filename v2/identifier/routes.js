@@ -159,7 +159,8 @@ const mongoose = require('mongoose');
 const registre = require('../registre');
 const { fauxRes } = require('./captureres');
 const { adapter, codeLangueDe, prixLiveDe, affirmerParLaRoute } = require('./adaptateur');
-const { appliquerMarqueurs } = require('./garde-marqueurs');        // MARQUEURS : le jumbo par le titre et la garde des groupes, derrière V2_JUMBO_TITRE et V2_GARDE_MARQUEURS (éteints : jamais appelée)
+const { consulterProbable, avecNiveau, actif: niveauServi } = require('./probable-route');   // PROBABLE : le niveau « probable » (V2_PROBABLE, éteint : jamais appelée), et `niveau` servi aux extensions >= 2.0.1
+const { appliquerMarqueurs } = require('./garde-marqueurs');       // MARQUEURS : le jumbo par le titre et la garde des groupes, derrière V2_JUMBO_TITRE et V2_GARDE_MARQUEURS (éteints : jamais appelée)
 const { fournisseurParDefaut, idsAffirmes, idsACharger } = require('./jumeaux');
 const { idsDeLaGarde } = require('./garde-contradiction');
 const { preparer: preparerLD } = require('./langue-decisive-charge');
@@ -220,6 +221,7 @@ function facturationDe(issue, faits) {
     const nonRendu = { debite: 1, reserve: 0, rembourse: false, raisonNonRembourse: faits.cause ?? 'erreur' };
     if (issue === 'affirmee') return fabriquerFacturation({ debite: 1, rembourse: false, motif: 'affirmee' });
     if (issue === 'question') {
+        if (faits.question && faits.probable) return fabriquerFacturation({ debite: 1, reserve: 0, rembourse: false, motif: 'question' });     // PROBABLE : débité à l'affichage
         if (faits.question) return fabriquerFacturation({ debite: 0, reserve: 1, rembourse: false, motif: 'question' });
         if (faits.rendu) return fabriquerFacturation({ debite: 0, rembourse: true, motif: 'question' });
         return fabriquerFacturation({ ...nonRendu, motif: refuse ? 'plafond-jour' : 'question' });
@@ -484,7 +486,7 @@ function traiterIdentifier(cfg, deps = {}) {
         // 4. la chaîne héritée, avec le DOUBLE de res ; tout ce qui suit se décide dans le contexte de CE scan (la cause d'un non-remboursement s'y note)
         // 🔑 TOUT ce qui suit le débit est sous UN filet : une exception, d'où qu'elle vienne, rend le crédit (voir le catch).
         const traceScan = {};   // I1 : ce que les recherches du scan notent d'elles-mêmes (index-nom.js : catalogueIndex)
-        let reqH = null, rembourserOrigine = null, sortie, lecture = null, desaccordG = null, traceSeconde = null, traceTampon = null, empreinteInfo = null, traceImage = null, complement = null, traceMarqueurs = null;
+        let reqH = null, rembourserOrigine = null, sortie, lecture = null, desaccordG = null, traceSeconde = null, traceTampon = null, empreinteInfo = null, traceImage = null, complement = null, traceMarqueurs = null, probableDecide = null;
         // `parLaGarde` : le refus est celui de la garde des jumeaux (le NÔTRE) → nature `jumeaux`, une unité (une carte), constatée par le serveur et rendue SANS plafond (PLAFOND-DECLARE)
         // FREIN-CONSTATES : la nature vient du MOTIF, par l'unique fonction `natureDuMotif` : une panne de NOTRE côté (`panne-*`, INDISPONIBLE compris) est hors plafond, un introuvable est un constat plafonné
         const rembourserMoi = (motif, parLaGarde = false) => reqH.credit.v2.rembourser(reqH, motif, parLaGarde ? { compteur: 'jumeaux', unites: 1 } : { compteur: natureDuMotif(motif) });
@@ -641,6 +643,11 @@ function traiterIdentifier(cfg, deps = {}) {
                             }
                         } catch (e) { journalErreur('marqueurs', e); }
                     }
+                    // PROBABLE : une QUESTION dont un candidat se détache (signal A) ; la décision seulement ici, le débit à l'affichage plus bas (une fois la question écrite). Éteint, rien n'est lu.
+                    if (resultat.issue === 'question' && cfg.probable === true) {
+                        try { probableDecide = consulterProbable({ cfg, entree, resultat, corpsChaine: c, produits, version: version0, traceMarqueurs, memo: te.voisinsUneFois === true }); }
+                        catch (e) { journalErreur('probable', e); probableDecide = null; }
+                    }
                     // CALCUL-CLIENT : une QUESTION que la règle G aurait pu trancher avec des mesures que le serveur ne calcule pas (V2_ORB_SERVEUR=0) — on demande ces mesures au client qui l'annonce. Jamais quand G a
                     // déjà changé le résultat ou contredit la chaîne, jamais sur autre chose qu'une question (le second envoi ne peut que PROMOUVOIR). Un échec ici n'enlève rien : le premier verdict reste, sans complément.
                     if (resultat.issue === 'question' && cfg.mesuresClient === true && entree.mesuresClient === true && empreinteInfo && empreinteInfo.attente && !desaccordG && !empreinteInfo.influence) {
@@ -692,10 +699,20 @@ function traiterIdentifier(cfg, deps = {}) {
                     // un refus de la garde des jumeaux (resultat.motif) est NOTRE refus : rendu dans le compteur dédié `jumeaux` (l'unicité par scan reste)
                     try { await rembourserMoi(resultat.issue === 'panne' ? `panne-${resultat.erreur.code}` : 'introuvable', Boolean(resultat.motif)); } catch (e) { journalErreur('remboursement', e); }
                 }
-                const faits = { admin, rendu: Boolean(reqH.scanRendu), question: Boolean(reqH.questionId) && resultat.issue === 'question', cause: reqH.scanRendu ? null : raisonNonRemboursement() };
+                // PROBABLE : le prix du candidat va être montré — le crédit est DÉBITÉ à l'affichage (jamais réservé). Le passage échoue ou la question n'existe pas : pas de probable, la question d'avant (réservée) reste.
+                if (probableDecide && resultat.issue === 'question') {
+                    let ok = false;
+                    try {
+                        if (admin) ok = true;
+                        else if (credit && reqH.questionId && argent && typeof argent.passerEnProbable === 'function') { const pr = await argent.passerEnProbable(porteur, { scanId, carte: 0 }); ok = Boolean(pr && pr.ok); }
+                    } catch (e) { journalErreur('passage en probable', e); }
+                    if (!ok) probableDecide = null;
+                } else probableDecide = null;
+                const faits = { admin, rendu: Boolean(reqH.scanRendu), question: Boolean(reqH.questionId) && resultat.issue === 'question', probable: Boolean(probableDecide), cause: reqH.scanRendu ? null : raisonNonRemboursement() };
                 // I-2 : la borne du scan est atteinte pendant les étapes qui suivent la chaîne (catalogue, seconde lecture, règle G) : l'analyse finit en ÉCHEC par le chemin d'exception existant (ci-dessous : le crédit pris est rendu)
                 if (entree.arret && entree.arret.signal.aborted && resultat.issue !== 'panne') throw Object.assign(new Error('borne du scan atteinte'), { code: 'BORNE_PHOTOS' });
                 return { resultat, facturation: facturationDe(resultat.issue, faits), lecture, desaccord: desaccordG, motif: resultat.motif ?? null, ...(traceSeconde ? { secondeLecture: traceSeconde } : {}), ...(traceTampon ? { lectureTampon: traceTampon } : {}), ...(empreinteInfo ? { empreinte: empreinteInfo } : {}), ...(traceImage ? { surParImage: traceImage } : {}), ...(traceMarqueurs ? { regleMarqueurs: traceMarqueurs } : {}),
+                    ...(probableDecide ? { probable: probableDecide } : {}),
                     ...(complement && resultat.issue === 'question' ? { complement } : {}) };     // CALCUL-CLIENT : seulement si la question a TENU jusqu'ici (une question non écrite est devenue une panne : pas de complément)
             }, traceScan);          // I1 : la trace du scan survit à la chaîne (catalogueIndex)
             }
@@ -753,7 +770,8 @@ function traiterIdentifier(cfg, deps = {}) {
         const photosDites = Array.isArray(entree.photoIds) && entree.photoIds.length ? (() => { const idx = (entree.photosRecues || []).map(p => p.index).sort((a, b) => a - b); return { photosRecues: idx, photoRecue: idx.includes(0) }; })() : null;
         // PRIX-LISIBLE : une carte identifiée dont l'analyse n'a rien dicté à lire (langue non lue, état non retenu) reçoit le repli honnête `prixRepli` SI sa fiche a une donnée de prix ; toute autre carte est rendue telle quelle.
         // Posé ICI, après la lecture du tampon (qui peut refaire le Produit) : le guide du repli est celui de la carte servie. Rien n'en entre dans la ligne `analyses` (elle est écrite depuis `analyse.cartes` : le repli se recalcule à la demande).
-        const analyse = { ...analyseAvecRepli(resultat.analyse), regleVerdict: regle, ...(photosDites || {}) };
+        const analyse0 = { ...analyseAvecRepli(resultat.analyse), regleVerdict: regle, ...(photosDites || {}) };
+        const analyse = niveauServi(cfg, entree) ? avecNiveau(analyse0, sortie.probable) : analyse0;     // PROBABLE : `niveau` et `probable` seulement si V2_PROBABLE ET une extension >= 2.0.1 ; sinon la réponse est celle d'avant, octet pour octet
         // 9. les écritures annexes : sans effet sur la réponse
         // TEMPS-ETAPES (V2_TE_FIN_PARALLELE) : la ligne `analyses` et l'annonce sont deux écritures INDÉPENDANTES (chacune sous son propre filet, aucune ne lit l'autre) : elles partent ensemble, et la clôture de la marque
         // (ci-dessous) attend les DEUX, comme avant. Éteint : l'une puis l'autre, l'ordre d'avant.
@@ -768,6 +786,7 @@ function traiterIdentifier(cfg, deps = {}) {
                 ...(porteur.compte && porteur.compte.banc === true ? { banc: true } : {}),           // le compte de MESURE : exclu des statistiques d'usage (journal-hors-banc.js)
                 // B1b.5 : de quoi servir /reponse sans relire le catalogue — l'état, la question, la zone (aucune donnée de l'annonce) et la lecture de la langue
                 cartes: cartes.map((c, i) => ({ idProduct: c.carte ? c.carte.idProduct : null, statut: c.statut, raison: c.raison, etat: c.etat ?? null, question: c.question ?? null, zone: c.zone ?? null,
+                    ...(i === 0 && sortie.probable ? { probable: { idProduct: sortie.probable.idProduct, signal: sortie.probable.signal } } : {}),     // PROBABLE : la surveillance, interne, jamais servie telle quelle
                     ...(sortie.lectures ? { lecture: sortie.lectures[i] } : i === 0 && sortie.lecture ? { lecture: sortie.lecture } : {}),
                     ...((sortie.motifs ? sortie.motifs[i] : i === 0 ? sortie.motif : null) ? { motifJumeaux: sortie.motifs ? sortie.motifs[i] : sortie.motif } : {}) })),     // JUMEAU-V2 : le motif de la garde, PAR CARTE (interne, jamais servi)
                 produits: cartes.flatMap(c => (c.carte ? [c.carte] : c.candidats)), facturation,
@@ -904,6 +923,11 @@ function traiterReponse(cfg, deps = {}) {
         // 9. la réponse est une VÉRITÉ : écrite une fois (la première gagne), sans jamais changer la réponse au client
         try { await col('analyses').updateOne({ _id: scanId, [`cartes.${carte}.reponse`]: { $exists: false } }, { $set: { [`cartes.${carte}.reponse`]: { choix, idProduct, le } } }); }
         catch (e) { journalErreur('vérité de la réponse', e); }
+        // PROBABLE (surveillance, interne) : le candidat choisi est-il le probable émis ? La mesure en vrai de la précision du niveau ; écrit une fois (la première réponse gagne), jamais servi.
+        if (entree.probable && Number.isInteger(entree.probable.idProduct)) {
+            try { await col('analyses').updateOne({ _id: scanId, [`cartes.${carte}.probableConfirme`]: { $exists: false } }, { $set: { [`cartes.${carte}.probableConfirme`]: idProduct === entree.probable.idProduct } }); }
+            catch (e) { journalErreur('probable confirmé', e); }
+        }
         const solde = await soldeSur(), offre = await offreP();
         // B6.4 : le crochet du banc réel, APRÈS la vérification du porteur (analyses) et l'acceptation de la réponse ; jamais attendu, ne lève jamais
         require('../banc/crochet').apresReponse({ cfg, req, scanId: b.scanId, carte, choix, idProduct });

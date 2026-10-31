@@ -26,7 +26,7 @@
 // Un jeton dont le code ne pourrait pas être prouvé servi n'entre pas dans CONDITIONS : il n'est jamais annoncé.
 
 /** La liste fermée (DEMANDE-SERVEUR-EXTENSION.md, « EXTENSION — 24/10 (soir) »), dans l'ordre de la réponse. UN seul endroit : les bancs, le schéma et le contrat la lisent d'ici. */
-const CAPACITES = Object.freeze(['langue-impression', 'marques', 'prix-incertains', 'prix-repli', 'achete-avant-jour', 'empreinte', 'mesures-client']);
+const CAPACITES = Object.freeze(['langue-impression', 'marques', 'prix-incertains', 'prix-repli', 'achete-avant-jour', 'empreinte', 'mesures-client', 'probable']);
 
 /**
  * L'archive des visuels EN MÉMOIRE est-elle en place, avec au moins un produit ? `version` est ce que rend le lecteur (chargeur/etat.js::version) : un objet gelé, ou null. Écrit par ce qu'il AUTORISE :
@@ -72,7 +72,10 @@ const CONDITIONS = Object.freeze({
     },
     // CALCUL-CLIENT (26/10, contrat « calcul client », point 5) : POST /api/identifier/mesures existe et la réponse peut porter un `complement`. Les QUATRE à la fois : le jeton `empreinte` (sa condition, appelée telle quelle :
     // sans vecteur ni index, aucune mesure à demander) ; V2_MESURES_CLIENT allumé (`cfg.mesuresClient === true`) ; le serveur ne mesure PAS lui-même (`cfg.orbServeur === false` : sinon il n'émet jamais de complément).
-    'mesures-client': (cfg, lireVersion, lireEmpreintes) => CONDITIONS.empreinte(cfg, lireVersion, lireEmpreintes) === true && cfg.mesuresClient === true && cfg.orbServeur === false
+    'mesures-client': (cfg, lireVersion, lireEmpreintes) => CONDITIONS.empreinte(cfg, lireVersion, lireEmpreintes) === true && cfg.mesuresClient === true && cfg.orbServeur === false,
+    // PROBABLE (31/10, contrat « niveau probable » du 25/10) : `niveau` et `probable` sont servis (aux extensions >= 2.0.1). Les DEUX à la fois : V2_PROBABLE allumé (`cfg.probable === true`) ET la configuration
+    // valide — la version minimale est une version lisible « x.y.z ». Le jeton est le DERNIER de la liste.
+    probable: (cfg) => cfg.probable === true && /^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(typeof cfg.versionMinProbable === 'string' ? cfg.versionMinProbable : '')
 });
 
 /**
