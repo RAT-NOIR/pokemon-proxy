@@ -12,6 +12,8 @@
 //        manuel, apport-manuel → officiel SEULEMENT si la table lue (`ctx.officielsManuels`, issue des lignes de logos-apport-manuel-lus.json / logos-manuels-lus.json qui portent
 //        `officiel: true`) nomme le fichier. 🔴 Mesuré le 2026-10-13 : AUCUNE ligne de ces deux tables ne porte `officiel` (elles disent ce que le fichier REPRÉSENTE, pas d'où il vient) →
 //        ces logos sont `inconnu`. (La phrase « PNG d'un site officiel » de leur `preuve` est du texte libre du dépôt par le testeur : elle se compte, elle ne se lit pas comme une table.)
+//        → officiel AUSSI si la table des CONCORDANCES (`ctx.concordances`, logos-concordances-lus.json) nomme le fichier : le dépôt compte comme UNE source, et une seconde source
+//        indépendante le reproduit, concordance mesurée à l'image et regardée (testeur, 2026-10-31). Ne lève jamais générique, copie de Pokécardex ni logo du couple.
 //        ptcg-assets, bulbagarden:demande-site, toute autre source, source absente → inconnu
 // `source` : posée seulement si elle MANQUE et se lit sans deviner (logoCompose → « compose » ; logoOfficiel → l'hôte de urlSource, TCGdex ou Bill's) ; jamais reposée.
 const { refusCopie, refusDuCouple, logoGenerique } = require('./langue-logo');
@@ -54,6 +56,8 @@ function classer(champ, entree, set = {}, ctx = {}) {
     if (refusDuCouple(e.fichier)) return rendre('inconnu', 'logo du couple (le fichier nomme plusieurs sets)');
     if (SOURCES_OFFICIELLES.has(e.source)) return rendre('officiel', `source ${e.source}`);
     if (SOURCES_MANUELLES.has(e.source)) {
+        const c = ctx.concordances?.get(e.fichier);
+        if (c) return rendre('officiel', `source ${e.source}, concorde à l'image avec ${c.concordance.hote} (${c.concordance.mesure}, regardée le ${c.concordance.le})`);
         return ctx.officielsManuels?.has(e.fichier) ? rendre('officiel', `source ${e.source}, ligne de la table lue : officiel`) : rendre('inconnu', `source ${e.source} : aucune ligne de la table lue ne le dit officiel`);
     }
     return rendre('inconnu', `source « ${e.source ?? '∅'} » hors de la table`);
@@ -88,4 +92,21 @@ function simuler(sets, ctx = {}) {
     return { sets: sets.length, champsVus, comptes, parTirage, exemples, aEcrire };
 }
 
-module.exports = { classer, simuler, CHAMPS };
+/**
+ * Le RECLASSEMENT (une modification, feu vert nommé du testeur du 2026-10-31) : les champs dont le niveau ÉCRIT est « inconnu » et que la table des concordances rend
+ * « officiel ». Rien d'autre : ni un champ sans niveau (c'est `simuler`), ni un officiel levé par un autre motif, ni un autre niveau.
+ */
+function aReclasser(sets, ctx = {}) {
+    const out = [];
+    for (const s of sets) for (const champ of CHAMPS) {
+        const [racine, cle] = champ.split('.');
+        const e = cle ? s[racine]?.[cle] : s[racine];
+        if (!e || typeof e !== 'object' || e.niveau !== 'inconnu' || !SOURCES_MANUELLES.has(e.source)) continue;
+        const c = ctx.concordances?.get(e.fichier);
+        if (!c || classer(champ, e, s, ctx).niveau !== 'officiel') continue;
+        out.push({ _id: s._id, chemin: champ, avant: 'inconnu', apres: 'officiel', fichier: e.fichier, concordance: c.concordance });
+    }
+    return out;
+}
+
+module.exports = { classer, simuler, aReclasser, CHAMPS };

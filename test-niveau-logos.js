@@ -61,5 +61,46 @@ verifier('simulation : le dénominateur (sets lus, champs de logo vus) est rendu
     verifier('plan = attendu : écriture permise ; plan ≠ attendu : refus AVANT écriture, les deux nombres dits', [P.verifierPlan(1046, 1046), /1046/.test(P.verifierPlan(1045, 1046) ?? '') && /1045/.test(P.verifierPlan(1045, 1046))], [null, true]);
     verifier('relecture : écrits = attendu et plus aucun champ sans niveau : concordant ; sinon dit', [P.verifierRelecture({ ecrits: 5, attendu: 5, restants: 0 }), typeof P.verifierRelecture({ ecrits: 4, attendu: 5, restants: 0 }), typeof P.verifierRelecture({ ecrits: 5, attendu: 5, restants: 1 })], [null, 'string', 'string']);
 }
+// 31/10 (testeur) : un dépôt manuel qui CONCORDE À L'IMAGE avec une seconde source indépendante est « officiel » — par la table des concordances lues, jamais deviné
+{
+    const L = { set: 'Awakening-Legends', fichier: 'Logo JP/NEO3.png', concordance: { hote: 'www.serebii.net', url: 'https://www.serebii.net/x.png', mesure: 'JP corr 0.999', le: '2026-10-31', regardee: true } };
+    const ctx = { concordances: new Map([[L.fichier, L]]) };
+    verifier('concordance : dépôt manuel / apport-manuel nommé par la table → officiel ; non nommé → inconnu', [
+        niveau('logo', { source: 'manuel', fichier: 'Logo JP/NEO3.png' }, {}, ctx),
+        niveau('logo', { source: 'apport-manuel', fichier: 'Logo JP/NEO3.png' }, {}, ctx),
+        niveau('logo', { source: 'manuel', fichier: 'Logo JP/NEO4.png' }, {}, ctx)], ['officiel', 'officiel', 'inconnu']);
+    verifier('concordance : la raison nomme l\'hôte de la seconde source', /concorde à l'image.*www\.serebii\.net/.test(N.classer('logo', { source: 'manuel', fichier: 'Logo JP/NEO3.png' }, {}, ctx).raison), true);
+    verifier('concordance : ne lève JAMAIS générique, copie de Pokécardex ni logo du couple', [
+        niveau('logo', { source: 'manuel', fichier: 'Logo JP/NEO3.png' }, { logoGenerique: true }, ctx),
+        niveau('logo', { source: 'manuel', fichier: 'Logo JP/NEO3.png', sha1: COPIE }, {}, ctx),
+        niveau('logo', { source: 'manuel', fichier: COUPLE }, {}, { concordances: new Map([[COUPLE, L]]) })], ['generique', 'inconnu', 'inconnu']);
+    verifier('concordance : ne vaut que pour un dépôt (manuel, apport-manuel), pas pour une autre source', niveau('logo', { source: 'ptcg-assets', fichier: 'Logo JP/NEO3.png' }, {}, ctx), 'inconnu');
+    // le reclassement : un champ ÉCRIT « inconnu » que la concordance rend « officiel » — et rien d'autre
+    const sets2 = [
+        { _id: 'A', logo: { source: 'manuel', fichier: 'Logo JP/NEO3.png', niveau: 'inconnu' } },
+        { _id: 'B', logo: { source: 'manuel', fichier: 'Logo JP/NEO4.png', niveau: 'inconnu' } },
+        { _id: 'C', logo: { source: 'tcgdex:en', sha1: 'a', niveau: 'inconnu' } },
+        { _id: 'D', logo: { source: 'manuel', fichier: 'Logo JP/NEO3.png' } },
+        { _id: 'E', logo: { source: 'manuel', fichier: 'Logo JP/NEO3.png', niveau: 'officiel' } }
+    ];
+    const r = N.aReclasser(sets2, ctx);
+    verifier('reclassement : seulement un niveau ÉCRIT « inconnu » levé par la concordance (pas un champ sans niveau, pas un autre motif, pas un officiel)', r.map(x => [x._id, x.chemin, x.avant, x.apres, x.fichier]), [['A', 'logo', 'inconnu', 'officiel', 'Logo JP/NEO3.png']]);
+    verifier('reclassement : porte la ligne de concordance (la preuve)', r[0]?.concordance?.hote, 'www.serebii.net');
+    // la table lue : une garde écrite par ce qu'elle AUTORISE
+    const P = require('./poser-niveau-logos');
+    const lire = lignes => { try { return P.concordancesDesLignes(lignes).size; } catch (e) { return `refus: ${e.message.slice(0, 40)}`; } };
+    verifier('table des concordances : une ligne complète est lue', lire([L]), 1);
+    verifier('table des concordances : ligne incomplète, non regardée, date mal formée, source exclue, fichier en double ou table vide → REFUS', [
+        lire([{ ...L, concordance: { ...L.concordance, hote: '' } }]),
+        lire([{ ...L, concordance: { ...L.concordance, regardee: false } }]),
+        lire([{ ...L, concordance: { ...L.concordance, le: '31/10' } }]),
+        lire([{ ...L, concordance: { ...L.concordance, mesure: undefined } }]),
+        lire([{ ...L, concordance: { ...L.concordance, hote: 'www.pokecardex.com' } }]),
+        lire([{ ...L, concordance: { ...L.concordance, hote: 'www.cardmarket.com' } }]),
+        lire([{ ...L, set: '' }]),
+        lire([L, L]),
+        lire([])].map(x => typeof x === 'string' && x.startsWith('refus')), [true, true, true, true, true, true, true, true, true]);
+    verifier('arguments : --reclasser accepté seul (simulation) et avec --ecrire --attendu', [P.analyserArguments(['--reclasser']).erreurs, P.analyserArguments(['--reclasser', '--ecrire', '--attendu=15']).reclasser], [[], true]);
+}
 console.log(`\n${ok} passés, ${ko} en échec`);
 if (ko) process.exitCode = 1;

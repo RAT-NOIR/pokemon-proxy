@@ -1,0 +1,372 @@
+{
+ "regle": "testeur, 2026-10-31 : le dépôt compte comme UNE source ; s'il concorde à l'image avec une seconde source indépendante, le logo est validé « officiel » (ce n'est pas une recomposition). Pokellector compte si le set est identifié sans ambiguïté.",
+ "instrument": "collecte-cartes/mesure-logos.js (JP corr ≥ 0.90, écart de proportion ≤ 0.15), puis planche regardée par le coordinateur",
+ "lignes": [
+  {
+   "set": "Awakening-Legends",
+   "code": "N3",
+   "tirage": "jp",
+   "fichier": "Logo JP/NEO3.png",
+   "depot": {
+    "w": 425,
+    "h": 177,
+    "sha256": "cbc19b89501deffbb1d54f198f7fcec1a49556128ea209e5a9bcee09658be380"
+   },
+   "concordance": {
+    "hote": "den-media.pokellector.com",
+    "url": "https://den-media.pokellector.com/logos/Awakening-Legends.logo.332.png",
+    "page": "https://jp.pokellector.com/Awakening-Legends-Expansion/",
+    "appariement": "nom/code, score 1",
+    "w": 384,
+    "h": 160,
+    "sha256": "409ef85e0be143d738f158134326206f3b85c88795046e524ad95dfbbf356f4d",
+    "mesure": "mesure-logos.js : JP corr 0.999 (seuil 0.9), écart de proportion 0.01 (max 0.15)",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS2/PLANCHE-01.png"
+   }
+  },
+  {
+   "set": "Darkness-and-to-Light",
+   "code": "N4",
+   "tirage": "jp",
+   "fichier": "Logo JP/NEO4.png",
+   "depot": {
+    "w": 382,
+    "h": 233,
+    "sha256": "d729a6747b7c881f89e18dd254d433cc41186db09b1aa0adb9494e22945ee752"
+   },
+   "concordance": {
+    "hote": "den-media.pokellector.com",
+    "url": "https://den-media.pokellector.com/logos/Darkness-and-to-Light.logo.333.png",
+    "page": "https://jp.pokellector.com/Darkness-and-to-Light-Expansion/",
+    "appariement": "nom/code, score 1",
+    "w": 262,
+    "h": 160,
+    "sha256": "a01ca6d3c9e7529c97449821ec433348fce85141e3cc24c58cc4d0ee24d3d1f3",
+    "mesure": "mesure-logos.js : JP corr 0.905 (seuil 0.9), écart de proportion 0.00 (max 0.15)",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS2/PLANCHE-01.png",
+    "note": "marqué « suspect » par la mesure (corr < 0.95 ou proportion > 8 %) : regardé, même dessin"
+   }
+  },
+  {
+   "set": "Super-Burst-Impact",
+   "code": "sm8",
+   "tirage": "jp",
+   "fichier": "Logo JP/SM8.png",
+   "depot": {
+    "w": 226,
+    "h": 78,
+    "sha256": "3b0e61cde3692dc5ef1c6ce8106f9457d6e6abbcc63eeae321c7a6cf7e3e11bd"
+   },
+   "concordance": {
+    "hote": "www.serebii.net",
+    "url": "https://www.serebii.net/card/logo/explosiveimpact.png",
+    "page": "https://www.serebii.net/card/explosiveimpact",
+    "appariement": "alias manuel",
+    "w": 226,
+    "h": 78,
+    "sha256": "3cfa8e6c4ffe863e9fc112b37e986dc3fc52e3d9119c1ec9ed791f940b4f8175",
+    "mesure": "mesure-logos.js : JP corr 1.000 (seuil 0.9), écart de proportion 0.00 (max 0.15)",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS2/PLANCHE-01.png"
+   }
+  },
+  {
+   "set": "Night-Wanderer",
+   "code": "sv6a",
+   "tirage": "jp",
+   "fichier": "Logo JP/SV6A.png",
+   "depot": {
+    "w": 362,
+    "h": 85,
+    "sha256": "8748dd6b0fa7baf117b37509fbff7cc4aee0248e9f3ff56a7f775cb34d4eeaec"
+   },
+   "concordance": {
+    "hote": "www.serebii.net",
+    "url": "https://www.serebii.net/card/logo/nightwanderer.png",
+    "page": "https://www.serebii.net/card/nightwanderer",
+    "appariement": "nom/code, score 1",
+    "w": 300,
+    "h": 74,
+    "sha256": "29f011d34dbfeca7584c4489cd548f6ce63b78dd14e6dcfc3e608b52846785aa",
+    "mesure": "mesure-logos.js : JP corr 0.982 (seuil 0.9), écart de proportion 0.03 (max 0.15)",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS2/PLANCHE-01.png"
+   }
+  },
+  {
+   "set": "Wild-Blaze",
+   "code": "XY2",
+   "tirage": "jp",
+   "fichier": "Logo JP/XY2.png",
+   "depot": {
+    "w": 681,
+    "h": 159,
+    "sha256": "d9b4fd46b24781e9657708b25366cc41df3b82a5b7891c2570fc42ed4b12d653"
+   },
+   "concordance": {
+    "hote": "www.serebii.net",
+    "url": "https://www.serebii.net/card/logo/wildblaze.png",
+    "page": "https://www.serebii.net/card/wildblaze",
+    "appariement": "nom/code, score 1",
+    "w": 180,
+    "h": 40,
+    "sha256": "42a454aea0f17c87d8753c8fe708dcc304830b204a3a67fc03feeb274e530277",
+    "mesure": "mesure-logos.js : JP corr 0.975 (seuil 0.9), écart de proportion 0.00 (max 0.15)",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS2/PLANCHE-01.png"
+   }
+  },
+  {
+   "set": "Megalo-Cannon",
+   "code": "BW9",
+   "tirage": "jp",
+   "fichier": "Logo JP/BW9.png",
+   "depot": {
+    "w": 185,
+    "h": 31,
+    "sha256": "281a6e44e936d1b442b5e23a2c7a267c176df3f72dc0a2c4149ab39260e0fea1"
+   },
+   "concordance": {
+    "hote": "www.serebii.net",
+    "url": "https://www.serebii.net/card/logo/megalocannon.png",
+    "page": "https://www.serebii.net/card/megalocannon",
+    "appariement": "nom/code, score 1",
+    "w": 192,
+    "h": 37,
+    "sha256": "b9eca489e5ba84539586b1e6212629ee9cf6610b2665b42ee40ef8d8002e4801",
+    "mesure": "mesure-logos.js : JP corr 0.977 (seuil 0.9), écart de proportion 0.01 (max 0.15)",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS2/PLANCHE-01.png",
+    "note": "marqué « suspect » par la mesure (corr < 0.95 ou proportion > 8 %) : regardé, même dessin"
+   }
+  },
+  {
+   "set": "Hail-Blizzard",
+   "code": "BW3h",
+   "tirage": "jp",
+   "fichier": "Logo JP/BW3B.png",
+   "depot": {
+    "w": 133,
+    "h": 48,
+    "sha256": "1166a2a51159e228c60850fb594823a06f02dd308f4013a915945c17490b3730"
+   },
+   "concordance": {
+    "hote": "www.serebii.net",
+    "url": "https://www.serebii.net/card/logo/hailblizzard.png",
+    "page": "https://www.serebii.net/card/hailblizzard",
+    "appariement": "nom/code, score 1",
+    "w": 154,
+    "h": 54,
+    "sha256": "2a34dc53f0ae73c5f3908d7e9a1484af17deac33416c4145216ddfba9527458c",
+    "mesure": "mesure-logos.js : JP corr 0.927 (seuil 0.9), écart de proportion 0.01 (max 0.15)",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS2/PLANCHE-01.png",
+    "note": "marqué « suspect » par la mesure (corr < 0.95 ou proportion > 8 %) : regardé, même dessin"
+   }
+  },
+  {
+   "set": "Psycho-Drive",
+   "code": "BW3p",
+   "tirage": "jp",
+   "fichier": "Logo JP/BW3P.png",
+   "depot": {
+    "w": 143,
+    "h": 48,
+    "sha256": "1c0fa9c323627caa4330bbf3570af322d281ca609beb9817ad4d1acd237b8091"
+   },
+   "concordance": {
+    "hote": "www.serebii.net",
+    "url": "https://www.serebii.net/card/logo/psychodrive.png",
+    "page": "https://www.serebii.net/card/psychodrive",
+    "appariement": "nom/code, score 1",
+    "w": 154,
+    "h": 54,
+    "sha256": "7cda496f9018280f87e8f1b95c84e0957153dbe988e094ea38e75499bb0e131e",
+    "mesure": "mesure-logos.js : JP corr 0.994 (seuil 0.9), écart de proportion 0.00 (max 0.15)",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS2/PLANCHE-01.png"
+   }
+  },
+  {
+   "set": "Black-Collection",
+   "code": "BW1b",
+   "tirage": "jp",
+   "fichier": "Logo JP/BW1B.png",
+   "depot": {
+    "w": 176,
+    "h": 35,
+    "sha256": "14b85da4aab4214f930bb5d911e1a11dfd07b959df65bea3fb7ab3ecd42f20e3"
+   },
+   "concordance": {
+    "hote": "www.serebii.net",
+    "url": "https://www.serebii.net/card/logo/blackcollection.png",
+    "page": "https://www.serebii.net/card/blackcollection",
+    "appariement": "nom/code, score 1",
+    "w": 176,
+    "h": 35,
+    "sha256": "da5549267f0001ee5f9fbc0873f5bedc4a4968fcbacb593c89442cc6182c26a6",
+    "mesure": "mesure-logos.js : JP corr 1.000 (seuil 0.9), écart de proportion 0.00 (max 0.15)",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS2/PLANCHE-02.png"
+   }
+  },
+  {
+   "set": "White-Collection",
+   "code": "BW1w",
+   "tirage": "jp",
+   "fichier": "Logo JP/BW1W.png",
+   "depot": {
+    "w": 176,
+    "h": 33,
+    "sha256": "e9dd7ea30aeec37f1608e23073e19a3c8fb0f63626785126880f6616737db1cf"
+   },
+   "concordance": {
+    "hote": "www.serebii.net",
+    "url": "https://www.serebii.net/card/logo/whitecollection.png",
+    "page": "https://www.serebii.net/card/whitecollection",
+    "appariement": "nom/code, score 1",
+    "w": 176,
+    "h": 33,
+    "sha256": "17d90550d79715faba134902a83cee26f87ef153f5aabe3c68f2344c51b7fd91",
+    "mesure": "mesure-logos.js : JP corr 1.000 (seuil 0.9), écart de proportion 0.00 (max 0.15)",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS2/PLANCHE-02.png"
+   }
+  },
+  {
+   "set": "Detective-Pikachu-JP",
+   "code": "smP2",
+   "tirage": "jp",
+   "fichier": "Logo JP/SMP2.png",
+   "depot": {
+    "w": 135,
+    "h": 75,
+    "sha256": "63679e18ad74c238bed1e3cd61d033e2520a852763adbfe87173f2146cfa32a3"
+   },
+   "concordance": {
+    "hote": "www.serebii.net",
+    "url": "https://www.serebii.net/card/logo/greatdetectivepikachu.png",
+    "page": "https://www.serebii.net/card/greatdetectivepikachu",
+    "appariement": "nom/code, score 1",
+    "w": 188,
+    "h": 105,
+    "sha256": "645c4513d4dcf17001eb772d31121cac0351e8ff565bcfbaa91dbb6af76c767f",
+    "mesure": "mesure-logos.js : JP corr 0.994 (seuil 0.9), écart de proportion 0.01 (max 0.15)",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS2/PLANCHE-02.png"
+   }
+  },
+  {
+   "set": "Start-Deck-100",
+   "code": "sI100",
+   "tirage": "jp",
+   "fichier": "apport-manuel/Deck JP/SI.png",
+   "depot": {
+    "w": 308,
+    "h": 240,
+    "sha256": "ee0e49d8f26876c07b2b432fd5e9202ab2aff15b3ab819474ee3184d8608b581"
+   },
+   "concordance": {
+    "hote": "den-media.pokellector.com",
+    "url": "https://den-media.pokellector.com/logos/Start-Deck-100.logo.337.png",
+    "page": "https://jp.pokellector.com/Start-Deck-100-Expansion/",
+    "appariement": "nom/code, score 1",
+    "w": 420,
+    "h": 160,
+    "sha256": "2b9afd54a9b95e9795d42ea64611c3828690952f27f78847fbf0a60507ef5757",
+    "mesure": "mesure-logos.js : JP corr 0.996 (seuil 0.9), écart de proportion 0.00 (max 0.15)",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS2/PLANCHE-02.png",
+    "note": "marqué « suspect » par la mesure (corr < 0.95 ou proportion > 8 %) : regardé, même dessin"
+   }
+  },
+  {
+   "set": "Shining-Legends-JP",
+   "code": "sm3+",
+   "tirage": "jp",
+   "fichier": "Logo JP/SM3P.png",
+   "depot": {
+    "w": 512,
+    "h": 239,
+    "sha256": "c8f46a20cf6f0db41bb34b0e2961154fc75fadec1c13d33128dc32e7d59d9858"
+   },
+   "concordance": {
+    "hote": "www.serebii.net",
+    "url": "https://www.serebii.net/card/logo/shininglegend.png",
+    "page": "https://www.serebii.net/card/shininglegend",
+    "appariement": "alias manuel",
+    "w": 200,
+    "h": 85,
+    "sha256": "0c16becc852ba59293c34fbc97046c995bf328747458fe023a99e854d9b90bec",
+    "mesure": "mesure-logos.js : JP corr 0.985 (seuil 0.9), écart de proportion 0.01 (max 0.15)",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS2/PLANCHE-02.png",
+    "note": "marqué « suspect » par la mesure (corr < 0.95 ou proportion > 8 %) : regardé, même dessin"
+   }
+  },
+  {
+   "set": "Tapu-Bulu-GX-Enhanced-Starter-Set",
+   "code": "smC",
+   "tirage": "jp",
+   "fichier": "apport-manuel/Deck JP/SMC.png",
+   "depot": {
+    "w": 343,
+    "h": 100,
+    "sha256": "c595d1f1b9560aa255ebd70e4549d518b5d98fd0bd3447f3976eb1dffd2012f8"
+   },
+   "concordance": {
+    "hote": "www.serebii.net",
+    "url": "https://www.serebii.net/card/logo/startersettapubulugx.png",
+    "page": "https://www.serebii.net/card/startersettapubulugx",
+    "appariement": "nom/code, score 0.83",
+    "w": 343,
+    "h": 100,
+    "sha256": "1297f9dfde1df6b7243e3839c51efedda7db3ce044d8919674637d9c4089bb83",
+    "mesure": "mesure-logos.js : JP corr 0.999 (seuil 0.9), écart de proportion 0.00 (max 0.15)",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS2/PLANCHE-02.png"
+   }
+  },
+  {
+   "set": "Ash-vs-Team-Rocket-Deck-Kit",
+   "code": "smD",
+   "tirage": "jp",
+   "fichier": "apport-manuel/Deck JP/SMD.png",
+   "depot": {
+    "w": 612,
+    "h": 309,
+    "sha256": "2e4ef8683816ea850df0fceaefcf87af02fed5474623ad427c43bccb29f46159"
+   },
+   "concordance": {
+    "hote": "den-media.pokellector.com",
+    "url": "https://den-media.pokellector.com/logos/Ash-vs-Team-Rocket-Battle-Set.logo.221.png",
+    "page": "https://jp.pokellector.com/Ash-vs-Team-Rocket-Battle-Set-Expansion/",
+    "appariement": "nom/code, score 0.67",
+    "w": 210,
+    "h": 80,
+    "sha256": "649d438dce286d4ec4d461e4e4372c7eb961adce9f88596d066f6747f93ee26d",
+    "mesure": "mesure-logos.js : JP corr 0.925 (seuil 0.9), écart de proportion 0.00 (max 0.15)",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS2/PLANCHE-02.png",
+    "note": "marqué « suspect » par la mesure (corr < 0.95 ou proportion > 8 %) : regardé, même dessin"
+   }
+  }
+ ]
+}
