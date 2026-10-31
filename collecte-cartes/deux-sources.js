@@ -12,7 +12,9 @@ const { clesNom, cleNumero } = require('./jointure');
 /** Les sources indépendantes de Cardmarket ET de Bulbapedia, admises. Une source absente d'ici ne compte pas. */
 // (2026-10-24, décision du testeur) la liste LOCALE : dépôts et JSON clonés (type-null, TCGdex, pokemontcg.io), relevés pokedata (pdt), CardTrader (ctr), Pokéllector, pkmncards (pkc), pokemon.com,
 // pokemon-card.com, TPC Asie, Pokumon, PikaQian ; plus artofpkm (en cache) et l'API TCGdex (≤ 50 requêtes). Bulbapedia reste exclue par son nom.
-const SOURCES_ADMISES = Object.freeze(['tcgdex', 'tpc-asie', 'pokemon-card-com', 'artofpkm', 'pikaqian', 'pokumon', 'pokemontcg.io', 'tcgdex-api', 'type-null', 'pdt', 'ctr', 'pokellector', 'pkc', 'pokemon-com']);
+const SOURCES_ADMISES = Object.freeze(['tcgdex', 'tpc-asie', 'pokemon-card-com', 'artofpkm', 'pikaqian', 'pokumon', 'pokemontcg.io', 'tcgdex-api', 'type-null', 'pdt', 'ctr', 'pokellector', 'pkc', 'pokemon-com', 'preuve-par-set']);
+// ➕ 2026-10-31 'preuve-par-set' : la liste d'un set (kado.hk) dont TOUS les noms se traduisent par des tables indépendantes de Cardmarket et concordent avec les produits du MÊME set, sous un jugement qui sait dire non
+// (collecte-cartes/fiches-preuve-set.js::juger). Sa concordante porte le numéro Cardmarket (le témoin) et `par: 'set'` ; elle ne vaut que pour un nom NON latin (comme `par: 'pokedex'`).
 /** Les sources EXCLUES, énumérées pour que le refus se nomme : Bulbapedia sous toutes ses formes. */
 const SOURCES_EXCLUES = Object.freeze(['bulbapedia', 'bulbapedia-r2', 'setlist', 'wikitext', 'carte-bulbapedia']);
 
@@ -62,7 +64,7 @@ function rejouer(produit, concordantes) {
         if (c.set !== produit.set) { motifs.push(`${nom} : set différent (${c.set} / ${produit.set})`); continue; }
         if (produit.numero == null || c.numero == null || cleNumero(String(c.numero)) !== cleNumero(String(produit.numero))) { motifs.push(`${nom} : numéro différent (${c.numero} / ${produit.numero})`); continue; }
         const nomOk = c.nom ? memeNom(produit.nom, c.nom) : false;
-        const dexOk = !nomOk && c.par === 'pokedex' && !nomLisible(c.nom);
+        const dexOk = !nomOk && (c.par === 'pokedex' || (c.par === 'set' && c.source === 'preuve-par-set' && !!c.nom && !!c.ref)) &&!nomLisible(c.nom);
         if (!nomOk && !dexOk) motifs.push(`${nom} : nom discordant (« ${c.nom ?? '—'} » / « ${produit.nom} »)`);
     }
     return { ok: motifs.length === 0, motifs };

@@ -11,19 +11,11 @@ const { produitsDeLExpansion, cleNumero } = require('./collecte-cartes/jointure'
 const LS = require('./collecte-cartes/lecture-sure');
 const { prouverParSet } = require('./collecte-cartes/preuve-par-set');
 const TZ = require('./collecte-cartes/table-zh');
-const lire = f => JSON.parse(fs.readFileSync(f, 'utf8').replace(/^\uFEFF/, ''));
+const { chargerSources, CIBLES } = require('./collecte-cartes/fiches-preuve-set');
 
-const SETS = Object.fromEntries(fs.readdirSync(path.join(DOSSIER, 'cache', 'sets')).map(f => { const j = lire(path.join(DOSSIER, 'cache', 'sets', f)); return [j.etiquette, j]; }));
-const LABELS = fs.existsSync(path.join(DOSSIER, 'labels.json')) ? lire(path.join(DOSSIER, 'labels.json')) : {};
-const TW = lire(path.join(DOSSIER, 'table-zh-tw.json')).table;
-const POKEAPI = TZ.lireEspecesPokeApi(fs.readFileSync(path.join(DOSSIER, 'pokeapi', 'pokemon_species_names.csv'), 'utf8'));
-// 2e source INDÉPENDANTE des espèces : Wikidata (CC0), n° de Pokédex ; lue seulement si le fichier daté existe (la source n'a pas pu être récoltée le 2026-10-31 : voir RESUME)
-let ESPECES = POKEAPI;
-const WD = path.join(DOSSIER, 'wikidata', 'especes-zh.json');
-if (fs.existsSync(WD)) { const w = TZ.lireEspecesWikidata(lire(WD), { licence: 'CC0', luLe: fs.readFileSync(path.join(DOSSIER, 'wikidata', 'LU-LE.txt'), 'utf8').slice(0, 10) }); const m = TZ.fusionnerEspeces(POKEAPI.table, w.table); ESPECES = { table: m.table, stats: { ...POKEAPI.stats, wikidata: w.stats, fusion: m.stats } }; console.log('Wikidata (' + w.meta.licence + ', lu le ' + w.meta.luLe + ') :', JSON.stringify(w.stats)); } else console.log('Wikidata : AUCUN fichier — la table des espèces est PokeAPI seule');
-console.log('table des espèces PokeAPI (BSD-3-Clause, lue le ' + fs.readFileSync(path.join(DOSSIER, 'pokeapi', 'LU-LE.txt'), 'utf8').slice(0, 10) + ') :', JSON.stringify(ESPECES.stats));
-const DEXIDS = lire('C:/Users/Yung/Desktop/pokemon-proxy/pokedex-dexids.json');
-const cleProduit = TZ.fabriquerCleProduit(DEXIDS);
+// UN SEUL chargement des tables pour la simulation et pour l'outil d'écriture (collecte-cartes/fiches-preuve-set.js::chargerSources, §21 bis) ; Wikidata (CC0) est lu seulement si son fichier daté existe
+const { SETS, LABELS, TW, ESPECES, cleProduit, journal: JOURNAL_SOURCES } = chargerSources(DOSSIER);
+for (const l of JOURNAL_SOURCES) console.log(l);
 const pairesSource = Object.fromEntries(Object.entries(LABELS).filter(([, v]) => v && v.en).map(([zh, v]) => [zh.normalize('NFKC').replace(/\s+/g, ''), v.en]));
 const traduireBase = TZ.fabriquerTraducteur({ tableEspeces: ESPECES.table, tableAutres: TW, cleProduit });
 const traduire = traduireBase;   // PokeAPI (+ Wikidata si présent) pour les espèces, TCGdex/base pour le reste — AUCUNE table tirée de Cardmarket
@@ -31,17 +23,7 @@ const traduire = traduireBase;   // PokeAPI (+ Wikidata si présent) pour les es
 const nz = s => String(s).normalize('NFKC').replace(/\s+/g, '');
 const oracle = nomZh => { const en = pairesSource[nz(nomZh)]; return en ? cleProduit(en) : null; };
 const categorie = nomZh => { const en = pairesSource[nz(nomZh)]; if (!en) return 'sans libellé'; if (/energy/i.test(en)) return 'énergie'; return cleProduit(en)[0] === 'D' ? 'espèce' : 'dresseur/objet'; };
-const groupeGem = n => String(n).slice(0, 2);
-
-// rôle 'vise' : les sets visés (le numéro Cardmarket des produits sert de TÉMOIN) ; rôle 'calibration' : le numéro connu est CACHÉ à la règle, puis comparé à ce qu'elle donne
-const CIBLES = [
-    { nom: 'Gem Pack Vol. 4 (CBB4C)', exp: 6447, kado: [['Gem Pack Vol. 4', '']], groupeDe: groupeGem, role: 'vise', calibrable: true },
-    { nom: 'Gem Pack Vol. 5 (CBB5C)', exp: 6544, kado: [['Gem Pack Vol. 5', '']], groupeDe: groupeGem, role: 'vise', calibrable: true },
-    { nom: 'Happy Set Decidueye… (CSVH4C)', exp: 6543, kado: [['Happy Set (Happy Pack)', 'e'], ['Happy Set (Modification Pack)', 'a'], ['Happy Set (Reward Pack)', 'p']], role: 'vise' },
-    { nom: '30th Celebration (30C)', exp: 6601, kado: [['30th Celebration (4229)', '']], role: 'vise' },
-    { nom: 'Phantasmal Flames (calibration)', exp: 6299, kado: [['Phantasmal Flames', '']], role: 'calibration' },
-    { nom: 'Ascended Heroes (calibration)', exp: 6395, kado: [['Ascended Heroes', '']], role: 'calibration' }
-];
+// CIBLES : collecte-cartes/fiches-preuve-set.js (la même liste pour la simulation et l'écriture). rôle 'vise' : le numéro Cardmarket des produits sert de TÉMOIN ; rôle 'calibration' : le numéro connu est CACHÉ à la règle, puis comparé à ce qu'elle donne
 
 const resumerDiscordances = d => { const t = {}; for (const x of d) t[x.type] = (t[x.type] || 0) + 1; return t; };
 (async () => {
