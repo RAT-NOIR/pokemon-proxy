@@ -98,6 +98,19 @@ t('distanceUneLettre : insertion, suppression, substitution = 1 ; identique, tra
     assert.strictEqual(d('abc', 'abc'), false); assert.strictEqual(d('abcd', 'abdc'), false); assert.strictEqual(d('abc', 'a'), false); assert.strictEqual(d('', 'a'), true);
 });
 
+t('NON (position) : des produits SANS numéro Cardmarket — la position ne se vérifie pas, et le contrôle de groupe de la preuve ne la voit pas non plus : refus', () => {
+    const j = jeu(['Ponyta', 'Pinsir', 'Timbur', 'Eevee', 'Grotle'], BASE);
+    j.produits.forEach(p => { p.numero = null; });
+    const r = TOL.proposerTolerance({ ...j, traduire, cleProduit: cleProduitParDefaut, groupeDe });
+    assert.strictEqual(r.applicable, false); assert.match(r.raison, /position/);
+});
+t('NON (liste corrigée refusée) : si le nom corrigé ne se traduit pas à la clé du produit, la liste corrigée n\'est pas admise — la tolérance ne s\'applique pas', () => {
+    const j = jeu(['Ponyta', 'Pinsir', 'Timbur', 'Eevee', 'Grotle'], BASE);
+    const trad = z => (z === 'Timburr' ? 'AUTRE-CLE' : cleProduitParDefaut(z));
+    const r = TOL.proposerTolerance({ ...j, traduire: trad, cleProduit: cleProduitParDefaut, groupeDe });
+    assert.strictEqual(r.applicable, false); assert.match(r.raison, /toujours pas admise/);
+});
+
 // ── branchement : jugerTout (ecrire-fiches-preuve-set.js) — la tolérance est un OPT-IN de la cible, jamais un défaut ──
 const E = require('./ecrire-fiches-preuve-set');
 const branche = (tolerance, noms = ['Ponyta', 'Pinsir', 'Timbur', 'Eevee', 'Grotle']) => {
