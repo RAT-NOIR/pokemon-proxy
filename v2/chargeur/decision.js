@@ -17,6 +17,14 @@ const fichierDe = (cle, w, h) => (typeof cle === 'string' && cle ? { cle, w, h }
 const ceder = () => new Promise(r => setImmediate(r));
 /** Ce qui définit un set pour ses impressions (lib/impressionDuSet.ts : CibleDuSet) : le tirage, les expansions Bulbapedia et, quand le set en porte un, le deck. */
 const cibleDuSet = s => ({ tirage: s.tirage ?? s.region, expansions: [].concat(s.bulba?.expansion ?? []), deck: s.deck });
+/**
+ * GUICHET 31/10 — ANNEXES (Yellow A, lib/annexes.ts du site, liste FERMÉE de 61 entrées carte|numéro) : les impressions du set PUIS les annexes qui prennent leur fiche dans ce set (leur parent est une expansion du set).
+ * Même fonction que le site (`impressionsEtAnnexes`, embarquée) : l'ordre compte (une annexe n'est jamais la principale). Une règle injectée qui ne l'a pas (banc) garde le comportement d'avant : les seules impressions du set.
+ */
+function impressionsDuMembre(regle, d, cible) {
+    const imps = (d.impressions || []).filter(Boolean), duSet = i => regle.impressionDuSet(i, cible);
+    return typeof regle.impressionsEtAnnexes === 'function' ? regle.impressionsEtAnnexes(imps, d._id, cible, duSet) : imps.filter(duSet);
+}
 /** La clé stable d'une fiche, comme lib/collectionContrat.ts::cleFiche (« - » pour une fiche sans numéro). */
 const cleFiche = (idInterne, numero) => `${idInterne}|${numero ?? '-'}`;
 
@@ -222,9 +230,11 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         // LA règle du site : les impressions de CE set (tirage, expansion, deck). fichesDesProduits (exporter-donnees-logos-site.js, hors v2/, non touché) filtre encore par tirage et expansion ;
         // elle reçoit ici des documents dont les impressions sont DÉJÀ celles du set, son filtre ne retire plus rien de plus.
         const membres = (parSet.get(id) || []).filter(d => typeof d.nomEn === 'string' && d.nomEn !== '')
-            .map(d => ({ ...d, impressions: (d.impressions || []).filter(i => i && regle.impressionDuSet(i, cible)) }));
+            .map(d => ({ ...d, impressions: impressionsDuMembre(regle, d, cible) }));
         const ids = new Set(membres.map(d => d._id));
-        const fiche = Lg.fichesDesProduits(regle, s, membres, ls.filter(l => ids.has(l.carteId) && exps(s).includes(l.idExpansion))).fiche;
+        // ANNEXES : fichesDesProduits refiltre par « expansion ∈ bulba.expansion » ; la copie du set qu'on lui passe y ajoute les expansions annexes. Sans fuite : les impressions des membres sont déjà celles du set + SES annexes (parent vérifié).
+        const sPourFiches = typeof regle.impressionsEtAnnexes === 'function' && regle.expansionsAnnexes?.length ? { ...s, bulba: { ...s.bulba, expansion: [...[].concat(s.bulba?.expansion ?? []), ...regle.expansionsAnnexes] } } : s;
+        const fiche = Lg.fichesDesProduits(regle, sPourFiches, membres, ls.filter(l => ids.has(l.carteId) && exps(s).includes(l.idExpansion))).fiche;
         fiches.set(id, fiche);
         const parCle = new Map();                                             // clé de fiche → idProducts (triés : une sortie stable)
         for (const [idProduct, f] of fiche) { const cle = cleFiche(f.carteId, f.numero); if (!parCle.has(cle)) parCle.set(cle, []); parCle.get(cle).push(idProduct); }
