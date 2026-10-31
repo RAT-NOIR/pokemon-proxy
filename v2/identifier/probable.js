@@ -28,7 +28,7 @@ function versionAuMoins(version, minimum = VERSION_MIN_PROBABLE) {
  * @param groupe    vrai pour une question de GROUPE (même dessin) : le cosinus n'entre pas dans le classement
  * @returns null (aucun probable) | { idProduct, signal, contredits }
  */
-function decider({ ids, produits, lu, cosinus = null, groupe = false, cosinusMin = 0 } = {}) {
+function decider({ ids, produits, lu, cosinus = null, groupe = false, cosinusMin = 0, vecteurExige = false } = {}) {
     try {
         if (!lu || !Array.isArray(ids) || ids.length < 2 || ids.length > 3 || !ids.every(Number.isInteger) || new Set(ids).size !== ids.length || !(produits instanceof Map)) return null;
         const cands = ids.map(id => {
@@ -54,6 +54,7 @@ function decider({ ids, produits, lu, cosinus = null, groupe = false, cosinusMin
         if (cmp(premier, second) === 0) return null;                                       // ex aequo exact en tête : aucun candidat ne se détache
         if (!(premier.ko === 0 && premier.ok >= 1)) return null;                           // la lecture concorde avec le 1er et ne le contredit pas
         if (!tri.slice(1).every(c => c.ko >= 1)) return null;                              // ... et contredit TOUS les autres
+        if (vecteurExige === true && premier.cos === null) return null;                    // VECTEUR EXIGÉ : un probable demande un cosinus MESURÉ pour le 1er candidat (sinon la question reste réservée)
         if (Number.isFinite(cosinusMin) && cosinusMin > 0 && premier.cos !== null && premier.cos < cosinusMin) return null;     // le COSINUS MINIMAL : un 1er candidat dont le visuel est trop loin de la photo (cosinus connu) n'est pas désigné
         return { idProduct: premier.id, signal: SIGNAL, contredits: tri.slice(1).map(c => c.id), detail: { nCand: cands.length, ok: premier.ok, ko: premier.ko, cosPremier: premier.cos, cosSecond: second.cos } };
     } catch { return null; }

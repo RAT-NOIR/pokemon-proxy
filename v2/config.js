@@ -234,7 +234,9 @@ function lireConfig(env = process.env) {
         // Le COSINUS MINIMAL du 1er candidat (lot PROBABLE, tour 1) : si la vérité est hors de la liste, aucun candidat n'a le visuel de la photo, donc même le meilleur cosinus est bas. Un 1er candidat dont le cosinus est
         // CONNU et sous ce seuil ne devient pas probable (la question reste réservée). Seuil choisi sur le RÉGLAGE seul (v2/mesures/mesurer-probable-production.js), vérifié sur les ordinaires et les tamponnées. 0 = garde éteinte.
         // Sans cosinus (pas de vecteur, photo non redressée, visuel emprunté) la garde se tait : la lecture seule décide, comme mesuré.
-        probableCosinusMin: decimal01('V2_PROBABLE_COSINUS_MIN', env.V2_PROBABLE_COSINUS_MIN, 0),
+        probableCosinusMin: decimal01('V2_PROBABLE_COSINUS_MIN', env.V2_PROBABLE_COSINUS_MIN, 0.38),     // GARDE RETENUE (tour 2) : choisie sur le RÉGLAGE seul, 0 probable faux sur les trois bancs
+        // TOUR 2 : « vecteur exigé » — un probable demande un cosinus MESURÉ pour le 1er candidat (vecteur de l'extension, photo redressée, visuel propre) ; sinon la question reste réservée.
+        probableVecteurExige: booleen('V2_PROBABLE_VECTEUR_EXIGE', env.V2_PROBABLE_VECTEUR_EXIGE, true),
         // TEMPS-ETAPES (identifier/temps-etapes.js) : quatre coupes de TEMPS qui ne changent aucune décision, chacune ÉTEINTE par défaut (0) : la route est alors celle d'avant, octet pour octet.
         // voisinsUneFois : la recherche des voisins une fois par requête ; empreinteTot : la recherche et la garde des zones partent pendant l'attente du modèle ; finParallele : les lectures/écritures annexes de la fin de requête partent ensemble.
         // orbUtile : la règle G (recherche des voisins + garde des zones, donc l'ORB) n'est pas consultée quand la chaîne a rendu un INTROUVABLE — elle ne peut rien y changer (arbitrage-g.js, promotion-g.js) ; la réponse dit alors `empreinte: { utilisee: false, code: 'muette' }`.

@@ -754,7 +754,8 @@ function traiterIdentifier(cfg, deps = {}) {
             return repondreErreur(res, erreurLot.code, undefined, { facturation: PS.avecPoche(erreurLot.facturation, credit ? credit.poche : null),...(erreurLot.detail !== undefined ? { detail: erreurLot.detail } : {}),
                 ...(solde !== undefined ? { solde } : {}), ...avecOffre(erreurLot.code === 'QUOTA' && erreurLot.detail !== 'lot-trop-grand' ? offreRefusee(offre) : offre) });   // lot-trop-grand : les unités sont rendues, l'offre relue dit le VRAI restant (relecture 1, I-2)
         }
-        const { resultat, facturation } = sortie;
+        const { resultat } = sortie;
+        let { facturation } = sortie;      // PROBABLE (tour 2) : `let` — le montant annoncé suit le grand livre APRÈS l'opération si le crédit d'un probable est rendu faute d'écriture `analyses`
         if (resultat.issue === 'panne') {
             await fermer();
             return repondreErreur(res, resultat.erreur.code, undefined, { facturation: PS.avecPoche(facturation, await poche()), ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) });
@@ -771,7 +772,7 @@ function traiterIdentifier(cfg, deps = {}) {
         // PRIX-LISIBLE : une carte identifiée dont l'analyse n'a rien dicté à lire (langue non lue, état non retenu) reçoit le repli honnête `prixRepli` SI sa fiche a une donnée de prix ; toute autre carte est rendue telle quelle.
         // Posé ICI, après la lecture du tampon (qui peut refaire le Produit) : le guide du repli est celui de la carte servie. Rien n'en entre dans la ligne `analyses` (elle est écrite depuis `analyse.cartes` : le repli se recalcule à la demande).
         const analyse0 = { ...analyseAvecRepli(resultat.analyse), regleVerdict: regle, ...(photosDites || {}) };
-        const analyse = niveauServi(cfg, entree) ? avecNiveau(analyse0, sortie.probable) : analyse0;     // PROBABLE : `niveau` et `probable` seulement si V2_PROBABLE ET une extension >= 2.0.1 ; sinon la réponse est celle d'avant, octet pour octet
+        let analyse = niveauServi(cfg, entree) ? avecNiveau(analyse0, sortie.probable) : analyse0;    // PROBABLE : `niveau` et `probable` seulement si V2_PROBABLE ET une extension >= 2.0.1 ; sinon la réponse est celle d'avant, octet pour octet
         // 9. les écritures annexes : sans effet sur la réponse
         // TEMPS-ETAPES (V2_TE_FIN_PARALLELE) : la ligne `analyses` et l'annonce sont deux écritures INDÉPENDANTES (chacune sous son propre filet, aucune ne lit l'autre) : elles partent ensemble, et la clôture de la marque
         // (ci-dessous) attend les DEUX, comme avant. Éteint : l'une puis l'autre, l'ordre d'avant.
@@ -810,8 +811,13 @@ function traiterIdentifier(cfg, deps = {}) {
             if (sortie.probable && !admin && credit) {
                 try {
                     const r = await argent.rembourser(porteur, credit, 'panne-SERVEUR', { scanId, compteur: 'panne' });
-                    if (r && r.rendu) await col('questions_v2').updateOne({ _id: `${scanId}:0`, etat: 'en-attente' }, { $set: { etat: 'remboursee', rembourse: true, regleeLe: new Date() } });
-                    else console.error(`🔴 [v2 identifier] scan ${scanId} : écriture analyses en échec ET probable NON rendu (${(r && r.raisonNonRembourse) || 'erreur'}) — à la réconciliation`);
+                    if (r && r.rendu) {
+                        await col('questions_v2').updateOne({ _id: `${scanId}:0`, etat: 'en-attente' }, { $set: { etat: 'remboursee', rembourse: true, regleeLe: new Date() } });
+                        // TOUR 2 : le montant ANNONCÉ est celui du grand livre après l'opération : rendu (debite 0, rembourse true), plus de probable servi sur une question close, solde et offre relus
+                        facturation = fabriquerFacturation({ debite: 0, reserve: 0, rembourse: true, motif: 'question' });
+                        if (niveauServi(cfg, entree)) analyse = avecNiveau(analyse0, null);
+                        try { solde = await soldeSur(); offre = await offreP(); } catch (e3) { journalErreur('solde après remboursement du probable', e3); }
+                    } else console.error(`🔴 [v2 identifier] scan ${scanId} : écriture analyses en échec ET probable NON rendu (${(r && r.raisonNonRembourse) || 'erreur'}) — à la réconciliation`);
                 } catch (e2) { journalErreur('remboursement du probable sans analyse', e2); }
             }
         } };

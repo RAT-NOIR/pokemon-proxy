@@ -59,7 +59,7 @@ function consulterProbable({ cfg, entree, resultat, corpsChaine, produits, versi
             }
         } catch { cosinus = null; }
     }
-    const d = P.decider({ ids, produits, lu, cosinus, groupe, cosinusMin: cfg.probableCosinusMin });
+    const d = P.decider({ ids, produits, lu, cosinus, groupe, cosinusMin: cfg.probableCosinusMin, vecteurExige: cfg.probableVecteurExige === true });
     if (!d) return null;
     // I2 : « un probable affiché AVEC un prix » — le candidat désigné doit porter un prix servi (même règle que le repli de prix : un guide daté avec un prix). Sinon la question reste réservée comme avant.
     const c = cartes[0].candidats.find(x => x && x.idProduct === d.idProduct);

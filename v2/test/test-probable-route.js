@@ -9,7 +9,7 @@ const path = require('path');
 const IMAGE = require(path.join(__dirname, '..', '..', 'verrou', 'charges.json')).charges.find(c => c.cellule === 'occidentale').imageUrl;
 const ref = n => ({ $ref: `#/components/schemas/${n}` });
 const base = { MONGODB_BASE: 'test_scratch', V2_HEBDO: '0' };
-const cfgOff = lireConfig(base), cfgOn = lireConfig({ ...base, V2_PROBABLE: '1' });
+const cfgOff = lireConfig(base), cfgOn = lireConfig({ ...base, V2_PROBABLE: '1', V2_PROBABLE_VECTEUR_EXIGE: '0', V2_PROBABLE_COSINUS_MIN: '0' }), cfgGarde = lireConfig({ ...base, V2_PROBABLE: '1' });      // cfgOn : la garde du cosinus ÉTEINTE (ce banc n'envoie aucun vecteur) ; cfgGarde : les VALEURS PAR DÉFAUT (vecteur exigé, cosinus 0,38)
 const ORIGINE = cfgOff.origines.extension;
 let nIp = 0; const ip = () => { nIp++; return { 'x-forwarded-for': `10.17.${Math.floor(nIp / 250)}.${nIp % 250 + 1}` }; };
 let nCle = 0; const cle = () => `banc-probable-${Date.now().toString(36)}-${++nCle}`;
@@ -163,6 +163,11 @@ const ids = c0 => c0.candidats.map(c => c.idProduct).sort();
     H.v('5e. rejeu de la même réponse : 200, toujours un seul débit', [rej.statut, await livre(a1)], [200, PAYE]);
 
     // ── 6. /ping annonce le jeton `probable` seulement allumé
+    // ── 5b. TOUR 2 : la garde par DÉFAUT (vecteur exigé) : sans vecteur de l'extension, la même question n'est PAS un probable (crédit réservé) ; la garde éteinte, elle l'est
+    const sGarde = await monter(cfgGarde);
+    const gd = await scan(sGarde, 'probable', '2.0.1');
+    H.v('5b. V2_PROBABLE=1 aux valeurs par défaut (vecteur exigé, cosinus min 0,38) : sans vecteur, la question reste une question, crédit RÉSERVÉ ; défauts lus', [cfgGarde.probableVecteurExige, cfgGarde.probableCosinusMin, gd.c0.niveau, gd.c0.probable, await livre(gd)], [true, 0.38, 'question', null, RESERVE]);
+    await sGarde.fermer();
     // ── 6. I3 : une paire jumbo/normale (même dessin, la lecture ne les sépare pas) n'est JAMAIS un probable, quelle que soit la combinaison des drapeaux des marqueurs
     for (const [g, j] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
         const sg = await monter(lireConfig({ ...base, V2_PROBABLE: '1', V2_GARDE_MARQUEURS: String(g), V2_JUMBO_TITRE: String(j) }));
@@ -179,6 +184,7 @@ const ids = c0 => c0.candidats.map(c => c.idProduct).sort();
     const pa = await scan(sOn, 'probable', '2.0.1'); delete dbo.collection;
     const qa = await raw('questions_v2').findOne({ _id: `${pa.scanId}:0` });
     H.v('8. M2 : écriture `analyses` en panne après le débit d\'un probable : la réponse est servie, le crédit est RENDU (net 0, un remboursement), la question est close', [pa.r.statut, await livre(pa), qa && qa.etat], [200, RENDU, 'remboursee']);
+    H.v('   TOUR 2 : la réponse du scan dit ce que dit le grand livre APRÈS l\'opération (debite 0, rembourse true), jamais `debite 1` ; et plus de probable servi sur une question close', [pa.j.facturation.debite, pa.j.facturation.reserve, pa.j.facturation.rembourse, pa.c0.niveau, pa.c0.probable], [0, 0, true, 'question', null]);
     // ── 9. M3 : l'invariant du contrat (niveau probable ⇔ probable non nul ; probable.idProduct ∈ candidats) sur TOUTES les réponses, et le détecteur sait dire NON
     H.v('9. M3 : tout ce qui a été servi respecte « niveau probable ⇔ probable non nul » et « probable.idProduct ∈ candidats »', incoherents, []);
     const fautes = [{ niveau: 'probable', probable: null, candidats: [] }, { niveau: 'question', probable: { idProduct: 1, aConfirmer: true }, candidats: [{ idProduct: 1 }] }, { niveau: 'probable', probable: { idProduct: 9, aConfirmer: true }, candidats: [{ idProduct: 1 }] }];
