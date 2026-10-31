@@ -85,7 +85,7 @@ const resumerTypes = d => { const t = {}; for (const x of d) t[x.type] = (t[x.ty
             }
             const etiquette = `liste-externe:${s.code}`;
             SETSL[etiquette] = { etiquette, cartes: G.listeDuSet(cr) };
-            cibles.push({ nom: s.nom, exp: s.exp, kado: [[etiquette, '']], groupeDe: FPS.groupeGem, role: 'vise', calibrable: true, etiquetteRef: etiquette });
+            cibles.push({ nom: s.nom, exp: s.exp, kado: [[etiquette, '']], groupeDe: FPS.groupeGem, role: 'vise', calibrable: true, etiquetteRef: etiquette, tolerance: true });   // décision de l'éditeur 31/10 : la tolérance d'orthographe (une lettre, même groupe, candidat unique, reste concordant)
         }
         // la chaîne de production : jugement (règle sans numéro, avec témoin, calibration, 4 contrôles négatifs) puis planificateur de la voie deux-sources
         const connexionPartagee = { cartes: cx.cartes, prod: cx.prod, fermer: async () => {} };

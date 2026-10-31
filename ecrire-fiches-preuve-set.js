@@ -95,6 +95,8 @@ async function executer({ argv, ouvrirLecture, ouvrirEcriture, cibles = FPS.CIBL
         for (const v of verdicts) {
             log(`\n■ ${v.cible.nom} · exp ${v.cible.exp} · rôle ${v.cible.role} · source ${v.source.length} entrées · produits ${v.produits.length} → ${v.admis ? 'ADMIS' : 'TOMBÉ'}`);
             log(`   ${v.raison}`);
+            if (v.toleranceMotif) log(`   ✎ ${v.toleranceMotif}`);
+            if (v.toleranceRefusee) log(`   (tolérance d'orthographe demandée, REFUSÉE : ${v.toleranceRefusee})`);
             if (!v.admis && v.intraduisibles && v.intraduisibles.length) log(`   noms intraduisibles (${v.intraduisibles.length}) : ${v.intraduisibles.slice(0, 20).join(', ')}`);
             if (v.negatifs) log(`   contrôles négatifs (tous false = la calibration sait dire non) : ${JSON.stringify(v.negatifs)}`);
         }
