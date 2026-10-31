@@ -83,6 +83,26 @@ verifier('worker actif sur CE set (même preuve que pour les images) : la baisse
 }
 { const { validerAnnonces } = require('./collecte-cartes/garde-lot'); let leve = false; try { validerAnnonces({ [K_A]: 1, 'vignettes-set set:Set-A': 3 }); } catch { leve = true; }
   verifier('l\'annonce « vignettes-images » est un compteur connu', leve, false); }
+{ // ➕ 2026-10-31 (relecture du scan moyen, I1) : `images[].moyen` — le site le lit ; un rejeu qui l'efface est la panne des vignettes du 2026-10-08
+    const etatMoy = copie(etat0); etatMoy.cartes[0].images[0].moyen = { cleR2: 'moyens/a/2.webp', w: 400, h: 550 };
+    const lotMoyPerdu = copie(etatMoy); delete lotMoyPerdu.cartes[0].images[0].moyen;
+    const KM = 'moyens-images set:Set-A|1|2|a/2';
+    verifier('MOYEN : un compteur par entrée qui porte un moyen, et un nombre par set', [compterEtat(etatMoy).get(KM), compterEtat(etatMoy).get('moyens-set set:Set-A'), compterEtat(etat0).get(KM) ?? 0], [1, 1, 0]);
+    verifier('MOYEN : un moyen effacé (le reste de l\'entrée intact) ARRÊTE le lot, clé ET nombre du set', comparer(compterEtat(etatMoy), compterEtat(lotMoyPerdu)).nonAutorisees.map(b => `${b.cle} ${b.avant}→${b.apres}`), [`${KM} 1→0`, 'moyens-set set:Set-A 1→0']);
+    verifier('MOYEN : des moyens qui MONTENT passent, et se comptent en hausse', [comparer(compterEtat(etat0), compterEtat(etatMoy)).nonAutorisees.length, comparer(compterEtat(etat0), compterEtat(etatMoy)).hausses['moyens-images']], [0, 1]);
+    verifier('MOYEN : annonce par set couvre la perte', comparer(compterEtat(etatMoy), compterEtat(lotMoyPerdu), { annonces: { 'moyens-set set:Set-A': 1 } }).nonAutorisees.length, 0);
+    verifier('MOYEN : worker prouvé sur le set : dispensé', comparer(compterEtat(etatMoy), compterEtat(lotMoyPerdu), { setsDuWorker: new Set(['Set-A']) }).nonAutorisees.length, 0);
+    verifier('MOYEN : une annonce « moyens-images » est un compteur connu', (() => { try { require('./collecte-cartes/garde-lot').validerAnnonces({ [KM]: 1, 'moyens-set set:Set-A': 3 }); return false; } catch { return true; } })(), false);
+    // un moyen ne se confond pas avec une vignette : effacer l'un ne fait pas baisser l'autre
+    const les2 = copie(etatMoy); les2.cartes[0].images[0].vignette = { cleR2: 'vignettes/a/2.webp', w: 200, h: 280 };
+    const sansMoy = copie(les2); delete sansMoy.cartes[0].images[0].moyen;
+    verifier('MOYEN : effacer le moyen seul ne touche pas aux compteurs de vignettes', comparer(compterEtat(les2), compterEtat(sansMoy)).nonAutorisees.map(b => b.compteur), ['moyens-images', 'moyens-set']);
+    // la comparaison par document (sets touchés) voit le champ : un lot qui AJOUTE des moyens revalide ses sets
+    const { setsTouches, SITE_LIT } = require('./collecte-cartes/garde-lot');
+    verifier('MOYEN : SITE_LIT.images contient « moyen » avec sa forme figée (cleR2, w, h — jamais l\'empreinte `de`)', [SITE_LIT.images.includes('moyen'), SITE_LIT.formes['images.moyen']], [true, ['cleR2', 'w', 'h']]);
+    const st = setsTouches({ avant: { cartes: etat0.cartes, cartesProduits: [], sets: [] }, apres: { cartes: etatMoy.cartes, cartesProduits: [], sets: [] } });
+    verifier('MOYEN : un lot qui AJOUTE un moyen touche le set (revalidation)', st.sets, ['Set-A']);
+}
 { // restauration CHIRURGICALE : on ne remet que le champ vignette, jamais le tableau images
     const { planVignettes } = require('./collecte-cartes/garde-lot');
     const sauve = [{ _id: 1, images: [{ set: 'Set-A', numero: '2', cleR2: 'a/2', jointeLe: 'ancien', vignette: { cleR2: 'v/a2' } }, { set: 'Set-A', numero: '3', cleR2: 'a/3', vignette: { cleR2: 'v/a3' } }, { set: 'Set-B', numero: '1', cleR2: 'b/1', vignette: { cleR2: 'v/b1' } }] }];
