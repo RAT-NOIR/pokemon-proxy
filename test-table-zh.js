@@ -83,6 +83,21 @@ t('fusionnerEspeces : PokeAPI OU Wikidata ; un nom qui désigne deux espèces se
     assert.strictEqual(r.table['甲'], undefined);
     assert.strictEqual(r.stats.contradictions, 1);
 });
+t('CONTESTÉS : un libellé Wikidata porté par deux numéros (hk de D26, mo de D27) est retiré AUSSI de la table PokeAPI (un nom contesté ne traduit rien)', () => {
+    const w = T.lireEspecesWikidata({ results: { bindings: [bind(26, { hk: '甲X' }), bind(27, { mo: '甲X' }), bind(28, { hk: '乙Y' })] } }, { licence: 'CC0', luLe: 'x' });
+    assert.deepStrictEqual(w.contestes, ['甲X']);
+    const m = T.fusionnerEspeces({ 甲X: 'D25', 丙: 'D1' }, w.table, w.contestes);
+    assert.strictEqual(m.table['甲X'], undefined);
+    assert.strictEqual(m.table['丙'], 'D1');
+    assert.strictEqual(m.table['乙Y'], 'D28');
+});
+t('variantes : lireEspecesWikidata ne lit que les variantes demandées (sans zh-mo, 比卡超 disparaît)', () => {
+    const j = { results: { bindings: [bind(25, { hk: '皮卡丘', mo: '比卡超' })] } };
+    assert.strictEqual(T.lireEspecesWikidata(j, { licence: 'CC0', luLe: 'x' }).table['比卡超'], 'D25');
+    const r = T.lireEspecesWikidata(j, { licence: 'CC0', luLe: 'x', variantes: ['hk', 'hant', 'hans'] });
+    assert.strictEqual(r.table['比卡超'], undefined);
+    assert.strictEqual(r.table['皮卡丘'], 'D25');
+});
 t('ISOLEMENT : aucune table « produit Cardmarket au même numéro » n\'existe plus (circulaire, refusée)', () => {
     assert.ok(!require('fs').existsSync(require('path').join(__dirname, 'proposer-table-zh.js')));
     assert.strictEqual(T.fabriquerTraducteur.length <= 1, true);

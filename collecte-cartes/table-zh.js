@@ -89,7 +89,7 @@ function lireEspecesPokeApi(csv) {
  * Entrée : le JSON de résultats SPARQL { results: { bindings: [{ n, hk?, hant?, hans? }] } } (ou tout export qui s'y ramène). La provenance est OBLIGATOIRE : { licence, luLe }.
  * Un libellé partagé par deux numéros est RETIRÉ (ambigu) ; un numéro qui n'est pas un entier est ignoré et compté.
  */
-function lireEspecesWikidata(json, { licence, luLe } = {}) {
+function lireEspecesWikidata(json, { licence, luLe, variantes = null } = {}) {
     if (!licence || !luLe) throw new Error('lireEspecesWikidata : la licence et la date de lecture sont obligatoires (provenance de la table)');
     const vus = new Map(), ambigus = new Set(); let illisibles = 0;
     for (const b of (json && json.results && json.results.bindings) || []) {
@@ -97,19 +97,20 @@ function lireEspecesWikidata(json, { licence, luLe } = {}) {
         if (!/^\d+$/.test(String(brut ?? ''))) { illisibles++; continue; }
         const cle = 'D' + Number(brut);
         // libellés de Wikidata par variante de chinois : zh-hk, zh-hant, zh-hans, et les variantes régionales (zh-mo « 比卡超 » porte le nom de Hong Kong/Macao quand zh-hk n'est qu'un repli), zh
-        for (const champ of ['hk', 'hant', 'hans', 'cn', 'tw', 'mo', 'sg', 'my', 'zh']) {
+        for (const champ of ['hk', 'hant', 'hans', 'cn', 'tw', 'mo', 'sg', 'my', 'zh'].filter(c => !variantes || variantes.includes(c))) {
             const zh = b[champ] && String(b[champ].value).normalize('NFKC').replace(/\s+/g, '');
             if (!zh) continue;
             if (vus.has(zh) && vus.get(zh) !== cle) ambigus.add(zh); else vus.set(zh, cle);
         }
     }
     for (const a of ambigus) vus.delete(a);
-    return { table: Object.fromEntries(vus), stats: { entrees: vus.size, ambigus: ambigus.size, numerosIllisibles: illisibles }, meta: { source: 'Wikidata', licence, luLe } };
+    // `contestes` : les libellés ambigus pour Wikidata ; fusionnerEspeces les retire AUSSI de l'autre table (un nom contesté ne traduit rien)
+    return { table: Object.fromEntries(vus), contestes: [...ambigus], stats: { entrees: vus.size, ambigus: ambigus.size, numerosIllisibles: illisibles }, meta: { source: 'Wikidata', licence, luLe } };
 }
 
 /** PokeAPI OU Wikidata : un nom connu d'une seule source est admis ; connu des deux pour deux espèces différentes, il est RETIRÉ (contradiction), jamais arbitré. */
-function fusionnerEspeces(a, b) {
-    const sortie = new Map(Object.entries(a)), retires = new Set();
+function fusionnerEspeces(a, b, contestes = []) {
+    const sortie = new Map(Object.entries(a)), retires = new Set(contestes.filter(c => sortie.has(c)));
     for (const [zh, cle] of Object.entries(b)) { if (sortie.has(zh) && sortie.get(zh) !== cle) retires.add(zh); else sortie.set(zh, cle); }
     for (const r of retires) sortie.delete(r);
     return { table: Object.fromEntries(sortie), stats: { entrees: sortie.size, contradictions: retires.size } };
