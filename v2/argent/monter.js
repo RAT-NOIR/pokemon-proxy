@@ -19,6 +19,7 @@ module.exports = {
             rembourser: (porteur, credit, motif, o) => Lg.rembourser(porteur, credit, motif, o, cfg),
             rembourserLigne: (porteur, cle, motif, o) => Lg.rembourserLigne(porteur, cle, motif, o, cfg),      // O5 : la reprise unité par unité d'un remboursement interrompu
             reserverQuestion: (porteur, credit, q, maintenant) => Q.reserverQuestion(porteur, credit, q, cfg, maintenant),
+            passerEnProbable: (porteur, o) => Q.passerEnProbable(porteur, o, cfg),
             repondreQuestion: (porteur, o, maintenant) => Q.repondreQuestion(porteur, o, cfg, maintenant),
             balayerQuestions: o => Q.balayerQuestions(o, cfg),
             fusionnerALaLiaison: o => Fu.fusionnerALaLiaison(o, cfg),

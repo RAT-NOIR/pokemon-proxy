@@ -206,6 +206,7 @@ const NATURES = Object.freeze({
     introuvable: { classe: 'constate', livre: true },   // un constat sur la photo : plafonné
     jumeaux: { classe: 'constate', livre: true },
     'constate-question': { classe: 'constate', livre: false },
+    'probable-aucune': { classe: 'probable', livre: false },   // PROBABLE (31/10) : « aucune » sur un probable : son PROPRE compteur (cfg.plafonds.probables), ni constats ni déclarations
     question: { classe: 'declare', livre: false },
     'sans-prix': { classe: 'declare', livre: false },
     'lot-trop-grand': { classe: 'lot', livre: true }
@@ -225,6 +226,7 @@ async function plafondParOffre(porteur, cfg, maintenant, table) {
 }
 const plafondDesDeclarations = (porteur, cfg, maintenant) => plafondParOffre(porteur, cfg, maintenant, cfg.plafonds.declares);
 const plafondDesConstates = (porteur, cfg, maintenant) => plafondParOffre(porteur, cfg, maintenant, cfg.plafonds.constates);
+const plafondDesProbables = (porteur, cfg, maintenant) => plafondParOffre(porteur, cfg, maintenant, cfg.plafonds.probables);
 // rendreLeScan : ordre = débits enregistrés → CLAIM du mouvement rb|scanId (une fois par scan) → plafond (incrément puis rollback) → unité par unité (prise atomique « rendu-en-cours », crédit, trace +1, PUIS « rembourse») → si rien rendu, libérer claim ET compteur.
 async function rendreLeScan(porteur, motif, { scanId, compteur, jourDe, sansPlafond = false, unites = 1, maintenant = new Date() } = {}, cfg) {
     if (!scanId) { console.error('❌ [v2 rembourser] scanId absent : la clé rb|… serait commune à tous les scans — refusé'); return { rendu: false, raisonNonRembourse: 'erreur' }; }
@@ -285,15 +287,15 @@ async function rendreLeScan(porteur, motif, { scanId, compteur, jourDe, sansPlaf
         pendantes.sort((a, b) => String(a._id) < String(b._id) ? -1 : 1);
         if (!sansPlafond && classe !== 'infra') {
             // le plafond se lit AVANT le compteur : une lecture qui échoue n'a rien compté (l'erreur libère le claim, plus bas)
-            const plafond = classe === 'declare' ? await plafondDesDeclarations(porteur, cfg, maintenant) : classe === 'constate' ? await plafondDesConstates(porteur, cfg, maintenant) : cfg.plafonds.lotTropGrand;
+            const plafond = classe === 'declare' ? await plafondDesDeclarations(porteur, cfg, maintenant) : classe === 'constate' ? await plafondDesConstates(porteur, cfg, maintenant) : classe === 'probable' ? await plafondDesProbables(porteur, cfg, maintenant) : cfg.plafonds.lotTropGrand;
             const c = await incPlafond(porteurCle, jour, type, maintenant, pas); compteurPris = true;
             if (c.count > plafond) {
                 await liberer();
                 // les deux compteurs se journalisent à CHAQUE refus : ni message d'erreur ni identifiant de porteur (type seulement), le scan permet de remonter
                 console.warn(`⚠️ [v2 plafond] ${type} : plafond du jour atteint (${plafond}) — remboursement refusé, porteur ${porteur.type}, scan ${scanId}, jour ${jour}`);
-                return { rendu: false, raisonNonRembourse: 'plafond-jour', ...(classe === 'declare' ? { declaration: { rendue: false, raison: 'plafond-declarations', plafondJour: plafond } } : {}) };
+                return { rendu: false, raisonNonRembourse: 'plafond-jour', ...(classe === 'declare' ? { declaration: { rendue: false, raison: 'plafond-declarations', plafondJour: plafond } } : classe === 'probable' ? { declaration: { rendue: false, raison: 'plafond-probable', plafondJour: plafond } } : {}) };
             }
-            if (classe === 'declare') declaration = { rendue: true, raison: null, plafondJour: plafond };
+            if (classe === 'declare' || classe === 'probable') declaration = { rendue: true, raison: null, plafondJour: plafond };
         }
         const avecDeclaration = r => (declaration ? { ...r, declaration } : r);
         for (const d of pendantes) {

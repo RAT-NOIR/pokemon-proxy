@@ -24,7 +24,34 @@ function facturationDe(q) {
         return facturation({ debite: 1, motif: raison === 'plafond-jour' ? 'plafond-jour' : 'question', raisonNonRembourse: raison });
     }
     if (q.etat === 'repondue') return facturation({ debite: 1, motif: 'question' });
+    if (q.probable === true) return facturation({ debite: 1, motif: 'question' });  // PROBABLE : débité à l'AFFICHAGE, jamais réservé
     return facturation({ reserve: 1, motif: 'question' });                         // en-attente / en-reglement : le crédit est réservé
+}
+
+// PROBABLE (décision de l'éditeur, 25/10) : une question dont un candidat est montré avec son prix « à confirmer » est DÉBITÉE à l'affichage (le débit du scan passe de 'reserve' à 'debite', un seul débit par scan).
+// « aucune » rembourse (compteur des constats) ; « ne-sait-pas » et l'abandon ne remboursent pas. Jamais pour un lot ni pour une question déjà prise ou réglée. Idempotent.
+async function passerEnProbable(porteur, { scanId, carte = 0 } = {}, cfg) {
+    try {
+        const _id = idQuestion(scanId, carte), sien = { _id, 'porteur.type': porteur.type, 'porteur.id': porteur.id };
+        const q = await col('questions_v2').findOne(sien);
+        if (!q || q.lot === true) return { ok: false };
+        if (q.probable === true) return { ok: q.etat === 'en-attente' };
+        if (q.etat !== 'en-attente') return { ok: false };
+        // ORDRE SÛR (relecture 1, I1) : le MOUVEMENT d'abord (reserve -> debite, contrôlé), puis le marqueur ; si le marqueur ne s'écrit pas, le mouvement est REMIS à reserve. Après une panne, le grand livre
+        // et la question disent la même chose : une question ordinaire, crédit réservé (jamais un marqueur probable sur un mouvement réservé, ni l'inverse).
+        const filtreMv = { ...base(porteur), type: 'debit', scanId };
+        const m = await col('mouvements').updateOne({ ...filtreMv, etat: 'reserve' }, { $set: { etat: 'debite' } });
+        if ((m.matchedCount ?? m.modifiedCount ?? 0) < 1) return { ok: false };
+        let marque = false;
+        try { const r = await col('questions_v2').updateOne({ ...sien, etat: 'en-attente', probable: { $ne: true } }, { $set: { probable: true } }); marque = (r.matchedCount ?? r.modifiedCount ?? 0) >= 1; }
+        catch (e) { console.error(`🔴 [v2 probable] marqueur non écrit (${(e && (e.code || e.name)) || 'erreur'}) — le mouvement est remis à reserve`); }
+        if (!marque) {
+            try { await col('mouvements').updateOne({ ...filtreMv, etat: 'debite' }, { $set: { etat: 'reserve' } }); }
+            catch (e) { console.error(`🔴 [v2 probable] mouvement NON remis à reserve (${(e && (e.code || e.name)) || 'erreur'}) — scan ${scanId} : débité, question ordinaire (son remboursement reste possible) — à la réconciliation`); }
+            return { ok: false };
+        }
+        return { ok: true };
+    } catch (e) { console.error(`🔴 [v2 probable] passage en probable refusé (${(e && (e.code || e.name)) || 'erreur'})`); return { ok: false }; }
 }
 
 async function reserverQuestion(porteur, credit, { scanId, carte = 0, raison, candidats = [], choix = [], lot = false, cleDebit = null } = {}, cfg, maintenant = new Date()) {
@@ -83,6 +110,17 @@ async function regler(q, motif, cfg, maintenant, sortie = {}) {
         const lot = await rendreLotSiConfirmationsRefusees(q.scanId, porteur, q.credit, cfg, maintenant);      // l'abandon d'une confirmation peut être la DERNIÈRE du lot
         if (lot && lot.declaration) sortie.declaration = lot.declaration;
         return fin;
+    }
+    // PROBABLE : le prix a été montré, le débit est acquis. « ne-sait-pas » et l'abandon ne rendent rien (la question est réglée, débitée) ; « aucune » rend, par le compteur des CONSTATS (la lecture du serveur s'est trompée).
+    if (q.probable === true && !(motif === 'question-aucune' && !(q.reponse && q.reponse.choix === 'ne-sait-pas'))) {
+        return col('questions_v2').findOneAndUpdate({ _id: q._id, etat: 'en-reglement' }, { $set: { etat: 'repondue', rembourse: false, regleeLe: maintenant } }, { returnDocument: 'after' });
+    }
+    if (q.probable === true) {
+        // décision de l'éditeur (31/10) : un compteur PROPRE (`probable-aucune`), ni les constats ni les déclarations ; le refus au plafond DIT son message (`declaration`, raison `plafond-probable`)
+        const rp = await rembourser(porteur, q.credit, motif, { scanId: q.scanId, compteur: 'probable-aucune', jourDe: q.poseeLe, maintenant }, cfg);
+        if (rp.declaration) sortie.declaration = rp.declaration;
+        return col('questions_v2').findOneAndUpdate({ _id: q._id, etat: 'en-reglement' },
+            { $set: { etat: rp.rendu ? 'remboursee' : 'non-remboursee', rembourse: rp.rendu, raisonNonRembourse: rp.rendu ? null : rp.raisonNonRembourse, regleeLe: maintenant, ...(rp.declaration ? { declaration: rp.declaration } : {}) } }, { returnDocument: 'after' });
     }
     // PLAFOND-DECLARE : « aucune », « ne-sait-pas » et l'abandon sont des DÉCLARATIONS du client (l'abandon est une déclaration par l'absence : sans lui, ne jamais répondre rendrait le plafond contournable)
     const r = await rembourser(porteur, q.credit, motif, { scanId: q.scanId, compteur: 'question', jourDe: q.poseeLe, maintenant }, cfg);
@@ -362,4 +400,4 @@ async function balayerQuestions({ maintenant = new Date(), max = 500 } = {}, cfg
     if (bilan.bloquees) console.error(`🔴 [v2 question-balayage] ${bilan.bloquees} question(s) bloquée(s) « en-reglement » depuis plus de 15 min : crédit rendu ou non, à vérifier à la main (jamais reprise seule)`);
     return bilan;
 }
-module.exports = { reserverQuestion, repondreQuestion, balayerQuestions, facturationDe, lotsNonJuges, lotsEnReglement };
+module.exports = { reserverQuestion, passerEnProbable, repondreQuestion, balayerQuestions, facturationDe, lotsNonJuges, lotsEnReglement };

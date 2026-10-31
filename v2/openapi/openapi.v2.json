@@ -4851,6 +4851,16 @@
           "etat": {
             "$ref": "#/components/schemas/EtatCarte"
           },
+          "niveau": {
+            "type": "string",
+            "enum": [
+              "sur"
+            ],
+            "description": "AJOUT FACULTATIF (lot PROBABLE) : le niveau de la carte, servi SEULEMENT si le serveur annonce le jeton `probable` ET que la requête porte `versionExtension >= 2.0.1`. Une carte identifiée est `sur`."
+          },
+          "probable": {
+            "type": "null"
+          },
           "prixLive": {
             "oneOf": [
               {
@@ -4918,6 +4928,24 @@
           "etat": {
             "$ref": "#/components/schemas/EtatCarte"
           },
+          "niveau": {
+            "type": "string",
+            "enum": [
+              "probable",
+              "question"
+            ],
+            "description": "AJOUT FACULTATIF (lot PROBABLE) : `probable` = un candidat se détache (voir `probable`), `question` = les candidats sont à égalité ; une valeur inconnue du client vaut `question`. Servi SEULEMENT si le serveur annonce le jeton `probable` ET que la requête porte `versionExtension >= 2.0.1`. Le `statut` ne change pas : une carte probable reste `a-trancher`."
+          },
+          "probable": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ProbableCarte"
+              }
+            ]
+          },
           "prixLive": {
             "type": "null"
           },
@@ -4979,6 +5007,13 @@
           "etat": {
             "type": "null"
           },
+          "niveau": {
+            "type": "null",
+            "description": "AJOUT FACULTATIF (lot PROBABLE) : un introuvable n'a pas de niveau."
+          },
+          "probable": {
+            "type": "null"
+          },
           "prixLive": {
             "type": "null"
           },
@@ -5005,6 +5040,28 @@
           "zone"
         ],
         "additionalProperties": false
+      },
+      "ProbableCarte": {
+        "type": "object",
+        "properties": {
+          "idProduct": {
+            "type": "integer",
+            "description": "L'UN des `candidats` de la carte : celui que le serveur désigne. L'extension montre sa fiche en tête avec son `prixGuide` présenté comme le prix DE CE CANDIDAT à confirmer, jamais comme celui de la carte scannée."
+          },
+          "aConfirmer": {
+            "type": "boolean",
+            "enum": [
+              true
+            ],
+            "description": "Toujours `true` : aucun probable n'est confirmé côté serveur."
+          }
+        },
+        "required": [
+          "idProduct",
+          "aConfirmer"
+        ],
+        "additionalProperties": false,
+        "description": "Le niveau « probable » (lot PROBABLE, 2026-10-31). Le crédit est DÉBITÉ à l'affichage (`facturation { debite 1, reserve 0, motif question }`), un seul débit par scan. Se confirme par `POST /api/identifier/reponse` : le `choix` dont l'`idProduct` est `probable.idProduct` (« c'est bien celle-ci ») ou un autre candidat — ni remboursement ni second débit ; `aucune` REND le crédit (dans la limite des constats du jour) ; `ne-sait-pas` et l'abandon (24 h) ne rendent rien."
       },
       "CarteAnalysee": {
         "oneOf": [
@@ -5828,9 +5885,10 @@
             ],
             "enum": [
               "plafond-declarations",
+              "plafond-probable",
               null
             ],
-            "description": "CODE (jamais une phrase) : `null` quand rendue ; `plafond-declarations` quand refusée. L'extension écrit le texte."
+            "description": "CODE (jamais une phrase) : `null` quand rendue ; `plafond-declarations` quand refusée ; `plafond-probable` (lot PROBABLE) quand « aucune » sur un probable est refusée parce que le compteur PROPRE des « aucune » de probable du jour est plein (sans compte 1, gratuit 3, Pro 30) : le crédit reste débité, le message est dit. L'extension écrit le texte."
           },
           "plafondJour": {
             "type": "integer",
@@ -6925,11 +6983,12 @@
                 "prix-repli",
                 "achete-avant-jour",
                 "empreinte",
-                "mesures-client"
+                "mesures-client",
+                "probable"
               ]
             },
             "x-conditionnel": "RM_API_V2=1",
-            "description": "AJOUT FACULTATIF (lot CAPACITES-PING) : les parties du contrat que CE serveur sert, une liste FERMÉE (la source est `v2/capacites.js`, comparée par test-openapi.js), dans l'ordre de la liste, sans doublon. Présent sous la MÊME condition que `versionMinExtension` (v2 allumée et configuration valide). Un jeton absent = la partie n'est pas servie ; un jeton inconnu d'un client est ignoré ; un champ absent, ou qui n'est pas un tableau, = on s'en tient aux champs servis. Sens et condition : `langue-impression` = `impressions[].langue`, annoncé seulement si l'archive des visuels est chargée en mémoire ET porte la colonne des jumeaux ; `marques` = `Produit.marques` et `Impression.marques`, annoncé seulement si l'archive des visuels est chargée en mémoire ; `prix-incertains` = `prixGuide.{fiable, reserves, moyenne7, moyenne30, deBase}`, `version`, `set.badge`, `regleVerdict.ecartTendanceMax` ; `prix-repli` = `carte.prixRepli` ET la règle REPLI-QUOTA (un scan dont la réponse sert un repli compte dans le quota) — la règle est en place, mais `prixRepli` peut manquer sur une carte dont la fiche n'a aucun prix ; `achete-avant-jour` = `facturation.poche`, les analyses achetées sont débitées avant le quota du jour ; `empreinte` = le serveur attend le vecteur d'empreinte de l'extension, annoncé seulement si `V2_EMPREINTE_EXTENSION=1`, la configuration du modèle est valide ET l'index d'empreintes est chargé en mémoire (jamais le seul drapeau) ; `mesures-client` (contrat « calcul client ») = la réponse peut porter `complement` et `POST /api/identifier/mesures` existe, annoncé seulement si le jeton `empreinte` l'est ET `V2_MESURES_CLIENT=1` ET `V2_ORB_SERVEUR=0`. Les deux jetons de l'archive tombent à chaque réveil à froid du service, tant que l'archive n'est pas rechargée."
+            "description": "AJOUT FACULTATIF (lot CAPACITES-PING) : les parties du contrat que CE serveur sert, une liste FERMÉE (la source est `v2/capacites.js`, comparée par test-openapi.js), dans l'ordre de la liste, sans doublon. Présent sous la MÊME condition que `versionMinExtension` (v2 allumée et configuration valide). Un jeton absent = la partie n'est pas servie ; un jeton inconnu d'un client est ignoré ; un champ absent, ou qui n'est pas un tableau, = on s'en tient aux champs servis. Sens et condition : `langue-impression` = `impressions[].langue`, annoncé seulement si l'archive des visuels est chargée en mémoire ET porte la colonne des jumeaux ; `marques` = `Produit.marques` et `Impression.marques`, annoncé seulement si l'archive des visuels est chargée en mémoire ; `prix-incertains` = `prixGuide.{fiable, reserves, moyenne7, moyenne30, deBase}`, `version`, `set.badge`, `regleVerdict.ecartTendanceMax` ; `prix-repli` = `carte.prixRepli` ET la règle REPLI-QUOTA (un scan dont la réponse sert un repli compte dans le quota) — la règle est en place, mais `prixRepli` peut manquer sur une carte dont la fiche n'a aucun prix ; `achete-avant-jour` = `facturation.poche`, les analyses achetées sont débitées avant le quota du jour ; `empreinte` = le serveur attend le vecteur d'empreinte de l'extension, annoncé seulement si `V2_EMPREINTE_EXTENSION=1`, la configuration du modèle est valide ET l'index d'empreintes est chargé en mémoire (jamais le seul drapeau) ; `mesures-client` (contrat « calcul client ») = la réponse peut porter `complement` et `POST /api/identifier/mesures` existe, annoncé seulement si le jeton `empreinte` l'est ET `V2_MESURES_CLIENT=1` ET `V2_ORB_SERVEUR=0` ; `probable` (lot PROBABLE) = les cartes portent `niveau` et `probable` pour une requête `versionExtension >= 2.0.1`, annoncé seulement si `V2_PROBABLE=1` ET la configuration est valide. Les deux jetons de l'archive tombent à chaque réveil à froid du service, tant que l'archive n'est pas rechargée."
           }
         },
         "required": [

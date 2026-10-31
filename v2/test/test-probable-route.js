@@ -1,0 +1,214 @@
+'use strict';
+// PROBABLE (31/10) — la ROUTE et l'ARGENT, de bout en bout : un candidat qui se détache est servi `niveau: "probable"` (débité à l'affichage), seulement avec V2_PROBABLE=1 ET une extension >= 2.0.1 ;
+// éteint, ou extension plus ancienne, la réponse est celle d'avant (crédit réservé). Base EN MÉMOIRE du banc, chaîne héritée FABRIQUÉE, aucun réseau, aucun appel payant.
+const H = require('./_harnais');
+const mongoose = require('mongoose');
+const db = require('../db'); const M = require('../modeles'); const J = require('../comptes/jetons'); const Q = require('./_aide-quota');
+const { lireConfig } = require('../config'); const { valider } = require('../openapi/valider'); const SCHEMA = require('../openapi/openapi.v2.json');
+const path = require('path');
+const IMAGE = require(path.join(__dirname, '..', '..', 'verrou', 'charges.json')).charges.find(c => c.cellule === 'occidentale').imageUrl;
+const ref = n => ({ $ref: `#/components/schemas/${n}` });
+const base = { MONGODB_BASE: 'test_scratch', V2_HEBDO: '0' };
+const cfgOff = lireConfig(base), cfgOn = lireConfig({ ...base, V2_PROBABLE: '1', V2_PROBABLE_VECTEUR_EXIGE: '0', V2_PROBABLE_COSINUS_MIN: '0' }), cfgGarde = lireConfig({ ...base, V2_PROBABLE: '1' });      // cfgOn : la garde du cosinus ÉTEINTE (ce banc n'envoie aucun vecteur) ; cfgGarde : les VALEURS PAR DÉFAUT (vecteur exigé, cosinus 0,38)
+const ORIGINE = cfgOff.origines.extension;
+let nIp = 0; const ip = () => { nIp++; return { 'x-forwarded-for': `10.17.${Math.floor(nIp / 250)}.${nIp % 250 + 1}` }; };
+let nCle = 0; const cle = () => `banc-probable-${Date.now().toString(36)}-${++nCle}`;
+const raw = n => mongoose.connection.db.collection(n);
+const E = require('../chargeur/etat'); const { creerConstructeur } = require('../chargeur/version'); const VB = require('./_visuels-banc');
+const P1 = 897001, P2 = 897002, P3 = 897003, P4 = 897004, P5 = 897005, P6 = 897006, P7 = 897007, META5 = 992105, EXP = 992001, META1 = 992101, META2 = 992102, META3 = 992103, META4 = 992104;
+let ecartsContrat = 0;
+
+async function inst(essais = 30) {
+    const jeton = J.genererJeton(); const i = M.nouvelleInstallation({ jetonEmpreinte: J.empreinte(jeton), essais, libelle: 'banc' });
+    await db.col('installations').insertOne(i); return { i, jeton };
+}
+async function poster(url, jeton, version = '2.0.1') {
+    const r = await H.appel(url, '/api/identifier', { methode: 'POST', corps: { contrat: 2, imageUrls: [IMAGE], title: 'Pikachu', description: null, prixVinted: null, devise: null, marche: 'vinted.fr', versionExtension: version, langueInterface: 'fr' },
+        entetes: { origin: ORIGINE, ...ip(), authorization: `Bearer ${jeton}`, 'idempotency-key': cle() } });
+    if (r.json && r.json.success === true && r.json.contrat === 2) for (const c of (r.json.analyse && r.json.analyse.cartes) || []) if (c.niveau !== undefined && !coherent(c)) incoherents.push(c.index);
+    if (r.json && r.json.success === true && r.json.contrat === 2) { const v = valider(r.json, ref('ReponseAnalyse'), SCHEMA); if (!v.ok) { ecartsContrat++; console.log(`   écart de contrat : ${v.erreurs.slice(0, 3).map(e => `${e.chemin} ${e.message}`).join(' ; ')}`); } }
+    return r;
+}
+async function repondre(url, jeton, scanId, choix) {
+    const r = await H.appel(url, '/api/identifier/reponse', { methode: 'POST', corps: { scanId, carte: 0, choix }, entetes: { origin: ORIGINE, ...ip(), authorization: `Bearer ${jeton}`, 'idempotency-key': cle() } });
+    if (r.json && r.json.success === true) { const v = valider(r.json, ref('ReponseQuestion'), SCHEMA); if (!v.ok) { ecartsContrat++; console.log(`   écart de contrat (reponse) : ${v.erreurs.slice(0, 3).map(e => `${e.chemin} ${e.message}`).join(' ; ')}`); } }
+    return r;
+}
+const fs = require('fs');
+const coherent = c => !c || ((c.niveau === 'probable') === (c.probable != null) && (c.probable == null || (Array.isArray(c.candidats) && c.candidats.some(x => x.idProduct === c.probable.idProduct))));
+const incoherents = [];
+async function livre(x) {
+    const mv = await raw('mouvements').find({ installationId: x.i._id }).toArray();
+    return { net: mv.reduce((s, m) => s + m.delta, 0), ouverts: mv.filter(m => m.type === 'debit' && m.etat !== 'rembourse').map(m => m.etat), remboursements: mv.filter(m => m.type === 'remboursement').length, debits: mv.filter(m => m.type === 'debit' && m.delta === -1).length };
+}
+const PAYE = { net: -1, ouverts: ['debite'], remboursements: 0, debits: 1 }, RESERVE = { net: -1, ouverts: ['reserve'], remboursements: 0, debits: 1 }, RENDU = { net: 0, ouverts: [], remboursements: 1, debits: 1 };
+const analyseDe = scanId => raw('analyses').findOne({ _id: new mongoose.Types.ObjectId(scanId) });
+const norm = s => String(s).replace(/"scanId":"[0-9a-f]{24}"/g, '"scanId":"<id>"');
+const ids = c0 => c0.candidats.map(c => c.idProduct).sort();
+
+(async () => {
+    await H.ouvrirBancV2();
+    await Q.eviterMinuit();
+    process.env.MONGODB_BASE = 'test_scratch';
+    const { connecterMongo } = require('../../mongo-connexion');
+    await connecterMongo({ script: 'test-probable-route.js', ecrit: true });
+    db.brancher(mongoose.connection.db);
+    await M.creerIndex();
+    for (const c of ['catalogue_produits', 'numeros_cartes', 'guide_prix', 'codes_set', 'depense_modele']) await raw(c).deleteMany({});
+    await raw('codes_set').insertOne({ idExpansion: EXP, codeSet: 'PRB', apprisLe: new Date() });
+    // trois produits d'un même set, TROIS numéros : la lecture « 12/131 » en désigne un seul
+    for (const [id, meta, numero] of [[P1, META1, '12'], [P2, META2, '15'], [P3, META3, '12']]) {
+        await raw('catalogue_produits').insertOne({ idProduct: id, name: 'Pikachu', idExpansion: EXP, idMetacard: meta });
+        await raw('numeros_cartes').insertOne({ idProduct: id, idExpansion: EXP, numero, numeroUrl: `PRB${numero}`, codeSet: 'PRB', nomFr: 'Pikachu', slug: `Pikachu-PRB${numero}-${id}`, slugSet: 'Banc-Set', source: 'cardmarket', certitude: 'exacte' });
+        await raw('guide_prix').insertOne({ idProduct: id, avg: 1.1, low: 0.5, trend: 1.0, avg1: 1.0, avg7: 1.0, avg30: 1.1, guideDu: new Date('2026-10-04') });
+    }
+    // P5 / P6 : un GROUPE (même fiche, même visuel, marqueurs différents : jumbo / normale), même numéro
+    for (const id of [P5, P6]) {
+        await raw('catalogue_produits').insertOne({ idProduct: id, name: 'Pikachu', idExpansion: EXP, idMetacard: META5 });
+        await raw('numeros_cartes').insertOne({ idProduct: id, idExpansion: EXP, numero: '12', numeroUrl: 'PRB12', codeSet: 'PRB', nomFr: 'Pikachu', slug: `Pikachu-PRB12-${id}`, slugSet: 'Banc-Set', source: 'cardmarket', certitude: 'exacte' });
+        await raw('guide_prix').insertOne({ idProduct: id, avg: 1.1, low: 0.5, trend: 1.0, avg1: 1.0, avg7: 1.0, avg30: 1.1, guideDu: new Date('2026-10-04') });
+    }
+    // P7 : le MÊME dessin que P5 (même fiche, même visuel), mais le numéro 15 : la lecture « 12 » le CONTREDIT et désigne P5 (TOUR 3 : un groupe interdit le probable même ainsi)
+    await raw('catalogue_produits').insertOne({ idProduct: P7, name: 'Pikachu', idExpansion: EXP, idMetacard: META5 });
+    await raw('numeros_cartes').insertOne({ idProduct: P7, idExpansion: EXP, numero: '15', numeroUrl: 'PRB15', codeSet: 'PRB', nomFr: 'Pikachu', slug: `Pikachu-PRB15-${P7}`, slugSet: 'Banc-Set', source: 'cardmarket', certitude: 'exacte' });
+    await raw('guide_prix').insertOne({ idProduct: P7, avg: 1.1, low: 0.5, trend: 1.0, avg1: 1.0, avg7: 1.0, avg30: 1.1, guideDu: new Date('2026-10-04') });
+    // P4 : le même numéro que P1, MAIS aucune ligne de guide de prix (I2)
+    await raw('catalogue_produits').insertOne({ idProduct: P4, name: 'Pikachu', idExpansion: EXP, idMetacard: META4 });
+    await raw('numeros_cartes').insertOne({ idProduct: P4, idExpansion: EXP, numero: '12', numeroUrl: 'PRB12', codeSet: 'PRB', nomFr: 'Pikachu', slug: `Pikachu-PRB12-${P4}`, slugSet: 'Banc-Set', source: 'cardmarket', certitude: 'exacte' });
+    const b = creerConstructeur({ marquages: true });
+    for (const [id, meta, numero] of [[P1, META1, '12'], [P2, META2, '15'], [P3, META3, '12'], [P4, META4, '12']]) b.entree(VB.doc(id, { idMetacard: meta, numero, variante: 'normale', total: '131', vignette: { cle: `banc/probable-${id}.webp`, w: 300, h: 420 } }));
+    b.entree(VB.doc(P5, { idMetacard: META5, numero: '12', variante: 'normale', total: '131', vignette: { cle: 'banc/probable-groupe.webp', w: 300, h: 420 } }));
+    b.entree(VB.doc(P6, { idMetacard: META5, numero: '12', variante: 'jumbo', total: '131', vignette: { cle: 'banc/probable-groupe.webp', w: 300, h: 420 } }));
+    b.entree(VB.doc(P7, { idMetacard: META5, numero: '12', variante: 'jumbo', total: '131', vignette: { cle: 'banc/probable-groupe.webp', w: 300, h: 420 } }));
+    E.installer(b.finir());
+
+    const express = require('express'); const pret = require('../pret');
+    const { dansUnScan } = require('../../sources'); const { assembler } = require('../index');
+    let mode = 'probable';
+    const ETAT = { estimeIA: null, confianceIA: null, defautsVus: [], declareVendeur: null, declareCardmarket: null, retenu: null };
+    const cand = (id, numero) => ({ idProduct: id, nom: 'Pikachu', numero, set: 'Banc Set', prix: 1, photoUrl: null });
+    const enTete = { etat: ETAT, classement: [], guidePrix: {}, reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: null }, codeLangue: 2 };
+    const lecture = (numero, ids) => ({ numero, total: '131', setCode: 'PRB', symboleSet: null, langue: 'EN', attaque: null, attaqueConfiance: null, carteTcgdexId: null, totalHorsTailleDeSet: false, vivierIds: ids });
+    const chaine = async (req, res) => {
+        const sid = String(req.scanIdImpose);
+        if (mode === 'sur') return res.json({ success: true, scanId: sid, question: null, ...enTete, candidats: [cand(P1, '12')], carte: { idProduct: P1, nomProduit: 'Pikachu', nom: 'Pikachu', numero: '12', setCode: 'PRB', total: '131', rarete: null, langue: 'EN', ambigu: false }, lectureGarde: lecture('12', [P1]) });
+        // la chaîne POSE une question (réserve le crédit). 'probable' : la lecture « 12 » contredit P2 (15) mais PAS P3 (12) → non, voir plus bas ; 'un-contredit' : P1 et P2 seuls
+        if (mode === 'sans-prix') {      // I2 : le candidat désigné par la lecture (P4, numéro 12) n'a pas de guide de prix
+            await req.credit.v2.poserQuestion(req, { scanId: req.scanIdImpose, raison: 'egalite-sans-enjeu', candidats: [P4, P2] });
+            return res.json({ success: true, scanId: sid, question: { etat: 'en-attente', delaiHeures: 24 }, ...enTete, candidats: [cand(P4, '12'), cand(P2, '15')], carte: { idProduct: P4, nomProduit: 'Pikachu', nom: 'Pikachu', numero: '12', setCode: 'PRB', total: '131', rarete: null, langue: 'EN', ambigu: true }, lectureGarde: lecture('12', [P4, P2]) });
+        }
+        if (mode === 'groupe-lecture') {      // TOUR 3, I3 : le MÊME dessin (P5 / P7), la lecture « 12 » contredit P7 (15) et désigne P5 : sans l'interdiction du groupe, ce serait un probable par la lecture seule
+            await req.credit.v2.poserQuestion(req, { scanId: req.scanIdImpose, raison: 'egalite-sans-enjeu', candidats: [P5, P7] });
+            return res.json({ success: true, scanId: sid, question: { etat: 'en-attente', delaiHeures: 24 }, ...enTete, candidats: [cand(P5, '12'), cand(P7, '15')], carte: { idProduct: P5, nomProduit: 'Pikachu', nom: 'Pikachu', numero: '12', setCode: 'PRB', total: '131', rarete: null, langue: 'EN', ambigu: true }, lectureGarde: lecture('12', [P5, P7]) });
+        }
+        if (mode === 'groupe') {      // I3 : une paire jumbo/normale du même dessin, que la lecture ne sépare pas (même numéro 12)
+            await req.credit.v2.poserQuestion(req, { scanId: req.scanIdImpose, raison: 'egalite-sans-enjeu', candidats: [P5, P6] });
+            return res.json({ success: true, scanId: sid, question: { etat: 'en-attente', delaiHeures: 24 }, ...enTete, candidats: [cand(P5, '12'), cand(P6, '12')], carte: { idProduct: P5, nomProduit: 'Pikachu', nom: 'Pikachu', numero: '12', setCode: 'PRB', total: '131', rarete: null, langue: 'EN', ambigu: true }, lectureGarde: lecture('12', [P5, P6]) });
+        }
+        const [a, b2, l] = mode === 'probable' ? [P1, P2, lecture('12', [P1, P2])] : mode === 'trois' ? [P1, P2, lecture('12', [P1, P2, P3])] : [P1, P3, lecture('12', [P1, P3])];     // 'sans-signal' : P1 et P3 portent le MÊME numéro
+        const liste = mode === 'trois' ? [P1, P2, P3] : [a, b2];
+        await req.credit.v2.poserQuestion(req, { scanId: req.scanIdImpose, raison: 'egalite-sans-enjeu', candidats: liste });
+        return res.json({ success: true, scanId: sid, question: { etat: 'en-attente', delaiHeures: 24 }, ...enTete, candidats: liste.map(i => cand(i, i === P2 ? '15' : '12')), carte: { idProduct: a, nomProduit: 'Pikachu', nom: 'Pikachu', numero: '12', setCode: 'PRB', total: '131', rarete: null, langue: 'EN', ambigu: true }, lectureGarde: l });
+    };
+    const monter = async cfgApp => {
+        const app = express(); app.set('trust proxy', true); app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
+        pret.armer(require('../modeles').verifierIndex);
+        app.use(assembler([require('../argent/monter'), require('../identifier/monter')], cfgApp, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), voisinsEmpreinte: async () => ({ ok: false, code: 'muette' }) }));
+        return H.serveur(app);
+    };
+    const scan = async (s, m, version) => { mode = m; const x = await inst(); const r = await poster(s.url, x.jeton, version); const j = r.json || {}; return { ...x, r, j, scanId: j.scanId, c0: j.analyse && j.analyse.cartes[0] }; };
+    const sOff = await monter(cfgOff), sOn = await monter(cfgOn);
+
+    // ── 1. ÉTEINT (défaut) : la réponse est celle d'avant — ni niveau ni probable, crédit RÉSERVÉ, rien de plus dans `analyses`
+    const off = await scan(sOff, 'probable', '2.0.1');
+    H.v('1a. V2_PROBABLE éteint, extension 2.0.1 : la question d\'avant (a-trancher), crédit RÉSERVÉ, ni `niveau` ni `probable`', [off.c0.statut, ids(off.c0), await livre(off), 'niveau' in off.c0, 'probable' in off.c0, off.j.facturation.reserve, off.j.facturation.debite], ['a-trancher', [P1, P2], RESERVE, false, false, 1, 0]);
+    H.v('   `analyses` ne porte aucun champ probable', JSON.stringify((await analyseDe(off.scanId)).cartes[0]).includes('probable'), false);
+
+    // ── 2. ALLUMÉ + extension >= 2.0.1 : le probable
+    const on = await scan(sOn, 'probable', '2.0.1');
+    H.v('2a. allumé, 2.0.1, la lecture contredit l\'autre candidat : niveau probable, probable { P1, aConfirmer }, carte et prixLive null, les deux candidats gardés', [on.c0.statut, on.c0.niveau, on.c0.probable, on.c0.carte, on.c0.prixLive, ids(on.c0)], ['a-trancher', 'probable', { idProduct: P1, aConfirmer: true }, null, null, [P1, P2]]);
+    H.v('   facturation : débité à l\'affichage (debite 1, reserve 0), un seul débit, le grand livre « debite »', [on.j.facturation.debite, on.j.facturation.reserve, on.j.facturation.motif, await livre(on)], [1, 0, 'question', PAYE]);
+    const anOn = await analyseDe(on.scanId), qOn = await raw('questions_v2').findOne({ _id: `${on.scanId}:0` });
+    H.v('   surveillance interne : analyses.cartes[0].probable = { idProduct, signal }, jamais servi sous cette forme ; la question est marquée probable', [anOn.cartes[0].probable, qOn.probable, qOn.etat], [{ idProduct: P1, signal: 'A' }, true, 'en-attente']);
+    H.v('   pas de verdict d\'affaire ni de fourchette sur la carte probable', [on.c0.verdictAffiche ?? null, on.c0.fourchette ?? null, 'verdict' in on.c0], [null, null, false]);
+    const sur = await scan(sOn, 'sur', '2.0.1');
+    H.v('2b. un SÛR : niveau sur, probable null ; facturation affirmée', [sur.c0.statut, sur.c0.niveau, sur.c0.probable, sur.j.facturation.motif, await livre(sur)], ['identifiee', 'sur', null, 'affirmee', PAYE]);
+    const nul = await scan(sOn, 'sans-signal', '2.0.1');
+    H.v('2c. deux candidats au MÊME numéro (la lecture ne contredit pas le rival) : niveau question, probable null, crédit RÉSERVÉ', [nul.c0.statut, nul.c0.niveau, nul.c0.probable, await livre(nul)], ['a-trancher', 'question', null, RESERVE]);
+    const tr = await scan(sOn, 'trois', '2.0.1');
+    H.v('2d. trois candidats dont un seul n\'est PAS contredit... P3 porte le même numéro que P1 : pas de probable', [tr.c0.niveau, tr.c0.probable, await livre(tr)], ['question', null, RESERVE]);
+
+    // ── 3. ALLUMÉ + extension plus ancienne : la réponse est celle d'avant, OCTET POUR OCTET (même octets que le serveur éteint)
+    const vieux = await scan(sOn, 'probable', '2.0.0');
+    H.v('3a. allumé mais extension 2.0.0 : ni niveau ni probable, crédit RÉSERVÉ, rien d\'écrit en probable', [vieux.c0.statut, 'niveau' in vieux.c0, 'probable' in vieux.c0, await livre(vieux), (await raw('questions_v2').findOne({ _id: `${vieux.scanId}:0` })).probable ?? false], ['a-trancher', false, false, RESERVE, false]);
+    const surOff = await scan(sOff, 'sur', '2.0.1');
+    // 3b : identique OCTET POUR OCTET à la référence PRISE SUR 012940a7 (le code d'avant le lot), pas seulement à un autre chemin du même code. Référence : `RM_PROBABLE_REFERENCE=ecrire RM_PROBABLE_REFERENCE_FICHIER=<f> node v2/test/test-probable-route.js` lancé sur 012940a7.
+    const cle3 = x => norm(JSON.stringify({ analyse: x.j.analyse, facturation: x.j.facturation }));
+    if (process.env.RM_PROBABLE_REFERENCE === 'ecrire') {
+        fs.writeFileSync(process.env.RM_PROBABLE_REFERENCE_FICHIER, JSON.stringify({ commit: '012940a7', probable201: cle3(off), probable200: cle3(vieux), sur201: cle3(surOff) }, null, 1));
+        console.log('référence écrite'); await mongoose.disconnect(); await H.arreterBanc(); process.exit(0);
+    }
+    const REF = JSON.parse(fs.readFileSync(path.join(__dirname, '_reference-012940a7-probable.json'), 'utf8'));
+    H.v('3b. éteint (2.0.1), allumé + 2.0.0, et un sûr éteint : la réponse (analyse + facturation) est identique OCTET POUR OCTET à celle de 012940a7', [cle3(off) === REF.probable201, cle3(vieux) === REF.probable200, cle3(surOff) === REF.sur201], [true, true, true]);
+    H.v('   le détecteur sait dire NON : la réponse du serveur ALLUMÉ à 2.0.1 n\'est PAS celle de 012940a7', cle3(on) === REF.probable201, false);
+    // ── 4. éteint + extension récente et sûr : aucun niveau non plus
+    H.v('4. éteint : même un sûr ne porte pas `niveau`', 'niveau' in surOff.c0, false);
+
+    // ── 5. LES RÉPONSES : confirmer ne débite pas de plus ; « aucune » rend (constats) ; « ne-sait-pas » ne rend pas ; jamais deux débits
+    const a1 = await scan(sOn, 'probable', '2.0.1');
+    const ok = await repondre(sOn.url, a1.jeton, a1.scanId, (await raw('questions_v2').findOne({ _id: `${a1.scanId}:0` })).choix.find(c => c.idProduct === P1).id);
+    H.v('5a. confirmer le probable : identifiee P1, debite 1, un seul débit, rien de rendu', [ok.json.carte.statut, ok.json.carte.carte.idProduct, ok.json.facturation.debite, await livre(a1)], ['identifiee', P1, 1, PAYE]);
+    H.v('   probableConfirme = true (interne)', (await analyseDe(a1.scanId)).cartes[0].probableConfirme, true);
+    const a2 = await scan(sOn, 'probable', '2.0.1');
+    const autre = await repondre(sOn.url, a2.jeton, a2.scanId, (await raw('questions_v2').findOne({ _id: `${a2.scanId}:0` })).choix.find(c => c.idProduct === P2).id);
+    H.v('5b. choisir l\'autre candidat : identifiee P2, un seul débit ; probableConfirme = false', [autre.json.carte.carte.idProduct, await livre(a2), (await analyseDe(a2.scanId)).cartes[0].probableConfirme], [P2, PAYE, false]);
+    const a3 = await scan(sOn, 'probable', '2.0.1');
+    const aucune = await repondre(sOn.url, a3.jeton, a3.scanId, 'aucune');
+    H.v('5c. « aucune » : introuvable, REMBOURSÉ (rembourse true), un débit, un remboursement ; probableConfirme = false', [aucune.json.carte.statut, aucune.json.facturation.rembourse, await livre(a3), (await analyseDe(a3.scanId)).cartes[0].probableConfirme], ['introuvable', true, RENDU, false]);
+    const a4 = await scan(sOn, 'probable', '2.0.1');
+    const nsp = await repondre(sOn.url, a4.jeton, a4.scanId, 'ne-sait-pas');
+    H.v('5d. « ne-sait-pas » : PAS de remboursement (debite 1), le débit reste acquis', [nsp.json.facturation.debite, nsp.json.facturation.rembourse, await livre(a4)], [1, false, PAYE]);
+    const rej = await repondre(sOn.url, a1.jeton, a1.scanId, (await raw('questions_v2').findOne({ _id: `${a1.scanId}:0` })).choix.find(c => c.idProduct === P1).id);
+    H.v('5e. rejeu de la même réponse : 200, toujours un seul débit', [rej.statut, await livre(a1)], [200, PAYE]);
+
+    // ── 6. /ping annonce le jeton `probable` seulement allumé
+    // ── 5b. TOUR 2 : la garde par DÉFAUT (vecteur exigé) : sans vecteur de l'extension, la même question n'est PAS un probable (crédit réservé) ; la garde éteinte, elle l'est
+    const sGarde = await monter(cfgGarde);
+    const gd = await scan(sGarde, 'probable', '2.0.1');
+    H.v('5b. V2_PROBABLE=1 aux valeurs par défaut (vecteur exigé, cosinus min 0,38) : sans vecteur, la question reste une question, crédit RÉSERVÉ ; défauts lus', [cfgGarde.probableVecteurExige, cfgGarde.probableCosinusMin, gd.c0.niveau, gd.c0.probable, await livre(gd)], [true, 0.38, 'question', null, RESERVE]);
+    await sGarde.fermer();
+    // ── 6. I3 : une paire jumbo/normale (même dessin, la lecture ne les sépare pas) n'est JAMAIS un probable, quelle que soit la combinaison des drapeaux des marqueurs
+    for (const [g, j] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+        const sg = await monter(lireConfig({ ...base, V2_PROBABLE: '1', V2_GARDE_MARQUEURS: String(g), V2_JUMBO_TITRE: String(j) }));
+        const x = await scan(sg, 'groupe', '2.0.1');
+        H.v(`6. I3 : V2_GARDE_MARQUEURS=${g} V2_JUMBO_TITRE=${j} : la paire jumbo/normale reste une question (niveau question, crédit RÉSERVÉ), jamais un probable`, [x.c0.statut, x.c0.niveau, x.c0.probable, await livre(x)], ['a-trancher', 'question', null, RESERVE]);
+        await sg.fermer();
+    }
+    // ── 6b. TOUR 3 : I3 INCONDITIONNEL — les gardes du cosinus ÉTEINTES (vecteur non exigé, cosinus minimal 0) et la lecture qui SÉPARE les deux versions d'un même dessin : jamais un probable, quelle que soit la combinaison des drapeaux des marqueurs
+    for (const [g, j] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+        const sg = await monter(lireConfig({ ...base, V2_PROBABLE: '1', V2_PROBABLE_VECTEUR_EXIGE: '0', V2_PROBABLE_COSINUS_MIN: '0', V2_GARDE_MARQUEURS: String(g), V2_JUMBO_TITRE: String(j) }));
+        const x = await scan(sg, 'groupe-lecture', '2.0.1'), t = await scan(sg, 'probable', '2.0.1');
+        H.v(`6b. TOUR 3 : gardes du cosinus ouvertes, V2_GARDE_MARQUEURS=${g} V2_JUMBO_TITRE=${j} : une paire de même dessin que la lecture sépare reste une question (jamais un probable, crédit RÉSERVÉ) ; le témoin (deux dessins distincts) est un probable`, [x.c0.niveau, x.c0.probable, await livre(x), t.c0.niveau], ['question', null, RESERVE, 'probable']);
+        await sg.fermer();
+    }
+    // ── 7. I2 : le candidat désigné n'a AUCUN prix de guide : pas de probable, la question d'avant, crédit RÉSERVÉ
+    const sp = await scan(sOn, 'sans-prix', '2.0.1');
+    H.v('7. I2 : le probable désigné (P4) sans guide de prix : niveau question, pas de probable, crédit RÉSERVÉ (jamais un débit sans prix montré)', [sp.c0.niveau, sp.c0.probable, ids(sp.c0), await livre(sp)], ['question', null, [P2, P4], RESERVE]);
+    // ── 8. M2 : l'écriture de `analyses` échoue APRÈS le débit d'un probable : le crédit est RENDU (jamais un 503 sans remboursement)
+    const dbo = mongoose.connection.db, origColl = dbo.collection.bind(dbo);       // db.js::col passe par cet objet ; routes.js a capturé `col` : on casse la collection elle-même
+    dbo.collection = (n, ...a) => { const c = origColl(n, ...a); return /analyses$/.test(String(n)) ? new Proxy(c, { get: (t, k) => (k === 'insertOne' ? async () => { throw Object.assign(new Error('panne'), { code: 'BANC' }); } : (typeof t[k] === 'function' ? t[k].bind(t) : t[k])) }) : c; };
+    const pa = await scan(sOn, 'probable', '2.0.1'); delete dbo.collection;
+    const qa = await raw('questions_v2').findOne({ _id: `${pa.scanId}:0` });
+    H.v('8. M2 : écriture `analyses` en panne après le débit d\'un probable : la réponse est servie, le crédit est RENDU (net 0, un remboursement), la question est close', [pa.r.statut, await livre(pa), qa && qa.etat], [200, RENDU, 'remboursee']);
+    H.v('   TOUR 2 : la réponse du scan dit ce que dit le grand livre APRÈS l\'opération (debite 0, rembourse true), jamais `debite 1` ; et plus de probable servi sur une question close', [pa.j.facturation.debite, pa.j.facturation.reserve, pa.j.facturation.rembourse, pa.c0.niveau, pa.c0.probable], [0, 0, true, 'question', null]);
+    // ── 9. M3 : l'invariant du contrat (niveau probable ⇔ probable non nul ; probable.idProduct ∈ candidats) sur TOUTES les réponses, et le détecteur sait dire NON
+    H.v('9. M3 : tout ce qui a été servi respecte « niveau probable ⇔ probable non nul » et « probable.idProduct ∈ candidats »', incoherents, []);
+    const fautes = [{ niveau: 'probable', probable: null, candidats: [] }, { niveau: 'question', probable: { idProduct: 1, aConfirmer: true }, candidats: [{ idProduct: 1 }] }, { niveau: 'probable', probable: { idProduct: 9, aConfirmer: true }, candidats: [{ idProduct: 1 }] }];
+    H.v('   le détecteur sait dire NON sur trois fausses cartes, et accepte les justes', [...fautes.map(c => coherent(c)), coherent({ niveau: 'probable', probable: { idProduct: 1, aConfirmer: true }, candidats: [{ idProduct: 1 }] }), coherent({ niveau: 'question', probable: null, candidats: [] })], [false, false, false, true, true]);
+    // (le jeton de /ping est tenu par test-capacites-ping.js : cet assemblage ne monte pas /ping)
+
+    for (const s of [sOff, sOn]) await s.fermer();
+    H.v('contrat : toutes les réponses valident le schéma publié', ecartsContrat, 0);
+    await mongoose.disconnect(); await H.arreterBanc();
+    H.bilan();
+})().catch(async e => { console.error('❌', e); try { await H.arreterBanc(); } catch (_) { } process.exit(1); });
