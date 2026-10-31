@@ -697,6 +697,7 @@ try {
     //    la section 8 le rejoue sur des MUTANTS de l'outil, qui doivent le faire rougir.
     const scenarioD = (Tm) => {
         const res = {};
+        const horsTemp = [];
         const base = fs.mkdtempSync(path.join(TMP, 'rm-retrait-dbase-'));
         const bureau = fs.mkdtempSync(path.join(TMP, 'rm-retrait-bureau-')), ancien = fs.mkdtempSync(path.join(TMP, 'rm-retrait-ancien-'));
         try {
@@ -742,9 +743,14 @@ try {
             // sans l'option bureau (donc le vrai bureau, absent du banc) : le même nom est refusé
             const sans = path.join(bureau, 'pokemon-proxy-v2-nb'); ajouter(sans); const o2 = o(); delete o2.bureau; const rs = Tm.retirer(sans, o2); res.sansOptionBureau = rs.code !== 0 && existe(sans);
             // bureau de banc hors du Temp : refusé (aucune zone d), le worktree reste
-            const rh = Tm.retirer(sans, o({ bureau: path.dirname(TMP) })); res.bureauHorsTemp = rh.code !== 0 && existe(sans);
+            const hb = fs.mkdtempSync(path.join(path.dirname(TMP), 'rm-retrait-hbureau-')); horsTemp.push(hb);
+            const hw = path.join(hb, 'pokemon-proxy-v2-ht'); ajouter(hw);   // ADMISSIBLE si ce bureau était admis : seule la règle « sous le Temp » le refuse
+            const rh = Tm.retirer(hw, o({ bureau: hb })); res.bureauHorsTemp = rh.code !== 0 && existe(hw) && /bureau de banc refusé/.test(String(rh.message));
+            const ha = fs.mkdtempSync(path.join(path.dirname(TMP), 'rm-retrait-hancien-')); horsTemp.push(ha);
+            const hn = path.join(ha, 'pokemon-proxy-v2-hn'); ajouter(hn); const hnn = path.join(bureau, 'pokemon-proxy-v2-hn'); fs.renameSync(hn, hnn);   // déplacée vers un bureau valable, inscrite sous un ancien bureau hors Temp
+            const rha = Tm.retirer(hnn, o({ ancienBureau: ha })); res.ancienHorsTemp = rha.code !== 0 && existe(hnn) && /ancien bureau de banc refusé/.test(String(rha.message));
             // option bureau SANS racine de banc (production) : refusée
-            const rp = Tm.retirer(sans, { executer: true, bureau, depots: [depot], sortie: muet }); res.bureauSansBanc = rp.code !== 0 && existe(sans);
+            const rp = Tm.retirer(sans, { executer: true, bureau, depots: [depot], sortie: muet }); res.bureauSansBanc = rp.code !== 0 && existe(sans) && /bureau de banc sans racine de banc/.test(String(rp.message));
             // ---- copies DÉPLACÉES (le cas réel) : inscrites par git sous l'ANCIEN bureau, renommées vers le nouveau ----
             const deplacer = (nomAncien, nomNouveau, parentAncien = ancien) => { const a = path.join(parentAncien, nomAncien), nv = path.join(bureau, nomNouveau); ajouter(a); fs.renameSync(a, nv); return { ancienChemin: a, nv }; };
             const gone = deplacer('pokemon-proxy-v2-gone', 'pokemon-proxy-v2-gone'); fs.rmSync(gone.nv, { recursive: true, force: true });   // inscription « prunable » qui doit SURVIVRE (aucun prune)
@@ -766,16 +772,45 @@ try {
             res.deplaceAncienIntact = existe(m3a);
             const m4 = deplacer('pokemon-proxy-v2-m4', 'pokemon-proxy-v2-m4'); const o4 = o(); delete o4.ancienBureau; const r4 = Tm.retirer(m4.nv, o4); res.deplaceSansAncienOption = r4.code !== 0 && existe(m4.nv);
             const rr = path.join(ancien, 'pokemon-proxy-v2-r'), rrn = path.join(ROOT, 'wr' + (++n), 'pokemon-proxy-v2-r'); fs.mkdirSync(path.dirname(rrn)); ajouter(rr); fs.renameSync(rr, rrn); refuse('deplaceHorsBureau', rrn);   // déplacée sous la racine (zone a) : l'exception ne vaut qu'au bureau
+            // reprise d'une quarantaine d'une copie DÉPLACÉE : le premier passage échoue à l'instrument (la copie reste en quarantaine), le second la finit
+            const dq = deplacer('pokemon-proxy-v2-rq', 'pokemon-proxy-v2-rq');
+            const rq1 = Tm.retirer(dq.nv, o({ instrumentReanalyse: () => ({ status: 1, stdout: '' }) }));
+            const qs = existe(path.dirname(dq.nv)) ? quarantaines(dq.nv) : [];
+            res.repriseDeplacee1 = rq1.code === 3 && qs.length === 1 && !existe(dq.nv);
+            const rq2 = qs.length === 1 ? Tm.retirer(qs[0], o()) : { code: 99 };
+            res.repriseDeplacee2 = rq2.code === 0 && quarantaines(dq.nv).length === 0 && !lp().includes(fw(dq.ancienChemin));
+            // l'ancien chemin réapparaît APRÈS le contrôle d'entrée : le répertoire d'administration n'est PAS retiré (alerte, code 4)
+            const dr = deplacer('pokemon-proxy-v2-ra', 'pokemon-proxy-v2-ra');
+            const adminRa = path.join(depot, '.git', 'worktrees', 'pokemon-proxy-v2-ra');
+            const rra = Tm.retirer(dr.nv, o({ apresInstrument: () => { fs.mkdirSync(dr.ancienChemin); } }));
+            res.ancienReapparu = rra.code === 4 && /ALERTE-ancien-reapparu/.test(String(rra.issue)) && existe(adminRa);
             res.temoinsFin = intact(temoin, temoin2, apports) && JSON.stringify(photo(apports)) === JSON.stringify(avA);
         } finally {
-            for (const d of [bureau, ancien, base]) { try { delier(d); fs.rmSync(d, { recursive: true, force: true }); } catch { /* rien */ } }
+            for (const d of [bureau, ancien, base, ...horsTemp]) { try { delier(d); fs.rmSync(d, { recursive: true, force: true }); } catch { /* rien */ } }
         }
         return res;
     };
     {
         const res = scenarioD(T);
-        const attendu = ['accepte', 'cibles', 'apportsIntacts', 'gitNeListePlus', 'dossierNonEnregistre', 'enregistreIgnoreDesDepots', 'nomPokemonProxy', 'nomApiV2', 'sansSuffixe', 'suffixeVide', 'soulignement', 'point', 'labo', 'prefixeEtendu', 'petitEnfant', 'traversees', 'logoDirect', 'apportsDedans', 'sale', 'plan', 'voisinQuelconque', 'bureauLuiMeme', 'sansOptionBureau', 'bureauHorsTemp', 'bureauSansBanc', 'deplacePlan', 'deplaceAccepte', 'deplaceCibles', 'deplaceAutresInscriptions', 'deplaceNomDifferent', 'deplaceMauvaisParent', 'deplaceAncienExiste', 'deplaceAncienIntact', 'deplaceSansAncienOption', 'deplaceHorsBureau', 'temoinsFin'];
+        const attendu = ['accepte', 'cibles', 'apportsIntacts', 'gitNeListePlus', 'dossierNonEnregistre', 'enregistreIgnoreDesDepots', 'nomPokemonProxy', 'nomApiV2', 'sansSuffixe', 'suffixeVide', 'soulignement', 'point', 'labo', 'prefixeEtendu', 'petitEnfant', 'traversees', 'logoDirect', 'apportsDedans', 'sale', 'plan', 'voisinQuelconque', 'bureauLuiMeme', 'sansOptionBureau', 'bureauHorsTemp', 'bureauSansBanc', 'deplacePlan', 'deplaceAccepte', 'deplaceCibles', 'deplaceAutresInscriptions', 'deplaceNomDifferent', 'deplaceMauvaisParent', 'deplaceAncienExiste', 'deplaceAncienIntact', 'deplaceSansAncienOption', 'deplaceHorsBureau', 'ancienHorsTemp', 'repriseDeplacee1', 'repriseDeplacee2', 'ancienReapparu', 'temoinsFin'];
         for (const k of attendu) vrai(`7. (d) ${k}`, res[k] === true);
+        // 7 bis. une constante n'est sûre que si ni elle ni un parent n'est un lien (relecture 1, Important)
+        const unitCS = (Tm) => {
+            const r = {}; const cs = fs.mkdtempSync(path.join(TMP, 'rm-retrait-cs-'));
+            try {
+                const vraie = path.join(cs, 'vraie', 'archives'); fs.mkdirSync(vraie, { recursive: true });
+                const cible = path.join(cs, 'cible'); fs.mkdirSync(path.join(cible, 'archives'), { recursive: true });
+                jonction(cible, path.join(cs, 'lien'));
+                const f = path.join(cs, 'f.txt'); fs.writeFileSync(f, 'x');
+                r.ordinaire = Tm.constanteSure(vraie) !== null && Tm.constanteSure(vraie).toLowerCase() === vraie.toLowerCase();
+                r.jonction = Tm.constanteSure(path.join(cs, 'lien')) === null;
+                r.parentJonction = Tm.constanteSure(path.join(cs, 'lien', 'archives')) === null;
+                r.absent = Tm.constanteSure(path.join(cs, 'absent')) === null;
+                r.fichier = Tm.constanteSure(f) === null;
+            } finally { try { delier(cs); fs.rmSync(cs, { recursive: true, force: true }); } catch { /* rien */ } }
+            return r;
+        };
+        for (const [k, b] of Object.entries(unitCS(T))) vrai(`7 bis. constanteSure : ${k}`, b);
         // 8. MUTANTS : chaque mutation de l'outil doit faire rougir au moins une vérification du scénario (d)
         const src = fs.readFileSync(require.resolve('../../outils/retirer-worktree'), 'utf8');
         const mutations = [
@@ -783,6 +818,12 @@ try {
             ['déplacement : ne compare plus le nom à l\'ancien', "|| cle(path.basename(ins)) !== cle(path.basename(cible))", ""],
             ['déplacement : ne compare plus l\'ancien parent', "cle(parent) !== cle(ancien) ||", ""],
             ['déplacement : accepte un ancien chemin encore présent', "if (lstatOuNull(ins)) throw", "if (false) throw"],
+            ['constante : plus de contrôle des liens', "if (!s || s.isSymbolicLink() || !s.isDirectory()) return null;", "if (!s) return null;"],
+            ['reprise : oublie l\'inscription du journal', "inscrit = reprise.inscrit || reprise.origine;", "inscrit = reprise.origine;"],
+            ['bureau de banc : plus « sous le Temp »', "if (!sousStrict(tmp, b)) throw", "if (false) throw"],
+            ['ancien bureau de banc : plus « sous le Temp »', "if (!sousStrict(tmp, a)) throw", "if (false) throw"],
+            ['bureau sans racine de banc admis', "if (bureauDonne || ancienDonne) throw", "if (false) throw"],
+            ['ancien chemin non relu avant l\'administration', "cle(inscrit) !== cle(origine) && lstatOuNull(inscrit))", "false)"],
             ['déplacement : admis hors du bureau', "if (zone !== 'bureau' || !ancien ||", "if (!ancien ||"],
             ['élargit le motif (préfixe seul)', "/^pokemon-proxy-v2-[a-z0-9-]+$/i", "/^pokemon-proxy-/i"],
             ['élargit le motif (sans ancre de fin)', "/^pokemon-proxy-v2-[a-z0-9-]+$/i", "/^pokemon-proxy-v2-[a-z0-9-]+/i"],
@@ -795,7 +836,7 @@ try {
             const f = path.join(ROOT, `mutant-${++n}.js`);
             fs.writeFileSync(f, src.replace(de, vers));
             let rouge = false, qui = '';
-            try { const rm = scenarioD(require(f)); const ko2 = attendu.filter(k => rm[k] !== true); rouge = ko2.length > 0; qui = ko2.join(','); } catch (e) { rouge = false; qui = 'EXCEPTION ' + e.message; }
+            try { const mod = require(f); const rm = scenarioD(mod); const ucs = unitCS(mod); const ko2 = attendu.filter(k => rm[k] !== true).concat(Object.keys(ucs).filter(k => ucs[k] !== true)); rouge = ko2.length > 0; qui = ko2.join(','); } catch (e) { rouge = false; qui = 'EXCEPTION ' + e.message; }
             vrai(`8. mutant « ${nom} » : le banc rougit sur une vérification précise (${qui})`, rouge);
         }
     }

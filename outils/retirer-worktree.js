@@ -109,6 +109,22 @@ function estEnfantBureau(r, bureau) {
     return cle(path.dirname(r)) === cle(bureau) && RE_BUREAU.test(q ? q[1] : nom);
 }
 
+// Une CONSTANTE de chemin n'est sûre que si elle désigne ce qu'elle dit : ni elle ni aucun de ses parents n'est un lien, et sa forme réelle lui est égale.
+// Sinon (une jonction posée en chemin, un nom court) la constante ne vaut plus : la garde dit « ce que la constante DÉSIGNE », pas « ce qu'elle résout ».
+// Rend le chemin réel, ou null.
+function constanteSure(chemin) {
+    const abs = path.resolve(chemin), racineDisque = path.parse(abs).root;
+    const morceaux = path.relative(racineDisque, abs).split(path.sep).filter(Boolean);
+    let courant = racineDisque;
+    for (const m of morceaux) {
+        courant = path.join(courant, m);
+        const s = lstatOuNull(courant);
+        if (!s || s.isSymbolicLink() || !s.isDirectory()) return null;
+    }
+    let r; try { r = reel(abs); } catch { return null; }
+    return cle(r) === cle(abs) ? r : null;
+}
+
 // La racine permise : la constante, ou (BANCS SEULEMENT) une racine STRICTEMENT sous le Temp écrit en dur, qui porte le marqueur du banc, avec un
 // journal à elle sous ce même Temp. Un journal de banc sans racine de banc, ou l'inverse, est refusé.
 // Le bureau (cas d) : la constante ; en banc, `opts.bureau` (strictement sous le Temp écrit en dur) ou aucun ; hors banc, `opts.bureau` est refusé.
@@ -119,8 +135,9 @@ function resoudreRacine(opts) {
     if (!banc) {
         if (opts.journal) throw new Refus(1, 'refus-entree', 'un journal de banc sans racine de banc est refusé');
         if (bureauDonne || ancienDonne) throw new Refus(1, 'refus-entree', 'un bureau de banc sans racine de banc est refusé');
-        let r; try { r = reel(RACINE_PAR_DEFAUT); } catch { throw new Refus(1, 'refus-entree', 'la racine permise est absente de ce poste'); }
-        let b = null; try { b = reel(BUREAU_PAR_DEFAUT); } catch { /* dossier d'archives absent de ce poste : aucun cas (d) */ }
+        const r = constanteSure(RACINE_PAR_DEFAUT);
+        if (!r) throw new Refus(1, 'refus-entree', 'la racine permise est absente de ce poste, ou elle (ou un de ses parents) est un lien : refusé');
+        const b = constanteSure(BUREAU_PAR_DEFAUT);   // null (aucun cas d) si le dossier d'archives est absent ou si un lien le détourne
         let a = null; try { a = reel(ANCIEN_BUREAU_PAR_DEFAUT); } catch { /* bureau absent : aucune copie déplacée admise */ }
         return { racine: r, journal: JOURNAL_PAR_DEFAUT, banc: false, depots: DEPOTS_PAR_DEFAUT, bureau: b, ancienBureau: a };
     }
@@ -620,6 +637,8 @@ function retirer(dossierBrut, opts = {}) {
         // 9. worktree : retrait du SEUL répertoire d'administration de la cible (même moteur), puis git ne doit plus la lister
         //    ET doit lister à l'identique tous les autres worktrees d'avant. Plus aucun `git worktree prune` : il élaguerait aussi les autres.
         if (worktree) {
+            if (cle(inscrit) !== cle(origine) && lstatOuNull(inscrit))
+                throw new Refus(4, 'ALERTE-ancien-reapparu', `🚨 l'ancien chemin inscrit (${inscrit}) est réapparu pendant le retrait : je ne retire PAS le répertoire d'administration, qui est peut-être celui d'un worktree vivant ; la copie est déjà supprimée`);
             if (adminACibler && lstatOuNull(adminACibler)) {
                 verifierAdmin(adminACibler, inscrit);
                 supprimerEntree(adminACibler, path.dirname(adminACibler), { liens: [] }, {});
@@ -661,5 +680,5 @@ function main(argv, env) {
     return retirer(dossiers[0], opts).code;
 }
 
-module.exports = { retirer, trouverGit, inventaire, instantane, verifierEntree, retirerLien, reanalyse, estDossierApports, RACINE_PAR_DEFAUT, MARQUEUR_BANC, JETON_BANC };
+module.exports = { constanteSure, retirer, trouverGit, inventaire, instantane, verifierEntree, retirerLien, reanalyse, estDossierApports, RACINE_PAR_DEFAUT, MARQUEUR_BANC, JETON_BANC };
 if (require.main === module) process.exitCode = main(process.argv.slice(2), process.env);
