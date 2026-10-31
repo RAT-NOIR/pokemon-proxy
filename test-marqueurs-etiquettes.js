@@ -83,6 +83,21 @@ verifier('Yellow A : seul un produit « [Staff] » porte le tampon au second mar
 const deuxPL = [...tous, JT.lireTcg({ productId: 82, name: 'Max Potion - 128a/145 (Pokemon League)', number: '128a/145' })];
 verifier('Yellow A : deux produits du second marché concordent → refus (ambigu)', raisons(M.planYellowA({ ...baseYA(), produits: [ya(100, 'Max Potion', '128a', 'pokemon-league')], lusYellowA: deuxPL })), ['plusieurs-produits-marche']);
 
+// ── SHADOWLESS (décision de l'éditeur du 31/10) : source 1 = l'étiquette « Shadowless » lue sur la vignette (liste fermée du 27/10), source 2 = la même carte dans le groupe « Base Set (Shadowless) » du second marché
+const cmB = { produits: new Map([[600, cmP(600, 'Alakazam', '1', 'Alakazam-V2-BS1', 1, 'Base-Set')], [601, cmP(601, 'Alakazam', '1', 'Alakazam-V1-BS1', 1, 'Base-Set')], [602, cmP(602, 'Chansey', '3', 'Chansey-V2-BS3', 1, 'Base-Set')], [603, cmP(603, 'Abra', '43', 'Abra-V2-BS43', 1, 'Base-Set')]]) };
+const lusSh = [JT.lireTcg({ productId: 70, name: 'Alakazam', number: '1/102' }), JT.lireTcg({ productId: 71, name: 'Chansey', number: '3/102' })];
+const entreeB = (numero, nom, unlimited, shadowless) => ({ numero, nom, unlimited, shadowless });
+const baseSh = () => ({ liste: [entreeB('1', 'Alakazam', [601], [600])], cm: cmB, lusShadowless: lusSh, luLe: '2026-10-27' });
+r = M.planShadowless(baseSh());
+verifier('SHADOWLESS : vignette lue « Shadowless » + même carte (n° et nom) dans le groupe Shadowless → SHADOWLESS, preuve sans nom de source', [r.cibles.map(c => [c.idProduct, c.famille, c.marqueurs]), raisons(r), /Base Set \(Shadowless\)/.test(r.cibles[0]?.preuve), /cardmarket|tcgplayer/i.test(r.cibles[0]?.preuve)], [[[600, 'SHADOWLESS', [{ type: 'SHADOWLESS', params: {} }]]], [], true, false]);
+verifier('SHADOWLESS : le produit Unlimited de la même fiche ne reçoit rien', r.cibles.some(c => c.idProduct === 601), false);
+verifier('SHADOWLESS : la carte n\'est pas dans le groupe Shadowless → refus nommé', raisons(M.planShadowless({ ...baseSh(), liste: [entreeB('43', 'Abra', [], [603])] })), ['carte-absente-du-marche']);
+verifier('SHADOWLESS : le numéro du produit ne concorde pas avec la ligne de la liste → refus', raisons(M.planShadowless({ ...baseSh(), liste: [entreeB('3', 'Chansey', [], [600])] })), ['numero-discordant']);
+verifier('SHADOWLESS : un produit à la fois Unlimited et Shadowless dans la liste → refus', raisons(M.planShadowless({ ...baseSh(), liste: [entreeB('1', 'Alakazam', [600], [600])] })), ['liste-contradictoire']);
+verifier('SHADOWLESS : produit inconnu du catalogue → refus', raisons(M.planShadowless({ ...baseSh(), liste: [entreeB('1', 'Alakazam', [], [999])] })), ['produit-inconnu']);
+verifier('SHADOWLESS : un candidat « 1st Edition » du second marché ne témoigne pas → refus', raisons(M.planShadowless({ ...baseSh(), lusShadowless: [JT.lireTcg({ productId: 72, name: 'Alakazam (1st Edition)', number: '1/102' })] })), ['carte-absente-du-marche']);
+verifier('SHADOWLESS : groupe du second marché vide → LÈVE (une source vide ne prouve rien)', (() => { try { M.planShadowless({ ...baseSh(), lusShadowless: [] }); return 'passe'; } catch { return 'leve'; } })(), 'leve');
+
 // ── LE PLAN D'ÉCRITURE (une ligne, champ absent, jamais écrasé ; un produit dans deux familles est refusé)
 const cible = (idProduct, marqueurs, famille = 'STAFF') => ({ idProduct, marqueurs, preuve: 'p', famille });
 const lignes = [{ _id: 'a|2', idProduct: 2 }, { _id: 'b|20', idProduct: 20, marqueurs: [{ type: 'WCD', params: { annee: 2024, joueur: 'Sakuya O.' } }, { type: 'NON_LEGAL', params: {} }] }, { _id: 'c|21', idProduct: 21, marqueurs: [{ type: 'JUMBO', params: {} }] }, { _id: 'd|22', idProduct: 22 }, { _id: 'e|22', idProduct: 22 }, { _id: 'f|23', idProduct: 23, variante: 'x' }];

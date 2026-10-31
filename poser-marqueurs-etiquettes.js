@@ -1,5 +1,5 @@
 // ============================================================
-// POSER `cartes_produits.marqueurs` STAFF, WCD (année, joueur) + NON_LEGAL, LEAGUE (+ PLACE) PAR DEUX SOURCES CONCORDANTES (contrat MARQUEURS v1 de l'API ; décision de l'éditeur du 2026-10-27)
+// POSER `cartes_produits.marqueurs` STAFF, WCD (année, joueur) + NON_LEGAL, LEAGUE (+ PLACE), SHADOWLESS PAR DEUX SOURCES CONCORDANTES (contrat MARQUEURS v1 de l'API ; décisions de l'éditeur du 2026-10-27 et du 2026-10-31)
 // ============================================================
 //   node poser-marqueurs-etiquettes.js --simuler [--rapport=<f>.json]                                     (lecture seule : plan, RIEN n'est écrit)
 //   node lot-additif.js --quoi="marqueurs STAFF/WCD/LEAGUE : N produits" --collections=cartes_produits -- node poser-marqueurs-etiquettes.js --ecrire --attendu=N --refus=R   (N et R lus à la simulation)
@@ -11,9 +11,12 @@
 const MQ = require('./collecte-cartes/marqueurs-etiquettes');
 const J = require('./poser-marqueurs-jumbo');
 
+// SHADOWLESS (31/10) : la liste fermée lue à la vignette le 27/10 et le groupe « Base Set (Shadowless) » du second marché
+const plansDe = d => [MQ.planStaff(d), MQ.planWcd(d), MQ.planYellowA({ ...d, produits: d.yellowA }),
+    MQ.planShadowless({ liste: d.listeShadowless, cm: d.cm, lusShadowless: d.lusShadowless, luLe: d.luLeShadowless })];
 function planifier(d, lignes) {
-    const s = MQ.planStaff(d), w = MQ.planWcd(d), y = MQ.planYellowA({ ...d, produits: d.yellowA });
-    const cibles = [...s.cibles, ...w.cibles, ...y.cibles], preuve = [...s.refus, ...w.refus, ...y.refus];
+    const ps = plansDe(d);
+    const cibles = ps.flatMap(x => x.cibles), preuve = ps.flatMap(x => x.refus);
     return { cibles, refusPreuve: preuve, ...MQ.planifierEcriture({ cibles, lignes, exportIds: d.exportIds }) };
 }
 const compter = (xs, k) => { const o = {}; for (const x of xs) { const c = k(x); o[c] = (o[c] || 0) + 1; } return o; };
@@ -32,7 +35,7 @@ async function executer({ argv, ouvrirLecture, ouvrirEcriture, donnees, log = co
     try {
         const d = typeof donnees === 'function' ? await donnees(cx) : donnees;
         const db = cx.cartes.db;
-        const ids = [...new Set([...MQ.planStaff(d).cibles, ...MQ.planWcd(d).cibles, ...MQ.planYellowA({ ...d, produits: d.yellowA }).cibles].map(c => c.idProduct))];
+        const ids = [...new Set(plansDe(d).flatMap(x => x.cibles).map(c => c.idProduct))];
         const lignes = await db.collection('cartes_produits').find({ idProduct: { $in: ids } }).toArray();
         const plan = planifier(d, lignes);
         log(`   CIBLES PROUVÉES (deux sources) : ${plan.cibles.length} ${JSON.stringify(compter(plan.cibles, c => c.famille))} · lignes lues : ${lignes.length}`);
@@ -82,7 +85,9 @@ if (require.main === module) {
         return { etiquettes: I.produits, releveLe: String(I.date).slice(0, 10), cm, groupesDeExp, lusDe: new Map(groupes.map(g => [g.groupId, g.produits.map(JT.lireTcg)])),
             tcgWcd: gW.produits.map(JT.lireWcdTcg).filter(Boolean),
             lusYellowA: (() => { const gs = groupes.filter(g => g.categoryId === rel.categories.pokemon && MQ.GROUPES_YELLOW_A.includes(g.name)); if (gs.length !== MQ.GROUPES_YELLOW_A.length) throw new Error(`groupes des cartes tamponnées : ${gs.length} trouvé(s) pour ${MQ.GROUPES_YELLOW_A.length} attendu(s) — on ne devine pas`); return gs.flatMap(g => g.produits.map(JT.lireTcg)); })(),
-            yellowA: ya.map(y => ({ idProduct: y.idProduct, carte: y.carte, numero: y.numero, tamponProduit: y.tamponProduit })), luLe: '2026-10-27', exportIds: catalogue };
+            yellowA: ya.map(y => ({ idProduct: y.idProduct, carte: y.carte, numero: y.numero, tamponProduit: y.tamponProduit })), luLe: '2026-10-27', exportIds: catalogue,
+            listeShadowless: nonVide(require('./collecte-cartes/servir-scans-base-set').LISTE, 'servir-scans-base-set.js::LISTE'), luLeShadowless: '2026-10-27',
+            lusShadowless: (() => { const gs = groupes.filter(g => g.categoryId === rel.categories.pokemon && g.name === MQ.GROUPE_SHADOWLESS); if (gs.length !== 1) throw new Error(`groupe « ${MQ.GROUPE_SHADOWLESS} » : ${gs.length} trouvé(s) pour 1 attendu — on ne devine pas`); return gs[0].produits.map(JT.lireTcg); })() };
     };
     const ouvrirLecture = async () => {
         const { ouvrirLecture: ol } = require('./collecte-cartes/ouvrir-lecture');

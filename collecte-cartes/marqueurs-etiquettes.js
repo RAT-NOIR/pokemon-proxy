@@ -9,6 +9,7 @@
 // Une garde écrite par ce qu'elle AUTORISE : un marqueur n'est posé que si les DEUX sources le disent pour UN seul produit de chaque côté ; tout le reste est un refus NOMMÉ.
 // Les preuves ne nomment aucune source par son nom (règle de l'éditeur : « aucun nom de source en public »). Fonctions PURES : ni base, ni fichier, ni requête.
 const JT = require('./tcgcsv-jointure');
+const { cleNumero } = require('./jointure');
 
 // L'ordre de la table du §3 du contrat (CONTRAT-MARQUEURS.md v1) et les paramètres de chaque type : la liste est FERMÉE, un type absent n'existe pas.
 const ORDRE = Object.freeze(['JUMBO', 'WCD', 'NON_LEGAL', 'EDITION_1', 'SHADOWLESS', 'STAFF', 'PRERELEASE', 'LEAGUE', 'CHAMPIONSHIP', 'PLACE', 'PROFESSOR', 'PLAY_POKEMON', 'TRICK_OR_TRADE', 'BATTLE_ACADEMY',
@@ -160,6 +161,33 @@ function planYellowA({ produits, cm, lusYellowA, luLe }) {
 }
 
 /**
+ * SHADOWLESS (décision de l'éditeur du 2026-10-31 ; type « catalogue seulement » du contrat v1) : source 1, l'étiquette « Shadowless » et la bordure sans ombre LUES sur la vignette du produit
+ * (liste fermée du 27/10, `servir-scans-base-set.js::LISTE`, colonne `shadowless`) ; source 2, la même carte (n° fort et nom, clé de production) dans le groupe « Base Set (Shadowless) » du second
+ * marché, hors tout produit qui se dit « 1st Edition ». Un produit que la liste range aussi en Unlimited, ou dont le numéro ne concorde pas avec sa ligne, est refusé. Un groupe vide LÈVE.
+ * Plusieurs produits du second marché pour la même carte (joues rouges / jaunes de Pikachu) témoignent tous du même tirage : ils sont cités, pas départagés.
+ */
+function planShadowless({ liste, cm, lusShadowless, luLe }) {
+    const cibles = [], refus = [];
+    if (!(liste || []).length) return { cibles, refus };
+    if (!(lusShadowless || []).length) throw new Error('groupe « Base Set (Shadowless) » du second marché vide ou absent — une source vide ne prouve rien');
+    const no = (idProduct, raison, detail) => refus.push({ idProduct, famille: 'SHADOWLESS', raison, ...(detail ? { detail } : {}) });
+    const temoins = lusShadowless.filter(t => !t.marqueurs.some(x => /\b1st\b|first edition/.test(x)));
+    for (const e of liste) {
+        for (const id of e.shadowless || []) {
+            if ((e.unlimited || []).includes(id)) { no(id, 'liste-contradictoire'); continue; }
+            const p = cm?.produits?.get(id);
+            if (!p) { no(id, 'produit-inconnu'); continue; }
+            if (p.lu.fort == null || p.lu.fort !== cleNumero(String(e.numero))) { no(id, 'numero-discordant', { liste: e.numero, produit: p.lu.fort }); continue; }
+            const cands = temoins.filter(t => memeCarte(t, p.lu));
+            if (!cands.length) { no(id, 'carte-absente-du-marche'); continue; }
+            cibles.push({ idProduct: id, famille: 'SHADOWLESS', marqueurs: [{ type: 'SHADOWLESS', params: {} }],
+                preuve: `vignette du produit sur la place de marché de référence (copie locale, lue le ${luLe}) : étiquette « Shadowless », bordure sans ombre ; même carte (n° ${e.numero} et nom) dans le groupe « Base Set (Shadowless) » d'une seconde place de marché : ${cands.map(t => `« ${t.nomBrut} »`).join(', ')}` });
+        }
+    }
+    return { cibles, refus };
+}
+
+/**
  * Le plan d'écriture : une cible par produit (un produit visé par deux familles est refusé), produit présent dans l'export du jour, UNE ligne cartes_produits, champ `marqueurs` ABSENT
  * (une valeur présente, même `[]` ou `null`, n'est jamais écrasée), marqueurs valides au contrat et dans son ordre.
  */
@@ -188,4 +216,5 @@ function planifierEcriture({ cibles, lignes, exportIds }) {
     return { ecrire, refus, deja };
 }
 
-module.exports = { ORDRE, GROUPES_YELLOW_A, valide, ordonner, planStaff, planWcd, planYellowA, planifierEcriture, lettres };
+const GROUPE_SHADOWLESS = 'Base Set (Shadowless)';
+module.exports = { ORDRE, GROUPES_YELLOW_A, GROUPE_SHADOWLESS, valide, ordonner, planStaff, planWcd, planYellowA, planShadowless, planifierEcriture, lettres };
