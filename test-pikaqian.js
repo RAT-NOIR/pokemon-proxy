@@ -103,14 +103,31 @@ const chemins = appels => appels.map(a => a.url.replace('https://', ''));
     w = monde({ repondre: normal({ 'https://images.pikaqian.com/robots.txt': () => s3 }) });
     const i2 = await leve(() => w.client.image('https://images.pikaqian.com/cs1bc/' + UUID(1) + '.webp'));
     verifier('robots.txt d\'images en AccessDenied S3 → pas de robots.txt, l\'image est demandée', [i2, chemins(w.appels).length], [null, 2]);
-    w = monde({ repondre: normal({ 'https://images.pikaqian.com/robots.txt': () => ({ status: 403, texte: 'Forbidden' }) }) });
-    e = await leve(() => w.client.image('https://images.pikaqian.com/cs1bc/' + UUID(1) + '.webp'));
-    verifier('robots.txt en 403 sans marque S3 → BLOQUÉ, l\'image n\'est pas demandée', [e?.bloque === true, chemins(w.appels).length], [true, 1]);
-    for (const [nom, rep] of [['le corps AccessDenied, via CloudFront mais serveur Cloudflare', { ...s3, server: 'cloudflare', via: '1.1 abc.cloudfront.net (CloudFront)' }], ['le corps AccessDenied mais un serveur Cloudflare', { ...s3, server: 'cloudflare' }], ['le corps AccessDenied mais cf-mitigated', { ...s3, cfMitigated: 'challenge' }],
-        ['le corps AccessDenied sans aucun en-tête S3', { status: 403, texte: s3.texte }], ['un serveur S3 mais un corps qui n\'est pas AccessDenied', { ...s3, texte: '<html>Forbidden</html>' }]]) {
+    // 🔑 DÉCISION DU TESTEUR (2026-10-31) : RFC 9309 § 2.3.1.3 — un robots.txt de l'HÔTE D'IMAGES en 4xx (hors 429) est « indisponible » : aucune règle, ce n'est pas un refus de nos accès.
+    // Restent BLOQUANTS : 429, et toute marque de défi (serveur ou via Cloudflare, cf-mitigated, corps HTML). L'hôte des PAGES garde sa règle.
+    for (const [nom, rep] of [['403 « Forbidden » en texte', { status: 403, texte: 'Forbidden' }], ['403 au corps AccessDenied sans en-tête S3 (le cas du 31/10)', { status: 403, type: 'application/xml', texte: s3.texte }], ['401', { status: 401, texte: 'Unauthorized' }]]) {
+        w = monde({ repondre: normal({ 'https://images.pikaqian.com/robots.txt': () => rep }) });
+        const i3 = await leve(() => w.client.image('https://images.pikaqian.com/cs1bc/' + UUID(1) + '.webp'));
+        verifier(`robots.txt d'images en ${nom} → « indisponible » (RFC 9309) : aucune règle, l'image est demandée`, [i3, chemins(w.appels).length], [null, 2]);
+    }
+    for (const [nom, rep] of [['429', { status: 429, texte: 'Too Many Requests' }], ['le corps AccessDenied, via CloudFront mais serveur Cloudflare', { ...s3, server: 'cloudflare', via: '1.1 abc.cloudfront.net (CloudFront)' }], ['le corps AccessDenied mais un serveur Cloudflare', { ...s3, server: 'cloudflare' }], ['le corps AccessDenied mais cf-mitigated', { ...s3, cfMitigated: 'challenge' }],
+        ['un corps HTML (une page de défi possible)', { ...s3, texte: '<html>Forbidden</html>' }]]) {
         w = monde({ repondre: normal({ 'https://images.pikaqian.com/robots.txt': () => rep }) });
         e = await leve(() => w.client.image('https://images.pikaqian.com/cs1bc/' + UUID(1) + '.webp'));
-        verifier(`robots.txt d'images en 403 avec ${nom} → BLOQUÉ (seule la marque S3 COMPLÈTE le tolère)`, [e?.bloque === true, chemins(w.appels).length], [true, 1]);
+        verifier(`robots.txt d'images en ${nom} → BLOQUÉ, l'image n'est pas demandée`, [e?.bloque === true, chemins(w.appels).length], [true, 1]);
+    }
+    w = monde({ repondre: normal({ 'https://pikaqian.com/robots.txt': () => ({ status: 403, texte: 'Forbidden' }) }) });
+    e = await leve(() => w.client.page('https://pikaqian.com/sets/cs1bc'));
+    verifier('robots.txt des PAGES en 403 : BLOQUÉ (la décision du 31/10 ne vaut que pour l\'hôte d\'images)', [e?.bloque === true, chemins(w.appels).length], [true, 1]);
+    // le transport RÉEL : source passive (13/10), sauf l'hôte d'images rouvert le 31/10 — jamais une page
+    {
+        const fetchAvant = globalThis.fetch; const vus = [];
+        globalThis.fetch = async url => { vus.push(String(url)); return { status: 404, headers: { get: () => null }, arrayBuffer: async () => new ArrayBuffer(0) }; };
+        try {
+            const ePage = await leve(() => P.transportFetch.get('https://pikaqian.com/sets/cs1bc'));
+            const eImg = await leve(() => P.transportFetch.get('https://images.pikaqian.com/robots.txt'));
+            verifier('transport réel : une PAGE reste fermée (passive, aucun fetch) ; l\'hôte d\'IMAGES part (rouvert le 31/10)', [ePage?.passive === true, eImg?.passive === true, vus], [true, false, ['https://images.pikaqian.com/robots.txt']]);
+        } finally { globalThis.fetch = fetchAvant; }
     }
 
     // redirections : même hôte seulement, trois sauts, robots relu

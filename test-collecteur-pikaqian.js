@@ -367,6 +367,47 @@ const imageDe = async larg => sharp({ create: { width: larg, height: Math.round(
           verifier('une entrée marquée d\'une AUTRE langue n\'est pas remplaçable : PikaQian cède', [des(Bm), J.dejaParAutre], [['tcgdex:true'], 1]); }
     }
 
+    // ── LA PAGE APPRISE (décision du testeur du 31/10 : l'hôte d'IMAGES rouvert ; la page n'est JAMAIS redemandée, elle se lit dans la fiche apprise) ────────────
+    {
+        const { lireTuiles, lireOrigines, titreLu } = P;
+        const apprise = { fichier: 'cs1bc--20261012T000000Z.json', tuiles: lireTuiles(PAGE), origines: lireOrigines(PAGE), titre: titreLu(PAGE) };
+        const lancerAppris = async (B, tr, alerte) => {
+            if (alerte) B.col('collecte_images_etat').set(alerte._id, alerte);
+            const client = P.fabriquerClientPikaqian({ transport: tr, cadenceMs: 0, verrou, pause: async () => { }, horloge: () => 0 });
+            const r = silencieux();
+            try { return await collecterSet(uniteDeLaLigne(lignePikaqian(SLUG)), B.M, { verrou, client, deposer: async () => { }, fabriquerVerrouSet: verrouSet, vignetter: vignetteOk(), pageApprise: apprise }); }
+            finally { r(); }
+        };
+        const ALERTE_PAGES = { _id: P.ID_ALERTE, active: true, depuis: '2026-10-12T02:14:33.295Z', motif: 'défi anti-robot (HTTP 403, server=cloudflare, cf-mitigated=challenge) sur https://pikaqian.com/robots.txt', blocages: [{ url: 'https://pikaqian.com/robots.txt', status: 403 }, { url: 'https://pikaqian.com/robots.txt', status: 403 }] };
+        let Ba = fausseBase(); semer(Ba); let tra = reseau(normal());
+        let ba = await lancerAppris(Ba, tra, ALERTE_PAGES);
+        verifier('page apprise : AUCUNE requête vers l\'hôte des pages (ni robots.txt, ni /sets/) ; robots.txt des images puis l\'image ; « verifie »', [tra.appels.map(u => u.replace('https://', '')), ba.etat],
+            [['images.pikaqian.com/robots.txt', `images.pikaqian.com/cs1bc/${UUID(1)}.webp`], 'verifie']);
+        verifier('   l\'alerte de blocage qui ne porte QUE sur l\'hôte des pages ne bloque pas l\'hôte d\'images ; le visuel est écrit', Ba.col('images').get(P.idImagePikaqian(SLUG, 1, '001'))?.etat, 'ok');
+        verifier('   le bilan dit la page apprise (fichier), jamais une page lue', Ba.col('sets').get(SLUG).visuelsPikaqian?.pageApprise, apprise.fichier);
+        for (const [nom, al] of [['un blocage sur l\'hôte d\'IMAGES', { ...ALERTE_PAGES, blocages: [...ALERTE_PAGES.blocages, { url: `https://images.pikaqian.com/cs1bc/${UUID(1)}.webp`, status: 403 }] }],
+            ['une alerte sans adresse lisible', { _id: P.ID_ALERTE, active: true, depuis: '2026-10-31T00:00:00Z', motif: 'erreur répétée', blocages: [] }]]) {
+            Ba = fausseBase(); semer(Ba); tra = reseau(normal());
+            ba = await lancerAppris(Ba, tra, al);
+            verifier(`page apprise, alerte avec ${nom} : refus, aucune requête`, [ba.etat, tra.appels.length], ['refuse-source-bloquee', 0]);
+        }
+        // sans page apprise, la voie habituelle ne change pas : l'alerte (même « des pages ») refuse
+        Ba = fausseBase(); semer(Ba); Ba.col('collecte_images_etat').set(P.ID_ALERTE, ALERTE_PAGES); tra = reseau(normal());
+        ({ b: ba } = await lancer(Ba, tra));
+        verifier('sans page apprise : l\'alerte refuse comme avant, aucune requête', [ba.etat, tra.appels.length], ['refuse-source-bloquee', 0]);
+        // une page apprise qui n'est pas celle du set (code étranger) : refus sans requête, par la règle de la page
+        Ba = fausseBase(); semer(Ba); tra = reseau(normal());
+        const r2 = silencieux(); let bx;
+        try { bx = await collecterSet(uniteDeLaLigne(lignePikaqian(SLUG)), Ba.M, { verrou, client: P.fabriquerClientPikaqian({ transport: tra, cadenceMs: 0, verrou, pause: async () => { }, horloge: () => 0 }), deposer: async () => { }, fabriquerVerrouSet: verrouSet, vignetter: vignetteOk(),
+            pageApprise: { ...apprise, tuiles: lireTuiles(PAGE.replaceAll('cs1bc', 'csv1c')) } }); } finally { r2(); }
+        verifier('page apprise d\'un AUTRE set : refus (verdict de page), aucune requête', [bx.etat, tra.appels.length], ['refuse-liste', 0]);
+        // la fiche apprise d'un set : celle de SON code, la plus récente (lireApprises la choisit) ; absente → null (le set ne part pas)
+        const { pageAppriseDe } = require(process.env.PK_COLLECTEUR ? path.resolve(process.env.PK_COLLECTEUR) : './collecteur-images-pikaqian');
+        const fiches = [{ fichier: 'csv1c--x.json', fiche: { code: 'csv1c', tuiles: [1], origines: [], titre: 'a' } }, { fichier: 'cs1bc--y.json', fiche: { code: 'cs1bc', tuiles: [2], origines: [['u', { officielle: null }]], titre: 'b' } }];
+        const pa = pageAppriseDe(fiches, lignePikaqian(SLUG));
+        verifier('pageAppriseDe : la fiche du code du set (tuiles, origines en Map, titre, fichier) ; aucun code → null', [pa?.fichier, pa?.tuiles, pa?.origines instanceof Map && pa.origines.has('u'), pa?.titre, pageAppriseDe(fiches.slice(0, 1), lignePikaqian(SLUG))], ['cs1bc--y.json', [2], true, 'b', null]);
+    }
+
     console.log(`\n${ok} passés, ${ko} en échec (sur ${ok + ko})`);
     process.exit(ko ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(2); });

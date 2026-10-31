@@ -12,6 +12,12 @@
 const SOURCES_PASSIVES = Object.freeze({ pikaqian: 'source passive : visites du testeur seulement' });
 const estPassive = source => Object.prototype.hasOwnProperty.call(SOURCES_PASSIVES, source);
 const motifPassif = source => SOURCES_PASSIVES[source] ?? null;
+// ➕ 2026-10-31 (décision du testeur, mot pour mot) : « SOURCE CHINOISE DES 8 282 VISUELS ZH-HANS : RÉOUVERTE. Le 403 ne portait que sur robots.txt. […] Règle maintenue :
+// au PREMIER 403 ou 429 sur une image ou une page, fermeture définitive. Rythme poli, collecte limitée à ce qui manque ou est faux. »
+// Rouvert : l'hôte d'IMAGES seulement (l'hôte des pages porte un défi Cloudflare depuis le 2026-10-12 : il reste fermé, ses pages se lisent dans les fiches APPRISES).
+// La source reste passive pour le WORKER (elle n'est pas remise dans SOURCES_EN_SERVICE) : seule la ligne de commande locale, sous lot-additif.js, s'en sert.
+const IMAGES_ROUVERTES = Object.freeze({ pikaqian: 'images.pikaqian.com' });
+const imagesRouvertes = (source, hote) => Object.prototype.hasOwnProperty.call(IMAGES_ROUVERTES, source) && IMAGES_ROUVERTES[source] === hote;
 
 /**
  * Clôt une unité de file d'une source passive, SANS requête : refusée, le motif écrit, plus jamais reprise d'elle-même.
@@ -35,4 +41,4 @@ function phraseAlerte(alerte) {
     return ` · ${motifPassif(source)} : aucune tentative automatique (l'échéance écrite en base ne programme plus rien)`;
 }
 
-module.exports = { SOURCES_PASSIVES, estPassive, motifPassif, cloreUnitePassive, phraseAlerte, ID_ALERTE_PASSIVE };
+module.exports = { SOURCES_PASSIVES, estPassive, motifPassif, IMAGES_ROUVERTES, imagesRouvertes, cloreUnitePassive, phraseAlerte, ID_ALERTE_PASSIVE };
