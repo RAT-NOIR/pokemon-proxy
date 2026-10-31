@@ -12,6 +12,7 @@ const EXCEPTIONS = {
     // Tour 1 : ils ne lisent que rat-market-site/lib (vérifié : seuls des readFileSync et le côté SOURCE d'un copyFileSync y sont refusés sans exception) — et en LECTURE SEULE (LECTURE_SEULE ci-dessous).
     'test-chargeur-decision.js': { 'rat-market-site/lib': 'code du site (lib/*.ts, lib/*.json), pas un apport manuel : la copie embarquée de la règle est comparée à lui' },
     'test-chargeur-regle-site.js': { 'rat-market-site/lib': 'code du site (lib/*.ts, lib/*.json), pas un apport manuel : la copie embarquée de la règle est régénérée et comparée' },
+    'test-courriels-site.js': { 'rat-market-site/lib': 'code du site (lib/courriels*.ts et sa fermeture), pas un apport manuel : la copie embarquée des gabarits de courriel est régénérée et comparée' },
     'test-contrat-extension.js': { 'extension v2/src/fond/fausses': 'fausses réponses versionnées de l\'extension (RM_EXTENSION_FAUSSES)' },
     'test-identifier-adaptateur.js': { 'extension v2/src/fond/fausses': 'fausses réponses versionnées de l\'extension' },
     'test-identifier-regle-g.js': { 'labo-embedding/rm/fixtures-g': 'fixtures du labo (argument de ligne de commande par défaut)' },
@@ -26,13 +27,14 @@ const LECTURE_SEULE = {
     'test-collection-forme.js': ['rat-market-site/archives/CORRECTION-ILLUSTRATEURS.json', 'rat-market-site/lib/logos-officiels.json', 'rat-market-site/LISTE-FICHES-SANS-VISUEL.json'],
     'test-chargeur-decision.js': ['rat-market-site/lib'],
     'test-chargeur-regle-site.js': ['rat-market-site/lib'],
+    'test-courriels-site.js': ['rat-market-site/lib'],
 };
 // Intégration d'api-v2 (OUTIL-RETRAIT) : test-retirer-worktree.js crée un VOISIN du dossier temporaire (cas N5 : « hors de Temp ») avec fs.mkdtempSync(<parent du temporaire>/rm-retrait-horstemp-). Ouverture ÉTROITE :
 // ce fichier seulement, les dossiers dont le nom commence par ce préfixe et ce qu'ils contiennent, dans le dossier parent du temporaire seulement ; ni un dossier existant, ni un dossier d'apports, ni une clé large.
 const VOISINS_DU_TEMP = { 'test-retirer-worktree.js': ['rm-retrait-horstemp-'] };
 // Idem : l'outil de retrait cherche git en LISTANT %LOCALAPPDATA%\GitHubDesktop (app-*). Ouverture en LECTURE SEULE de ce seul dossier, pour ce fichier seulement (jamais une écriture, jamais le dossier parent).
 // COPIE-SITE-2 : l'outil de copie lit les sources du site au commit nommé (`git show`) et cherche git de la même façon ; les deux bancs qui l'appellent ont la même ouverture, en lecture seule.
-const LECTURES_LOCALAPPDATA = { 'test-retirer-worktree.js': ['GitHubDesktop'], 'test-chargeur-regle-site.js': ['GitHubDesktop'], 'test-chargeur-deck.js': ['GitHubDesktop'], 'test-chargeur-edition-locale.js': ['GitHubDesktop'] };
+const LECTURES_LOCALAPPDATA = { 'test-retirer-worktree.js': ['GitHubDesktop'], 'test-chargeur-regle-site.js': ['GitHubDesktop'], 'test-courriels-site.js': ['GitHubDesktop'],'test-chargeur-deck.js': ['GitHubDesktop'], 'test-chargeur-edition-locale.js': ['GitHubDesktop'] };
 
 /**
  * Tour 1 (I-3) — une exception est écrite par ce qu'on AUTORISE : une clé est un chemin RELATIF au Bureau, en « / », de segments non vides, ni « . » ni « .. », qui ne désigne pas le Bureau lui-même

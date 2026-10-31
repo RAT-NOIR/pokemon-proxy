@@ -24,7 +24,8 @@ function detacher(nom, fn) {
     return p;
 }
 async function attendre() { while (enCours.size) await Promise.all([...enCours]); }
-async function envoyer(nom, f) { try { await f(); } catch (e) { console.error(`❌ [v2 ${nom}] envoi du courrier en échec (${(e && e.name) || 'Error'})`); } }
+// → le NOM de l'erreur si l'envoi a échoué (jamais le message : il pourrait porter une adresse), sinon null.
+async function envoyer(nom, f) { try { await f(); return null; } catch (e) { const n = (e && e.name) || 'Error'; console.error(`❌ [v2 ${nom}] envoi du courrier en échec (${n})`); return n; } }
 
 const lienVerification = (cfg, jeton) => `${cfg.urls.verification}?jeton=${jeton}`;
 async function ecrireLien(compteId, type, cfg, maintenant) {
@@ -42,7 +43,9 @@ async function confirmer(compte, cle, cfg, courrier, nom, maintenant) {
     const r = await L.reserver(`confirmation:${J.empreinte(cleBoite(cle))}`, { delaiMs: cfg.comptes.confirmationHeures * HEURE, maintenant });
     if (!r.permis) return false;
     const jeton = await ecrireLien(compte._id, 'verification', cfg, maintenant);
-    await envoyer(nom, () => courrier.envoyerVerification(compte.email, lienVerification(cfg, jeton), { purgeHeures: cfg.comptes.nonConfirmeHeures }));
+    const echec = await envoyer(nom, () => courrier.envoyerVerification(compte.email, lienVerification(cfg, jeton), { purgeHeures: cfg.comptes.nonConfirmeHeures }));
+    // BREVO tour 1 (R4) : refusé par le plafond du jour = RIEN n'est parti, donc l'adresse ne perd pas sa place de 24 h (une autre panne la garde : un pilote en panne ne se rattrape pas en bombardant une boîte)
+    if (echec === 'BrevoPlafond') await L.liberer(`confirmation:${J.empreinte(cleBoite(cle))}`);
     return true;
 }
 
@@ -96,7 +99,8 @@ function demanderReinit({ email, cfg, courrier, maintenant = new Date() }) {
         const r = await L.consommer(`reinit:${J.empreinte(cleBoite(cle))}`, { max: cfg.limites.renvoiParCompteHeure, fenetreMs: HEURE, maintenant });
         if (!r.permis) return;
         const jeton = await ecrireLien(compte._id, 'reinit', cfg, maintenant);
-        await envoyer('mot-de-passe-oublie', () => courrier.envoyerReinitialisation(compte.email, `${cfg.urls.reinit}?jeton=${jeton}`));
+        const echec = await envoyer('mot-de-passe-oublie', () => courrier.envoyerReinitialisation(compte.email, `${cfg.urls.reinit}?jeton=${jeton}`, { validiteHeures: cfg.comptes.lienHeures }));   // BREVO : la durée écrite dans le courriel est celle du lien
+        if (echec === 'BrevoPlafond') await L.rendre(`reinit:${J.empreinte(cleBoite(cle))}`, { fenetreMs: HEURE, maintenant });   // tour 1 (R4) : refusé au plafond du jour = rien n'est parti, la demande ne compte pas dans les 3 de l'heure
     });
 }
 

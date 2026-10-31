@@ -152,6 +152,9 @@ Source de la liste : `v2/config.js` (les 30 variables sont DÉRIVÉES du fichier
 | `V2_VERIFICATION_IP_HEURE`, `V2_CONNEXION_IP_HEURE` | 30 | 30 | idem | oui |
 | `V2_SUPPRESSION_COMPTE_HEURE`, `V2_RENVOI_COMPTE_HEURE` | 10 / 3 | défauts (`V2_RENVOI_COMPTE_HEURE` borne aussi les liens de RÉINITIALISATION par adresse : D9) | idem | oui |
 | `V2_EMPREINTE_JOURS` | 365 | 365 | minimum 1 | oui |
+| `V2_COURRIELS_JOUR` | 250 | 250 | entier de 1 à 300 (offre gratuite de Brevo : 300 par jour), sinon invalide | oui (BREVO : plafond quotidien d'envois ; les courriels de sécurité passent avant les avertissements) |
+| `V2_AVERTISSEMENTS_INACTIFS` | `0` | éteint | 0 ou 1, sinon invalide | oui (BREVO : la passe d'avertissement des comptes inactifs, éteinte tant que le coordinateur ne l'allume pas) |
+| `V2_COURRIEL_DE`, `V2_COURRIEL_REPONSE` | `no-reply@rat-market.fr`, `ratmarket.contact@gmail.com` | défauts | tout sauf une adresse courriel = invalide | oui (BREVO : expéditeur et Reply-To ; l'expéditeur doit exister chez Brevo) |
 | `V2_URL_VERIFICATION`, `V2_URL_REINIT` | `https://rat-market.fr/fr/…` | défauts | tout sauf `https://…` = invalide | oui (une URL https d'un autre hôte est admise : variable d'opérateur) |
 | `V2_ORDRE_POCHES` | `jour` | défaut (OFFRE-QUOTA : la seule poche débitable est le quota du jour) | poche inconnue, doublon, ordre sans `jour`, ou une ANCIENNE poche (`essai`, `accueil`, `hebdo`, `abonnement` : « n'est plus débitée »), ou `achete` (« n'est pas configurable » : débitée AVANT `jour`, ordre fixé dans le code) = invalide | oui (O2 réécrit) |
 | `V2_QUOTA_SANS_COMPTE` / `V2_QUOTA_GRATUIT` / `V2_QUOTA_PRO_PLAFOND` | 3 / 10 / 200 | analyses RENDUES par jour de Paris : installation non liée / compte vérifié sans abonnement actif / plafond TECHNIQUE anti-abus d'un abonné Pro (jamais montré : `offre.restant: null`) | entier de 1 à 1000, sinon invalide (0, négatif, décimal, texte, espaces) | oui (OFFRE-QUOTA) |

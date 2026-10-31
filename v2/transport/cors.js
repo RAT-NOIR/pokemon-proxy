@@ -17,7 +17,8 @@ function profils(cfg) {
           chemins: [/^\/ping$/, /^\/api\/(installation|solde|retour-live|identifier|identifier\/reponse|creer-recharge)$/, /^\/api\/compte\/(lier|delier)$/, /^\/api\/banc\/.+$/, ...(cfg.photosMultiples === true ? [/^\/api\/photo(\/.+)?$/] : [])],      // le sous-arbre entier, comme /api/banc/.+ : un chemin voisin inexistant porte les mêmes en-têtes que la route (le 404 natif d'un non-administrateur ne se distingue pas)
           methodes: 'GET, POST', entetes: 'Authorization, Content-Type, Idempotency-Key' },
         { nom: 'site', origines: new Set([o.site]), credentials: true,
-          chemins: [/^\/ping$/, /^\/api\/compte(\/.*)?$/, /^\/api\/scanner\/.+$/, /^\/api\/solde$/, /^\/api\/creer-recharge$/, /^\/api\/collection(\/.*)?$/, /^\/api\/abonnement(\/.*)?$/],
+          // INST-BANC-CORS : POST /api/installation, ce chemin EXACT seulement (l'exemption du compte de mesure exige l'Origin du site + X-Rat-Market + la session) ; aucun voisin
+          chemins: [/^\/ping$/, /^\/api\/installation$/, /^\/api\/compte(\/.*)?$/, /^\/api\/scanner\/.+$/, /^\/api\/solde$/, /^\/api\/creer-recharge$/, /^\/api\/collection(\/.*)?$/, /^\/api\/abonnement(\/.*)?$/],
           methodes: 'GET, POST, DELETE', entetes: 'Content-Type, X-Rat-Market, Idempotency-Key' }
     ];
 }

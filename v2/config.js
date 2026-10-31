@@ -72,6 +72,7 @@ function lireConfig(env = process.env) {
         if (!actif) return null;
         throw new Error('configuration invalide : V2_SECRET_EMPREINTE absent (v2 allumée)');
     })();
+    const adresseCourriel = (nom, v, defaut) => { if (v === undefined || v === '') return defaut; if (typeof v !== 'string' || v.length > 254 || !/^[^\s@<>"',;\\()[\]]{1,64}@[^\s@<>"',;\\()[\]]+\.[A-Za-z0-9-]{2,}$/.test(v)) throw new Error(`configuration invalide : ${nom} doit être une adresse courriel`); return v; };
     const url = (nom, v, defaut) => { if (v === undefined || v === '') return defaut; if (!/^https:\/\/\S+$/.test(v)) throw new Error(`configuration invalide : ${nom} doit commencer par https://`); return v; };
     const turnstile = (() => { const t = env.V2_TURNSTILE; if (t === undefined || t === '') return 'on'; if (t === 'on' || t === 'off') return t; throw new Error(`configuration invalide : V2_TURNSTILE="${t}" (attendu on ou off)`); })();
     if (actif && turnstile === 'off' && !banc) throw new Error('configuration invalide : V2_TURNSTILE=off n\'est accepté que sur une base de banc (MONGODB_BASE=test_scratch ET BANC_ISOLE=1)');
@@ -176,7 +177,15 @@ function lireConfig(env = process.env) {
         collection: { clesParCompte: 100000, horsCatalogueParCompte: 6000, quantitesParCompte: 10000, setsParCompte: 1000, quantiteMax: 99, octetsService: 10485760 },
         comptes: { motDePasseMin: 10, lienHeures: 24, codeLongueur: 6, codeMinutes: 10, codesVivants: 3, sessionJours: 30, libelleMax: 60, glissementHeures: 24,
                     // O3 : un compte non confirmé est INACTIF et supprimé après `nonConfirmeHeures` ; un seul courriel de confirmation par adresse et par `confirmationHeures` (inscription et renvoi confondus).
-                    nonConfirmeHeures: 48, confirmationHeures: 24 },
+                    nonConfirmeHeures: 48, confirmationHeures: 24,
+                    // BREVO : un compte CONFIRMÉ resté sans connexion `inactiviteAns` ans est supprimé (politique de confidentialité v2, décision de l'éditeur du 26/10) ; un courriel d'avertissement part
+                    // `avertissementJours` jours avant. Constantes de politique, sans variable : une durée promise au public ne se règle pas depuis l'environnement.
+                    inactiviteAns: 3, avertissementJours: 30 },
+        // BREVO : l'offre gratuite de Brevo plafonne à 300 courriels par jour ; l'API s'arrête avant (défaut 250) et les courriels de SÉCURITÉ (vérification, mot de passe) passent avant les avertissements
+        // (v2/comptes/plafond-courriels.js). `avertissementsInactifs` : la passe quotidienne d'avertissement des comptes inactifs ; ÉTEINTE par défaut (allumage décidé par le coordinateur, après un envoi réel de contrôle).
+        // Expéditeur (décision de l'éditeur du 31/10) : From « Rat-Market <no-reply@rat-market.fr> », Reply-To la boîte de contact du projet. L'éditeur crée l'expéditeur chez Brevo ; le code ne crée rien là-bas.
+        courriels: { de: adresseCourriel('V2_COURRIEL_DE', env.V2_COURRIEL_DE, 'no-reply@rat-market.fr'), repondreA: adresseCourriel('V2_COURRIEL_REPONSE', env.V2_COURRIEL_REPONSE, 'ratmarket.contact@gmail.com'),
+                     jour: entier('V2_COURRIELS_JOUR', env.V2_COURRIELS_JOUR, 250, 1, 300), avertissementsInactifs: booleen('V2_AVERTISSEMENTS_INACTIFS', env.V2_AVERTISSEMENTS_INACTIFS, false) },
         urls: { verification: url('V2_URL_VERIFICATION', env.V2_URL_VERIFICATION, 'https://rat-market.fr/fr/verification'), reinit: url('V2_URL_REINIT', env.V2_URL_REINIT, 'https://rat-market.fr/fr/reinitialisation') },
         empreinte: { secret: secretEmpreinte, jours: entier('V2_EMPREINTE_JOURS', env.V2_EMPREINTE_JOURS, 365, 1) },
         origines: { extension: 'chrome-extension://fgibgdgmadfejkaapeohbhaoolhgpkhb',
