@@ -21,7 +21,10 @@ console.log('table des espèces PokeAPI (BSD-3-Clause, lue le ' + fs.readFileSyn
 const DEXIDS = lire('C:/Users/Yung/Desktop/pokemon-proxy/pokedex-dexids.json');
 const cleProduit = TZ.fabriquerCleProduit(DEXIDS);
 const pairesSource = Object.fromEntries(Object.entries(LABELS).filter(([, v]) => v && v.en).map(([zh, v]) => [zh.normalize('NFKC').replace(/\s+/g, ''), v.en]));
-const traduire = TZ.fabriquerTraducteur({ tableEspeces: ESPECES.table, tableAutres: TW, cleProduit });
+const traduireBase = TZ.fabriquerTraducteur({ tableEspeces: ESPECES.table, tableAutres: TW, cleProduit });
+// --proposee : ajoute la table PROPOSÉE (deux sources d'accord, proposer-table-zh.js). ⚠️ circulaire pour juger les NUMÉROS (le témoin Cardmarket a servi à la prouver) : n'est montrée que pour dire quels sets cesseraient de tomber.
+const PROP = ARGS.proposee ? lire(path.join(DOSSIER, 'table-proposee.json')).acceptees : {};
+const traduire = n => traduireBase(n) ?? (PROP[String(n).normalize('NFKC').replace(/\s+/g, '')]?.cle ?? null);
 // L'ORACLE (hypothèse, jamais appliquée) : le libellé anglais que la source publie sur la page de la carte. Il sert à CATÉGORISER les noms intraduisibles et à tester si un set ne tombe que pour cette raison.
 const nz = s => String(s).normalize('NFKC').replace(/\s+/g, '');
 const oracle = nomZh => { const en = pairesSource[nz(nomZh)]; return en ? cleProduit(en) : null; };
