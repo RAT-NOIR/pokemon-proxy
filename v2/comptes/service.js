@@ -96,7 +96,7 @@ function demanderReinit({ email, cfg, courrier, maintenant = new Date() }) {
         const r = await L.consommer(`reinit:${J.empreinte(cleBoite(cle))}`, { max: cfg.limites.renvoiParCompteHeure, fenetreMs: HEURE, maintenant });
         if (!r.permis) return;
         const jeton = await ecrireLien(compte._id, 'reinit', cfg, maintenant);
-        await envoyer('mot-de-passe-oublie', () => courrier.envoyerReinitialisation(compte.email, `${cfg.urls.reinit}?jeton=${jeton}`));
+        await envoyer('mot-de-passe-oublie', () => courrier.envoyerReinitialisation(compte.email, `${cfg.urls.reinit}?jeton=${jeton}`, { validiteHeures: cfg.comptes.lienHeures }));   // BREVO : la durée écrite dans le courriel est celle du lien
     });
 }
 

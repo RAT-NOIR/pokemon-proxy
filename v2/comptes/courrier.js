@@ -13,10 +13,13 @@ function creerCourrierMemoire() {
     const envoyes = [];
     const garder = e => { envoyes.push(e); while (envoyes.length > ENVOYES_MAX) envoyes.shift(); };
     return {
+        reel: false,      // ne part nulle part : la passe d'avertissement des inactifs le refuse (elle marquerait des comptes sans rien envoyer)
         envoyes,
         async envoyerVerification(email, lien, options) { garder({ type: 'verification', email, lien, texte: texteVerification(lien, options) }); },
-        async envoyerReinitialisation(email, lien) { garder({ type: 'reinit', email, lien }); }
+        async envoyerReinitialisation(email, lien) { garder({ type: 'reinit', email, lien }); },
+        async envoyerAvertissement(email, donnees) { garder({ type: 'avertissement', email, ...donnees }); }
     };
 }
-function creerCourrierBrevo() { throw new Error('non-implemente'); }   // lot ultérieur
+// Le pilote Brevo vit dans courrier-brevo.js (chargé à la demande : un banc du pilote mémoire n'en a pas besoin).
+function creerCourrierBrevo(options) { return require('./courrier-brevo').creerCourrierBrevo(options); }
 module.exports = { creerCourrierMemoire, creerCourrierBrevo, texteVerification, ENVOYES_MAX };

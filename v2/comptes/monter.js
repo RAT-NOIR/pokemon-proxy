@@ -9,9 +9,21 @@ module.exports = {
             const { verifierTurnstile } = require('./turnstile');
             registre.fournir('turnstile', { verifier: (jeton, ip) => verifierTurnstile(jeton, ip) });
         }
-        if (absent('courrier') && !process.env.BREVO_API_KEY)   // sans clé : mémoire seulement ; avec clé et pilote non écrit : rien (503)
-            registre.fournir('courrier', require('./courrier').creerCourrierMemoire());
+        if (absent('courrier')) {
+            if (!process.env.BREVO_API_KEY) registre.fournir('courrier', require('./courrier').creerCourrierMemoire());   // sans clé : mémoire seulement
+            else {
+                // BREVO : avec la clé, le pilote Brevo, sous le plafond du jour (V2_COURRIELS_JOUR). Une construction qui échoue (banc isolé, clé illisible) laisse le courrier NON fourni (503), comme avant le pilote :
+                // jamais un repli sur la mémoire avec une clé posée, qui ferait croire à un envoi. Le NOM de l'erreur seul est journalisé.
+                try {
+                    const { creerPlafondJour } = require('./plafond-courriels');
+                    registre.fournir('courrier', require('./courrier').creerCourrierBrevo({ de: cfg.courriels.de, repondreA: cfg.courriels.repondreA, plafond: creerPlafondJour({ max: cfg.courriels.jour }) }));
+                } catch (e) { console.error(`❌ [v2 courrier] pilote Brevo non monté (${(e && e.name) || 'Error'}) — le courrier reste indisponible (503)`); }
+            }
+        }
         routesComptes(router, cfg, deps);
         require('./purge').demarrerPurge({ cfg, ...(deps && deps.minuteurs ? { minuteurs: deps.minuteurs } : {}) });   // O3 : purge des comptes non confirmés (passe différée puis horaire), un seul minuteur par processus
+        // BREVO : la passe d'avertissement des comptes inactifs (30 jours avant la suppression). ÉTEINTE par défaut (V2_AVERTISSEMENTS_INACTIFS=1 pour l'allumer) ; elle lit le courrier à chaque passe et refuse un pilote qui n'envoie pas.
+        if (cfg.courriels && cfg.courriels.avertissementsInactifs)
+            require('./inactifs').demarrerAvertissements({ cfg, courrier: () => registre.obtenir('courrier'), ...(deps && deps.minuteurs ? { minuteurs: deps.minuteurs } : {}) });
     }
 };
