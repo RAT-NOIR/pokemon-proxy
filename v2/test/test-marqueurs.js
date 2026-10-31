@@ -12,7 +12,11 @@ const section3 = contrat.split(/^## 3\./m)[1].split(/^## 4\./m)[0];
 const lignes = section3.split(/\r?\n/).filter(l => /^\| `[A-Z0-9_]+` \|/.test(l)).map(l => l.split('|').slice(1, -1).map(c => c.trim()));
 const types = lignes.map(c => c[0].replace(/`/g, ''));
 H.v('1a. la table du §3 du contrat et le module disent les MÊMES types, dans le MÊME ordre (ordre d\'affichage)', types, [...MQ.NOMS_TYPES]);
-H.v('1b. 25 types (la liste fermée du contrat)', types.length, 25);
+H.v('1b. 27 types (la liste fermée du contrat)', types.length, 27);
+H.v('1b ter. GUICHET 31/10 (contrat v2) : LEAGUE_CUP « Tampon League Cup » / « League Cup stamp » (après LEAGUE) ; REGIONAL « Tampon Championnat régional » / « Regional Championship stamp » (après CHAMPIONSHIP) ; sans paramètre ; CHAMPIONSHIP inchangé',
+    [MQ.rendre('LEAGUE_CUP', {}), MQ.rendre('REGIONAL', {}), MQ.rendre('CHAMPIONSHIP', {}), MQ.NOMS_TYPES.indexOf('LEAGUE_CUP') - MQ.NOMS_TYPES.indexOf('LEAGUE'), MQ.NOMS_TYPES.indexOf('REGIONAL') - MQ.NOMS_TYPES.indexOf('CHAMPIONSHIP'),
+        MQ.TYPES.find(t => t.type === 'LEAGUE_CUP').params.length, MQ.TYPES.find(t => t.type === 'REGIONAL').params.length],
+    [{ fr: 'Tampon League Cup', en: 'League Cup stamp' }, { fr: 'Tampon Championnat régional', en: 'Regional Championship stamp' }, { fr: 'Tampon Championnat', en: 'Championship stamp' }, 1, 1, 0, 0]);
 H.v('1b bis. GUICHET 31/10 : SHADOWLESS « Sans ombre (Shadowless) » / « Shadowless » ; FINITION_NON_VISIBLE « Finition non visible » / « Finish not shown », en dernier, sans paramètre',
     [MQ.rendre('SHADOWLESS', {}), MQ.rendre('FINITION_NON_VISIBLE', {}), MQ.NOMS_TYPES[MQ.NOMS_TYPES.length - 1], MQ.TYPES.find(t => t.type === 'FINITION_NON_VISIBLE').params.length],
     [{ fr: 'Sans ombre (Shadowless)', en: 'Shadowless' }, { fr: 'Finition non visible', en: 'Finish not shown' }, 'FINITION_NON_VISIBLE', 0]);
