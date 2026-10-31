@@ -22,6 +22,17 @@ const verifier = (nom, obtenu, attendu) => {
     const e = await vignetterApresJointure(db, 'Set-A', { bucket: 'b', journal: muet, assurer: async () => { throw new Error('R2 injoignable'); } });
     verifier('un échec ne lève pas : il est rendu, aucun set', [e.vg.erreur, e.sets], ['R2 injoignable', []]);
 
+    // ── LE MOYEN (400 px) SE FABRIQUE DANS LA MÊME ÉTAPE (DEMANDE-CATALOGUE.md, le scan « moyen ») : même appel, mêmes sets revalidés
+    const appelsM = [];
+    const assurerMoy = async (db2, o) => { appelsM.push({ db2, o }); return { entrees: 2, cles: 1, traitees: 1, fabriquees: 1, refaites: 0, retirees: 0, deja: 0, depuisDocument: 0, echecs: [], interrompu: false, sets: ['Set-A', 'Set-C'] }; };
+    const rm = await vignetterApresJointure(db, 'Set-A', { bucket: 'bucket-x', arreter, assurer, assurerMoy });
+    verifier('le moyen est demandé après la vignette, sur le même set, le même bucket, avec la revérification des remplacements', [appelsM.length, appelsM[0].o.slug, appelsM[0].o.bucket, appelsM[0].o.reverifier, appelsM[0].o.arreter === arreter], [1, 'Set-A', 'bucket-x', true, true]);
+    verifier('le bilan porte le moyen à côté de la vignette ; les sets des deux sont rendus (sans doublon) pour la revalidation', [rm.vg.moyens.fabriquees, rm.vg.moyens.echecs, rm.vg.depuisDocument, rm.sets], [1, 0, 2, ['Set-A', 'Set-B', 'Set-C']]);
+    const em = await vignetterApresJointure(db, 'Set-A', { bucket: 'b', journal: muet, assurer, assurerMoy: async () => { throw new Error('moyen en panne'); } });
+    verifier('un échec du moyen ne perd PAS la vignette : elle reste rendue, l\'erreur du moyen est nommée à part', [em.vg.erreur, em.vg.moyens.erreur, em.sets], [undefined, 'moyen en panne', ['Set-A', 'Set-B']]);
+    const ev = await vignetterApresJointure(db, 'Set-A', { bucket: 'b', journal: muet, assurer: async () => { throw new Error('R2 injoignable'); }, assurerMoy });
+    verifier('un échec de la vignette ne prive pas le moyen de sa passe', [ev.vg.erreur, ev.vg.moyens.fabriquees, ev.sets], ['R2 injoignable', 1, ['Set-A', 'Set-C']]);
+
     // ── EFFET (sans R2) : une entrée réécrite sans vignette + un document `images` qui en porte une -> la vignette revient, recopiée
     // (depuisDocument), sans fabrication. `assurerVignettes` RÉEL, base fictive en mémoire, r2 remplacé (aucun accès réseau).
     const r2Faux = { verifierBucket: async () => { }, lireBinaire: async () => { throw new Error('ne doit pas lire R2 : la vignette est dans le document'); }, deposerBinaire: async () => { throw new Error('ne doit pas déposer'); } };

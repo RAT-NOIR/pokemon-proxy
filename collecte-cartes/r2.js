@@ -67,9 +67,10 @@ async function deposerTexte(bucket, cle, texte, contentType = 'text/plain; chars
     return { ecrit: true, cle };
 }
 
-/** Dépose un binaire (image) s'il n'y est pas déjà. */
-async function deposerBinaire(bucket, cle, buffer, contentType) {
-    if (await existe(bucket, cle)) return { ecrit: false, cle };
+/** Dépose un binaire (image) s'il n'y est pas déjà. `ecraser` (défaut false) : seul le moyen refait après un remplacement d'original sous la même
+ *  clé l'emploie (collecte-cartes/moyen.js) ; tout autre appelant garde le dépôt idempotent qui n'écrase rien. */
+async function deposerBinaire(bucket, cle, buffer, contentType, { ecraser = false } = {}) {
+    if (!ecraser && await existe(bucket, cle)) return { ecrit: false, cle };
     await client().send(new PutObjectCommand({ Bucket: bucket, Key: cle, Body: buffer, ContentType: contentType }));
     return { ecrit: true, cle };
 }
