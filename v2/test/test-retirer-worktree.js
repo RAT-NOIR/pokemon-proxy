@@ -691,6 +691,114 @@ try {
         const eh = cli([xh, '--executer'], envHors);
         vrai('6. CLI N5 : …et en exécution, rien n\'est supprimé', eh.status !== 0 && existe(path.join(xh, 'f')));
     }
+
+    // 7. CAS (d) : un worktree ENREGISTRÉ, enfant DIRECT du « bureau », nommé ^pokemon-proxy-v2-[a-z0-9-]+$. Le bureau est FABRIQUÉ (option `bureau`,
+    //    valable en banc seulement, strictement sous le Temp écrit en dur) ; le vrai bureau n'est jamais visé. Le scénario prend le module en paramètre :
+    //    la section 8 le rejoue sur des MUTANTS de l'outil, qui doivent le faire rougir.
+    const scenarioD = (Tm) => {
+        const res = {};
+        const base = fs.mkdtempSync(path.join(TMP, 'rm-retrait-dbase-'));
+        const bureau = fs.mkdtempSync(path.join(TMP, 'rm-retrait-bureau-')), ancien = fs.mkdtempSync(path.join(TMP, 'rm-retrait-ancien-'));
+        try {
+            const temoin = path.join(base, 'temoin'), temoin2 = path.join(base, 'temoin2'), apports = path.join(base, 'Logo FR');
+            fairetemoin(temoin, 'un'); fairetemoin(temoin2, 'deux'); fairetemoin(apports, 'apports');
+            const avT = photo(temoin), avT2 = photo(temoin2), avA = photo(apports);
+            const depot = depotTemp(base);
+            const o = (plus = {}) => ({ executer: true, racine: ROOT, journal: JOURNAL, bureau, ancienBureau: ancien, depots: [depot], sortie: muet, ...plus });
+            const ajouter = (chemin) => { fs.mkdirSync(path.dirname(chemin), { recursive: true }); const a = git(depot, 'worktree', 'add', '-q', '-b', 'd' + (++n), chemin); if (a.status !== 0) throw new Error('worktree add : ' + a.stderr); };
+            const intact = (...ps) => ps.every(existe);
+            // (d) accepté : jonctions node_modules, .banc-local\node_modules et une jonction vers un dossier d'apports fabriqué
+            const ok = path.join(bureau, 'pokemon-proxy-v2-x'); ajouter(ok);
+            jonction(temoin, path.join(ok, 'node_modules')); fs.mkdirSync(path.join(ok, 'x', 'y'), { recursive: true }); jonction(temoin2, path.join(ok, 'x', 'y', 'cache')); jonction(apports, path.join(ok, 'x', 'logos'));
+            const r = Tm.retirer(ok, o());
+            res.accepte = r.code === 0 && !existe(ok) && quarantaines(ok).length === 0;
+            res.cibles = JSON.stringify(photo(temoin)) === JSON.stringify(avT) && JSON.stringify(photo(temoin2)) === JSON.stringify(avT2);
+            res.apportsIntacts = JSON.stringify(photo(apports)) === JSON.stringify(avA);
+            res.gitNeListePlus = !listeWt(depot).includes(ok.replace(/\\/g, '/').toLowerCase());
+            // refusés : chacun reste en place, et ses cibles aussi
+            const refuse = (cle, chemin, plus = {}) => { const rr = Tm.retirer(chemin, o(plus)); res[cle] = rr.code !== 0 && existe(chemin); };
+            const nonEnreg = path.join(bureau, 'pokemon-proxy-v2-y'); fs.mkdirSync(nonEnreg); fs.writeFileSync(path.join(nonEnreg, 'f'), 'f'); refuse('dossierNonEnregistre', nonEnreg);
+            const enregAilleurs = path.join(bureau, 'pokemon-proxy-v2-z'); ajouter(enregAilleurs); refuse('enregistreIgnoreDesDepots', enregAilleurs, { depots: [] });
+            for (const [cle, nom] of [['nomPokemonProxy', 'pokemon-proxy'], ['nomApiV2', 'pokemon-proxy-api-v2'], ['sansSuffixe', 'pokemon-proxy-v2'], ['suffixeVide', 'pokemon-proxy-v2-'], ['soulignement', 'pokemon-proxy-v2-a_b'], ['point', 'pokemon-proxy-v2-a.b'], ['labo', 'pokemon-proxy-labo'], ['prefixeEtendu', 'xpokemon-proxy-v2-a']]) {
+                const p = path.join(bureau, nom); try { ajouter(p); } catch { res[cle] = 'non préparé'; continue; } refuse(cle, p);
+            }
+            const petit = path.join(bureau, 'sous', 'pokemon-proxy-v2-p'); ajouter(petit); refuse('petitEnfant', petit);
+            const logo = path.join(bureau, 'LOGO'); fs.mkdirSync(logo); fs.writeFileSync(path.join(logo, 'precieux.png'), 'p');
+            const ptsAvant = photo(logo);
+            const rt = Tm.retirer(path.join(bureau, 'pokemon-proxy-v2-x', '..', 'LOGO'), o()); const rt2 = Tm.retirer(path.join(bureau, 'pokemon-proxy-v2-..', 'x'), o());
+            const rt3 = Tm.retirer(path.join(bureau, 'pokemon-proxy-v2-q\\..\\LOGO'), o());
+            res.traversees = rt.code !== 0 && rt2.code !== 0 && rt3.code !== 0 && JSON.stringify(photo(logo)) === JSON.stringify(ptsAvant);
+            refuse('logoDirect', logo);
+            // un vrai dossier d'apports DANS un worktree admis : refusé sans --detruire-copies-apports, fichiers intacts
+            const avecA = path.join(bureau, 'pokemon-proxy-v2-w'); ajouter(avecA); fs.mkdirSync(path.join(avecA, 'Logo FR')); fs.writeFileSync(path.join(avecA, 'Logo FR', 'p.png'), 'p'); refuse('apportsDedans', avecA);
+            // sale : refusé sans --jeter-modifications
+            const sale = path.join(bureau, 'pokemon-proxy-v2-s'); ajouter(sale); fs.writeFileSync(path.join(sale, 'f.txt'), 'modifié'); refuse('sale', sale);
+            // plan (sans --executer) : ne supprime rien
+            const plan = path.join(bureau, 'pokemon-proxy-v2-pl'); ajouter(plan); const rpl = Tm.retirer(plan, o({ executer: false })); res.plan = rpl.code === 0 && existe(plan);
+            // autres dossiers du bureau
+            const voisin = path.join(bureau, 'rat-market-site'); fs.mkdirSync(voisin); fs.writeFileSync(path.join(voisin, 'f'), 'f'); refuse('voisinQuelconque', voisin);
+            // le bureau lui-même
+            const rb = Tm.retirer(bureau, o()); res.bureauLuiMeme = rb.code !== 0 && existe(bureau);
+            // sans l'option bureau (donc le vrai bureau, absent du banc) : le même nom est refusé
+            const sans = path.join(bureau, 'pokemon-proxy-v2-nb'); ajouter(sans); const o2 = o(); delete o2.bureau; const rs = Tm.retirer(sans, o2); res.sansOptionBureau = rs.code !== 0 && existe(sans);
+            // bureau de banc hors du Temp : refusé (aucune zone d), le worktree reste
+            const rh = Tm.retirer(sans, o({ bureau: path.dirname(TMP) })); res.bureauHorsTemp = rh.code !== 0 && existe(sans);
+            // option bureau SANS racine de banc (production) : refusée
+            const rp = Tm.retirer(sans, { executer: true, bureau, depots: [depot], sortie: muet }); res.bureauSansBanc = rp.code !== 0 && existe(sans);
+            // ---- copies DÉPLACÉES (le cas réel) : inscrites par git sous l'ANCIEN bureau, renommées vers le nouveau ----
+            const deplacer = (nomAncien, nomNouveau, parentAncien = ancien) => { const a = path.join(parentAncien, nomAncien), nv = path.join(bureau, nomNouveau); ajouter(a); fs.renameSync(a, nv); return { ancienChemin: a, nv }; };
+            const gone = deplacer('pokemon-proxy-v2-gone', 'pokemon-proxy-v2-gone'); fs.rmSync(gone.nv, { recursive: true, force: true });   // inscription « prunable » qui doit SURVIVRE (aucun prune)
+            const dp = deplacer('pokemon-proxy-v2-m', 'pokemon-proxy-v2-m');
+            jonction(temoin, path.join(dp.nv, 'node_modules')); fs.mkdirSync(path.join(dp.nv, 'x', 'y'), { recursive: true }); jonction(temoin2, path.join(dp.nv, 'x', 'y', 'cache'));
+            const lp = () => (git(depot, 'worktree', 'list', '--porcelain').stdout || '').replace(/\r/g, '').replace(/\\/g, '/').toLowerCase(), fw = (x) => x.replace(/\\/g, '/').toLowerCase();
+            const brut = lp();
+            const autresAvant = brut.split(/\n\s*\n/).filter(b => b.trim() && !b.includes(fw(dp.ancienChemin))).map(b => b.trim()).sort().join('\n');
+            const rpd = Tm.retirer(dp.nv, o({ executer: false })); res.deplacePlan = rpd.code === 0 && existe(dp.nv);
+            const rd = Tm.retirer(dp.nv, o());
+            const apres = lp();
+            res.deplaceAccepte = rd.code === 0 && !existe(dp.nv) && quarantaines(dp.nv).length === 0 && !apres.includes(fw(dp.ancienChemin));
+            res.deplaceCibles = JSON.stringify(photo(temoin)) === JSON.stringify(avT) && JSON.stringify(photo(temoin2)) === JSON.stringify(avT2);
+            res.deplaceAutresInscriptions = apres.split(/\n\s*\n/).filter(b => b.trim()).map(b => b.trim()).sort().join('\n') === autresAvant && apres.includes(fw(gone.ancienChemin));
+            // refusés : nom différent de l'ancien, ancien parent inconnu, ancien chemin qui existe encore (copie, pas déplacement), ancien bureau non donné
+            const m1 = deplacer('pokemon-proxy-v2-m1', 'pokemon-proxy-v2-m1b'); refuse('deplaceNomDifferent', m1.nv);
+            const m2 = deplacer('pokemon-proxy-v2-m2', 'pokemon-proxy-v2-m2', base); refuse('deplaceMauvaisParent', m2.nv);
+            const m3a = path.join(ancien, 'pokemon-proxy-v2-m3'); ajouter(m3a); const m3 = path.join(bureau, 'pokemon-proxy-v2-m3'); fs.cpSync(m3a, m3, { recursive: true }); refuse('deplaceAncienExiste', m3);
+            res.deplaceAncienIntact = existe(m3a);
+            const m4 = deplacer('pokemon-proxy-v2-m4', 'pokemon-proxy-v2-m4'); const o4 = o(); delete o4.ancienBureau; const r4 = Tm.retirer(m4.nv, o4); res.deplaceSansAncienOption = r4.code !== 0 && existe(m4.nv);
+            const rr = path.join(ancien, 'pokemon-proxy-v2-r'), rrn = path.join(ROOT, 'wr' + (++n), 'pokemon-proxy-v2-r'); fs.mkdirSync(path.dirname(rrn)); ajouter(rr); fs.renameSync(rr, rrn); refuse('deplaceHorsBureau', rrn);   // déplacée sous la racine (zone a) : l'exception ne vaut qu'au bureau
+            res.temoinsFin = intact(temoin, temoin2, apports) && JSON.stringify(photo(apports)) === JSON.stringify(avA);
+        } finally {
+            for (const d of [bureau, ancien, base]) { try { delier(d); fs.rmSync(d, { recursive: true, force: true }); } catch { /* rien */ } }
+        }
+        return res;
+    };
+    {
+        const res = scenarioD(T);
+        const attendu = ['accepte', 'cibles', 'apportsIntacts', 'gitNeListePlus', 'dossierNonEnregistre', 'enregistreIgnoreDesDepots', 'nomPokemonProxy', 'nomApiV2', 'sansSuffixe', 'suffixeVide', 'soulignement', 'point', 'labo', 'prefixeEtendu', 'petitEnfant', 'traversees', 'logoDirect', 'apportsDedans', 'sale', 'plan', 'voisinQuelconque', 'bureauLuiMeme', 'sansOptionBureau', 'bureauHorsTemp', 'bureauSansBanc', 'deplacePlan', 'deplaceAccepte', 'deplaceCibles', 'deplaceAutresInscriptions', 'deplaceNomDifferent', 'deplaceMauvaisParent', 'deplaceAncienExiste', 'deplaceAncienIntact', 'deplaceSansAncienOption', 'deplaceHorsBureau', 'temoinsFin'];
+        for (const k of attendu) vrai(`7. (d) ${k}`, res[k] === true);
+        // 8. MUTANTS : chaque mutation de l'outil doit faire rougir au moins une vérification du scénario (d)
+        const src = fs.readFileSync(require.resolve('../../outils/retirer-worktree'), 'utf8');
+        const mutations = [
+            ['retire la condition « enregistré »', "if (!enregistres.has(cle(entree.worktree.inscrit || r))) throw", "if (false) throw"],
+            ['déplacement : ne compare plus le nom à l\'ancien', "|| cle(path.basename(ins)) !== cle(path.basename(cible))", ""],
+            ['déplacement : ne compare plus l\'ancien parent', "cle(parent) !== cle(ancien) ||", ""],
+            ['déplacement : accepte un ancien chemin encore présent', "if (lstatOuNull(ins)) throw", "if (false) throw"],
+            ['déplacement : admis hors du bureau', "if (zone !== 'bureau' || !ancien ||", "if (!ancien ||"],
+            ['élargit le motif (préfixe seul)', "/^pokemon-proxy-v2-[a-z0-9-]+$/i", "/^pokemon-proxy-/i"],
+            ['élargit le motif (sans ancre de fin)', "/^pokemon-proxy-v2-[a-z0-9-]+$/i", "/^pokemon-proxy-v2-[a-z0-9-]+/i"],
+            ['élargit le motif (suffixe optionnel)', "/^pokemon-proxy-v2-[a-z0-9-]+$/i", "/^pokemon-proxy-v2-[a-z0-9-]*$/i"],
+            ['élargit à tout descendant du bureau', "cle(path.dirname(r)) === cle(bureau)", "sousStrict(bureau, r)"],
+            ['accepte tout enfant du bureau', "&& RE_BUREAU.test(q ? q[1] : nom)", ""],
+        ];
+        for (const [nom, de, vers] of mutations) {
+            if (!src.includes(de)) { vrai(`8. mutant « ${nom} » : la cible de la mutation existe dans l'outil`, false); continue; }
+            const f = path.join(ROOT, `mutant-${++n}.js`);
+            fs.writeFileSync(f, src.replace(de, vers));
+            let rouge = false, qui = '';
+            try { const rm = scenarioD(require(f)); const ko2 = attendu.filter(k => rm[k] !== true); rouge = ko2.length > 0; qui = ko2.join(','); } catch (e) { rouge = false; qui = 'EXCEPTION ' + e.message; }
+            vrai(`8. mutant « ${nom} » : le banc rougit sur une vérification précise (${qui})`, rouge);
+        }
+    }
 } catch (e) {
     console.log(`❌ exception du banc : ${e && e.stack || e}`); ko++;
 } finally {

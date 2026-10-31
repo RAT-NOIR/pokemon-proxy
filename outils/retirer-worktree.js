@@ -36,7 +36,13 @@
 //
 // LA GARDE S'ÉCRIT PAR CE QU'ELLE AUTORISE, ET RIEN D'AUTRE :
 //   (a) un worktree ENREGISTRÉ (`git worktree list --porcelain` de l'un des dépôts connus) situé STRICTEMENT sous `…\rat-market-travail\api\` ;
-//   (b) un enfant DIRECT de `…\rat-market-travail\api\_mutants\` ; (c) une quarantaine du journal.
+//   (b) un enfant DIRECT de `…\rat-market-travail\api\_mutants\` ; (c) une quarantaine du journal ;
+//   (d) un worktree ENREGISTRÉ, enfant DIRECT de `C:\Users\Yung\rat-market-travail\archives-bureau`, au nom EXACT ^pokemon-proxy-v2-[a-z0-9-]+$
+//       (copies de travail des lots v2, DÉPLACÉES du bureau). Même procédure que (a). Ces copies sont déplacées : git les a inscrites sous
+//       `C:\Users\Yung\Desktop\<même nom>` (ancien chemin, qui doit ne plus exister). L'outil ne répare PAS l'inscription et n'élague JAMAIS
+//       (`git worktree repair` / `prune` : aucun) : il la reconnaît (`resoudreInscrit`), vérifie qu'elle est dans la liste git, puis retire le
+//       répertoire d'administration comme pour (a). Tout le reste du bureau et des archives reste refusé.
+//       Les options `bureau` et `ancienBureau` sont réservées au banc (strictement sous le Temp écrit en dur, racine de banc exigée).
 // Jamais un dépôt principal, jamais `api\` lui-même, jamais `node22`, jamais un sous-dossier d'un worktree, jamais un lien.
 // Refus dur, quel que soit l'environnement : tout chemin qui contient un dossier d'apports (Logo FR, apport-manuel, Desktop\LOGO, Logo JP, Logo ZH,
 // GABARIT-pokecardex). Les variables de banc (RM_RETRAIT_RACINE_BANC, RM_RETRAIT_JOURNAL) ne valent que si la racine qu'elles nomment est sous
@@ -50,6 +56,9 @@ const { spawnSync } = require('child_process');
 
 const RACINE_PAR_DEFAUT = 'C:\\Users\\Yung\\rat-market-travail\\api';
 const JOURNAL_PAR_DEFAUT = path.join(RACINE_PAR_DEFAUT, 'journal-retraits.jsonl');
+const BUREAU_PAR_DEFAUT = 'C:\\Users\\Yung\\rat-market-travail\\archives-bureau';   // cas (d) : les copies pokemon-proxy-v2-* rangées là (déplacées du bureau)
+const ANCIEN_BUREAU_PAR_DEFAUT = 'C:\\Users\\Yung\\Desktop';   // où git les a inscrites avant leur déplacement
+const RE_BUREAU = /^pokemon-proxy-v2-[a-z0-9-]+$/i;    // le nom EXACT admis au bureau ; tout le reste du bureau est refusé
 const DEPOTS_PAR_DEFAUT = ['C:\\Users\\Yung\\Desktop\\pokemon-proxy-api-v2', 'C:\\Users\\Yung\\Desktop\\pokemon-proxy'];
 const TEMP_EN_DUR = 'C:\\Users\\Yung\\AppData\\Local\\Temp';   // jamais os.tmpdir() : TEMP et TMP sont sous le contrôle de l'environnement
 const MARQUEUR_BANC = '.rm-retrait-banc';          // fichier que SEUL le banc écrit dans sa racine, avec ce contenu exact
@@ -92,14 +101,28 @@ function trouverGit() {
     return exe;
 }
 
+// Cas (d) : enfant DIRECT du bureau, au nom EXACT ^pokemon-proxy-v2-[a-z0-9-]+$ (ou sa quarantaine <nom>.retrait-…). L'enregistrement par git est
+// vérifié à part (admettre) ; ici seulement la FORME.
+function estEnfantBureau(r, bureau) {
+    if (!bureau) return false;
+    const nom = path.basename(r), q = RE_QUARANTAINE.exec(nom);
+    return cle(path.dirname(r)) === cle(bureau) && RE_BUREAU.test(q ? q[1] : nom);
+}
+
 // La racine permise : la constante, ou (BANCS SEULEMENT) une racine STRICTEMENT sous le Temp écrit en dur, qui porte le marqueur du banc, avec un
 // journal à elle sous ce même Temp. Un journal de banc sans racine de banc, ou l'inverse, est refusé.
+// Le bureau (cas d) : la constante ; en banc, `opts.bureau` (strictement sous le Temp écrit en dur) ou aucun ; hors banc, `opts.bureau` est refusé.
 function resoudreRacine(opts) {
     const banc = opts.racine !== undefined && opts.racine !== null && opts.racine !== '';
+    const bureauDonne = opts.bureau !== undefined && opts.bureau !== null && opts.bureau !== '';
+    const ancienDonne = opts.ancienBureau !== undefined && opts.ancienBureau !== null && opts.ancienBureau !== '';
     if (!banc) {
         if (opts.journal) throw new Refus(1, 'refus-entree', 'un journal de banc sans racine de banc est refusé');
+        if (bureauDonne || ancienDonne) throw new Refus(1, 'refus-entree', 'un bureau de banc sans racine de banc est refusé');
         let r; try { r = reel(RACINE_PAR_DEFAUT); } catch { throw new Refus(1, 'refus-entree', 'la racine permise est absente de ce poste'); }
-        return { racine: r, journal: JOURNAL_PAR_DEFAUT, banc: false, depots: DEPOTS_PAR_DEFAUT };
+        let b = null; try { b = reel(BUREAU_PAR_DEFAUT); } catch { /* dossier d'archives absent de ce poste : aucun cas (d) */ }
+        let a = null; try { a = reel(ANCIEN_BUREAU_PAR_DEFAUT); } catch { /* bureau absent : aucune copie déplacée admise */ }
+        return { racine: r, journal: JOURNAL_PAR_DEFAUT, banc: false, depots: DEPOTS_PAR_DEFAUT, bureau: b, ancienBureau: a };
     }
     if (!opts.journal) throw new Refus(1, 'refus-entree', 'une racine de banc exige un journal de banc');
     let tmp; try { tmp = reel(TEMP_EN_DUR); } catch { throw new Refus(1, 'refus-entree', 'le dossier Temp écrit en dur est absent de ce poste : aucune racine de banc'); }
@@ -110,11 +133,22 @@ function resoudreRacine(opts) {
     let jd; try { jd = reel(path.dirname(path.resolve(opts.journal))); } catch { throw new Refus(1, 'refus-entree', 'dossier du journal de banc absent'); }
     const j = path.join(jd, path.basename(opts.journal));
     if (!sousStrict(tmp, j)) throw new Refus(1, 'refus-entree', `journal de banc refusé : il doit être STRICTEMENT sous ${TEMP_EN_DUR}`);
-    return { racine: r, journal: j, banc: true, depots: Array.isArray(opts.depots) ? opts.depots : [] };
+    let bureau = null, ancienBureau = null;
+    if (bureauDonne) {
+        let b; try { b = reel(opts.bureau); } catch { throw new Refus(1, 'refus-entree', 'bureau de banc absent'); }
+        if (!sousStrict(tmp, b)) throw new Refus(1, 'refus-entree', `bureau de banc refusé : il doit être STRICTEMENT sous ${TEMP_EN_DUR}`);
+        bureau = b;
+    }
+    if (ancienDonne) {
+        let a; try { a = reel(opts.ancienBureau); } catch { throw new Refus(1, 'refus-entree', 'ancien bureau de banc absent'); }
+        if (!sousStrict(tmp, a)) throw new Refus(1, 'refus-entree', `ancien bureau de banc refusé : il doit être STRICTEMENT sous ${TEMP_EN_DUR}`);
+        ancienBureau = a;
+    }
+    return { racine: r, journal: j, banc: true, depots: Array.isArray(opts.depots) ? opts.depots : [], bureau, ancienBureau };
 }
 
-// Refus d'entrée (le dossier est-il ce qu'il prétend être ?). Retourne { dossier (réel), worktree: null | { repo, admin, commun } }.
-function verifierEntree(brut, racine) {
+// Refus d'entrée (le dossier est-il ce qu'il prétend être ?). Retourne { dossier (réel), zone, worktree: null | { repo, admin, commun } }.
+function verifierEntree(brut, racine, bureau = null, ancienBureau = null) {
     if (typeof brut !== 'string' || !brut.trim()) throw new Refus(1, 'refus-entree', 'aucun dossier donné');
     const abs = path.resolve(brut);
     const st = lstatOuNull(abs);
@@ -125,9 +159,10 @@ function verifierEntree(brut, racine) {
     if (cle(r) !== cle(abs)) throw new Refus(1, 'refus-entree', `le chemin traverse un lien ou un nom court (réel : ${r}) : donne le chemin réel`);
     const ap = estDossierApports(r);
     if (ap) throw new Refus(1, 'refus-apports', `le chemin contient un dossier d'apports manuels (« ${ap} ») : jamais retiré, quel que soit l'environnement (${r})`);
-    if (!sousStrict(racine, r)) throw new Refus(1, 'refus-entree', `dossier hors de la racine permise (ou égal à elle) : ${r}`);
+    const zone = estEnfantBureau(r, bureau) ? 'bureau' : (sousStrict(racine, r) ? 'racine' : null);
+    if (!zone) throw new Refus(1, 'refus-entree', `dossier hors de la racine permise (ou égal à elle), et pas un enfant direct du bureau au nom pokemon-proxy-v2-… : ${r}`);
     const g = lstatOuNull(path.join(r, '.git'));
-    if (!g) return { dossier: r, worktree: null };
+    if (!g) return { dossier: r, zone, worktree: null };
     if (g.isSymbolicLink()) throw new Refus(1, 'refus-entree', `.git est un lien : refusé (${r})`);
     if (g.isDirectory()) throw new Refus(1, 'refus-entree', `dépôt principal (dossier .git réel) : refusé (${r})`);
     const m = /^gitdir:\s*(.+?)\s*$/m.exec(fs.readFileSync(path.join(r, '.git'), 'utf8'));
@@ -138,10 +173,28 @@ function verifierEntree(brut, racine) {
     const commun = path.resolve(gitdir, fs.readFileSync(path.join(gitdir, 'commondir'), 'utf8').trim());
     const repo = path.basename(commun).toLowerCase() === '.git' ? path.dirname(commun) : commun;
     if (!lstatOuNull(repo)) throw new Refus(1, 'refus-entree', `worktree orphelin : son dépôt est introuvable (${r})`);
-    return { dossier: r, worktree: { repo, admin: gitdir, commun } };
+    const inscrit = RE_QUARANTAINE.test(path.basename(r)) ? null : resoudreInscrit(gitdir, r, zone, ancienBureau);
+    return { dossier: r, zone, worktree: { repo, admin: gitdir, commun, inscrit } };
 }
 
-// Le répertoire d'administration d'un worktree : enfant DIRECT de <commun>\worktrees\, et son fichier `gitdir` doit désigner <cible>\.git.
+// Le chemin sous lequel git a INSCRIT le worktree (le `gitdir` de son répertoire d'administration, sans le « .git »). C'est la cible elle-même, sauf
+// pour une copie DÉPLACÉE (cas d, zone bureau seulement) : l'inscription vise alors l'ANCIEN chemin, qui doit être <ancien bureau>\<même nom> et ne
+// plus exister. Tout autre écart rend la cible elle-même : verifierAdmin refusera. Aucune réparation, aucun `prune` : l'inscription disparaît avec
+// le répertoire d'administration, retiré par l'outil comme pour (a).
+function resoudreInscrit(admin, cible, zone, ancien) {
+    let g;
+    try { g = path.resolve(fs.readFileSync(path.join(admin, 'gitdir'), 'utf8').trim()); }
+    catch (e) { throw new Refus(1, 'refus-admin', `répertoire d'administration illisible (${admin}) : ${e.code || e.message}`); }
+    if (cle(g) === cle(path.join(cible, '.git'))) return cible;
+    if (zone !== 'bureau' || !ancien || path.basename(g).toLowerCase() !== '.git') return cible;
+    const ins = path.dirname(g);
+    let parent; try { parent = reel(path.dirname(ins)); } catch { return cible; }
+    if (cle(parent) !== cle(ancien) || cle(path.basename(ins)) !== cle(path.basename(cible))) return cible;
+    if (lstatOuNull(ins)) throw new Refus(1, 'refus-admin', `l'ancien chemin inscrit existe encore (${ins}) : ce n'est pas un déplacement, refusé`);
+    return ins;
+}
+
+// Le répertoire d'administration d'un worktree : enfant DIRECT de <commun>\worktrees\, et son fichier `gitdir` doit désigner <inscrit>\.git.
 function verifierAdmin(admin, cible) {
     let commun, g;
     try {
@@ -169,9 +222,11 @@ function worktreesEnregistres(depots, git) {
 
 // Ce que l'outil AUTORISE, et rien d'autre : (a) un worktree enregistré sous la racine ; (b) un enfant direct de _mutants.
 function admettre(r, entree, ctx) {
+    if (entree.zone === 'bureau' && !(entree.worktree && estEnfantBureau(r, ctx.bureau)))
+        throw new Refus(1, 'refus-non-admis', `au bureau, seul un worktree ENREGISTRÉ enfant direct nommé pokemon-proxy-v2-… est admis : refusé (${r})`);
     if (entree.worktree) {
         const enregistres = worktreesEnregistres(ctx.depots, trouverGit());
-        if (!enregistres.has(cle(r))) throw new Refus(1, 'refus-non-enregistre', `ce worktree n'est enregistré (git worktree list) dans aucun des dépôts connus (${ctx.depots.length}) : refusé (${r})`);
+        if (!enregistres.has(cle(entree.worktree.inscrit || r))) throw new Refus(1, 'refus-non-enregistre', `ce worktree n'est enregistré (git worktree list) dans aucun des dépôts connus (${ctx.depots.length}) : refusé (${r})`);
         return;
     }
     const mutants = path.join(ctx.racine, '_mutants');
@@ -266,11 +321,12 @@ function controlesAvantAction(dossier, entree, ctx, lanceurGit) {
     if (dedans) throw new Refus(1, 'refus-contient-git', `le dossier contient un .git à l'intérieur (${dedans}) : un dépôt ou un worktree s'y cache, refusé`);
     const apportsDedans = trouverApportsDedans(dossier);
     if (!entree.worktree) return { sale: [], ignores: [], liste: null, apportsDedans };
-    verifierAdmin(entree.worktree.admin, dossier);
+    const inscrit = entree.worktree.inscrit || dossier;
+    verifierAdmin(entree.worktree.admin, inscrit);
     const li = lanceurGit(['-C', entree.worktree.repo, 'worktree', 'list', '--porcelain']);
     if (li.status !== 0) throw new Refus(1, 'refus-liste-git', `git worktree list a échoué (code ${li.status}) : je ne peux pas conclure sur le verrou`);
     const liste = parserListe(li.stdout);
-    const moi = liste.find(b => b.chemin === cle(dossier));
+    const moi = liste.find(b => b.chemin === cle(inscrit));
     if (!moi) throw new Refus(1, 'refus-liste-git', `git ne liste pas ce worktree (${dossier}) : je ne peux pas conclure`);
     if (/^locked(\s|$)/m.test(moi.texte))
         throw new Refus(1, 'refus-verrou', `ce worktree est VERROUILLÉ par git : déverrouille-le toi-même (git worktree unlock), je ne force rien`);
@@ -410,7 +466,7 @@ function retirer(dossierBrut, opts = {}) {
     let entree, ctx, reprise = null;
     try {
         ctx = resoudreRacine(opts);
-        entree = verifierEntree(dossierBrut, ctx.racine);
+        entree = verifierEntree(dossierBrut, ctx.racine, ctx.bureau, ctx.ancienBureau);
         if (RE_QUARANTAINE.test(path.basename(entree.dossier))) {
             // une quarantaine n'est admise QUE si le journal l'a posée (chemin d'origine, nom, répertoire d'administration)
             reprise = lireJournal(ctx.journal).filter(l => l.evenement === 'quarantaine' && l.quarantaine && cle(path.resolve(l.quarantaine)) === cle(entree.dossier)).pop() || null;
@@ -442,11 +498,13 @@ function retirer(dossierBrut, opts = {}) {
             for (const a of rec.apports) sortie(`  🔴 ROUGE compte APRÈS de la cible d'apports ${a.cible} : ${decrire(a.apres)}`);
         };
         let quar = null, origine = dossier, avantListe = null, adminACibler = worktree ? worktree.admin : null;
+        let inscrit = worktree && worktree.inscrit ? worktree.inscrit : dossier;   // le chemin sous lequel git a inscrit le worktree (≠ dossier pour une copie déplacée)
         let contexte2 = { dossier, chemin: dossier, cibles: [] };
 
         if (reprise) {
             // ---- REPRISE d'une quarantaine posée par l'outil : on reprend au contrôle par l'inventaire et l'instrument ----
             origine = reprise.origine;
+            inscrit = reprise.inscrit || reprise.origine;
             adminACibler = reprise.admin || null;
             for (const a of (reprise.avant || [])) { const { cible, ...avant } = a; cibles.set(cle(cible), { cible, avant, apports: null }); }
             rec.avant = reprise.avant || [];
@@ -455,7 +513,7 @@ function retirer(dossierBrut, opts = {}) {
             const dedans = trouverGitDedans(dossier);
             if (dedans) throw new Refus(1, 'refus-contient-git', `la quarantaine contient un .git à l'intérieur (${dedans}) : refusé`);
             if (worktree && adminACibler && lstatOuNull(adminACibler)) {
-                verifierAdmin(adminACibler, origine);
+                verifierAdmin(adminACibler, inscrit);
                 const li = lanceurGit(['-C', worktree.repo, 'worktree', 'list', '--porcelain']);
                 if (li.status !== 0) throw new Refus(1, 'refus-liste-git', `git worktree list a échoué (code ${li.status})`);
                 avantListe = parserListe(li.stdout);
@@ -540,7 +598,7 @@ function retirer(dossierBrut, opts = {}) {
                 if (!lstatOuNull(cand)) quar = cand;
             }
             if (!quar) throw new Refus(3, 'refus-renommage', 'aucun nom de quarantaine libre ; le dossier reste en place');
-            ajouterJournal({ evenement: 'quarantaine', date: new Date().toISOString(), dossier: quar, origine: dossier, quarantaine: quar, admin: worktree ? worktree.admin : null, repo: worktree ? worktree.repo : null, avant: rec.avant });
+            ajouterJournal({ evenement: 'quarantaine', date: new Date().toISOString(), dossier: quar, origine: dossier, inscrit, quarantaine: quar, admin: worktree ? worktree.admin : null, repo: worktree ? worktree.repo : null, avant: rec.avant });
             try { fs.renameSync(dossier, quar); }
             catch (e) { quar = null; throw new Refus(3, 'refus-renommage', `le renommage en quarantaine a échoué (${e.code || e.message}) : un processus tient peut-être le dossier ; il reste en place, ses liens sont déjà retirés`); }
             enQuarantaine = true; rec.quarantaine = quar; contexte.chemin = quar;
@@ -563,15 +621,15 @@ function retirer(dossierBrut, opts = {}) {
         //    ET doit lister à l'identique tous les autres worktrees d'avant. Plus aucun `git worktree prune` : il élaguerait aussi les autres.
         if (worktree) {
             if (adminACibler && lstatOuNull(adminACibler)) {
-                verifierAdmin(adminACibler, origine);
+                verifierAdmin(adminACibler, inscrit);
                 supprimerEntree(adminACibler, path.dirname(adminACibler), { liens: [] }, {});
             }
             const li = lanceurGit(['-C', worktree.repo, 'worktree', 'list', '--porcelain']);
             if (li.status !== 0) throw new Refus(4, 'ALERTE-liste-git', `🚨🚨 ALERTE ROUGE : git worktree list a échoué après le retrait (code ${li.status}) : je ne peux pas vérifier ; le dossier est déjà supprimé`);
             const apresListe = parserListe(li.stdout);
-            const encore = apresListe.some(b => b.chemin === cle(origine));
-            const sans = (liste) => (liste || []).filter(b => b.chemin !== cle(origine)).map(b => b.texte).sort();
-            if (encore) throw new Refus(4, 'ALERTE-liste-git', `🚨🚨 ALERTE ROUGE : git liste ENCORE le worktree retiré (${origine}) après le retrait de son répertoire d'administration ; le dossier est déjà supprimé`);
+            const encore = apresListe.some(b => b.chemin === cle(inscrit));
+            const sans = (liste) => (liste || []).filter(b => b.chemin !== cle(inscrit)).map(b => b.texte).sort();
+            if (encore) throw new Refus(4, 'ALERTE-liste-git', `🚨🚨 ALERTE ROUGE : git liste ENCORE le worktree retiré (${inscrit}) après le retrait de son répertoire d'administration ; le dossier est déjà supprimé`);
             if (avantListe && JSON.stringify(sans(avantListe)) !== JSON.stringify(sans(apresListe)))
                 throw new Refus(4, 'ALERTE-liste-git', '🚨🚨 ALERTE ROUGE : la liste des AUTRES worktrees a changé pendant le retrait (git worktree list avant et après ne sont pas identiques) ; le dossier est déjà supprimé');
         }
