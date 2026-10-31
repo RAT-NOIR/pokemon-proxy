@@ -29,7 +29,7 @@ const TYPES = Object.freeze([
     { type: 'WCD', params: ['annee', 'joueur'], obligatoires: ['annee'], formes: () => WCD_GABARITS },
     fixe('NON_LEGAL', 'Non autorisée en tournoi', 'Not tournament legal'),
     fixe('EDITION_1', '1re édition', '1st Edition'),
-    fixe('SHADOWLESS', 'Sans ombre', 'Shadowless'),
+    fixe('SHADOWLESS', 'Sans ombre (Shadowless)', 'Shadowless'),
     fixe('STAFF', 'Tampon Staff', 'Staff stamp'),
     fixe('PRERELEASE', 'Tampon Avant-première', 'Prerelease stamp'),
     fixe('LEAGUE', 'Tampon Ligue', 'League stamp'),
@@ -49,7 +49,8 @@ const TYPES = Object.freeze([
     fixe('ORIGINS', 'Tampon Origins Game Fair', 'Origins Game Fair stamp'),
     fixe('SNOWFLAKE', 'Tampon Flocon', 'Snowflake stamp'),
     fixe('COSMO', 'Holo Cosmos', 'Cosmos holo'),
-    fixe('MCDONALDS', 'Promo McDonald\'s', 'McDonald\'s promo')
+    fixe('MCDONALDS', 'Promo McDonald\'s', 'McDonald\'s promo'),
+    fixe('FINITION_NON_VISIBLE', 'Finition non visible', 'Finish not shown')           // GUICHET 31/10 : catalogue seulement (Prize Pack S7-S9 : le rendu officiel ne montre aucune finition)
 ]);
 const PAR_TYPE = new Map(TYPES.map((t, i) => [t.type, { ...t, rang: i }]));
 const NOMS_TYPES = Object.freeze(TYPES.map(t => t.type));

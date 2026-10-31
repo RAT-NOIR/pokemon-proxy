@@ -9,8 +9,9 @@ const importerParDefaut = f => import(pathToFileURL(path.join(__dirname, f)).hre
 
 /** @returns {Promise<{fichesDuDocument, setParImpression, impressionDuSet, produitsDeLaFiche, visuelAdmisPourLaRegion, normaliserNumero, cardmarketUrl}>} — `importer` est injectable pour le banc. */
 async function regleEmbarquee({ importer = importerParDefaut } = {}) {
-    const [I, C, L, N, D] = await Promise.all(['impressionsDuSet.mjs', 'cardmarket.mjs', 'langueDuVisuel.mjs', 'imageDeLImpression.mjs', 'impressionDuSet.mjs'].map(f => importer(f)));
-    const r = { fichesDuDocument: I?.fichesDuDocument, setParImpression: I?.setParImpression, impressionDuSet: D?.impressionDuSet, produitsDeLaFiche: C?.produitsDeLaFiche, visuelAdmisPourLaRegion: L?.visuelAdmisPourLaRegion,
+    const [I, C, L, N, D, A] = await Promise.all(['impressionsDuSet.mjs', 'cardmarket.mjs', 'langueDuVisuel.mjs', 'imageDeLImpression.mjs', 'impressionDuSet.mjs', 'annexes.mjs'].map(f => importer(f)));
+    // GUICHET 31/10 — ANNEXES (Yellow A) : `impressionsEtAnnexes` est FACULTATIVE (absente d'une règle injectée par un banc = comportement d'avant, sans annexe) ; embarquée, elle est TOUJOURS là.
+    const r = { impressionsEtAnnexes: typeof A?.impressionsEtAnnexes === 'function' ? A.impressionsEtAnnexes : undefined, expansionsAnnexes: Array.isArray(A?.EXPANSIONS_ANNEXES) ? A.EXPANSIONS_ANNEXES : [], fichesDuDocument: I?.fichesDuDocument, setParImpression: I?.setParImpression, impressionDuSet: D?.impressionDuSet, produitsDeLaFiche: C?.produitsDeLaFiche, visuelAdmisPourLaRegion: L?.visuelAdmisPourLaRegion,
         normaliserNumero: N?.normaliserNumero, cardmarketUrl: C?.cardmarketUrl };
     for (const k of REQUISES) if (typeof r[k] !== 'function') throw new Error(`règle embarquée : ${k} absent de v2/chargeur/regle-site — le chargeur s'arrête (jamais un repli)`);
     return Object.freeze(r);
