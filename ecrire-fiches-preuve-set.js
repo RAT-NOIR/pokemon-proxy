@@ -40,8 +40,9 @@ function jugerTout({ sources, lecture, cibles = FPS.CIBLES }) {
     const fauxPartout = verdicts.reduce((s, v) => s + (v.calibration ? v.calibration.faux : 0), 0);
     const calibres = verdicts.filter(v => v.calibration && v.calibration.jugees > 0);
     const jugees = calibres.reduce((s, v) => s + v.calibration.jugees, 0);
-    const global = { fauxPartout, setsCalibres: calibres.length, produitsJuges: jugees, regleFiable: fauxPartout === 0 };
-    if (!global.regleFiable) for (const v of verdicts) if (v.admis) { v.admis = false; v.motifs = [...v.motifs, `la règle montre ${fauxPartout} faux sur un set de calibration : rien n'est admis`]; v.raison = v.motifs.join(' ; '); v.attributions = []; }
+    const global = { fauxPartout, setsCalibres: calibres.length, produitsJuges: jugees, regleFiable: fauxPartout === 0 && calibres.length > 0 };
+    global.message = fauxPartout > 0 ? `la règle montre ${fauxPartout} faux sur un set de calibration : rien n'est admis` : calibres.length === 0 ? 'calibration sur zéro set : elle n\'a rien prouvé, aucun set n\'est admis' : null;
+    if (!global.regleFiable) for (const v of verdicts) if (v.admis) { v.admis = false; v.motifs = [...v.motifs, global.message]; v.raison = v.motifs.join(' ; '); v.attributions = []; }
     return { verdicts, global };
 }
 
@@ -77,6 +78,7 @@ async function executer({ argv, ouvrirLecture, ouvrirEcriture, cibles = FPS.CIBL
         const lecture = await V5.lire({ cartesDb, prodDb, expansions: [...new Set(cibles.map(c => c.exp))] });
         const { verdicts, global } = jugerTout({ sources, lecture, cibles });
         log(`   DÉNOMINATEURS : ${verdicts.length} sets jugés · ${lecture.cartes.length} cartes · ${lecture.sets.size} sets · ${lecture.lignes.length} lignes cartes_produits · calibration : ${global.setsCalibres} set(s) calibré(s), ${global.produitsJuges} produits jugés, ${global.fauxPartout} faux`);
+        if (global.message) log(`   ⚠️ ${global.message}`);
         for (const v of verdicts) {
             log(`\n■ ${v.cible.nom} · exp ${v.cible.exp} · rôle ${v.cible.role} · source ${v.source.length} entrées · produits ${v.produits.length} → ${v.admis ? 'ADMIS' : 'TOMBÉ'}`);
             log(`   ${v.raison}`);

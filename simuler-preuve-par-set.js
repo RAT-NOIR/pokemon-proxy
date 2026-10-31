@@ -1,7 +1,7 @@
 // SIMULATION (lecture seule) de la PREUVE PAR LE SET — décision du testeur, 2026-10-31. N'écrit RIEN en base, ne fait AUCUNE requête réseau.
 // Lit : les listes kado.hk déjà en cache (scripts de lecture dans couverture/S8/AUDIT-31/FICHES-SET/scripts), les libellés anglais que la SOURCE publie (labels.json),
 // la table zh-tw construite sur TCGdex (table-zh-tw.json), pokedex-dexids.json, et la production EN LECTURE SEULE (catalogue_produits + numeros_cartes via produitsDeLExpansion).
-// Usage : node simuler-preuve-par-set.js [--dossier=<FICHES-SET>]   (NODE_PATH = node_modules du dépôt principal ; .env copié dans la copie de travail, à supprimer après)
+// Usage : node simuler-preuve-par-set.js [--dossier=<FICHES-SET>] [--variantes=hk,hant,hans]  (variantes Wikidata admises parmi hk,hant,hans,cn,tw,mo,sg,my,zh ; défaut toutes)   (NODE_PATH = node_modules du dépôt principal ; .env copié dans la copie de travail, à supprimer après)
 const fs = require('fs'), path = require('path');
 const ARGS = Object.fromEntries(process.argv.slice(2).map(a => { const m = /^--([^=]+)=(.*)$/.exec(a); return m ? [m[1], m[2]] : [a.replace(/^--/, ''), true]; }));
 const DOSSIER = ARGS.dossier || 'C:/Users/Yung/rat-market-travail/catalogue/couverture/S8/AUDIT-31/FICHES-SET';
@@ -14,7 +14,7 @@ const TZ = require('./collecte-cartes/table-zh');
 const { chargerSources, CIBLES } = require('./collecte-cartes/fiches-preuve-set');
 
 // UN SEUL chargement des tables pour la simulation et pour l'outil d'écriture (collecte-cartes/fiches-preuve-set.js::chargerSources, §21 bis) ; Wikidata (CC0) est lu seulement si son fichier daté existe
-const { SETS, LABELS, TW, ESPECES, cleProduit, journal: JOURNAL_SOURCES } = chargerSources(DOSSIER);
+const { SETS, LABELS, TW, ESPECES, cleProduit, journal: JOURNAL_SOURCES } = chargerSources(DOSSIER, { variantes: typeof ARGS.variantes === 'string' ? ARGS.variantes.split(',').filter(Boolean) : null });   // --variantes=hk,hant,hans : restreint les variantes Wikidata (défaut : toutes)
 for (const l of JOURNAL_SOURCES) console.log(l);
 const pairesSource = Object.fromEntries(Object.entries(LABELS).filter(([, v]) => v && v.en).map(([zh, v]) => [zh.normalize('NFKC').replace(/\s+/g, ''), v.en]));
 const traduireBase = TZ.fabriquerTraducteur({ tableEspeces: ESPECES.table, tableAutres: TW, cleProduit });

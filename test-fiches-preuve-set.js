@@ -157,6 +157,33 @@ const PRD4 = [P(1, 'Vulpix', '001'), P(2, 'Eevee', '002'), P(3, 'Ponyta', '003')
         const seul = E.jugerTout({ sources, lecture, cibles: [cibles[0]] });
         assert.strictEqual(seul.verdicts[0].admis, true);   // sans le set fautif, il est admis : le refus vient bien de lui
     });
+    await t('outil : une calibration sur ZÉRO set n\'a rien prouvé — regleFiable faux, aucun set admis, le message le dit', () => {
+        const sources = { SETS: { Bon: { cartes: [{ numero: '214', nomZh: '甲' }, { numero: '215', nomZh: '？' }] } }, traduire: z => TAB[z] ?? null, cleProduit: cleProduitParDefaut };
+        const lecture = { produits: new Map([[1, [P(20, 'Gengar ex', '214'), P(21, 'Pikachu', '215')]]]) };
+        const r = E.jugerTout({ sources, lecture, cibles: [{ nom: 'A', exp: 1, kado: [['Bon', '']], role: 'vise' }] });
+        assert.strictEqual(r.global.setsCalibres, 0);
+        assert.strictEqual(r.global.regleFiable, false);
+        assert.match(r.global.message, /zéro set/);
+        assert.strictEqual(r.verdicts[0].admis, false);
+    });
+    await t('chargerSources : --variantes restreint les variantes Wikidata (sans zh-mo, 比卡超 ne traduit plus) ; un libellé contesté retire aussi l\'entrée PokeAPI', () => {
+        const fs = require('fs'), os = require('os'), path = require('path');
+        const d = fs.mkdtempSync(path.join(os.tmpdir(), 'cs-'));
+        for (const s of ['cache/sets', 'pokeapi', 'wikidata']) fs.mkdirSync(path.join(d, s), { recursive: true });
+        fs.writeFileSync(path.join(d, 'cache/sets/a.json'), JSON.stringify({ etiquette: 'a', cartes: [] }));
+        fs.writeFileSync(path.join(d, 'table-zh-tw.json'), JSON.stringify({ table: {} }));
+        fs.writeFileSync(path.join(d, 'pokeapi/pokemon_species_names.csv'), 'pokemon_species_id,local_language_id,name,genus\n26,4,同名,x\n');
+        fs.writeFileSync(path.join(d, 'pokeapi/LU-LE.txt'), '2026-10-31');
+        fs.writeFileSync(path.join(d, 'wikidata/LU-LE.txt'), '2026-10-31');
+        const b = (n, o) => ({ n: { value: String(n) }, ...Object.fromEntries(Object.entries(o).map(([k, v]) => [k, { value: v }])) });
+        fs.writeFileSync(path.join(d, 'wikidata/especes-zh.json'), JSON.stringify({ results: { bindings: [b(25, { hk: '皮卡丘', mo: '比卡超' }), b(27, { hk: '同名' }), b(28, { mo: '同名' })] } }));
+        const toutes = FPS.chargerSources(d), hk = FPS.chargerSources(d, { variantes: ['hk', 'hant', 'hans'] });
+        assert.strictEqual(toutes.ESPECES.table['比卡超'], 'D25');
+        assert.strictEqual(hk.ESPECES.table['比卡超'], undefined);
+        assert.strictEqual(hk.ESPECES.table['皮卡丘'], 'D25');
+        assert.strictEqual(toutes.ESPECES.table['同名'], undefined);   // contesté par Wikidata (D27 / D28) : l'entrée PokeAPI (D26) ne survit pas
+        assert.match(hk.journal[0], /variantes hk\/hant\/hans/);
+    });
     await t('outil : --ecrire hors de lot-additif.js → 2 AVANT toute connexion ; sans --seulement ni --attendu → 2', async () => {
         let ouvert = false;
         assert.strictEqual(await E.executer(base(['--ecrire', '--seulement=pret.json', '--attendu=1'], { ouvrirEcriture: async () => { ouvert = true; return cx(); } })), 2);

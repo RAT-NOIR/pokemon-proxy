@@ -92,7 +92,7 @@ function entreesDuSet({ verdict, source, produits, exp, slugSet, etiquette }) {
 }
 
 /** Les tables et les listes sur disque (aucun réseau) : le même chargement pour la simulation et pour l'écriture (§21 bis). */
-function chargerSources(dossier) {
+function chargerSources(dossier, { variantes = null } = {}) {
     const lire = f => JSON.parse(fs.readFileSync(f, 'utf8').replace(/^﻿/, ''));
     const SETS = Object.fromEntries(fs.readdirSync(path.join(dossier, 'cache', 'sets')).map(f => { const j = lire(path.join(dossier, 'cache', 'sets', f)); return [j.etiquette, j]; }));
     const LABELS = fs.existsSync(path.join(dossier, 'labels.json')) ? lire(path.join(dossier, 'labels.json')) : {};
@@ -102,10 +102,10 @@ function chargerSources(dossier) {
     let ESPECES = POKEAPI;
     const WD = path.join(dossier, 'wikidata', 'especes-zh.json');
     if (fs.existsSync(WD)) {
-        const w = TZ.lireEspecesWikidata(lire(WD), { licence: 'CC0', luLe: fs.readFileSync(path.join(dossier, 'wikidata', 'LU-LE.txt'), 'utf8').slice(0, 10) });
-        const m = TZ.fusionnerEspeces(POKEAPI.table, w.table);
+        const w = TZ.lireEspecesWikidata(lire(WD), { licence: 'CC0', luLe: fs.readFileSync(path.join(dossier, 'wikidata', 'LU-LE.txt'), 'utf8').slice(0, 10), variantes });
+        const m = TZ.fusionnerEspeces(POKEAPI.table, w.table, w.contestes);
         ESPECES = { table: m.table, stats: { ...POKEAPI.stats, wikidata: w.stats, fusion: m.stats } };
-        journal.push('Wikidata (' + w.meta.licence + ', lu le ' + w.meta.luLe + ') : ' + JSON.stringify(w.stats));
+        journal.push('Wikidata (' + w.meta.licence + ', lu le ' + w.meta.luLe + (variantes ? ', variantes ' + variantes.join('/') : '') + ') : ' + JSON.stringify(w.stats));
     } else journal.push('Wikidata : AUCUN fichier — la table des espèces est PokeAPI seule');
     journal.push('table des espèces PokeAPI (BSD-3-Clause, lue le ' + fs.readFileSync(path.join(dossier, 'pokeapi', 'LU-LE.txt'), 'utf8').slice(0, 10) + ') : ' + JSON.stringify(ESPECES.stats));
     const DEXIDS = lire(path.join(__dirname, '..', 'pokedex-dexids.json'));
