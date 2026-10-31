@@ -6,7 +6,8 @@ const fs = require('fs'), os = require('os'), path = require('path'), { spawnSyn
 const V = path.join(__dirname, '..');
 const BANCS = 'test';
 const GG = 'identifier/g-groupe.js', ROUTE = 'identifier/calcul-client-route.js';
-const B1 = 'test-g-groupe.js', B2 = 'test-g-groupe-route.js';
+const PROB = 'identifier/probable-route.js', PRBL = 'identifier/probable.js', ROUTES = 'identifier/routes.js';
+const B1 = 'test-g-groupe.js', B2 = 'test-g-groupe-route.js', B3 = 'test-g-groupe-probable.js', B4 = 'test-g-groupe-designation.js';
 
 // [nom, fichier (relatif à v2/), ancre (une seule occurrence), remplacement, banc, équivalent? (raison)]
 const MUTANTS = [
@@ -29,10 +30,27 @@ const MUTANTS = [
     ['le drapeau est ignoré dans le jugement (toujours calculé)', ROUTE, 'args.gGroupe !== true ||', 'false ||', B2],
     ['le jeton ne signe plus la liste étendue', ROUTE, 'MC.signerJeton({ scanId: String(scanId), mesures, refs: refsJeton, exp }', 'MC.signerJeton({ scanId: String(scanId), mesures: ens.mesures, refs: refsJeton, exp }', B2],
     ['les références n\'incluent plus les visuels du groupe', ROUTE, 'refsDemande = [...refsDemande, ...gr.map(c => c.cle).filter((k, i, a) => !refsDemande.includes(k) && a.indexOf(k) === i)];', '', B2],
-    ['le groupe n\'est plus stocké pour le second envoi', ROUTE, '...(groupe ? { groupe } : {}) }', '}', B2],
+    ['le groupe n\'est plus stocké pour le second envoi', ROUTE, '...(groupe ? { groupe } : {}),', '', B2],
     ['le jugement ne valide plus les résultats avant d\'ordonner', ROUTE, 'if (!MC.validerResultats(args.cm.mesures, args.resultats).ok) return j;', '', B2],
     ['le seuil de la configuration est remplacé par une constante', ROUTE, 'ecartMin: args.ecartMin })', 'ecartMin: 100 })', B2],
     ['une demande de G vide ne peut plus porter le groupe', ROUTE, 'if (mesures.length === 0) return null;', 'if (ens.mesures.length === 0) return null;', B2],
+    // G-GROUPE -> PROBABLE (désignation et débit)
+    ['la désignation ignore les drapeaux', PROB, "if (!(cfg && cfg.probable === true && cfg.gGroupe === true)) return { refus: 'drapeaux' };", '', B4],
+    ['la désignation ignore la version de l\'extension', PROB, "if (!P.versionAuMoins(versionExtension, cfg.versionMinProbable)) return { refus: 'version-extension' };", '', B4],
+    ['la désignation ne vérifie plus que la tête est un candidat', PROB, "|| !ids.includes(tete)) return { refus: 'candidats' };", ") return { refus: 'candidats' };", B4],
+    ['I3 : une trace de marqueurs absente n\'est plus un groupe', PROB, "if (groupeMarqueurs !== false) return { refus: 'groupe' };", "if (groupeMarqueurs === true) return { refus: 'groupe' };", B4],
+    ['I3 : le groupe des données n\'est plus lu', PROB, "if (dansUnGroupe(version, tete, ids)) return { refus: 'groupe' };", '', B4],
+    ['vecteur exigé et cosinus minimal : plus lus', PROB, "if (!P.cosinusAdmis(Number.isFinite(cosinus) ? cosinus : null, { cosinusMin: cfg.probableCosinusMin, vecteurExige: cfg.probableVecteurExige })) return { refus: 'cosinus' };", '', B4],
+    ['I2 : le prix de guide servi n\'est plus exigé', PROB, "if (PR.depuisGuide(prixGuide, 'tendance-seule') === null) return { refus: 'sans-prix' };", '', B4],
+    ['le vecteur n\'est plus exigé (cosinusAdmis)', PRBL, 'if (exige && !connu) return false;', '', B4],
+    ['le cosinus minimal n\'est plus lu (cosinusAdmis)', PRBL, 'if (minimum > 0 && connu && cos < minimum) return false;', '', B4],
+    ['le passage en probable (débit atomique) est sauté', ROUTE, 'const r = await argent.passerEnProbable(porteur, { scanId, carte: 0 }); ok = Boolean(r && r.ok);', 'ok = true;', B3],
+    ['le marqueur n\'est pas retiré quand le débit échoue', ROUTE, "await col('analyses').updateOne({ _id: scanId, 'cartes.0.probable.signal': d.signal }, { $unset: { 'cartes.0.probable': '' } });", '', B3],
+    ['V2_PROBABLE n\'est plus exigé pour devenir probable', ROUTE, 'if (cfg.gGroupe === true && cfg.probable === true && j.ordreGroupe', 'if (cfg.gGroupe === true && j.ordreGroupe', B3, 'redondant par construction : probableG n\'est stocké que si V2_PROBABLE est allumé et designerTeteDeGroupe relit les deux drapeaux — la garde est doublée, aucun cas observable ne les sépare'],
+    ['un probable déjà désigné par PROBABLE peut être remplacé', ROUTE, "if (c0.probable || c0.reponse) return { refus: 'deja-designe-ou-repondu' };", '', B3],
+    ['le prix de guide lu est celui d\'un autre produit (le premier)', ROUTE, 'const prod = (an.produits || []).find(p => p && p.idProduct === ordre.tete);', 'const prod = (an.produits || [])[0];', B3],
+    ['les données du premier envoi (probableG) ne sont plus gardées', ROUTE, '...(groupe && probableG && cfg.probable === true ? { probableG } : {}) }', '}', B3],
+    ['le premier envoi ne calcule plus les cosinus (probableG vide)', ROUTES, 'if (cfg.gGroupe === true && cfg.probable === true) {', 'if (false) {', B3],
     ['un ensemble nul de G ne porte plus le groupe (le client ne mesure plus rien)', ROUTE, 'if (!ens && cfg.gGroupe !== true) return null;', 'if (!ens) return null;', B2],
     ['le maximum du contrat n\'est plus respecté', ROUTE, 'max: MC.MESURES_MAX', 'max: 99', B2],
 ];

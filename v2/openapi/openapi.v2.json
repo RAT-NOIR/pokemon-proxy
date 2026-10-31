@@ -6248,7 +6248,7 @@
           },
           "change": {
             "type": "boolean",
-            "description": "`false` : le premier verdict reste (résultats rejetés, règle sans affirmation, candidat hors de la question, réponse déjà donnée…), sans autre champ. `true` : la carte est montée en `identifiee` ; la question réservée est réglée comme une réponse par ce candidat (un seul débit)."
+            "description": "`false` : le premier verdict reste (résultats rejetés, règle sans affirmation, candidat hors de la question, réponse déjà donnée…), sans autre champ. `true` : la carte est montée en `identifiee` ; la question réservée est réglée comme une réponse par ce candidat (un seul débit). Avec `V2_PROBABLE=1` ET `V2_G_GROUPE=1` seulement (éteints : jamais), `true` peut aussi porter la carte `a-trancher` de la question avec `niveau: \"probable\"` et `probable` (la tête que les mesures du client désignent, toutes les gardes de PROBABLE passées) ; le crédit est alors débité à l'affichage, comme un probable de `/api/identifier`."
           },
           "carte": {
             "$ref": "#/components/schemas/CarteAnalysee"

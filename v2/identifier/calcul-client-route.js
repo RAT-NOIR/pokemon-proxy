@@ -12,6 +12,7 @@ const MC = require('./calcul-client');
 const RG = require('./regle-g');
 const PG = require('./promotion-g');
 const GG = require('./g-groupe');
+const PR = require('./probable-route');
 const G = require('../../ratmarket/decision-g');
 const registre = require('../registre');
 const { col } = require('../db');
@@ -39,7 +40,7 @@ function corpsGarde(c) {
  * Le complément d'une question (phase 1). null : rien à demander (aucune mesure, plus de 12, voie « plus de 3 produits », index absent, configuration incomplète).
  * @returns {{ public: {jeton, expireDans, mesures, references}, stocke: object } | null}
  */
-function preparerComplement({ cfg, scanId, attente, corpsChaine, resultat, maintenant = Date.now(), cleDe = null }) {
+function preparerComplement({ cfg, scanId, attente, corpsChaine, resultat, maintenant = Date.now(), cleDe = null, probableG = null }) {
     if (!cfg || !cfg.empreinte || typeof cfg.empreinte.secret !== 'string' || !cfg.images || !Array.isArray(cfg.images.hotesPublics) || !cfg.images.hotesPublics[0]) return null;
     if (!resultat || resultat.issue !== 'question' || !resultat.analyse || !Array.isArray(resultat.analyse.cartes) || !resultat.analyse.cartes[0]) return null;
     if (resultat.confirmationNombreux !== undefined) return null;                  // R5 : cette question n'est JAMAIS promue (promotion-g.js) — demander des mesures serait les faire calculer pour rien
@@ -67,7 +68,9 @@ function preparerComplement({ cfg, scanId, attente, corpsChaine, resultat, maint
     return {
         public: { jeton, expireDans: VALIDITE_MS / 1000, mesures, references },
         stocke: { mesures, refs: refsJeton, ligne: { top: attente.ligne.top.map(([k, s]) => [k, s]), essai: attente.ligne.essai }, exp: new Date(exp), index,
-            corps: corpsGarde(corpsChaine), ids: (c0.candidats || []).map(x => x.idProduct).filter(Number.isInteger), consomme: false, ...(groupe ? { groupe } : {}) }
+            corps: corpsGarde(corpsChaine), ids: (c0.candidats || []).map(x => x.idProduct).filter(Number.isInteger), consomme: false, ...(groupe ? { groupe } : {}),
+            // G-GROUPE → PROBABLE : ce que la désignation relira au second envoi (version de l'extension, trace des groupes, cosinus de chaque candidat) — seulement si les DEUX drapeaux sont allumés et que le groupe est demandé
+            ...(groupe && probableG && cfg.probable === true ? { probableG } : {}) }
     };
 }
 
@@ -109,6 +112,46 @@ async function jugerG({ cm, resultats, catalogue }) {
     } catch (e) { journalErreur('jugement', e); return { issue: 'erreur' }; }
 }
 
+/**
+ * G-GROUPE → PROBABLE. La tête du groupe (ordre.tete) devient le probable de la question SI ET SEULEMENT SI : PROBABLE n'avait rien désigné ; la question est encore posée, sans réponse ; TOUTES les gardes de PROBABLE
+ * passent (probable-route.js::designerTeteDeGroupe : version de l'extension, I3 groupes, vecteur exigé et cosinus minimal, I2 prix de guide servi) ; la carte à servir peut être fabriquée ; le débit atomique
+ * (I1) passe par argent.passerEnProbable. Le marqueur d'analyse est écrit AVANT le débit et retiré si le débit échoue : jamais un débit sans marqueur. Ne lève jamais.
+ * @returns {{reponse: {carte, facturation, solde?, offre?}} | {refus: string}}
+ */
+async function devenirProbable({ cfg, argent, porteur, scanId, an, entree, cm, ordre, maintenant }) {
+    try {
+        if (!cm.probableG || typeof cm.probableG !== 'object') return { refus: 'sans-donnees' };
+        const c0 = an.cartes[0];
+        if (c0.probable || c0.reponse) return { refus: 'deja-designe-ou-repondu' };
+        const ids = entree.question.choix.map(x => x && x.idProduct);
+        const prod = (an.produits || []).find(p => p && p.idProduct === ordre.tete);
+        const cos = cm.probableG.cosinus && typeof cm.probableG.cosinus === 'object' ? cm.probableG.cosinus[String(ordre.tete)] : null;
+        const d = PR.designerTeteDeGroupe({ cfg, versionExtension: cm.probableG.versionExtension, tete: ordre.tete, ids, version: require('../chargeur/etat').version(), groupeMarqueurs: cm.probableG.groupeMarqueurs,
+            cosinus: typeof cos === 'number' ? cos : null, prixGuide: prod ? prod.prixGuide : null });
+        if (!Number.isInteger(d.idProduct)) return { refus: d.refus || 'refus' };
+        const { carteRepondue, facturationDe } = require('./routes');
+        const { avecRepliAnalyse } = require('./prix-repli');
+        const { avecNiveau } = PR;
+        const brute = carteRepondue(an, entree, 0, 'ne-sait-pas', null);
+        const carte = brute && avecNiveau({ cartes: [avecRepliAnalyse(brute)] }, d).cartes[0];
+        if (!carte) return { refus: 'carte' };
+        const admin = Boolean(an.facturation && an.facturation.motif === 'administrateur');
+        const m = await col('analyses').updateOne({ _id: scanId, 'cartes.0.probable': { $exists: false } }, { $set: { 'cartes.0.probable': { idProduct: d.idProduct, signal: d.signal } } });
+        if (!m || (m.matchedCount ?? m.modifiedCount ?? 0) < 1) return { refus: 'marqueur' };
+        let ok = admin;
+        if (!admin) { try { const r = await argent.passerEnProbable(porteur, { scanId, carte: 0 }); ok = Boolean(r && r.ok); } catch (e) { journalErreur('passage en probable', e); ok = false; } }
+        if (!ok) {
+            try { await col('analyses').updateOne({ _id: scanId, 'cartes.0.probable.signal': d.signal }, { $unset: { 'cartes.0.probable': '' } }); } catch (e) { journalErreur('marqueur probable retiré', e); }
+            return { refus: 'debit' };
+        }
+        const facturation = facturationDe('question', { admin, rendu: false, question: true, probable: true, cause: null });
+        let solde, offre;
+        try { solde = await argent.solde(porteur); } catch (e) { journalErreur('solde', e); }
+        try { offre = await offreSur(porteur, argent); } catch (e) { journalErreur('offre', e); }
+        return { reponse: { carte, facturation, ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) } };
+    } catch (e) { journalErreur('probable de groupe', e); return { refus: 'erreur' }; }
+}
+
 function traiterMesures(cfg, deps = {}) {
     const catalogue = deps.catalogue || require('./catalogue').creerCatalogue({ cfg });
     const maintenant = () => (typeof deps.maintenant === 'function' ? deps.maintenant() : Date.now());
@@ -145,7 +188,16 @@ function traiterMesures(cfg, deps = {}) {
         const entree = Array.isArray(an.cartes) ? an.cartes[0] : null;
         if (!entree || entree.statut !== 'a-trancher' || !entree.question || !Array.isArray(entree.question.choix)) return inchange('plus-de-question');
         const j = await juger({ cm, resultats: b.resultats, catalogue, gGroupe: cfg.gGroupe === true, ecartMin: cfg.gGroupeEcart });
-        if (!Number.isInteger(j.promouvoir)) return inchange(j.issue || 'inchange', j.ordreGroupe);
+        if (!Number.isInteger(j.promouvoir)) {
+            // G-GROUPE → PROBABLE (V2_G_GROUPE ET V2_PROBABLE) : la tête posée par g-groupe.js est une désignation CANDIDATE du niveau « probable » ; toutes les gardes de PROBABLE s'appliquent, le débit passe par
+            // argent.passerEnProbable (la fonction de PROBABLE). Un refus laisse la question réservée : le résultat d'avant, `change: false`.
+            if (cfg.gGroupe === true && cfg.probable === true && j.ordreGroupe && j.ordreGroupe.change === true) {
+                const p = await devenirProbable({ cfg, argent, porteur, scanId, an, entree, cm, ordre: j.ordreGroupe, maintenant: maintenant() });
+                if (p.reponse) { await noter('probable-groupe', { ...j.ordreGroupe, probable: 'servi' }); return res.status(200).json({ success: true, scanId: b.scanId, change: true, ...p.reponse }); }
+                return inchange(j.issue || 'inchange', { ...j.ordreGroupe, probable: `refus:${p.refus}` });
+            }
+            return inchange(j.issue || 'inchange', j.ordreGroupe);
+        }
         const cand = entree.question.choix.find(x => x && x.idProduct === j.promouvoir);
         if (!cand || typeof cand.id !== 'string') return inchange('hors-question');
 

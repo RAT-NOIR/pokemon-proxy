@@ -17,7 +17,13 @@ let consulterProbable = null;       // absent sur 012940a7 (la copie de référe
 try { ({ consulterProbable } = rq('v2/identifier/probable-route')); } catch { consulterProbable = null; }
 const { creerCatalogue } = rq('v2/identifier/catalogue'), { lireConfig } = rq('v2/config'), dbV2 = rq('v2/db');
 const S = rq('v2/chargeur/scellement'), F = rq('v2/chargeur/format'), X = rq('v2/identifier/index-empreintes'), EV = rq('v2/identifier/empreinte-vecteur');
-const ARCHIVE = path.join(TRAVAIL, 'archives', 'candidate-2026-10-26.rmv');
+const argv = n => { const a = process.argv.find(x => x.startsWith(`--${n}=`)); return a ? a.slice(n.length + 3) : null; };
+const ARCHIVE = path.join(TRAVAIL, 'archives', argv('archive') || 'candidate-2026-10-26.rmv');
+// G-GROUPE (--g-groupe) : après PROBABLE, une question qu'il ne désigne pas reçoit la tête de g-groupe.js si TOUTES les gardes de PROBABLE passent (probable-route.js::designerTeteDeGroupe) ; il faut une archive AVEC la colonne des emprunts.
+const GGFLAG = process.argv.includes('--g-groupe');
+const ECART = Number(argv('ecart') || 50);
+const CARTES = path.join(TRAVAIL, 'index-empreintes-essai', 'donnees-nav', 'cartes-bancs');
+const CACHE_F = path.join(TRAVAIL, 'g-groupe', 'cache-mesures.json');
 const INDEX = path.join(TRAVAIL, 'index-empreintes-essai', 'sortie', 'index-empreintes-2026-10-24.rmei');
 const NAV = path.join(TRAVAIL, 'index-empreintes-essai', 'donnees-nav', 'nav-bancs.json');
 const MODELE = { id: 'p8000-poids8s-1', sha256: '857105e3eb0035c5e0b6eab88f898a134d171321eb00e90452f4d37f7df28ec2' };
@@ -40,6 +46,23 @@ const pct = (a, b) => (b ? (100 * a / b).toFixed(1) + ' %' : 'n/a');
     const o = X.ouvrir(fs.readFileSync(INDEX), process.env.V2_VISUELS_HMAC, { modeleAttendu: MODELE }), idx = o.index;
     const etat = { courante: () => ({ index: idx, meta: { modele: MODELE } }) };
     const nav = JSON.parse(fs.readFileSync(NAV, 'utf8')).photos;
+    // ── G-GROUPE : l'index et l'archive EN PLACE (comme la route), le fournisseur sans ORB serveur (ce que le client recevrait), et les mesures calculées par les fonctions de pixels de production, gardées dans un cache
+    let GGX = null;
+    if (GGFLAG) {
+        const VE = rq('v2/identifier/voisins-empreinte'), CR = rq('v2/identifier/carte-redressee'), Z = rq('ratmarket/zones'), MC = rq('v2/identifier/calcul-client'), GGm = rq('v2/identifier/g-groupe'), PRO = rq('v2/identifier/probable-route'), G = rq('ratmarket/decision-g');
+        rq('v2/identifier/etat-empreintes').installer(Object.freeze({ index: idx, meta: Object.freeze(o.meta) }));
+        rq('v2/chargeur/etat').installer(V);
+        const cache = fs.existsSync(CACHE_F) ? JSON.parse(fs.readFileSync(CACHE_F, 'utf8')) : {};
+        const crypto = require('crypto'), sha1 = s => crypto.createHash('sha1').update(s).digest('hex');
+        const DIRS = [path.join(TRAVAIL, 'index-empreintes-essai', 'images'), path.join(TRAVAIL, 'index-empreintes', 'images'), path.join(TRAVAIL, 'modele-visuel-hors-ligne', 'cache-archive', 'img')];
+        const lireScan = cle => { for (const d of DIRS) { const p = path.join(d, sha1(cle) + '.webp'); if (fs.existsSync(p)) return fs.readFileSync(p); } return null; };
+        // le cache est amorcé par l'extraction du lot (mesures-bancs.json) : mêmes photos, mêmes scans, mêmes fonctions
+        try {
+            const M0 = JSON.parse(fs.readFileSync(path.join(TRAVAIL, 'g-groupe', 'mesures-bancs.json'), 'utf8'));
+            for (const l of M0.lignes) { const sid = l.cle.split(':')[0]; for (const r of (l.resultats || [])) if (r) cache[r.type === 'paire' ? `${sid}|p|${r.a}|${r.b}` : `${sid}|z|${r.ref}`] = r; for (const [k, z] of Object.entries(l.zonesGroupe || {})) if (z) cache[`${sid}|z|${k}`] = z; }
+        } catch { /* pas d'amorce : tout se calcule */ }
+        GGX = { VE, CR, Z, MC, GG: GGm, PRO, G, cache, lireScan, fournisseur: VE.creerFournisseurEmpreinte({ cfg: { modeleEmpreinte: MODELE }, orbServeur: false }), calculees: 0 };
+    }
     console.log(`code mesuré : ${RACINE} · archive ${path.basename(ARCHIVE)} · index ${path.basename(INDEX)} · colonne marquages ${V.colonneMarquages === true} · ordinaires ${ORDINAIRES.size}`);
     const { c, db } = await ouvrir();
     dbV2.brancher(db);
@@ -157,10 +180,58 @@ const pct = (a, b) => (b ? (100 * a / b).toFixed(1) + ' %' : 'n/a');
         for (const [nomG, retire] of Object.entries(g)) console.log(`  garde ${nomG} : ` + FAMX.map(f => `${f} -${pf(f, x => x.juste && retire(x)).length}j/+${pf(f, x => !x.juste && retire(x)).length}f`).join(' · '));
         return th;
     }
+    // G-GROUPE → PROBABLE sur une question que PROBABLE n'a pas désignée : le complément que le client recevrait (fournisseur sans ORB, ensemble fermé + zones du groupe), les mesures calculées par les fonctions de
+    // pixels de production, G d'abord (s'il affirme, la question devient un sûr : hors de ce lot), la tête de g-groupe.js, puis les gardes de PROBABLE. Rend { raison } ou { tete, designe }.
+    async function teteDeGroupe(L, res, et, trace) {
+        const { VE, CR, Z, MC, GG, PRO, cache } = GGX;
+        const scanId = L.cle.split(':')[0], p = nav[scanId], jpg = path.join(CARTES, scanId + '.jpg');
+        if (!(p && p.redressee === true && Array.isArray(p.emb))) return { raison: 'photo-non-redressee' };
+        if (!fs.existsSync(jpg)) return { raison: 'sans-carte' };
+        const carteB64 = fs.readFileSync(jpg).toString('base64');
+        const envReq = { empreintes: [{ photo: 0, vecteur: EV.encoderVecteur(Float32Array.from(p.emb)), redressee: true, carte: carteB64 }], modeleEmpreinte: MODELE };
+        const v = await GGX.fournisseur({ entree: { imageUrls: ['x'], empreintes: VE.lireEnveloppe(envReq, 1) }, scanId });
+        if (v.ok) return { raison: 'g-tranche-sans-mesure' };
+        if (!v.attente) return { raison: `silence-${v.code}` };
+        const { ligne, ctx: ctxG } = v.attente;
+        const groupe = GG.groupeDeLaQuestion(et.choix, GG.cleDeLaVersion(V));
+        const ens = MC.ensembleFerme(ctxG, ligne);
+        const base = ens ? ens.mesures : [];
+        const ajout = groupe ? GG.demandeDuGroupe({ groupe, deja: base, max: MC.MESURES_MAX }) : null;
+        if (!ajout) return { raison: 'groupe-non-demandable' };
+        const demande = [...base, ...ajout], resultats = [];
+        let photo = null;
+        try {
+            for (const m of demande) {
+                const k = m.type === 'paire' ? `${scanId}|p|${m.a}|${m.b}` : `${scanId}|z|${m.ref}`;
+                if (!(k in cache)) {
+                    const sa = GGX.lireScan(m.type === 'paire' ? m.a : m.ref), sb = m.type === 'paire' ? GGX.lireScan(m.b) : null;
+                    if (!sa || (m.type === 'paire' && !sb)) { cache[k] = null; }
+                    else {
+                        if (!photo) { const cr = await CR.valider(carteB64); photo = await Z.photoGrise(cr.data, cr.width, cr.height); }
+                        if (m.type === 'paire') { const [ecart, couverture] = await Z.comparerPaire(photo, { cle: m.a, octets: sa }, { cle: m.b, octets: sb }); cache[k] = { type: 'paire', a: m.a, b: m.b, ecart, couverture }; }
+                        else { const z = await Z.scoresZones(photo, { cle: m.ref, octets: sa }); cache[k] = { type: 'zones', ref: m.ref, haut: z.haut, illustration: z.illustration, bandeau: z.bandeau, texte: z.texte, bas: z.bas, inliers: z.inliers }; }
+                        GGX.calculees++;
+                    }
+                }
+                resultats.push(cache[k]);
+            }
+        } finally { if (photo) { try { photo.delete(); } catch { /* libérée */ } } }
+        if (resultats.some(r => !r)) return { raison: 'mesure-absente' };
+        if (base.length) { const dec = MC.deciderAvecResultats(ctxG, ligne, base, resultats.slice(0, base.length)); if (dec.ok && dec.decision && dec.decision.affirme === true) return { raison: 'g-promeut', produit: dec.decision.produit }; }
+        const zones = k => resultats.find(r => r.type === 'zones' && r.ref === k) || null;
+        const og = GG.ordonnerGroupe({ groupe, zones, ecartMin: ECART });
+        if (!og.change) return { raison: `pas-de-tete:${og.motif}` };
+        const entree = { versionExtension: '2.0.1', empreintes: { modele: MODELE, rejet: null, entrees: [{ photo: 0, vecteur: EV.encoderVecteur(Float32Array.from(p.emb)), redressee: true, carte: null }] } };
+        const cosDe = PRO.cosinusDesCandidats({ cfg, entree, ids: et.choix, version: V, etat });
+        const cand = res.analyse.cartes[0].candidats.find(x => x && x.idProduct === og.tete);
+        const d = PRO.designerTeteDeGroupe({ cfg: { ...cfg, gGroupe: true }, versionExtension: '2.0.1', tete: og.tete, ids: et.choix, version: V, groupeMarqueurs: PRO.estGroupe(trace), cosinus: cosDe ? cosDe(og.tete) : null, prixGuide: cand ? cand.prixGuide : null });
+        return Number.isInteger(d.idProduct) ? { tete: og.tete, designe: true, ecart: og.ecart } : { raison: `refus:${d.refus}`, tete: og.tete };
+    }
+    const raisonsG = {}, tetesG = [], raisonParCle = {};
     for (const [nom0, drapeaux0] of [...Object.entries(VARIANTES), ['__garde', null]]) {
         let nom = nom0, drapeaux = drapeaux0;
         if (nom0 === '__garde') { if (THETA === null) break; const premier = Object.keys(VARIANTES)[0]; drapeaux = VARIANTES[premier]; nom = `${premier} + GARDE RETENUE ${THETA.nom} (fonction de production : probableCosinusMin ${THETA.th}, probableVecteurExige ${THETA.exige})`; cfg.probableCosinusMin = THETA.th; cfg.probableVecteurExige = THETA.exige; } else { cfg.probableCosinusMin = 0; cfg.probableVecteurExige = false; }
-        const compte = Object.fromEntries(FAMS.map(f => [f, { denom: 0, surJuste: 0, surVariante: 0, surFaux: 0, surAutre: 0, probJuste: 0, probFaux: 0, probFauxHors: 0, questions: 0, questionsAvec: 0, question1: 0, introuvables: 0, probInconnu: 0 }]));
+        const compte = Object.fromEntries(FAMS.map(f => [f, { denom: 0, surJuste: 0, surVariante: 0, surFaux: 0, surAutre: 0, probJuste: 0, probFaux: 0, probFauxHors: 0, questions: 0, questionsAvec: 0, question1: 0, introuvables: 0, probInconnu: 0, gJuste: 0, gFaux: 0, gFauxHors: 0, gInconnu: 0, gPromeut: 0 }]));
         const probFaux = [], probables = [], changes = [], raisons = {}, surs = []; let tracees = 0;
         for (const { L, ctx, corps, r } of livres) {
             if (L.banc === 'hors-banc') continue;
@@ -196,6 +267,17 @@ const pct = (a, b) => (b ? (100 * a / b).toFixed(1) + ' %' : 'n/a');
                 if (!Number.isInteger(L.verite)) m.probInconnu++;
                 else if (pr.idProduct === L.verite) m.probJuste++;
                 else { m.probFaux++; if (!et.choix.includes(L.verite)) m.probFauxHors++; probFaux.push({ cle: L.cle, fam: L.famille, verite: L.verite, probable: pr.idProduct, choix: et.choix, groupe: !!(trace && trace.garde) }); }
+            } else if (GGX && nom0 === '__garde' && res && !et.stocke) {
+                // G-GROUPE : la tête du groupe, SEULEMENT sur une question que PROBABLE n'a pas désignée
+                let g; try { g = await teteDeGroupe(L, res, et, trace); } catch (e) { g = { raison: `exception:${String(e && (e.code || e.name))}` }; }
+                const kr = g.designe ? 'DESIGNE' : g.raison; raisonsG[kr] = (raisonsG[kr] || 0) + 1; raisonParCle[L.cle] = kr;
+                if (g.designe) {
+                    const famille = L.banc === 'reglage' ? 'reglage' : L.famille;
+                    tetesG.push({ cle: L.cle, fam: famille, verite: L.verite, tete: g.tete, ecart: g.ecart, juste: g.tete === L.verite, horsCandidats: Number.isInteger(L.verite) && !et.choix.includes(L.verite) });
+                    if (!Number.isInteger(L.verite)) m.gInconnu++;
+                    else if (g.tete === L.verite) m.gJuste++;
+                    else { m.gFaux++; if (!et.choix.includes(L.verite)) m.gFauxHors++; }
+                } else if (g.raison === 'g-promeut') m.gPromeut++;
             }
         }
         sortie[nom] = compte; detail[nom] = { probFaux, probables, surs };
@@ -210,6 +292,19 @@ const pct = (a, b) => (b ? (100 * a / b).toFixed(1) + ' %' : 'n/a');
             console.log(`${' '.repeat(14)}RÉPONSE DIRECTE JUSTE = ${direct}/${x.denom} = ${pct(direct, x.denom)} (avec variantes ${pct(direct + x.surVariante, x.denom)}) ; sûrs seuls ${pct(x.surJuste, x.denom)} ; plafond (sûrs + vérité dedans) ${pct(plafond, x.denom)} ; cible 85 % = ${Math.ceil(0.85 * x.denom)} → ${direct - Math.ceil(0.85 * x.denom) >= 0 ? '+' : ''}${direct - Math.ceil(0.85 * x.denom)}`);
         }
         if (probFaux.length) console.log('  probables FAUX :', JSON.stringify(probFaux));
+        if (GGX && nom0 === '__garde') {
+            console.log(`\n== G-GROUPE → PROBABLE (écart ${ECART}, V2_PROBABLE ET V2_G_GROUPE, gardes de production) — mesures calculées dans cette passe : ${GGX.calculees}`);
+            for (const f of [...FAMS, 'controle']) {
+                const x = f === 'controle' ? Object.fromEntries(Object.keys(compte.ordinaire).map(k => [k, compte.tamponnee[k] + compte.ordinaire[k]])) : compte[f];
+                const direct0 = x.surJuste + x.probJuste, direct1 = direct0 + x.gJuste;
+                console.log(`  ${f.padEnd(10)} (${x.denom} à vérité) : sûrs justes ${x.surJuste} · probables justes PROBABLE seul ${x.probJuste} · probables FAUX PROBABLE seul ${x.probFaux} || AVEC G-GROUPE : probables justes ajoutés ${x.gJuste} · probables FAUX ajoutés ${x.gFaux} (dont vérité hors candidats ${x.gFauxHors}) · sans vérité ${x.gInconnu} · (G promeut ${x.gPromeut}) → probables justes ${x.probJuste + x.gJuste}, FAUX ${x.probFaux + x.gFaux} ; réponse directe juste ${direct0}/${x.denom} = ${pct(direct0, x.denom)} → ${direct1}/${x.denom} = ${pct(direct1, x.denom)}`);
+            }
+            console.log('  pourquoi pas de tête (par question jugée, hors PROBABLE) :', JSON.stringify(raisonsG));
+            console.log('  têtes désignées :', JSON.stringify(tetesG));
+            console.log('  FAUX par G-GROUPE :', JSON.stringify(tetesG.filter(t => !t.juste && Number.isInteger(t.verite))));
+            detail.__gGroupe = { ecart: ECART, tetes: tetesG, raisons: raisonsG, raisonParCle };
+            try { fs.mkdirSync(path.dirname(CACHE_F), { recursive: true }); fs.writeFileSync(CACHE_F, JSON.stringify(GGX.cache)); } catch { /* cache facultatif */ }
+        }
     }
     fs.writeFileSync(process.argv[2] || path.join(__dirname, 'resultats-probable', 'production.json'), JSON.stringify({ le: new Date().toISOString(), code: RACINE, archive: path.basename(ARCHIVE), index: path.basename(INDEX), compte: sortie, detail }, null, 1));
     await c.close();
