@@ -11,6 +11,7 @@ const mongoose = require('mongoose');
 const MC = require('./calcul-client');
 const RG = require('./regle-g');
 const PG = require('./promotion-g');
+const GG = require('./g-groupe');
 const G = require('../../ratmarket/decision-g');
 const registre = require('../registre');
 const { col } = require('../db');
@@ -38,30 +39,51 @@ function corpsGarde(c) {
  * Le complément d'une question (phase 1). null : rien à demander (aucune mesure, plus de 12, voie « plus de 3 produits », index absent, configuration incomplète).
  * @returns {{ public: {jeton, expireDans, mesures, references}, stocke: object } | null}
  */
-function preparerComplement({ cfg, scanId, attente, corpsChaine, resultat, maintenant = Date.now() }) {
+function preparerComplement({ cfg, scanId, attente, corpsChaine, resultat, maintenant = Date.now(), cleDe = null }) {
     if (!cfg || !cfg.empreinte || typeof cfg.empreinte.secret !== 'string' || !cfg.images || !Array.isArray(cfg.images.hotesPublics) || !cfg.images.hotesPublics[0]) return null;
     if (!resultat || resultat.issue !== 'question' || !resultat.analyse || !Array.isArray(resultat.analyse.cartes) || !resultat.analyse.cartes[0]) return null;
     if (resultat.confirmationNombreux !== undefined) return null;                  // R5 : cette question n'est JAMAIS promue (promotion-g.js) — demander des mesures serait les faire calculer pour rien
     if (!attente || !attente.ctx || !attente.ligne) return null;
     const ens = MC.ensembleFerme(attente.ctx, attente.ligne);
-    if (!ens || ens.mesures.length === 0) return null;
+    if (!ens && cfg.gGroupe !== true) return null;
+    // G-GROUPE (V2_G_GROUPE, éteint par défaut : rien de ce bloc ne s'exécute et la demande est celle d'avant, octet pour octet) : les zones de chaque visuel de la question s'ajoutent à la demande
+    // quand elles tiennent dans MESURES_MAX — elles ordonnent le groupe (g-groupe.js), elles ne changent aucune décision de G. Même une demande de G vide (G refuse avant toute mesure) peut porter le groupe,
+    // et même une demande de G trop grande (ensemble nul : plus de MESURES_MAX mesures, G se tait comme avant) : le client ne mesure alors que le groupe.
+    let mesures = ens ? ens.mesures : [], refsDemande = ens ? ens.refs : [], groupe = null;
+    if (cfg.gGroupe === true) {
+        const gr = GG.groupeDeLaQuestion(((resultat.analyse.cartes[0].candidats) || []).map(x => x && x.idProduct), cleDe || GG.cleDeLaVersion(require('../chargeur/etat').version()));
+        const ajout = gr ? GG.demandeDuGroupe({ groupe: gr, deja: mesures, max: MC.MESURES_MAX }) : null;
+        if (ajout) { mesures = [...mesures, ...ajout]; refsDemande = [...refsDemande, ...gr.map(c => c.cle).filter((k, i, a) => !refsDemande.includes(k) && a.indexOf(k) === i)]; groupe = gr; }
+    }
+    if (mesures.length === 0) return null;
     const index = identiteIndex(etatEmpreintes().courante());
     if (!index) return null;
     const hote = cfg.images.hotesPublics[0];
-    const references = ens.refs.map(ref => ({ ref, url: urlDe(hote, ref), sha256: null, octets: null }));
+    const references = refsDemande.map(ref => ({ ref, url: urlDe(hote, ref), sha256: null, octets: null }));
     const refsJeton = references.map(r => ({ ref: r.ref, sha256: r.sha256 }));
     const exp = maintenant + VALIDITE_MS;
-    const jeton = MC.signerJeton({ scanId: String(scanId), mesures: ens.mesures, refs: refsJeton, exp }, cfg.empreinte.secret);
+    const jeton = MC.signerJeton({ scanId: String(scanId), mesures, refs: refsJeton, exp }, cfg.empreinte.secret);
     const c0 = resultat.analyse.cartes[0];
     return {
-        public: { jeton, expireDans: VALIDITE_MS / 1000, mesures: ens.mesures, references },
-        stocke: { mesures: ens.mesures, refs: refsJeton, ligne: { top: attente.ligne.top.map(([k, s]) => [k, s]), essai: attente.ligne.essai }, exp: new Date(exp), index,
-            corps: corpsGarde(corpsChaine), ids: (c0.candidats || []).map(x => x.idProduct).filter(Number.isInteger), consomme: false }
+        public: { jeton, expireDans: VALIDITE_MS / 1000, mesures, references },
+        stocke: { mesures, refs: refsJeton, ligne: { top: attente.ligne.top.map(([k, s]) => [k, s]), essai: attente.ligne.essai }, exp: new Date(exp), index,
+            corps: corpsGarde(corpsChaine), ids: (c0.candidats || []).map(x => x.idProduct).filter(Number.isInteger), consomme: false, ...(groupe ? { groupe } : {}) }
     };
 }
 
 /** La décision sur les résultats du client, puis l'arbitrage de la voie du vecteur. { promouvoir: idProduct } | { issue: '<raison>' } — ne lève jamais. */
-async function juger({ cm, resultats, catalogue }) {
+async function juger(args) {
+    const j = await jugerG(args);
+    // G-GROUPE (V2_G_GROUPE) : quand la règle G n'a rien promu, le groupe de la question est ordonné par les zones que le client a mesurées. Une décision journalisée, jamais servie, jamais une promotion
+    // (le niveau ne monte pas). Éteint, ou sans groupe demandé, ou mesures invalides : le résultat de G est rendu tel quel.
+    if (!args || args.gGroupe !== true || !args.cm || !Array.isArray(args.cm.groupe) || Number.isInteger(j.promouvoir)) return j;
+    try {
+        if (!MC.validerResultats(args.cm.mesures, args.resultats).ok) return j;
+        const zones = new Map(); args.cm.mesures.forEach((d, i) => { if (d.type === 'zones') zones.set(d.ref, args.resultats[i]); });
+        return { ...j, ordreGroupe: GG.ordonnerGroupe({ groupe: args.cm.groupe, zones: k => zones.get(k) ?? null, ecartMin: args.ecartMin }) };
+    } catch (e) { journalErreur('g-groupe', e); return j; }
+}
+async function jugerG({ cm, resultats, catalogue }) {
     try {
         const v = MC.validerResultats(cm.mesures, resultats);
         if (!v.ok) return { issue: `rejetees-${v.code}` };
@@ -117,13 +139,13 @@ function traiterMesures(cfg, deps = {}) {
         try { pris = await col('analyses').updateOne({ _id: scanId, porteur: cleP, 'complementMesures.consomme': false }, { $set: { 'complementMesures.consomme': true, 'complementMesures.recuLe': new Date(maintenant()), 'complementMesures.opencv': typeof b.opencv === 'string' ? b.opencv : null } }); }
         catch (e) { journalErreur('prise du complément', e); return repondreErreur(res, 'INDISPONIBLE'); }
         if (!pris || pris.matchedCount !== 1) return repondreErreur(res, 'CONFLIT', 'Les mesures ont déjà été envoyées');
-        const noter = async issue => { try { await col('analyses').updateOne({ _id: scanId }, { $set: { 'complementMesures.issue': issue } }); } catch (e) { journalErreur('issue du complément', e); } };
-        const inchange = async issue => { await noter(issue); return res.status(200).json({ success: true, scanId: b.scanId, change: false }); };
+        const noter = async (issue, ordreGroupe) => { try { await col('analyses').updateOne({ _id: scanId }, { $set: { 'complementMesures.issue': issue, ...(ordreGroupe ? { 'complementMesures.ordreGroupe': ordreGroupe } : {}) } }); } catch (e) { journalErreur('issue du complément', e); } };
+        const inchange = async (issue, ordreGroupe) => { await noter(issue, ordreGroupe); return res.status(200).json({ success: true, scanId: b.scanId, change: false }); };
 
         const entree = Array.isArray(an.cartes) ? an.cartes[0] : null;
         if (!entree || entree.statut !== 'a-trancher' || !entree.question || !Array.isArray(entree.question.choix)) return inchange('plus-de-question');
-        const j = await juger({ cm, resultats: b.resultats, catalogue });
-        if (!Number.isInteger(j.promouvoir)) return inchange(j.issue || 'inchange');
+        const j = await juger({ cm, resultats: b.resultats, catalogue, gGroupe: cfg.gGroupe === true, ecartMin: cfg.gGroupeEcart });
+        if (!Number.isInteger(j.promouvoir)) return inchange(j.issue || 'inchange', j.ordreGroupe);
         const cand = entree.question.choix.find(x => x && x.idProduct === j.promouvoir);
         if (!cand || typeof cand.id !== 'string') return inchange('hors-question');
 
@@ -154,4 +176,4 @@ function traiterMesures(cfg, deps = {}) {
     };
 }
 
-module.exports = { preparerComplement, traiterMesures, corpsGarde, VALIDITE_MS };
+module.exports = { preparerComplement, traiterMesures, corpsGarde, juger, VALIDITE_MS };
