@@ -98,6 +98,6 @@ const { creerCourrierMemoire } = require('../comptes/courrier'); const { verifie
     let leve = null; try { await verifierTurnstile('t', 'ip', { fetch: fetchFaux, secret: '' }); } catch (e) { leve = e.message; }
     H.v('turnstile réel : secret absent => lève', leve, 'turnstile-non-configure');
     let brevo = null; try { require('../comptes/courrier').creerCourrierBrevo({ cle: 'k' }); } catch (e) { brevo = e.message; }
-    H.v('pilote Brevo : non implémenté (aucun envoi réel possible)', brevo, 'non-implemente');
+    H.v('pilote Brevo : sur un banc isolé, il refuse de se construire vers l\'adresse réelle de Brevo (aucun envoi réel possible)', brevo, 'BrevoBancInterdit');
     await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });
