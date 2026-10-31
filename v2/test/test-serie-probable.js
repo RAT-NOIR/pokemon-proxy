@@ -27,6 +27,10 @@ const resultats = { bancs: { 'banc LIVRÉ': {} }, diffs: { 'banc LIVRÉ': [] },
 // ── le faux serveur : une horloge partagée (chaque appel l'avance d'un temps fixe), des scénarios par POSITION dans l'ordre rejoué ──
 const T = { photo: 500, identifier: 4000, mesures: 900, reponse: 300, calcul: 700 };
 const GRAINE = 7, N = 7;
+const HOTE_REF_NOM = 'pub-7d992e666c3d4a2b870b680a920045b6.r2.dev', HOTE_REF = `https://${HOTE_REF_NOM}`;           // l'hôte R2 public des références (extension v2 : src/fond/references.js::HOTE_R2_PUBLIC)
+const WEBP = Buffer.concat([Buffer.from('RIFF'), Buffer.from([4, 0, 0, 0]), Buffer.from('WEBP'), Buffer.from('VP8 xxxx')]);
+const repHote = (statut, entetes = { 'content-type': 'image/webp' }, octets = WEBP) => ({ status: statut, headers: { get: n => Object.fromEntries(Object.entries(entetes).map(([k, v]) => [k.toLowerCase(), v]))[String(n).toLowerCase()] ?? null }, arrayBuffer: async () => octets.buffer.slice(octets.byteOffset, octets.byteOffset + octets.byteLength), body: null });
+const CAPACITES_PLEINES = ['langue-impression', 'marques', 'prix-incertains', 'prix-repli', 'achete-avant-jour', 'empreinte', 'mesures-client', 'probable'];
 const sid = n => n.toString(16).padStart(24, '0');                       // l'identifiant de scan du faux serveur : le n-ième, 24 hexadécimaux
 const ordre = S.echantillon(S.lignesLocales(resultats), N, GRAINE).map(l => l.cle);
 resultats.ref.forEach(x => { x.banc = x.cle === ordre[0] ? 'reglage' : 'controle'; });      // la première ligne rejouée est du banc « réglage »
@@ -34,7 +38,7 @@ const idDe = cle => VERITE[cle.split(':')[0]];
 const choix = ids => ids.map((id, i) => ({ id: 'abc'[i], idProduct: id }));
 const carteSure = id => ({ index: 0, statut: 'identifiee', carte: { idProduct: id }, niveau: 'sur', probable: null });
 const carteATrancher = (ids, probable) => ({ index: 0, statut: 'a-trancher', carte: null, candidats: ids.map(id => ({ idProduct: id })), question: { choix: choix(ids) }, niveau: probable ? 'probable' : 'question', probable: probable ? { idProduct: probable, aConfirmer: true } : null });
-const COMPLEMENT = () => ({ jeton: JETON_MESURES, expireDans: 120, mesures: [{ type: 'paire', a: 'ref/un.webp', b: 'ref/deux.webp' }, { type: 'paire', a: 'ref/deux.webp', b: 'ref/un.webp' }, { type: 'zones', ref: 'ref/un.webp' }, { type: 'zones', ref: 'ref/deux.webp' }], references: [{ ref: 'ref/un.webp', url: 'https://images.invalid/ref/un.webp', sha256: null, octets: null }, { ref: 'ref/deux.webp', url: 'https://images.invalid/ref/deux.webp', sha256: null, octets: null }] });
+const COMPLEMENT = () => ({ jeton: JETON_MESURES, expireDans: 120, mesures: [{ type: 'paire', a: 'ref/un.webp', b: 'ref/deux.webp' }, { type: 'paire', a: 'ref/deux.webp', b: 'ref/un.webp' }, { type: 'zones', ref: 'ref/un.webp' }, { type: 'zones', ref: 'ref/deux.webp' }], references: [{ ref: 'ref/un.webp', url: `${HOTE_REF}/ref/un.webp`, sha256: null, octets: null }, { ref: 'ref/deux.webp', url: `${HOTE_REF}/ref/deux.webp`, sha256: null, octets: null }] });
 
 function fauxServeur(scen, comportement = {}) {
     const appels = [], horloge = { t: 0 };
@@ -45,7 +49,11 @@ function fauxServeur(scen, comportement = {}) {
         const a = { url, hote: u.hostname, chemin: u.pathname, methode: init.method || 'GET', entetes: init.headers || {}, corps, redirect: init.redirect, t: horloge.t };
         appels.push(a);
         if (comportement.avant) { const r = comportement.avant(a, appels); if (r) return r; }
-        if (u.pathname === '/ping') return rep(200, { ok: true, versionMinExtension: '2.0.0', capacites: ['empreinte', 'mesures-client'] });
+        if (u.hostname === HOTE_REF_NOM) {                                   // l'hôte PUBLIC des visuels (R2) : un faux, jamais le vrai
+            if (comportement.hote) return comportement.hote(a);
+            return { status: 200, headers: { get: n => ({ 'content-type': 'image/webp' })[String(n).toLowerCase()] ?? null }, arrayBuffer: async () => WEBP.buffer.slice(WEBP.byteOffset, WEBP.byteOffset + WEBP.byteLength), body: null };
+        }
+        if (u.pathname === '/ping') { const n = appels.filter(x => x.chemin === '/ping').length; return rep(200, { ok: true, versionMinExtension: '2.0.0', capacites: comportement.capacites ? comportement.capacites(n) : CAPACITES_PLEINES }); }
         if (u.pathname === '/api/installation') return rep(201, { success: true, jetonInstallation: JETON_INST });
         if (u.pathname === '/api/compte/connexion') return rep(200, { success: true }, { 'set-cookie': `rm_session=${COOKIE}; HttpOnly` });
         if (u.pathname === '/api/compte/code') return rep(200, { success: true, code: CODE });
@@ -219,8 +227,8 @@ const corpsDe = (s, c) => chemins(s, c).map(a => JSON.parse(a.corps));
           H.v('un faux au 3e scan : 3 photos seulement, 2 lignes justes gardées, la fautive en 3e position', [chemins(s, '/api/photo').length, r.resultats.map(x => x.verdict)], [3, ['sur-juste', 'sur-juste', 'probable-faux']]); }
 
         // ── 6. le second envoi : ce qui l'empêche, ce qui l'arrête ──
-        { const s = fauxServeur([{ premier: carteATrancher([idv(0), autre(0)]), complement: COMPLEMENT() }]), d = deps(s, { lireReference: ref => (ref === 'ref/deux.webp' ? null : lire(ref)) }); const r = await S.serie(base({ n: 1 }), d);
-          H.v('référence locale absente : AUCUN second envoi, la question reste, la raison est écrite sur la ligne', [chemins(s, '/api/identifier/mesures').length, r.resultats[0].verdict, r.resultats[0].secondEnvoi], [0, 'question-dans-candidats', { envoye: false, raison: 'reference-absente' }]);
+        { const s = fauxServeur([{ premier: carteATrancher([idv(0), autre(0)]), complement: COMPLEMENT() }], { hote: a => (/deux\.webp$/.test(a.chemin) ? repHote(404) : repHote(200)) }), d = deps(s, { lireReference: ref => (ref === 'ref/deux.webp' ? null : lire(ref)) }); const r = await S.serie(base({ n: 1 }), d);
+          H.v('référence absente en local ET introuvable sur l\'hôte public : AUCUN second envoi, la question reste, la raison est écrite sur la ligne', [chemins(s, '/api/identifier/mesures').length, r.resultats[0].verdict, r.resultats[0].secondEnvoi], [0, 'question-dans-candidats', { envoye: false, raison: 'reference-introuvable-hote' }]);
           H.v('   (la vérité parmi les candidats est quand même déclarée : le client déclare ce qu\'il SAIT)', corpsDe(s, '/api/identifier/reponse').map(c => c.choix), ['a']); }
         { const s = fauxServeur([{ premier: carteATrancher([idv(0), autre(0)]), complement: COMPLEMENT() }]); const r = await S.serie(base({ n: 1, cartes: path.join(dossier, 'cartes-vides') }), deps(s));
           H.v('carte redressée absente pour la ligne : aucun second envoi, raison « carte-absente »', [chemins(s, '/api/identifier/mesures').length, r.resultats[0].secondEnvoi.raison], [0, 'carte-absente']); }
@@ -257,10 +265,10 @@ const corpsDe = (s, c) => chemins(s, c).map(a => JSON.parse(a.corps));
             const s3 = fauxServeur([{ premier: carteSure(idv(0)) }, ...scen.slice(0, 5)]); const r3 = await S.serie(base({ n: 6 }), deps(s3));
             H.v('   moins de 10 questions (les sûrs ne comptent pas) : pas d\'alerte', [r3.arret, chemins(s3, '/api/photo').length], [null, 6]);
         }
-        H.v('rapport : compteurs d\'exercice (questions, compléments, seconds envois faits, change:true, non faits par raison) et « lignes à vérité N/total » imprimé', [Q.second, dA.logs.some(x => /lignes à vérité : 7\/7/.test(x))], [{ questions: 4, complements: 3, envoyes: 3, changeTrue: 1, nonEnvoyes: { 'reference-absente': 0, 'carte-absente': 0, autre: 0 } }, true]);
-        { const s = fauxServeur([{ premier: carteATrancher([idv(0), autre(0)]), complement: COMPLEMENT() }, { premier: carteATrancher([idv(1), autre(1)]), complement: COMPLEMENT() }]), d = deps(s, { lireReference: ref => (ref === 'ref/deux.webp' ? null : lire(ref)) });
-          const r = await S.serie(base({ n: 2 }), d);
-          H.v('   les seconds envois non faits sont comptés PAR RAISON', r.rapportProbable.second, { questions: 2, complements: 2, envoyes: 0, changeTrue: 0, nonEnvoyes: { 'reference-absente': 2, 'carte-absente': 0, autre: 0 } }); }
+        H.v('rapport : compteurs d\'exercice (questions, compléments, seconds envois faits, change:true, non faits par raison) et « lignes à vérité N/total » imprimé', [Q.second, dA.logs.some(x => /lignes à vérité : 7\/7/.test(x))], [{ questions: 4, complements: 3, envoyes: 3, changeTrue: 1, nonEnvoyes: { 'reference-introuvable-hote': 0, 'carte-absente': 0, autre: 0 } }, true]);
+        { const s = fauxServeur([{ premier: carteATrancher([idv(0), autre(0)]), complement: COMPLEMENT() }, { premier: carteATrancher([idv(1), autre(1)]), complement: COMPLEMENT() }], { hote: a => (/deux\.webp$/.test(a.chemin) ? repHote(404) : repHote(200)) }), d = deps(s, { lireReference: ref => (ref === 'ref/deux.webp' ? null : lire(ref)) });
+          const r = await S.serie(base({ n: 2 }), d);       // (le faux hôte public répond 404 pour « deux » dans ce scénario)
+          H.v('   les seconds envois non faits sont comptés PAR RAISON', r.rapportProbable.second, { questions: 2, complements: 2, envoyes: 0, changeTrue: 0, nonEnvoyes: { 'reference-introuvable-hote': 2, 'carte-absente': 0, autre: 0 } }); }
         // I3 : --g-probable et --deuxieme-apres-signal ne se combinent pas
         { const s = fauxServeur([]); const r = await essaie(() => S.serie(base({ deuxiemeApresSignal: 'signal.txt' }), deps(s)));
           H.v('--g-probable + --deuxieme-apres-signal : refusé avant TOUTE requête', [/deuxieme-apres-signal/.test(r.arret || ''), s.appels.length], [true, 0]); }
@@ -288,10 +296,100 @@ const corpsDe = (s, c) => chemins(s, c).map(a => JSON.parse(a.corps));
           H.v('garde anti-Vinted (photoRecue faux) : arrêt au premier scan, aucun second envoi ni déclaration', [chemins(s, '/api/identifier').length, chemins(s, '/api/identifier/mesures').length, chemins(s, '/api/identifier/reponse').length, /photo non rattachée/.test(r.arret || '')], [1, 0, 0, true]); }
 
         // ── 7. les refus avant toute requête ──
-        for (const [nom, extra, motif] of [['sans dossier de cartes', { cartes: undefined }, /--cartes/], ['sans lecteur de références (ni --scans ni lecteur)', { scans: undefined, lireReference: undefined }, /--scans/], ['version d\'extension illisible', { versionExtension: 'deux' }, /version-extension/]]) {
+        for (const [nom, extra, motif] of [['sans dossier de cartes', { cartes: undefined }, /--cartes/], ['version d\'extension illisible', { versionExtension: 'deux' }, /version-extension/]]) {
             const s = fauxServeur([]); const d = deps(s); if (extra.lireReference === undefined && 'lireReference' in extra) delete d.lireReference;
             const r = await essaie(() => S.serie(base(extra), d));
             H.v(`mode probable ${nom} : arrêt avant TOUTE requête`, [motif.test(r.arret || ''), s.appels.length], [true, 0]);
+        }
+        // ── 8. LES RÉFÉRENCES, TÉLÉCHARGÉES COMME L'EXTENSION (src/fond/references.js : hôte R2 public, GET, sans identifiant, sans redirection, taille max, WebP) ──
+        const A8 = SP.adresseReferenceAdmise;
+        H.v('l\'hôte des références est celui de l\'extension (HOTE_R2_PUBLIC) et de la config du serveur (hotesPublics[0])', [SP.HOTE_REFERENCES, SP.REFERENCE_OCTETS_MAX], [HOTE_REF, 4194304]);
+        H.v('adresseReferenceAdmise : l\'adresse exacte (https, hôte exact, chemin = la clé encodée segment par segment)', [A8(`${HOTE_REF}/ref/un.webp`, 'ref/un.webp'), A8(`${HOTE_REF}/banc/jeu%2012.webp`, 'banc/jeu 12.webp')], [true, true]);
+        for (const [nom, url] of [['hôte voisin (suffixe)', `${HOTE_REF}.evil.fr/ref/un.webp`], ['hôte voisin (préfixe)', 'https://evil-pub-7d992e666c3d4a2b870b680a920045b6.r2.dev/ref/un.webp'], ['un autre hôte du site', 'https://rat-market.fr/ref/un.webp'], ['l\'hôte d\'essai', `https://${S.HOTE_ESSAI}/ref/un.webp`],
+            ['http', `http://${HOTE_REF_NOM}/ref/un.webp`], ['identifiants dans l\'adresse', `https://u:p@${HOTE_REF_NOM}/ref/un.webp`], ['identifiants déguisés', `https://${HOTE_REF_NOM}@evil.fr/ref/un.webp`], ['un port', `${HOTE_REF}:8443/ref/un.webp`], ['une requête', `${HOTE_REF}/ref/un.webp?x=1`], ['un fragment', `${HOTE_REF}/ref/un.webp#a`],
+            ['le chemin d\'une AUTRE référence', `${HOTE_REF}/ref/deux.webp`], ['un préfixe du chemin', `${HOTE_REF}/ref/un.webp/../deux.webp`], ['un chemin avec préfixe en plus', `${HOTE_REF}/x/ref/un.webp`], ['une espace', `${HOTE_REF}/ref/un .webp`], ['vide', ''], ['pas une adresse', 'zzz'], ['un nombre', 42]])
+            H.v(`adresseReferenceAdmise REFUSE : ${nom}`, A8(url, 'ref/un.webp'), false);
+        {
+            const essai = async (rep, extra = {}) => { const appels = []; const f = async (url, init) => { appels.push([url, init]); if (rep instanceof Error) throw rep; return rep; }; const r = await SP.telechargerReference({ url: `${HOTE_REF}/ref/un.webp`, ref: 'ref/un.webp', fetchFn: f, ...extra }); return { r, appels }; };
+            const ok = await essai(repHote(200));
+            H.v('telechargerReference : un WebP de l\'hôte, GET, SANS aucun en-tête, redirection non suivie, délai armé', [ok.r.ok, Buffer.compare(ok.r.octets, WEBP), ok.appels[0][1].method, ok.appels[0][1].headers, ok.appels[0][1].redirect, ok.appels[0][1].signal instanceof AbortSignal], [true, 0, 'GET', {}, 'manual', true]);
+            for (const [nom, rep, raison] of [['redirection 302', repHote(302, { location: 'https://evil.fr/x' }), 'redirection'], ['redirection 301', repHote(301), 'redirection'], ['404', repHote(404), 'introuvable'], ['403', repHote(403), 'http'], ['503', repHote(503), 'http'],
+                ['type text/html', repHote(200, { 'content-type': 'text/html' }), 'type'], ['type absent', repHote(200, {}), 'type'], ['type application/octet-stream', repHote(200, { 'content-type': 'application/octet-stream' }), 'type'],
+                ['taille annoncée > 4 Mio', repHote(200, { 'content-type': 'image/webp', 'content-length': String(4194305) }), 'taille'],
+                ['taille réelle > 4 Mio sans annonce', repHote(200, { 'content-type': 'image/webp' }, Buffer.concat([WEBP, Buffer.alloc(4194305)])), 'taille'],
+                ['pas un WebP (image/png)', repHote(200, { 'content-type': 'image/png' }, Buffer.from('\u0089PNG\r\n\u001a\n0000000000')), 'webp'],
+                ['trop court', repHote(200, { 'content-type': 'image/webp' }, Buffer.from('RIFF')), 'webp'],
+                ['exception réseau', new Error('ECONNRESET'), 'reseau']]) {
+                const x = await essai(rep); H.v(`   refuse : ${nom}`, [x.r.ok, x.r.raison], [false, raison]);
+            }
+            const exact = Buffer.concat([WEBP, Buffer.alloc(4194304 - WEBP.length)]);
+            H.v('   la taille MAX exacte (4 Mio) passe', (await essai(repHote(200, { 'content-type': 'image/webp', 'content-length': '4194304' }, exact))).r.ok, true);
+            const sha = require('crypto').createHash('sha256').update(WEBP).digest('hex');
+            H.v('   sha256 servi : accepté s\'il est juste, refusé sinon', [(await essai(repHote(200), { sha256: sha })).r.ok, (await essai(repHote(200), { sha256: 'a'.repeat(64) })).r.raison], [true, 'sha256']);
+            const nul = await essai(repHote(200), { url: `${HOTE_REF}.evil.fr/ref/un.webp` });
+            H.v('   une adresse non admise : AUCUNE requête ne part', [nul.r.raison, nul.appels.length], ['adresse', 0]);
+        }
+        // en série : le client télécharge les références de l'hôte public (le cache local n'est qu'un raccourci)
+        {
+            const sc = [{ premier: carteATrancher([idv(0), autre(0)]), complement: COMPLEMENT() }, { premier: carteATrancher([idv(1), autre(1)]), complement: COMPLEMENT() }];
+            const s = fauxServeur(sc), d = deps(s, { lireReference: undefined }); const r = await S.serie(base({ n: 2, scans: undefined }), d);
+            const hote = s.appels.filter(a => a.hote === HOTE_REF_NOM);
+            H.v('sans cache local : les 2 références sont téléchargées UNE fois (2 scans, un cache mémoire), adresses exactes', [hote.map(a => a.url).sort(), r.rapportProbable.second.envoyes, chemins(s, '/api/identifier/mesures').length], [[`${HOTE_REF}/ref/deux.webp`, `${HOTE_REF}/ref/un.webp`], 2, 2]);
+            H.vrai('   en GET, sans en-tête (ni Authorization, ni Cookie, ni Origin), redirection non suivie', hote.every(a => a.methode === 'GET' && Object.keys(a.entetes).length === 0 && a.redirect === 'manual'));
+            H.vrai('   les octets mesurés sont ceux de l\'hôte, et les appels à l\'API restent sur l\'hôte d\'essai seul', d.journalPx.filter(x => x[0] === 'zones').every(x => x[2] === WEBP.toString()) && s.appels.filter(a => a.hote !== HOTE_REF_NOM).every(a => a.hote === S.HOTE_ESSAI));
+            const sortie = JSON.stringify(r) + d.logs.join('\n'); H.vrai('   aucun secret dans les sorties', TOUS_LES_SECRETS.every(x => !sortie.includes(x)));
+            const s2 = fauxServeur(sc), d2 = deps(s2); await S.serie(base({ n: 2 }), d2);
+            H.v('avec le cache local (raccourci) : aucune requête vers l\'hôte public', s2.appels.filter(a => a.hote === HOTE_REF_NOM).length, 0);
+            const s3 = fauxServeur(sc, { hote: () => { throw new Error('ECONNRESET'); } }), d3 = deps(s3); const r3 = await S.serie(base({ n: 2 }), d3);
+            H.v('… et l\'hôte en panne ne gêne pas un cache local complet (jamais une condition)', [r3.rapportProbable.second.envoyes, r3.arret], [2, null]);
+        }
+        for (const [nom, hote, raison] of [['404', () => repHote(404), 'reference-introuvable-hote'], ['redirection', () => repHote(302, { location: 'https://evil.fr' }), 'reference-hote-redirection'], ['type non image', () => repHote(200, { 'content-type': 'text/html' }), 'reference-hote-type'],
+            ['taille excessive', () => repHote(200, { 'content-type': 'image/webp', 'content-length': '9999999' }), 'reference-hote-taille'], ['panne réseau', () => { throw new Error('ECONNRESET'); }, 'reference-hote-reseau']]) {
+            const s = fauxServeur([{ premier: carteATrancher([idv(0), autre(0)]), complement: COMPLEMENT() }], { hote }); const r = await S.serie(base({ n: 1, scans: undefined }), deps(s, { lireReference: undefined }));
+            H.v(`hôte public : ${nom} ⇒ la question reste, AUCUN second envoi, raison « ${raison} »`, [chemins(s, '/api/identifier/mesures').length, r.resultats[0].secondEnvoi, r.arret], [0, { envoye: false, raison }, null]);
+        }
+        { const compl = COMPLEMENT(); compl.references[0].url = `${HOTE_REF}.evil.fr/ref/un.webp`;
+          const s = fauxServeur([{ premier: carteATrancher([idv(0), autre(0)]), complement: compl }]); const r = await S.serie(base({ n: 1, scans: undefined }), deps(s, { lireReference: undefined }));
+          H.v('une adresse de référence donnée par le serveur sur un hôte voisin : jamais appelée, la question reste', [s.appels.filter(a => a.hote !== HOTE_REF_NOM && a.hote !== S.HOTE_ESSAI).length, s.appels.filter(a => /evil/.test(a.hote)).length, r.resultats[0].secondEnvoi.raison], [0, 0, 'reference-hote-adresse']); }
+
+        // ── 9. /ping complet avant le premier scan (deux /ping espacés d'au moins 10 s) ──
+        {
+            const sans = n => CAPACITES_PLEINES.filter(c => c !== 'marques');
+            const run = async (capacites, extra = {}, scen = []) => { const s = fauxServeur(scen, { capacites, ...(extra.comportement || {}) }); const pauses = []; const d = deps(s, { pause: async ms => { pauses.push({ ms, pings: s.appels.filter(a => a.chemin === '/ping').length }); } }); const r = await essaie(() => S.serie(base({ n: 1, ...(extra.base || {}) }), d)); return { s, pauses, r, d }; };
+            const a = await run(n => (n <= 3 ? sans(n) : CAPACITES_PLEINES), {}, [{ premier: carteSure(idv(0)) }]);
+            H.v('/ping incomplet (sans « marques ») 3 fois, puis complet : on attend, puis un SECOND /ping complet espacé de >= 10 s, et seulement alors la connexion', [a.s.appels.filter(x => x.chemin === '/ping').length, a.s.appels.findIndex(x => x.chemin === '/api/compte/connexion'), a.pauses.some(p => p.ms >= 10000 && p.pings === 4), a.r.ok && a.r.ok.stats.n], [5, 5, true, 1]);
+            const b = await run(n => (n === 2 ? sans(n) : CAPACITES_PLEINES), {}, [{ premier: carteSure(idv(0)) }]);
+            H.v('deux /ping complets de suite exigés : un complet puis un incomplet ne suffit pas', [b.s.appels.filter(x => x.chemin === '/ping').length, b.pauses.filter(p => p.ms === 10000).length], [4, 2]);
+            const c = await run(() => sans(0), { base: { attenteCapacitesMaxMin: 1 } });
+            H.v('jamais complet : arrêt (code 2) AVANT toute connexion, seulement des /ping', [/capacités/.test(c.r.arret || ''), c.s.appels.every(x => x.chemin === '/ping'), c.s.appels.length > 1], [true, true, true]);
+            const dd = await run(n => (n === 1 ? ['empreinte'] : CAPACITES_PLEINES), { comportement: { avant: (x, ap) => (x.chemin === '/ping' && ap.filter(y => y.chemin === '/ping').length <= 2 ? (() => { throw new Error('ECONNRESET'); })() : null) } }, [{ premier: carteSure(idv(0)) }]);
+            H.v('un réveil à froid (exceptions réseau sur les premiers /ping) est attendu, pas fatal', [dd.r.ok && dd.r.ok.stats.n, dd.r.arret ?? null], [1, null]);
+            const e = await run(() => ['empreinte', 'mesures-client'], {}, []);       // l'ancien /ping du banc : sans langue-impression ni marques
+            H.v('capacités sans « langue-impression » ni « marques » : refusé (jamais un scan payé sur un service qui se réveille)', [/langue-impression/.test(e.r.arret || '') || /capacités/.test(e.r.arret || ''), e.s.appels.filter(x => x.chemin === '/api/photo').length], [true, 0]);
+        }
+
+        // ── 10. --cles : rejouer EXACTEMENT une liste de lignes, dans cet ordre ──
+        {
+            const pleines = [ordre[3], ordre[0], ordre[5]].sort().reverse();          // un ordre ni trié croissant, ni celui de l'échantillon
+            const cles = [pleines[0], pleines[1].split(':')[0], pleines[2]];
+            const s = fauxServeur(pleines.map(k => ({ premier: carteSure(idDe(k)) })));
+            const r = await S.serie(base({ cles, n: undefined, graine: undefined }), deps(s));
+            H.v('--cles : les lignes demandées, dans CET ordre (une clé nue = sa ligne « :0 »), ni plus ni moins, sans --n ni --graine', [r.lignes, chemins(s, '/api/photo').length, r.arret], [pleines, 3, null]);
+            for (const [nom, c] of [['une clé inconnue', [ordre[0], 'zz:0']], ['un doublon', [ordre[0], ordre[0]]], ['une liste vide', []], ['pas des chaînes', [1, 2]]]) {
+                const s2 = fauxServeur([]); const r2 = await essaie(() => S.serie(base({ cles: c, n: undefined, graine: undefined }), deps(s2)));
+                H.v(`--cles avec ${nom} : refusé avant TOUTE requête`, [/--cles/.test(r2.arret || ''), s2.appels.length], [true, 0]);
+            }
+        }
+
+        // ── 11. le coût estimé est imprimé et jugé AVANT toute requête ──
+        {
+            const s = fauxServeur([]), d = deps(s); const r = await essaie(() => S.serie(base({ n: 7, plafondUsd: 0.05, coutEstimeUsd: 0.01 }), d));
+            H.v('estimation (7 lignes × 0,01 = 0,07 USD) au-dessus du plafond 0,05 : refus avant toute requête, estimation imprimée', [/estimation/.test(r.arret || ''), s.appels.length, d.logs.some(x => /coût estimé avant toute requête : 7 lignes × 0\.01 = 0\.0700 USD/.test(x))], [true, 0, true]);
+            const s2 = fauxServeur(Array(7).fill({ premier: carteSure(1) })), d2 = deps(s2); const r2 = await essaie(() => S.serie(base({ n: 7, plafondUsd: 0.07, coutEstimeUsd: 0.01 }), d2));
+            H.v('   estimation = plafond : la série part', [s2.appels.length > 1, d2.logs.some(x => /coût estimé avant toute requête/.test(x))], [true, true]);
+            const f = path.join(dossier, 'deja.jsonl'); fs.writeFileSync(f, '{"coutUsd":0.04}\n'); const s3 = fauxServeur([]);
+            const r3 = await essaie(() => S.serie(base({ n: 3, plafondUsd: 0.06, coutEstimeUsd: 0.01, carnet: f }), deps(s3)));
+            H.v('   le total déjà inscrit au carnet compte dans l\'estimation (0,04 + 0,03 > 0,06)', [/estimation/.test(r3.arret || ''), s3.appels.length], [true, 0]);
         }
         // rapport pur : p50 / p95, familles
         { const lignes = [

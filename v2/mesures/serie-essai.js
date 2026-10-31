@@ -177,15 +177,29 @@ async function serie(o, deps = {}) {
         if (typeof versionClient !== 'string' || !/^\d+\.\d+\.\d+$/.test(versionClient)) throw new Arret('--version-extension doit être de la forme x.y.z');
         if (!o.cartes) throw new Arret('--g-probable exige --cartes= (la carte redressée de chaque ligne : les mesures du client se calculent dessus)');
         lireReference = deps.lireReference || (Array.isArray(o.scans) && o.scans.length ? SP.lecteurDeReferences(o.scans) : null);
-        if (!lireReference) throw new Arret('--g-probable exige --scans= (les dossiers des visuels de référence, lecture seule : <sha1 de la clé>.webp)');
+        // le cache local (--scans) n'est qu'un RACCOURCI facultatif : sans lui, les références se téléchargent de l'hôte public, comme l'extension (serie-probable.js::lecteurDeReferencesComplet)
     }
     const nav = o.nav && o.nav.photos ? o.nav.photos : {};
     const EV = require('../identifier/empreinte-vecteur');
     const candidates = lignesLocales(o.resultats).filter(l => nav[clePhoto(l.cle)] && Array.isArray(nav[clePhoto(l.cle)].emb) && trouverFichier(o.photos, clePhoto(l.cle)));
     if (!candidates.length) throw new Arret('aucune ligne du banc n\'a à la fois un vecteur (nav-bancs.json) et une photo locale');
-    const lignes = echantillon(candidates, Math.min(o.n, candidates.length), o.graine);
-    log(`série : graine ${o.graine}, ${lignes.length} lignes sur ${candidates.length} possibles, plafond ${o.plafondUsd} USD (déjà au carnet : ${carnet.total().toFixed(4)}), coût estimé ${coutEstimeUsd} USD par scan, hôte ${HOTE_ESSAI}`);
+    // --cles : EXACTEMENT cette liste de lignes, dans cet ordre (une clé nue vaut sa ligne « <clé>:0 ») ; ni --n ni --graine ; une clé inconnue, sans photo ou sans vecteur, un doublon, une liste vide : refus avant toute requête
+    let lignes;
+    if (o.cles !== undefined && o.cles !== null) {
+        if (!Array.isArray(o.cles) || o.cles.length === 0 || !o.cles.every(c => typeof c === 'string' && c.length > 0)) throw new Arret('--cles doit être une liste non vide de clés');
+        lignes = o.cles.map(c => candidates.find(l => l.cle === c) || candidates.find(l => l.cle === `${c}:0`));
+        const manque = o.cles.filter((_, i) => !lignes[i]);
+        if (manque.length) throw new Arret(`--cles : ${manque.length} clé(s) inconnue(s) ou sans photo/vecteur locaux : ${manque.slice(0, 5).join(' ')}`);
+        if (new Set(lignes.map(l => l.cle)).size !== lignes.length) throw new Arret('--cles : une clé figure deux fois');
+    } else lignes = echantillon(candidates, Math.min(o.n, candidates.length), o.graine);
+    log(`série : graine ${o.cles ? 'sans (--cles)' : o.graine}, ${lignes.length} lignes sur ${candidates.length} possibles, plafond ${o.plafondUsd} USD (déjà au carnet : ${carnet.total().toFixed(4)}), coût estimé ${coutEstimeUsd} USD par scan, hôte ${HOTE_ESSAI}`);
     log(`lignes (ordre rejoué) : ${lignes.map(l => l.cle).join(' ')}`);
+    if (gp) {                                                                                       // le COÛT ESTIMÉ est imprimé et jugé avant toute requête (le total déjà au carnet compte)
+        const estimation = lignes.length * coutEstimeUsd;
+        log(`coût estimé avant toute requête : ${lignes.length} lignes × ${coutEstimeUsd} = ${estimation.toFixed(4)} USD (déjà au carnet : ${carnet.total().toFixed(4)}, plafond ${o.plafondUsd})`);
+        if (carnet.total() + estimation > o.plafondUsd + 1e-12) throw new Arret(`estimation ${(carnet.total() + estimation).toFixed(4)} USD (carnet compris) au-dessus du plafond ${o.plafondUsd} : rien n'est lancé`);
+    }
+    const cacheHote = new Map();                                                                       // les références téléchargées de l'hôte public, pour la série
 
     let jeton = null;                                                  // le jeton d'installation LIÉ au compte de mesure (Bearer) ; il ne sort jamais de ce fichier
     const appeler = async (chemin, init, auth = 'bearer') => {
@@ -198,7 +212,26 @@ async function serie(o, deps = {}) {
     };
 
     // le ping dit la version minimale de l'extension et si le jeton `empreinte` est annoncé
-    const ping = await appeler('/ping', { method: 'GET' }, null);
+    // MODE --g-probable : avant le premier scan, DEUX /ping complets (toutes les capacités attendues, dont langue-impression et marques) espacés d'au moins 10 s ; un réveil à froid de l'essai (erreur, /ping partiel) s'attend, sans payer
+    const attendrePing = async () => {
+        const iterations = Math.max(1, Math.ceil(((o.attenteCapacitesMaxMin === undefined ? 10 : o.attenteCapacitesMaxMin) * 60) / 15));
+        const lire = async () => { try { return await appeler('/ping', { method: 'GET' }, null); } catch (e) { if (e instanceof Arret) throw e; return null; } };
+        let cur = await lire(), dernier = null;
+        for (let i = 0; i < iterations; i++) {
+            if (SP.pingComplet(cur)) {
+                await pause(10000);                                                                    // l'espacement exigé entre les deux /ping complets
+                const p2 = await lire();
+                if (SP.pingComplet(p2)) return p2;
+                cur = p2; continue;
+            }
+            dernier = cur;
+            log(`/ping incomplet (capacités : ${cur && cur.corps && Array.isArray(cur.corps.capacites) ? cur.corps.capacites.join(', ') || '(aucune)' : 'illisible'}) : en attente`);
+            await pause(15000); cur = await lire();
+        }
+        const manque = SP.CAPACITES_ATTENDUES.filter(c => !(dernier && dernier.corps && Array.isArray(dernier.corps.capacites) && dernier.corps.capacites.includes(c)));
+        throw new Arret(`capacités du /ping incomplètes après l'attente : il manque ${manque.join(', ') || '(deux /ping complets de suite)'} : rien n'est lancé`);
+    };
+    const ping = gp ? await attendrePing() : await appeler('/ping', { method: 'GET' }, null);
     if (ping.statut !== 200 || !ping.corps || typeof ping.corps.versionMinExtension !== 'string') throw new Arret(`/ping inattendu (${ping.statut}) : la v2 n'est pas annoncée, rien n'est envoyé`);
     const capacites = Array.isArray(ping.corps.capacites) ? ping.corps.capacites : [];
     log(`/ping : versionMinExtension ${ping.corps.versionMinExtension} ; capacités ${capacites.join(', ') || '(aucune)'} ; jeton empreinte ${capacites.includes('empreinte') ? 'PRÉSENT' : 'ABSENT (le serveur ne se sert pas encore des vecteurs)'}`);
@@ -243,7 +276,7 @@ async function serie(o, deps = {}) {
         if (!SP.fautif(j1.verdict) && classe1.niveau === 'question' && scanId && cplt && typeof cplt === 'object' && typeof cplt.jeton === 'string' && Array.isArray(cplt.mesures) && cplt.mesures.length > 0) {
             if (!carteB64) secondEnvoi = { envoye: false, raison: 'carte-absente' };
             else {
-                const prod = await SP.produireMesures({ demande: cplt.mesures, carteB64, lireReference, zones: deps.zones || require('../../ratmarket/zones'), carteRedressee: deps.carteRedressee || require('../identifier/carte-redressee'), validerResultats: require('../identifier/calcul-client').validerResultats });
+                const prod = await SP.produireMesures({ demande: cplt.mesures, carteB64, lireReference: SP.lecteurDeReferencesComplet({ local: lireReference, references: cplt.references, fetchFn: fetchF, cache: cacheHote, delaiMs: deps.delaiReferenceMs }), zones: deps.zones || require('../../ratmarket/zones'), carteRedressee: deps.carteRedressee || require('../identifier/carte-redressee'), validerResultats: require('../identifier/calcul-client').validerResultats });
                 if (!prod.ok) secondEnvoi = { envoye: false, raison: prod.raison };
                 else {
                     mesuresClient = prod.resultats;
@@ -358,7 +391,7 @@ async function serie(o, deps = {}) {
             rapportProbable = SP.rapportSerie(resultats, { statistiques });
             const T_ = rapportProbable.total;
             const X_ = rapportProbable.second;
-            log(`lignes à vérité : ${T_.avecVerite}/${T_.lignes} · questions ${X_.questions}, compléments demandés ${X_.complements}, seconds envois faits ${X_.envoyes}, réponses change:true ${X_.changeTrue}, non faits : référence locale absente ${X_.nonEnvoyes['reference-absente']}, carte absente ${X_.nonEnvoyes['carte-absente']}, autre ${X_.nonEnvoyes.autre}`);
+            log(`lignes à vérité : ${T_.avecVerite}/${T_.lignes} · questions ${X_.questions}, compléments demandés ${X_.complements}, seconds envois faits ${X_.envoyes}, réponses change:true ${X_.changeTrue}, non faits : référence introuvable sur l'hôte public ${X_.nonEnvoyes['reference-introuvable-hote']}, carte absente ${X_.nonEnvoyes['carte-absente']}, autre ${X_.nonEnvoyes.autre}`);
             log(`rapport probable : sûrs ${T_.surJuste} justes / ${T_.surFaux} FAUX · probables ${T_.probableJuste} justes / ${T_.probableFaux} FAUX · questions ${T_.questionDansCandidats} (vérité dans les candidats) / ${T_.questionHorsCandidats} (hors) · introuvables ${T_.introuvable} · sans vérité ${T_.sansVerite} · réponse directe juste ${T_.reponseDirecteJuste} %`);
             log(`premier verdict : n ${rapportProbable.premierVerdict.n}, p50 ${rapportProbable.premierVerdict.p50} ms, p95 ${rapportProbable.premierVerdict.p95} ms ; total : p50 ${rapportProbable.dureeTotale.p50} ms, p95 ${rapportProbable.dureeTotale.p95} ms`);
         }
@@ -409,7 +442,10 @@ if (require.main === module) {
         const scans = gProbable ? (arg('scans') ? arg('scans').split(',').filter(Boolean) : [DOSSIER_ARCHIVES + 'index-empreintes-essai/images', DOSSIER_ARCHIVES + 'index-empreintes/images', DOSSIER_ARCHIVES + 'modele-visuel-hors-ligne/cache-archive/img']) : undefined;
         const fTampons = gProbable ? (arg('tampons') || DOSSIER_ARCHIVES + 'tampons/controle-tampons-2026-10-18.json') : null;
         const releveTampons = fTampons ? new Set(JSON.parse(fs.readFileSync(fTampons, 'utf8')).lignes.flatMap(l => l.scans.flatMap(s => s.cartes.map(k => k.cle)))) : undefined;
-        const r = await serie({ base: arg('base') || undefined, resultats, nav, photos: necessaire('photos'), cartes: arg('cartes'), gProbable: gProbable || undefined, scans, releveTampons, declarations: process.argv.includes('--sans-declarations') ? false : undefined, versionExtension: arg('version-extension') || undefined, n: num('n', NaN), graine: num('graine', NaN), plafondUsd: num('plafond-usd', NaN), carnet: arg('carnet'),
+        // --cles=<fichier> : une liste de clés (tableau JSON de chaînes ou d'objets { cle }, ou une clé par ligne, « # » = commentaire), rejouée EXACTEMENT, dans cet ordre ; remplace --n et --graine
+        const fCles = arg('cles');
+        const cles = fCles ? (() => { const t = fs.readFileSync(fCles, 'utf8').trim(); const l = t.startsWith('[') ? JSON.parse(t) : t.split(/\r?\n/).map(x => x.trim()).filter(x => x && !x.startsWith('#')); return l.map(x => (x && typeof x === 'object' ? x.cle : x)); })() : undefined;
+        const r = await serie({ base: arg('base') || undefined, resultats, nav, photos: necessaire('photos'), cartes: arg('cartes'), cles, gProbable: gProbable || undefined, scans, releveTampons, declarations: process.argv.includes('--sans-declarations') ? false : undefined, versionExtension: arg('version-extension') || undefined, n: fCles ? undefined : num('n', NaN), graine: fCles ? undefined : num('graine', NaN), plafondUsd: num('plafond-usd', NaN), carnet: arg('carnet'),
             fichierEnv: arg('env') || process.env.V2_ESSAI_ENV || null, pauseS: num('pause-s', 6), coutEstimeUsd: arg('cout-estime-usd') === null ? undefined : num('cout-estime-usd', NaN), modele, env: process.env,
             deuxiemeApresSignal: signal || undefined, attenteMaxMin: num('attente-max-min', 120), apresSerie1: async r1 => { if (arg('sortie')) ecrire(arg('sortie'), r1); } });
         if (arg('sortie') && !signal) ecrire(arg('sortie'), r);
