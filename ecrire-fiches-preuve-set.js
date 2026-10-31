@@ -53,7 +53,7 @@ function entreesDesSetsAdmis({ verdicts, lecture }) {
         if (!v.admis || v.cible.role !== 'vise') continue;
         const slugs = [...lecture.sets.values()].filter(s => [].concat(s.idExpansion ?? []).includes(v.cible.exp)).map(s => s._id);
         if (slugs.length !== 1) { for (const a of v.attributions) refus.push({ idProduct: a.idProduct, raison: `l'expansion ${v.cible.exp} est portée par ${slugs.length} set(s) (${slugs.join(', ') || 'aucun'}) : le set ne se désigne pas, un doute est un refus` }); continue; }
-        entrees.push(...FPS.entreesDuSet({ verdict: v, source: v.source, produits: v.produits, exp: v.cible.exp, slugSet: slugs[0], etiquette: `kado.hk:${v.etiquette}` }));
+        entrees.push(...FPS.entreesDuSet({ verdict: v, source: v.source, produits: v.produits, exp: v.cible.exp, slugSet: slugs[0], etiquette: v.cible.etiquetteRef ?? `kado.hk:${v.etiquette}` }));   // une cible peut nommer sa propre référence (listes anglaises : aucun nom de source dans ce qui s'écrit)
     }
     return { entrees, refus };
 }
