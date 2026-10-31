@@ -28,6 +28,9 @@ function groupeParLesDonnees(version, ids) {
 function dansUnGroupe(version, id, ids) {
     try {
         if (!version || typeof version.entree !== 'function') return true;
+        // TOUR 4 : « entrée inconnue » vaut groupe — `memeDessin` rend false quand l'entrée d'un des deux produits manque à l'archive ; on ne s'y fie pas : une entrée ABSENTE pour le désigné OU pour un autre candidat est un groupe
+        // (memeDessin lui-même n'est pas touché : SUR-PAR-IMAGE le lit aussi).
+        if (!version.entree(id) || ids.some(autre => !version.entree(autre))) return true;
         return ids.some(autre => autre !== id && GM.memeDessin(version, id, autre, { avecEmprunt: true }));
     } catch { return true; }
 }

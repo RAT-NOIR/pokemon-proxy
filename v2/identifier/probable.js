@@ -33,7 +33,7 @@ function decider({ ids, produits, lu, cosinus = null, groupe = false, cosinusMin
     try {
         // GARDES FERMÉES PAR DÉFAUT (une garde s'écrit par ce qu'elle AUTORISE) : le vecteur est exigé SAUF si `vecteurExige === false` (explicite) ; le seuil est 0,38 SAUF si `cosinusMin` est un nombre fini (0 explicite l'éteint).
         // Un champ absent, null, NaN ou illisible ne lève jamais une garde.
-        const exige = vecteurExige !== false, minimum = Number.isFinite(cosinusMin) ? cosinusMin : COSINUS_MIN_DEFAUT;
+        const exige = vecteurExige !== false, minimum = Number.isFinite(cosinusMin) && cosinusMin >= 0 && cosinusMin <= 1 ? cosinusMin : COSINUS_MIN_DEFAUT;     // un nombre fini dans [0, 1] ; -1, 1,5, '0.1' (texte), Infinity = 0,38
         if (!lu || !Array.isArray(ids) || ids.length < 2 || ids.length > 3 || !ids.every(Number.isInteger) || new Set(ids).size !== ids.length || !(produits instanceof Map)) return null;
         const cands = ids.map(id => {
             const ligne = produits.get(id) || null, st = ligne ? GC.statuts(lu, ligne) : null;
