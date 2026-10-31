@@ -18,6 +18,7 @@ const V = require('./collecte-cartes/voie-deux-sources');
 const LOT = require('./collecte-cartes/lot-seulement');
 const FPS = require('./collecte-cartes/fiches-preuve-set');
 const V5 = require('./poser-fiches-voie-deux-sources');
+const TOL = require('./collecte-cartes/tolerance-orthographe');
 
 const DOSSIER = 'C:/Users/Yung/rat-market-travail/catalogue/couverture/S8/AUDIT-31/FICHES-SET';
 const AUTORISES = [/^--simuler$/, /^--ecrire$/, /^--dossier=.+$/, /^--seulement=.+\.json$/, /^--attendu=\d+$/, /^--plan=.+\.json$/, /^--resume=.+\.json$/, /^--pret=.+\.json$/];
@@ -34,7 +35,19 @@ function jugerTout({ sources, lecture, cibles = FPS.CIBLES }) {
         const produits = brut.map(p => ({ idProduct: p.idProduct, name: p.name, numero: p.numero ?? null }));
         const v = FPS.juger({ source, produits, traduire: sources.traduire, cleProduit: sources.cleProduit, groupeDe: c.groupeDe || null });
         const intraduisibles = [...new Set((v.discordances || []).filter(d => d.type === 'intraduisible').map(d => d.nomZh))];
-        verdicts.push({ ...v, cible: c, source, produits, intraduisibles, etiquette: c.kado.map(k => k[0]).join(' + ') });
+        const etiquette = c.kado.map(k => k[0]).join(' + ');
+        // LA TOLÉRANCE D'ORTHOGRAPHE (décision de l'éditeur, 2026-10-31) : un OPT-IN de la cible (`tolerance: true`), jamais un défaut. Elle ne corrige qu'UNE faute, sous ses quatre conditions
+        // (tolerance-orthographe.js) ; le set corrigé repasse ENTIÈREMENT par `juger` (0 faux, quatre contrôles négatifs), et le motif est écrit dans la raison et sur chaque fiche.
+        if (!v.admis && c.tolerance === true) {
+            const tol = TOL.proposerTolerance({ source, produits, traduire: sources.traduire, cleProduit: sources.cleProduit, groupeDe: c.groupeDe || null });
+            if (tol.applicable) {
+                const v2 = FPS.juger({ source: tol.source, produits, traduire: sources.traduire, cleProduit: sources.cleProduit, groupeDe: c.groupeDe || null });
+                if (v2.admis) { verdicts.push({ ...v2, raison: `${v2.raison} ; ${tol.motif}`, cible: c, source: tol.source, produits, intraduisibles: [], etiquette, tolerance: tol.correction, toleranceMotif: tol.motif }); continue; }
+                verdicts.push({ ...v, cible: c, source, produits, intraduisibles, etiquette, toleranceRefusee: `la liste corrigée est refusée par juger : ${v2.raison}` }); continue;
+            }
+            verdicts.push({ ...v, cible: c, source, produits, intraduisibles, etiquette, toleranceRefusee: tol.raison }); continue;
+        }
+        verdicts.push({ ...v, cible: c, source, produits, intraduisibles, etiquette });
     }
     // LA RÈGLE ENTIÈRE se tait si UN set montre un faux : 0 faux exigé partout où elle s'applique (sets visés ET sets de calibration)
     const fauxPartout = verdicts.reduce((s, v) => s + (v.calibration ? v.calibration.faux : 0), 0);

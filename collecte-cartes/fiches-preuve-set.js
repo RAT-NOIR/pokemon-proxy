@@ -88,7 +88,8 @@ function entreesDuSet({ verdict, source, produits, exp, slugSet, etiquette }) {
     return verdict.attributions.map(a => {
         const p = par.get(a.idProduct);
         const nomZh = nomParNumero.get(String(a.numero)) ?? nomParNumero.get(String((a.candidats || [])[0])) ?? null;
-        return { idProduct: a.idProduct, idExpansion: exp, slugSet, secondeSource: { concordantes: [{ source: SOURCE, ref: `${etiquette}#${a.numero}`, set: slugSet, numero: p ? String(p.numero) : null, nom: nomZh, par: 'set' }], refusees: [] } };
+        const note = verdict.toleranceMotif ? ` [${verdict.toleranceMotif}]` : '';   // la tolérance d'orthographe est écrite sur CHAQUE fiche du set qu'elle a rendu admis
+        return { idProduct: a.idProduct, idExpansion: exp, slugSet, secondeSource: { concordantes: [{ source: SOURCE, ref: `${etiquette}#${a.numero}${note}`, set: slugSet, numero: p ? String(p.numero) : null, nom: nomZh, par: 'set' }], refusees: [] } };
     });
 }
 
