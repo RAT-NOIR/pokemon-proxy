@@ -77,8 +77,24 @@ const alias = dir => {      // M1 : un nom court 8.3 réel si le système en fou
 const T = TMP;
 
 const arret = path.join(ARRETS, 'ARRET-HOTE-x.test.json');
+// PORTÉE (01/11 soir, décision de l'utilisateur) : la garde ne vaut que pour les sessions du catalogue (et leurs sous-agents, qui portent le session_id du parent).
+// Une autre session lancée depuis ce dépôt (l'agent API) passe ; une entrée SANS session_id lisible reste gardée (fermé par défaut).
+const SESSION_CAT = (() => { try { return require(HOOK).SESSIONS_CATALOGUE[0]; } catch { return 'absente'; } })();
+const avecSession = (sid, json) => JSON.stringify({ ...JSON.parse(json), session_id: sid });
+const AUTRE = '00000000-0000-4000-8000-0000000000a1';
 const CAS = [
     // [libellé, entrée, code attendu]
+    // ── portée : sessions du catalogue seulement ──
+    ['portée : session catalogue, WebFetch refusé', avecSession(SESSION_CAT, outil('WebFetch', { url: 'https://exemple.test' })), 2],
+    ['portée : session catalogue en MAJUSCULES, WebFetch refusé', avecSession(String(SESSION_CAT).toUpperCase(), outil('WebFetch', { url: 'https://exemple.test' })), 2],
+    ['portée : session catalogue, curl refusé', avecSession(SESSION_CAT, ps('curl https://exemple.test')), 2],
+    ['portée : autre session, WebFetch passe', avecSession(AUTRE, outil('WebFetch', { url: 'https://exemple.test' })), 0],
+    ['portée : autre session, curl passe', avecSession(AUTRE, ps('curl https://exemple.test')), 0],
+    ['portée : autre session, node -e passe (pas l\'affaire de la porte)', avecSession(AUTRE, ps('node -e "fetch(1)"')), 0],
+    ['portée : autre session, Write quelconque passe', avecSession(AUTRE, outil('Write', { file_path: path.join(T, 'x.txt'), content: 'x' })), 0],
+    ['portée : session_id vide = gardée', avecSession('', outil('WebFetch', { url: 'https://exemple.test' })), 2],
+    ['portée : session_id non textuel = gardée', JSON.stringify({ tool_name: 'WebFetch', tool_input: {}, session_id: 42 }), 2],
+    ['portée : sans session_id = gardée', outil('WebFetch', { url: 'https://exemple.test' }), 2],
     // ── H6 : fermé par défaut ──
     ['WebFetch toujours refusé', outil('WebFetch', { url: 'https://exemple.test', prompt: 'x' }), 2],
     ['webfetch en minuscules', outil('webfetch', { url: 'https://exemple.test' }), 2],
