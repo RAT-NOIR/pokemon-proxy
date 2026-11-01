@@ -572,10 +572,10 @@ function traiterIdentifier(cfg, deps = {}) {
                     let jumeaux = jumeaux0, ctxLD = {};
                     if (produits !== null) { const pr = await T.mesurer('base', () => preparerLD({ corpsListe: [c], produits, jumeaux: jumeaux0, catalogue, version: version0, deps })); produits = pr.produits; jumeaux = pr.jumeaux; if (pr.codeNumeroExiste) ctxLD = { codeNumeroExiste: pr.codeNumeroExiste }; }
                     resultat = produits === null ? { issue: 'panne', analyse: null, erreur: { code: 'INDISPONIBLE' } }
-                        : (deps.adapter || adapter)({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux, ...ctxLD });
+                        : (deps.adapter || adapter)({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux, ...ctxLD, ...(cfg.leviersAbde === true && niveauServi(cfg, entree) ? { leviersE: true } : {}) });
                     noterQuestion();
                     // SECONDE-LECTURE : seulement le cas visé, derrière son interrupteur ; la réponse d'avant reste si elle ne CONFIRME pas (jamais pire). AVANT la réservation ci-dessous : une affirmation confirmée n'en a pas.
-                    if (resultat.issue === 'question') {
+                    if (resultat.issue === 'question' && !resultat.jumeauxEnQuestion) {
                         const rejouer = jum => (deps.adapter || adapter)({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux: jum, ...ctxLD });
                         let sl = null;
                         try { sl = await T.mesurer('seconde', () => consulterSecondeLecture({ deps, cfg, entree, scanId, resultat, corpsChaine: c, produits, jumeaux, rejouer })); } catch (e) { journalErreur('seconde lecture', e); }
@@ -583,7 +583,7 @@ function traiterIdentifier(cfg, deps = {}) {
                     }
                     noterQuestion();
                     // F1-TAMPON puis LOT TAMPONS : lire les marques (liste fermée) pour trancher une paire séparée ; ou la mention de la règle 2 des prix. Derrière son interrupteur ; la réponse d'avant reste si la preuve n'est pas faite.
-                    if (resultat.issue === 'question' || resultat.issue === 'affirmee') {
+                    if ((resultat.issue === 'question' || resultat.issue === 'affirmee') && !resultat.jumeauxEnQuestion) {
                         try {
                             const lt = await T.mesurer('tampon', () => consulterLectureTampon({ deps, cfg, entree, scanId, resultat, corpsChaine: c, produits, version: version0, avecBorne,
                                 affirmer: (id, surcharge, critere) => affirmerParLaRoute(c, id, { produits: surcharge || produits, langueInterface: entree.langueInterface, cfg, ficheServie: false }, critere), journal: journalErreur }));
@@ -594,7 +594,7 @@ function traiterIdentifier(cfg, deps = {}) {
                     // une AFFIRMATION de la chaîne devenue une question (le produit a des jumeaux) : son crédit est encore pris, il est RÉSERVÉ plus bas, comme pour la règle G
                     if (resultat.issue === 'question' && c.success === true && c.carte && c.carte.ambigu === false) reqH.regleGRaison = 'jumeaux';
                     // MODELE-VISUEL-API : le vecteur de l'extension, si (et seulement si) V2_EMPREINTE_EXTENSION est allumé ET que la requête en porte ; jamais sur une panne. La voie V2_REGLE_G ci-dessous reste pour les requêtes sans vecteur.
-                    if (resultat.issue !== 'panne' && fournisseurEmpreinte && entree.empreintes) {
+                    if (resultat.jumeauxEnQuestion === true) { /* e : jamais promue */ } else if (resultat.issue !== 'panne' && fournisseurEmpreinte && entree.empreintes) {
                         if (te.orbUtile && resultat.issue === 'introuvable') {
                             // TEMPS-ETAPES (V2_TE_ORB_UTILE) : la règle G ne peut RIEN changer à un introuvable de la chaîne — arbitrer() rend « garder » quel que soit G, et l'introuvable ne se promeut jamais (depuisIntrouvable: false ;
                             // l'introuvable est déjà remboursé) : la recherche des voisins et la garde des zones (l'ORB) ne sont pas lancées. Ce que la réponse en dit : G se tait.
@@ -617,7 +617,7 @@ function traiterIdentifier(cfg, deps = {}) {
                     }
                     // SUR-PAR-IMAGE : une question que rien n'a tranchée, relue par le vecteur de l'extension (derrière V2_SUR_PAR_IMAGE ET V2_EMPREINTE_EXTENSION). Jamais quand la règle G a déjà changé le résultat ou
                     // contredit la chaîne (deux sources en conflit ne donnent pas un sûr), jamais sur autre chose qu'une question. La réponse d'avant reste si la preuve n'est pas faite.
-                    if (resultat.issue === 'question' && cfg.surParImage === true && entree.empreintes && !desaccordG && !(empreinteInfo && empreinteInfo.influence)) {
+                    if (resultat.issue === 'question' && cfg.surParImage === true && entree.empreintes && !desaccordG && !(empreinteInfo && empreinteInfo.influence) && !resultat.jumeauxEnQuestion) {
                         try {
                             const si = await T.mesurer('sur', () => consulterSurParImage({ cfg, entree, resultat, corpsChaine: c, produits, version: version0, jumeaux, affirmer: (id, surcharge, critere) => affirmerParLaRoute(c, id, { produits: surcharge || produits, langueInterface: entree.langueInterface, cfg, ficheServie: false }, critere),
                                 charger: cfg.vivierImage === true ? ids => catalogue.lire(ids) : undefined,         // VIVIER-IMAGE : les lignes des produits ajoutés au vivier (éteint : rien n'est passé, rien n'est lu)

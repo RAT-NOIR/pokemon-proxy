@@ -82,9 +82,9 @@ function introuvable(raison) {
 }
 
 // LEVIERS-ABDE, levier e (ordre n°17, V2_LEVIERS_ABDE, éteint par défaut) : « jumeaux-trop-nombreux » devient une QUESTION aux 3 premiers au lieu d'un introuvable, aux trois endroits où l'adaptateur le rend. Écrit par ce qu'il AUTORISE :
-// le drapeau est allumé (ctx.cfg.leviersAbde === true), la requête n'est PAS un lot (ctx.lot), et les lignes de catalogue des 3 premiers sont là (sinon `question` lèverait la panne SERVEUR : le repli d'avant, l'introuvable, reste).
-// Jamais une affirmation : une question ne devient un sûr que par les chemins d'avant. Éteint, aucune ligne de ce lot ne s'exécute.
-const jumeauxEnQuestion = (ctx, ids) => Boolean(ctx && ctx.cfg && ctx.cfg.leviersAbde === true && ctx.lot !== true && ctx.produits instanceof Map && ids.slice(0, 3).length >= 2 && ids.slice(0, 3).every(id => ctx.produits.has(id)));
+// le drapeau est allumé (ctx.cfg.leviersAbde === true), la route le PERMET (ctx.leviersE : V2_PROBABLE allumé ET extension qui sait répondre au niveau probable, posé par la route d'UNE carte seulement), la requête n'est PAS un lot (ctx.lot), et les lignes de catalogue des 3 premiers sont là (sinon `question` lèverait la panne SERVEUR : le repli d'avant, l'introuvable, reste).
+// La question née de e porte la marque jumeauxEnQuestion: true : ni la désignation, ni la seconde lecture, le tampon, la règle G, SUR-PAR-IMAGE ni le titre jumbo ne la promeuvent en sûr (comme l'introuvable de la chaîne, routes.js : jamais promu) ; elle peut devenir un probable par b. Éteint, aucune ligne de ce lot ne s'exécute.
+const jumeauxEnQuestion = (ctx, ids) => Boolean(ctx && ctx.cfg && ctx.cfg.leviersAbde === true && ctx.leviersE === true && ctx.lot !== true && ctx.produits instanceof Map && ids.slice(0, 3).length >= 2 && ids.slice(0, 3).every(id => ctx.produits.has(id)));
 
 // M1 (relecture r1) : une question de la CHAÎNE ne perd jamais le partenaire de partage d'un de ses candidats (l'image ne les sépare pas : la vérité peut être le partenaire). Les partenaires sont ajoutés
 // (les candidats d'abord) ; au-delà de 3 produits, jamais une question tronquée : l'introuvable impression-indeterminee, motif compté. Un fournisseur sans partages (banc, archive d'avant) : la question d'avant.
@@ -92,7 +92,7 @@ function questionAvecPartenaires(ids, etat, ctx, motifTexte) {
     const tous = [...ids];
     for (const id of ids) for (const q of partagesDuFournisseur(ctx.jumeaux, id)) if (!tous.includes(q)) tous.push(q);
     if (tous.length > ids.length && tous.length > 3) {                    // seulement quand des partenaires ont été AJOUTÉS : une question de la chaîne à 4 candidats reste coupée aux 3 premiers comme avant
-        if (jumeauxEnQuestion(ctx, tous)) return question(tous, etat, ctx);                  // LEVIERS-ABDE e (site 1)
+        if (jumeauxEnQuestion(ctx, tous)) return { ...question(tous, etat, ctx), jumeauxEnQuestion: true };                  // LEVIERS-ABDE e (site 1)
         noter('jumeaux-trop-nombreux', ids[0], `(${motifTexte} : ${tous.length} produits avec les partenaires de partage)`);
         return { ...introuvable('impression-indeterminee'), motif: 'jumeaux-trop-nombreux' };
     }
@@ -123,7 +123,7 @@ function apresGarde(g, etat, ctx, corps) {
         // CONFIRMATION-NOMBREUX (lot DESIGNATION-REGLES, R5, décision de l'éditeur 2026-10-25) : le SEUL candidat restant est montré en QUESTION « est-ce cette carte ? » (D1, comme UN-CANDIDAT), jamais en affirmation. Deux cas :
         // UN seul produit compatible après le filtre de nom (une ligne de jumeau manquante garde le repli : un jumeau sans ligne pourrait être la vérité, et `trois` est alors null).
         if (trois && trois.length === 1 && confirmationNombreux(ctx)) return { ...question(trois, etat, ctx), confirmationNombreux: true };
-        if (jumeauxEnQuestion(ctx, g.ids)) return question(g.ids.slice(0, 3), etat, ctx);        // LEVIERS-ABDE e (site 2) : la question aux 3 premiers, P d'abord
+        if (jumeauxEnQuestion(ctx, g.ids)) return { ...question(g.ids.slice(0, 3), etat, ctx), jumeauxEnQuestion: true };        // LEVIERS-ABDE e (site 2) : la question aux 3 premiers, P d'abord
         noter('jumeaux-trop-nombreux', g.ids[0], trois ? '(un seul candidat compatible)' : '(lignes de catalogue incomplètes)');
         return { ...introuvable('impression-indeterminee'), motif: 'jumeaux-trop-nombreux' };
     }
@@ -168,7 +168,7 @@ function parContradiction(idProduct, etat, ctx, corps) {
     const ajoutes = designes.flatMap(i => partagesDuFournisseur(ctx.jumeaux, i)).filter((x, k, a) => !designes.includes(x) && a.indexOf(x) === k);
     const avecPart = designes.length ? [...designes, ...ajoutes] : [];
     if (ajoutes.length && avecPart.length > 3) {
-        if (jumeauxEnQuestion(ctx, avecPart)) return { ...question(avecPart, etat, ctx), contradiction: g.resume };          // LEVIERS-ABDE e (site 3) : le résumé de la contradiction survit
+        if (jumeauxEnQuestion(ctx, avecPart)) return { ...question(avecPart, etat, ctx), contradiction: g.resume, jumeauxEnQuestion: true };          // LEVIERS-ABDE e (site 3) : le résumé de la contradiction survit
         noter('jumeaux-trop-nombreux', idProduct, `(contradiction : ${avecPart.length} produits avec les partenaires de partage)`);
         return { ...introuvable('impression-indeterminee'), motif: 'jumeaux-trop-nombreux', contradiction: g.resume };
     }
@@ -277,7 +277,7 @@ function traduire(statutHttp, corps, ctx) {
 // DESIGNATION (2026-10-18) : APRÈS le critère A et LANGUE-DECISIVE (déjà passés dans traduire), une QUESTION que rien n'a tranchée est relue : si les champs déjà lus ne satisfont que l'un de ses candidats (designation.js : seule la
 // règle `numero` est allumée), il est affirmé à la place. Une désignation qui échoue ne change rien : la question d'avant, jamais une panne.
 function parDesignation(r, corps, ctx) {
-    if (!r || r.issue !== 'question') return r;
+    if (!r || r.issue !== 'question' || r.jumeauxEnQuestion === true) return r;
     const regles = DES.reglesDe({ ...DES.REGLES_DESIGNATION, ...(ctx.designation && typeof ctx.designation === 'object' ? ctx.designation : {}) });
     if (!DES.actives(regles).length) return r;
     try {

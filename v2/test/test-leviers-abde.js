@@ -104,6 +104,7 @@ if (L) {
     const monde = (c, o = {}) => { const v = version(c); const produits = new Map(c.produits.map(p => [p.id, ligne(p)])); for (const id of (o.sansLigne || [])) produits.delete(id); return { produits, jumeaux: J.fournisseurDe(v) }; };
     const cfgOff = lireConfig({}), cfgOn = lireConfig({ V2_LEVIERS_ABDE: '1' });
     const { leviersAbde, leviersEcart, ...cfgAvant } = cfgOff;                         // la configuration d'AVANT ce lot : sans les deux champs
+    const E = { leviersE: true };                                                    // la route pose leviersE (V2_PROBABLE allumé ET extension >= 2.0.1) ; un lot ne le pose jamais
     const ctx = (m, cfg, plus = {}) => ({ produits: m.produits, langueInterface: 'fr', cfg, jumeaux: m.jumeaux, ...plus });
     const muet = f => { const w = console.warn; console.warn = () => { }; try { return f(); } finally { console.warn = w; } };
     const ids = r => r.analyse.cartes[0].candidats.map(x => x.idProduct).sort((a, b) => a - b);
@@ -114,19 +115,19 @@ if (L) {
     // site 2 (apresGarde, « nombreux ») : plus de 3 produits, une ligne de jumeau manque => « lignes incomplètes » : l'introuvable d'avant ; allumé, la question des 3 premiers si leurs lignes y sont
     {
         const m = monde(petit, { sansLigne: [703] });
-        const off = sortie(corpsDe(petit), ctx(m, cfgOff)), on = sortie(corpsDe(petit), ctx(m, cfgOn));
+        const off = sortie(corpsDe(petit), ctx(m, cfgOff)), on = sortie(corpsDe(petit), ctx(m, cfgOn, E));
         H.v('e site 2 : éteint, l\'introuvable d\'avant (impression-indeterminee, motif jumeaux-trop-nombreux)', [off.issue, off.analyse.cartes[0].raison, off.motif], ['introuvable', 'impression-indeterminee', 'jumeaux-trop-nombreux']);
         H.v('e site 2 : allumé, une QUESTION aux 3 premiers (P d\'abord, jamais un sûr, jamais plus de 3)', [on.issue, ids(on), on.analyse.cartes[0].statut, on.motif ?? null], ['question', [700, 701, 702], 'a-trancher', null]);
         H.v('e site 2 : éteint = configuration d\'avant, octet pour octet', JSON.stringify(off), JSON.stringify(sortie(corpsDe(petit), ctx(m, cfgAvant))));
-        const m2 = monde(petit, { sansLigne: [701] }), on2 = sortie(corpsDe(petit), ctx(m2, cfgOn));
+        const m2 = monde(petit, { sansLigne: [701] }), on2 = sortie(corpsDe(petit), ctx(m2, cfgOn, E));
         H.v('e site 2 : un des 3 premiers SANS ligne de catalogue => le repli d\'avant (introuvable), jamais une panne SERVEUR', [on2.issue, on2.motif], ['introuvable', 'jumeaux-trop-nombreux']);
-        const rl = sortie(corpsDe(petit), ctx(m, cfgOn, { lot: true }));
+        const rl = sortie(corpsDe(petit), ctx(m, cfgOn, { ...E, lot: true }));
         H.v('e : dans un LOT, le comportement d\'avant (introuvable jumeaux-trop-nombreux)', [rl.issue, rl.motif], ['introuvable', 'jumeaux-trop-nombreux']);
     }
     // site 2 bis : tous les jumeaux contredits par le nom lu, P compatible (« un seul candidat compatible ») : l'introuvable d'avant ; allumé, la question
     {
         const c = { ...petit, produits: [ligneB(700), ligneB(704, 'Charizard VMAX'), ligneB(705, 'Charizard VMAX'), ligneB(706, 'Charizard VMAX'), ligneB(707, 'Charizard VMAX')] };
-        const m = monde(c), off = sortie(corpsDe(c), ctx(m, cfgOff)), on = sortie(corpsDe(c), ctx(m, cfgOn));
+        const m = monde(c), off = sortie(corpsDe(c), ctx(m, cfgOff)), on = sortie(corpsDe(c), ctx(m, cfgOn, E));
         H.v('e site 2 bis : éteint, introuvable jumeaux-trop-nombreux ; allumé, une question de 3 qui contient P', [off.motif, on.issue, ids(on).length, ids(on).includes(700)], ['jumeaux-trop-nombreux', 'question', 3, true]);
     }
     // site 1 (questionAvecPartenaires) : une question de la chaîne dont les partenaires de partage portent le total au-delà de 3
@@ -136,7 +137,7 @@ if (L) {
         const jumeaux = Object.assign(() => ({ conclu: true, ids: [], partages: [] }), { partagesDe: id => (id === 10 ? [12, 13] : []) });
         const corps = { success: true, scanId: 's1', question: null, carte: { idProduct: 10, ambigu: true, nom: 'Pikachu', nomBrut: 'Pikachu', nomConfiance: 'basse' }, etat: { estimeIA: 'EX', confianceIA: 'haute', defautsVus: [], declareVendeur: null, retenu: 'GD' },
             candidats: [{ idProduct: 10 }, { idProduct: 11 }], classement: [], reverse: { attendue: false, strategie: null }, codeLangue: 2 };
-        const off = sortie(corps, { produits, langueInterface: 'fr', cfg: cfgOff, jumeaux }), on = sortie(corps, { produits, langueInterface: 'fr', cfg: cfgOn, jumeaux });
+        const off = sortie(corps, { produits, langueInterface: 'fr', cfg: cfgOff, jumeaux }), on = sortie(corps, { produits, langueInterface: 'fr', cfg: cfgOn, leviersE: true, jumeaux });
         H.v('e site 1 : éteint, introuvable jumeaux-trop-nombreux (4 produits avec les partenaires)', [off.issue, off.motif], ['introuvable', 'jumeaux-trop-nombreux']);
         H.v('e site 1 : allumé, une question aux 3 premiers (les candidats d\'abord, puis un partenaire)', [on.issue, ids(on)], ['question', [10, 11, 12]]);
     }
@@ -147,16 +148,28 @@ if (L) {
         const jumeaux = Object.assign(() => ({ conclu: true, ids: [], partages: [] }), { partagesDe: id => (id === 1 ? [3, 4] : []) });
         const corps = { success: true, scanId: 's1', question: null, carte: { idProduct: 1, ambigu: false, nom: 'Pikachu', nomBrut: 'Pikachu', nomConfiance: 'haute', numero: '5', total: null, setCode: null, langue: null }, lectureGarde: { numero: '5', vivierIds: [1, 2] },
             etat: { estimeIA: 'EX', confianceIA: 'haute', defautsVus: [], declareVendeur: null, retenu: 'GD' }, candidats: [{ idProduct: 1 }], classement: [{ idProduct: 1 }], reverse: { attendue: false, strategie: null }, codeLangue: 2 };
-        const off = sortie(corps, { produits, langueInterface: 'fr', cfg: cfgOff, jumeaux }), on = sortie(corps, { produits, langueInterface: 'fr', cfg: cfgOn, jumeaux });
+        const off = sortie(corps, { produits, langueInterface: 'fr', cfg: cfgOff, jumeaux }), on = sortie(corps, { produits, langueInterface: 'fr', cfg: cfgOn, leviersE: true, jumeaux });
         H.v('e site 3 : éteint, introuvable jumeaux-trop-nombreux AVEC la contradiction', [off.issue, off.motif, typeof off.contradiction], ['introuvable', 'jumeaux-trop-nombreux', 'string']);
         H.v('e site 3 : allumé, une question aux 3 premiers (P, le désigné, un partenaire) qui garde le résumé de la contradiction', [on.issue, ids(on), typeof on.contradiction], ['question', [1, 2, 3], 'string']);
+    }
+    // ── tour 1 (ruling A) : e n'agit que si la route le permet (leviersE), marque la question née de lui, et la désignation ne l'affirme jamais
+    {
+        const m = monde(petit, { sansLigne: [703] });
+        const sans = sortie(corpsDe(petit), ctx(m, cfgOn));
+        H.v('e : sans leviersE (V2_PROBABLE éteint ou extension trop ancienne) le drapeau seul ne change rien : l\'introuvable d\'avant', [sans.issue, sans.motif], ['introuvable', 'jumeaux-trop-nombreux']);
+        const on = sortie(corpsDe(petit), ctx(m, cfgOn, E));
+        H.v('e : la question née de e porte la marque jumeauxEnQuestion (G, SUR-PAR-IMAGE, seconde lecture, tampon, jumbo la lisent)', on.jumeauxEnQuestion, true);
+        // la désignation (règle numero) affirmerait 700 seul : une question de e n'est JAMAIS promue en sûr, même par l'adaptateur
+        H.v('e : la question née de e reste une question à confirmer (a-trancher), jamais un sûr à ce stade', [on.issue, on.analyse.cartes[0].statut], ['question', 'a-trancher']);
+        const ordinaire = sortie(corpsDe({ ...petit, produits: petit.produits.slice(0, 3) }), ctx(monde({ ...petit, produits: petit.produits.slice(0, 3) }), cfgOn, E));
+        H.v('une question ORDINAIRE (3 produits) ne porte pas la marque de e', ordinaire.jumeauxEnQuestion ?? null, null);
     }
     // la fixture réelle (72 cartes, VRAIE colonne des jumeaux) : allumer le drapeau ne change AUCUNE autre sortie, ne fabrique jamais un sûr
     {
         const FIX = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'banc-reel', 'jumeaux-question.json'), 'utf8')).cartes;
         let autres = 0, sursEnPlus = 0, toutesDeuxQuestions = 0;
         for (const c of FIX) {
-            const m = monde(c), a = sortie(corpsDe(c), ctx(m, cfgOff)), b = sortie(corpsDe(c), ctx(m, cfgOn));
+            const m = monde(c), a = sortie(corpsDe(c), ctx(m, cfgOff)), b = sortie(corpsDe(c), ctx(m, cfgOn, E));
             if (a.motif !== 'jumeaux-trop-nombreux') { if (JSON.stringify(a) !== JSON.stringify(b)) autres++; if (a.issue === 'question' && b.issue === 'question') toutesDeuxQuestions++; }
             if (b.issue === 'affirmee' && a.issue !== 'affirmee') sursEnPlus++;
         }
@@ -174,6 +187,11 @@ if (L) {
     H.vrai('route : drapeau éteint, la branche `else` appelle consulterProbable avec EXACTEMENT les arguments d\'avant', k > 0);
     H.vrai('route : le résultat de l\'étape ne remplace la question que s\'il en rend une, le probable vient de l\'étape (jamais de consulterProbable en même temps)', routes.includes('if (lv) { if (lv.resultat) resultat = lv.resultat; probableDecide = lv.probable; }'));
     H.vrai('route : l\'étape reçoit le catalogue et le contexte de l\'adaptateur (jumeaux, langue décisive) pour fabriquer la question', /appliquerLeviers\(\{[^]*catalogue, ctxQuestion: \{ langueInterface: entree\.langueInterface, cfg, ficheServie: false, jumeaux, \.\.\.ctxLD \}/.test(routes));
+    const marq = src('garde-marqueurs.js'), adap = src('adaptateur.js');
+    H.vrai('route : le contexte de l\'adaptateur d\'une carte pose leviersE seulement sous V2_LEVIERS_ABDE ET le niveau probable servi (V2_PROBABLE + extension >= 2.0.1)', routes.includes("...(cfg.leviersAbde === true && niveauServi(cfg, entree) ? { leviersE: true } : {})"));
+    H.vrai('route : seconde lecture, tampon, règle G (vecteur et V2_REGLE_G), SUR-PAR-IMAGE ne voient jamais une question née de e', routes.includes("if (resultat.issue === 'question' && !resultat.jumeauxEnQuestion) {") && routes.includes("if ((resultat.issue === 'question' || resultat.issue === 'affirmee') && !resultat.jumeauxEnQuestion) {") && routes.includes("if (resultat.jumeauxEnQuestion === true) { /* e : jamais promue */ } else if (resultat.issue !== 'panne' && fournisseurEmpreinte") && routes.includes("cfg.surParImage === true && entree.empreintes && !desaccordG && !(empreinteInfo && empreinteInfo.influence) && !resultat.jumeauxEnQuestion"));
+    H.vrai('marqueurs : le titre jumbo n\'affirme pas une question née de e, et lot est transmis à la question du groupe', marq.includes("lot || resultat.jumeauxEnQuestion === true ? { ...cfg, jumboTitre: false } : cfg") && marq.includes("questionDeGroupe(c, ids, { ...pctx, produits, jumeaux, lot })"));
+    H.vrai('adaptateur : la désignation ne touche pas une question née de e', adap.includes("if (!r || r.issue !== 'question' || r.jumeauxEnQuestion === true) return r;"));
     H.vrai('lot : le contexte de l\'adaptateur d\'un lot porte `lot: true` (le levier e ne s\'applique qu\'à UNE carte)', /\.\.\.ctxLD, lot: true \}/.test(lot));
     H.vrai('catalogue : `indexAliasFr` est exposé, lu par curseur, sous les gardes des autres index (compte, tronqué, plancher)', cat.includes('indexAliasFr,') && cat.includes('for await (const d of col.find({}, { projection: { idProduct: 1, nomFr: 1 } }))') && cat.includes('if (lus < attendu) throw') && cat.includes('INDEX_CODE_NUMERO_MIN'));
 }
