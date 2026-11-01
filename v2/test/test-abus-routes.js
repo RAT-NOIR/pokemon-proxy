@@ -811,6 +811,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             V2_ETIQUETTE_HEURE: [c => c.limites.etiquetteParPorteurHeure, 600, '0', 'leve'],      // ETIQUETAGE-A : le plafond horaire de POST /api/banc/etiquette (administrateur), posé sans mesure d'usage réel
             RENDER_GIT_COMMIT: [c => c.versions.chaine, null, 'pas-un-commit', 'ignore'], V2_VERSION_MODELE: [c => c.versions.modele, null, '%%', 'ignore'],   // ETIQUETAGE-A : informations internes, une valeur illisible vaut `null` (jamais invalide, jamais inventée)
             V2_ESSAIS_GLOBAUX_JOUR: [c => c.limites.essaisGlobauxJour, 500, 'abc', 'leve'],
+            V2_PHOTO_COMPTES_BANC: [c => c.photoComptesBanc, false, 'true', 'ignore'],      // COMPTE-TEST (commit 4) : /api/photo ouvert au compte de test ordinaire, éteint par défaut (seul « 1 » l'allume)
             V2_INSTALLATION_BANC_EXEMPTE: [c => c.installationBancExempte, false, 'true', 'ignore'], V2_INSTALLATION_BANC_JOUR: [c => c.limites.installationBancJour, 50, '0', 'leve'],      // INST-BANC : exemption éteinte par défaut (seul « 1 » l'allume) ; plafond du compte de mesure
             V2_INSTALLATION_REQUETES_HEURE: [c => c.limites.installationRequetesIpHeure, 30, '0', 'leve'],      // IDEMPOTENCE-INSTALLATION r1 I1 : borne les devinettes de clé sur /api/installation
             V2_BANC_LIEN_MOIS: [c => c.retention.bancLienMois, 12, '13', 'leve'],      // BANC-12 : jamais plus de 12 mois

@@ -126,10 +126,10 @@ module.exports = {
         // PHOTOS-MULTIPLES (7d) : POST /api/photo?index=<0..7>, derrière V2_PHOTOS_MULTIPLES=1. Drapeau éteint : la route N'EXISTE PAS (404 natif pour tous, administrateur compris). Phase 1 : MÊME garde de rôle que
         // /api/banc/photo (exigerAdministrateurPhoto : 404 natif sans lire le corps), AVANT le limiteur (le plafond horaire de /api/banc/photo, compteur à part) ; aucune idempotence (corps binaire), aucun argent.
         if (cfg.photosMultiples === true) {
-            const { exigerAdministrateurPhoto } = require('../banc/photo');
+            const { exigerPhotoAdminOuBanc } = require('../banc/acces-photo-banc');      // COMPTE-TEST (commit 4) : la garde d'origine + la porte du compte de test ordinaire (drapeau V2_PHOTO_COMPTES_BANC)
             const { traiterPhotoAvantScan } = require('./photo-avant-scan');
             const parPorteurPhoto = parPorteurDe('photo-avant-scan', Math.max(600, cfg.limites.etiquetteParPorteurHeure));      // (B) au moins 600 par porteur (75 scans de 8 photos), même si le réglage des routes du banc est plus bas
-            router.post('/api/photo', resoudrePorteur(cfg), exigerInstallation, exigerAdministrateurPhoto, parPorteurPhoto, traiterPhotoAvantScan(cfg, deps));
+            router.post('/api/photo', resoudrePorteur(cfg), exigerInstallation, exigerPhotoAdminOuBanc(cfg, deps), parPorteurPhoto, traiterPhotoAvantScan(cfg, deps));
         }
         demarrerBalayage();
         demarrerPurge();

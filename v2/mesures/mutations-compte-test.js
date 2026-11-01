@@ -7,6 +7,7 @@ const fs = require('fs'), os = require('os'), path = require('path'), { spawnSyn
 const V = path.join(__dirname, '..');
 const BANCS = 'test';
 const EX = 'installations/exemption-banc.js', RT = 'installations/routes.js', CE = 'admin/compte-essai.js', SE = 'mesures/serie-essai.js', SC = 'mesures/serie-compte-test.js';
+const AP = 'banc/acces-photo-banc.js', MO = 'identifier/monter.js', PA = 'identifier/photo-avant-scan.js', B_PH = 'test-photo-comptes-banc.js';
 const B_EX = 'test-installation-banc-ordinaire.js', B_CE = 'test-compte-ordinaire.js', B_SE = 'test-serie-compte-test.js';
 
 // [nom, fichier (relatif à v2/), ancre, remplacement, banc, équivalent? (raison)]
@@ -52,6 +53,17 @@ const MUTANTS = [
     ['SE : la lettre attendue n\'est plus vérifiée avant l\'envoi', SE, '&& (!att.lettre || choix === att.lettre)) {', ') {', B_SE],
     ['SE : le code de sortie d\'un écart redevient 1', SC, 'r && r.ecart ? CODE_ECART :', 'r && r.ecart ? 1 :', B_SE],
     ['SE : le code de sortie d\'un dépôt refusé redevient 1', SC, "startsWith('PHOTO REFUSÉE') ? CODE_PHOTO_REFUSEE", "startsWith('PHOTO REFUSÉE') ? 1", B_SE],
+    // ── POST /api/photo (commit 4) ──
+    ['PH : le drapeau V2_PHOTO_COMPTES_BANC n\'est plus consulté', AP, 'if (cfg && cfg.photoComptesBanc === true) {', 'if (true) {', B_PH],
+    ['PH : la liste fermée n\'est plus exigée (la base de l\'essai suffit)', AP, 'EX.estCompteDeTestOrdinaire(c) && EX.baseDeLEssai(nomBase())', 'EX.baseDeLEssai(nomBase())', B_PH],
+    ['PH : la base de l\'essai n\'est plus exigée', AP, 'EX.estCompteDeTestOrdinaire(c) && EX.baseDeLEssai(nomBase())', 'EX.estCompteDeTestOrdinaire(c)', B_PH],
+    ['PH : un refus ne retombe plus sur la garde d\'origine (tout passe)', AP, 'return exigerAdministrateurPhoto(req, res, next);\n    };', 'return next();\n    };', B_PH],
+    ['PH : la route n\'est plus gardée du tout', MO, 'exigerInstallation, exigerPhotoAdminOuBanc(cfg, deps), parPorteurPhoto', 'exigerInstallation, (q, s, n) => n(), parPorteurPhoto', B_PH],
+    ['PH : la porte n\'est plus branchée (la garde d\'origine seule)', MO, 'exigerInstallation, exigerPhotoAdminOuBanc(cfg, deps), parPorteurPhoto', 'exigerInstallation, require(\'../banc/photo\').exigerAdministrateurPhoto, parPorteurPhoto', B_PH],
+    ['PH : un porteur qui n\'est pas un compte entre dans la porte', AP, "if (p && p.type === 'compte' && p.administrateur !== true) {", 'if (p) {', B_PH, 'la lecture en base du compte inexistant rend null, que estCompteDeTestOrdinaire refuse : double garde'],
+    ['PH : le dépôt du compte de banc n\'est plus journalisé', PA, 'if (req.v2 && req.v2.compteBancPhoto) console.log(', 'if (false) console.log(', B_PH],
+    ['PH : le journal écrit le jeton', PA, '`📷 [v2 photo-banc] compte=${req.v2.compteBancPhoto}', '`📷 [v2 photo-banc] ${req.headers.authorization} compte=${req.v2.compteBancPhoto}', B_PH],
+    ['PH : le journal ne porte plus le sha256', PA, ' sha256=${require(\'crypto\').createHash(\'sha256\').update(octets).digest(\'hex\')}`', '`', B_PH],
     // ── le tableau et le juge ──
     ['TB : le quota après la ligne 6 attendu change', SC, "restantApres: 6 },\n    { rang: 7", "restantApres: 5 },\n    { rang: 7", B_SE],
     ['TB : le plafond du jour attendu à la ligne 8 change', SC, "const PLAFOND_PROBABLE_AUCUNE = 3;", "const PLAFOND_PROBABLE_AUCUNE = 4;", B_SE],

@@ -104,6 +104,8 @@ function traiterPhotoAvantScan(cfg, deps = {}) {
         try { photoId = magasin(deps).deposer(cle, index, propre.octets, propre.modele, { totalMs: performance.now() - debutDepot, traitementMs: performance.now() - debutTraitement }); }
         catch (e) { journal('magasin', e); return repondreErreur(res, 'INDISPONIBLE'); }
         PE.noter('ok');
+        // COMPTE-TEST (commit 4) : le dépôt d'un compte de banc est journalisé (qui, quand, taille, sha256 des octets reçus) — jamais l'image, jamais un secret
+        if (req.v2 && req.v2.compteBancPhoto) console.log(`📷 [v2 photo-banc] compte=${req.v2.compteBancPhoto} le=${new Date().toISOString()} octets=${octets.length} sha256=${require('crypto').createHash('sha256').update(octets).digest('hex')}`);
         return res.status(200).json({ success: true, photoId, expireDans: SERVICE_S });
     };
 }
