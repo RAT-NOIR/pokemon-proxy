@@ -11,6 +11,7 @@
   body { margin: 0; font: 15px/1.4 system-ui, sans-serif; background: var(--fond); color: var(--texte); }
   header { display: flex; gap: 16px; align-items: baseline; padding: 10px 16px; background: var(--carte); border-bottom: 1px solid #2c3038; }
   header strong { font-size: 16px; } .doux { color: var(--doux); }
+  #avis { color: var(--alerte); }
   #compteur { font-size: 18px; font-weight: 700; color: var(--accent); } #connexion { margin-left: auto; }
   #vue .grave { color: var(--alerte); font-size: 18px; padding: 24px; max-width: 640px; line-height: 1.5; }
   main { display: grid; grid-template-columns: minmax(320px, 1fr) 420px; gap: 16px; padding: 16px; }
@@ -36,6 +37,7 @@
   <span id="seau" class="doux">…</span>
   <span id="progres" class="doux"></span>
   <span id="connexion" class="doux"></span>
+  <button class="act" id="arreter" type="button" hidden title="Arrête le juge (le processus caché) : on le relance par le raccourci">Arrêter</button>
 </header>
 <main>
   <section>
@@ -50,6 +52,7 @@
       <button class="act principal" id="poser">Poser le jeton</button>
     </div>
 <!--SESSION-FIN-->
+    <div class="panneau" id="avis" hidden></div>
     <div class="panneau" id="saisie" hidden>
       <div><span class="doux">Scan</span> <strong id="rang"></strong> <span class="doux" id="carteNum"></span></div>
       <p class="doux">Ce que vous voyez est la photo seule. Collez l'adresse Cardmarket de la carte (ou son idProduct), puis <kbd>Entrée</kbd> deux fois : résoudre, confirmer.</p>

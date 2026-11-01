@@ -88,7 +88,8 @@ const noter = async (x, r) => { const j = r.journal ? fs.readFileSync(r.journal,
         const x = await lancerBanc({ envFile: ecrireEnv('AUTRE=1\nV2_ESSAI_BANC_IDENTIFIANT=quelqu-un@exemple.invalid\n') });
         const { r, faux } = x, e = await etatDe(r), pg = await H.appel(r.url.replace(/\/$/, ''), '/');
         H.v('2. identifiants absents : ZÉRO requête vers l\'essai', faux.appels.length, 0);
-        H.v('2. la page dit pourquoi, en français, sans jeton à remplir', [e.connexion.etat, e.jeton, /^Connexion à l'essai impossible \(identifiants du compte de mesure absents\) — fermez la fenêtre, attendez une minute et relancez ; si ça persiste, prévenez l'agent API$/.test(e.connexion.message), pg.texte.includes('id="jeton"')], ['echec', false, true, false]);
+        H.v('2. la page dit pourquoi, en français, sans jeton à remplir', [e.connexion.etat, e.jeton, /^Connexion à l'essai impossible \(identifiants du compte de mesure absents\) — attendez une minute puis double-cliquez de nouveau sur « Juge Rat-Market » ; si ça persiste, prévenez l'agent API$/.test(e.connexion.message), pg.texte.includes('id="jeton"')], ['echec', false, true, false]);
+        H.v('2. la phrase d\'échec ne parle plus de « fenêtre » à fermer (il n\'y en a pas)', /fermez la fenêtre/.test(e.connexion.message), false);
         H.v('2. le navigateur est quand même ouvert (la page porte le message) ; le relais refuse (401), rien n\'est appelé', [x.ouverts.length, (await H.appel(r.url.replace(/\/$/, ''), '/api/banc/seau/courant')).statut, faux.appels.length], [1, 401, 0]);
         await noter(x, r);
         await new Promise(res => setTimeout(res, 700));
@@ -227,6 +228,112 @@ const noter = async (x, r) => { const j = r.journal ? fs.readFileSync(r.journal,
         H.v('11. sans lanceur et sans jeton : le champ « jeton » est demandé (comportement d\'avant)', [f.ui.sessions, f.ui.connexions.length], [[true], 0]);
         f = fabrique([{ jeton: true }], { courant: { statut: 401, json: null } }); await f.ctrl.demarrer();
         H.v('11. sans lanceur, un 401 : le champ « jeton » est demandé (comportement d\'avant)', f.ui.sessions, [true]);
+    });
+
+    // ── 12. TOUR 1 : le lanceur (lecture des identifiants, double clic simultané, arrêt volontaire, inactivité, raccourci)
+    await essayer('12. lanceur tour 1', async () => {
+        // lireIdentifiants dans le try : une lecture qui lève devient un ÉCHEC affiché, jamais un rejet non géré
+        const piege = new Proxy({}, { get() { throw new Error('boom'); } });
+        const p = await lancerBanc({ env: piege });
+        const e = await etatDe(p.r);
+        H.v('12. une lecture des identifiants qui lève : échec affiché (phrase), aucune requête, pas de rejet', [e.connexion.etat, /lecture des identifiants impossible/.test(e.connexion.message), p.faux.appels.length], ['echec', true, 0]);
+        await noter(p, p.r); await p.r.fermer();
+
+        // double clic SIMULTANÉ : le port est pris par NOTRE serveur que la sonde n'a pas encore vu → réessai de /_etat, pas « port pris »
+        const un = await lancerBanc();
+        let premier = true;
+        const sondeAveugle = (u, i) => { if (premier) { premier = false; const err = new TypeError('fetch failed'); err.cause = { code: 'ECONNREFUSED' }; throw err; } return fetch(u, i); };
+        const deux = await lancerBanc({ port: un.r.port, fetchLocal: sondeAveugle });
+        H.v('12. double clic simultané : « déjà lancé » (page ouverte), jamais « port pris par un autre programme »', [deux.r.resultat, deux.r.code, deux.ouverts, deux.sorties.length], ['deja-lance', 0, [un.r.url], 0]);
+        await un.r.fermer();
+
+        // arrêt volontaire : POST /_arreter (jeton anti-falsification) arrête le processus proprement ; sans jeton : 403 ; sans lanceur : 404
+        const a = await lancerBanc();
+        const url = a.r.url.replace(/\/$/, ''), pg = await H.appel(url, '/'), csrf = (/name="rm-csrf" content="([0-9a-f]+)"/.exec(pg.texte) || [])[1];
+        H.v('12. /_arreter sans jeton anti-falsification : 403, le juge continue', [(await H.appel(url, '/_arreter', { methode: 'POST', corps: {} })).statut, a.quittes], [403, []]);
+        const ar = await H.appel(url, '/_arreter', { methode: 'POST', corps: {}, entetes: { 'x-rm-csrf': csrf } });
+        await new Promise(res => setTimeout(res, 300));
+        H.v('12. /_arreter avec le jeton : 200, le serveur est fermé puis le processus quitte (code 0)', [ar.statut, a.quittes], [200, [0]]);
+        let ferme = false; try { await fetch(url + '/_etat'); } catch { ferme = true; }
+        H.v('12. le port est libéré', ferme, true);
+        const sans = creerServeur({ apiBase: 'http://127.0.0.1:1', jeton: null }); const sa = await sans.ecouter(0);
+        const pgs = await H.appel(sa.url.replace(/\/$/, ''), '/'), cs = (/name="rm-csrf" content="([0-9a-f]+)"/.exec(pgs.texte) || [])[1];
+        H.v('12. sans lanceur, /_arreter n\'existe pas (404)', (await H.appel(sa.url.replace(/\/$/, ''), '/_arreter', { methode: 'POST', corps: {}, entetes: { 'x-rm-csrf': cs } })).statut, 404);
+        await sans.fermer();
+
+        // arrêt seul après inactivité (2 h en vrai ; ici quelques dizaines de ms)
+        const faux = fauxEssai(), quittes = [];
+        const i = await lancer({ port: 0, envFile: ecrireEnv(ENV_BON), env: {}, fetchFn: faux.fetch, ouvrir: () => { }, pause: async () => { }, quitter: c => quittes.push(c), dossierJournal: nouveauDossier(), sortie: () => { }, delaiInactiviteMs: 250, pasInactiviteMs: 40 });
+        await i.connexionFinie;
+        await new Promise(res => setTimeout(res, 120)); await H.appel(i.url.replace(/\/$/, ''), '/api/banc/seau/courant'); await new Promise(res => setTimeout(res, 150));
+        H.v('12. une activité (requête vers le banc) repousse l\'arrêt automatique', quittes, []);
+        await new Promise(res => setTimeout(res, 600));
+        H.v('12. sans aucune activité : arrêt seul (code 0), noté au journal', [quittes, fs.readFileSync(i.journal, 'utf8').includes('inactivité')], [[0], true]);
+        await i.fermer();
+        const lireSrc = rel => fs.readFileSync(path.join(__dirname, '..', '..', rel), 'utf8');
+        // le raccourci vise la copie du Bureau, pas le dossier d'où le script est lancé
+        const ps1 = lireSrc('outils/banc-200/creer-raccourci.ps1'), vbs = lireSrc('outils/banc-200/lancer-juge.vbs');
+        H.v('12. creer-raccourci.ps1 vise le .vbs de la copie du Bureau (chemin fixe), refuse s\'il manque, sans $PSScriptRoot ni paramètre sans effet', [ps1.includes('C:\\Users\\Yung\\Desktop\\pokemon-proxy-api-v2'), /outils\\banc-200\\lancer-juge\.vbs/.test(ps1), /Test-Path -LiteralPath \$vbs/.test(ps1), /throw/.test(ps1), /\$PSScriptRoot/.test(ps1.replace(/^#.*$/gm, '')), /DossierDeTravail/.test(ps1)], [true, true, true, true, false, false]);
+        H.v('12. le .vbs ne cite le journal que s\'il existe', [/FileExists\(\s*journal\s*\)/.test(vbs)], [true]);
+    });
+
+    // ── 13. TOUR 1 : le contrôleur (liste vide expliquée, seau absent ou scellé, mauvaise adresse, double Entrée, arrêt) — jamais de code brut
+    await essayer('13. contrôleur tour 1', async () => {
+        const BRUTS = ['seau-id', 'scan-introuvable', 'juge-scelle', 'CODE_INVALIDE', 'ENTREE', 'INDISPONIBLE', 'erreur 4', 'erreur 5', 'adresse-inconnue'];
+        const fabrique = ({ liste, courant = { statut: 200, json: { seau: { id: 's1', nom: 'juge-200', type: 'juge', n: 3, cible: 200 } } }, resolution, verite, porte } = {}) => {
+            const appels = [], textes = [], ui = {};
+            const api = async (m, c) => {
+                appels.push(`${m} ${c}`);
+                if (c === '/_etat') return { statut: 200, json: { lanceur: true, jeton: true, connexion: { etat: 'ok' } } };
+                if (c === '/api/banc/seau/courant') return courant;
+                if (c.startsWith('/api/banc/seau/a-etiqueter')) return liste;
+                if (c === '/api/banc/resoudre-cardmarket') { if (porte) await porte; return resolution || { statut: 200, json: { idProduct: 777, nom: 'Pikachu', set: { nom: 'Jungle' }, numero: '60' } }; }
+                if (c === '/api/banc/seau/verite') return verite || { statut: 200, json: { success: true } };
+                if (c === '/_arreter') return { statut: 200, json: { success: true } };
+                return { statut: 404, json: null };
+            };
+            const E = { vide: [], vider: 0, attente: null, progres: [], arret: 0, scan: null, avis: [] };
+            Object.assign(ui, { montrerSession: () => { }, montrerConnexion: c => textes.push(c.message || ''), montrerProgres: p => E.progres.push(p), montrerVide: t => { E.vide.push(t); textes.push(t || ''); }, montrerScan: s => { E.scan = s; }, montrerAttente: a => { E.attente = a; },
+                montrerCandidats: () => { }, dire: t => textes.push(t || ''), vider: () => { E.vider++; }, montrerArret: () => { E.arret++; }, montrerAvis: t => { E.avis.push(t); textes.push(t || ''); } });
+            return { appels, textes, E, ctrl: RMControleur.creer({ api, ui, attendre: f => f() }) };
+        };
+        const OK = (scans, extra = {}) => ({ statut: 200, json: { success: true, scans, prochain: null, autresComptes: 0, seau: { id: 's1', nom: 'juge-200', type: 'juge', etat: 'ouvert', n: 3, cible: 200 }, ...extra } });
+        const aucunBrut = (nom, f) => H.v(`13. ${nom} : aucun code brut affiché`, f.textes.filter(t => BRUTS.some(b => String(t).includes(b))), []);
+        const UN_SCAN = [{ scanId: 'a'.repeat(24), rang: 1, photos: 1, cartes: 1, etiquetees: 0 }];
+
+        let f = fabrique({ liste: OK([], { autresComptes: 3 }) }); await f.ctrl.demarrer();
+        H.v('13. 🔑 PORTEUR : liste vide mais 3 scans d\'un autre compte : la page le DIT, avec N', [f.E.vide.length, /3 scans faits avec un autre compte que celui de la page/.test(f.E.vide[0] || ''), /compte de mesure/.test(f.E.vide[0] || '')], [1, true, true]);
+        aucunBrut('liste d\'un autre compte', f);
+        f = fabrique({ liste: { statut: 200, json: { success: true, scans: UN_SCAN, prochain: 'a'.repeat(24), autresComptes: 1, seau: { id: 's1', nom: 'juge-200', type: 'juge', etat: 'ouvert', n: 3, cible: 200 } } } }); await f.ctrl.demarrer();
+        H.v('13. des scans listés ET 1 scan d\'un autre compte : un avis au singulier, la liste reste utilisable', [f.E.scan && f.E.scan.rang, /1 scan fait avec un autre compte que celui de la page/.test(f.E.avis.join('|'))], [1, true]);
+
+        f = fabrique({ courant: { statut: 200, json: { success: true, seau: null } }, liste: { statut: 400, json: { success: false, erreur: { code: 'ENTREE', detail: 'seau-id' } } } }); await f.ctrl.demarrer();
+        H.v('13. seau non déclaré : phrase claire', f.E.vide, ['Aucun seau ouvert : l\'agent API le déclare, rien à faire de votre côté']);
+        aucunBrut('seau non déclaré', f);
+
+        f = fabrique({ courant: { statut: 200, json: { success: true, seau: null } }, liste: OK([], { seau: { id: 's1', nom: 'juge-200', type: 'juge', etat: 'scelle', n: 200, cible: 200 } }) }); await f.ctrl.demarrer();
+        H.v('13. juge scellé : « Le juge est scellé : n/200, merci », compteur du seau scellé transmis', [f.E.vide, f.E.progres.map(p => p.seau && `${p.seau.n}/${p.seau.cible}`)], [['Le juge est scellé : 200/200, merci'], ['200/200']]);
+
+        f = fabrique({ liste: { statut: 200, json: { success: true, scans: UN_SCAN, prochain: 'a'.repeat(24), autresComptes: 0, seau: { id: 's1', nom: 'juge-200', type: 'juge', etat: 'ouvert', n: 3, cible: 200 } } }, resolution: { statut: 404, json: { success: false, erreur: { code: 'CODE_INVALIDE', detail: 'adresse-inconnue' } } } }); await f.ctrl.demarrer();
+        await f.ctrl.entrer('https://www.cardmarket.com/fr/Pokemon/Products/Singles/X/Y');
+        H.v('13. mauvaise adresse : le champ est vidé (et sélectionné) et le message est une phrase en français', [f.E.vider, /^Adresse non résolue/.test(f.textes[f.textes.length - 1]), f.E.attente], [1, true, null]);
+        await f.ctrl.entrer('du texte quelconque');
+        H.v('13. un texte qui n\'est pas une adresse : champ vidé aussi', f.E.vider, 2);
+        aucunBrut('mauvaise adresse', f);
+
+        let ouvrir; const porte = new Promise(r => { ouvrir = r; });
+        f = fabrique({ liste: { statut: 200, json: { success: true, scans: UN_SCAN, prochain: 'a'.repeat(24), autresComptes: 0, seau: { id: 's1', nom: 'juge-200', type: 'juge', etat: 'ouvert', n: 3, cible: 200 } } }, porte }); await f.ctrl.demarrer();
+        const url2 = 'https://www.cardmarket.com/fr/Pokemon/Products/Singles/Jungle/Pikachu';
+        const e1 = f.ctrl.entrer(url2), e2 = f.ctrl.entrer(url2); ouvrir(); await e1; await e2;
+        H.v('13. deux Entrées rapprochées : UNE seule résolution, une seule attente', [f.appels.filter(a => a.includes('resoudre')).length, f.appels.filter(a => a.includes('/verite')).length, f.E.attente && f.E.attente.via], [1, 0, 'url']);
+
+        f = fabrique({ liste: { statut: 200, json: { success: true, scans: UN_SCAN, prochain: 'a'.repeat(24), autresComptes: 0, seau: { id: 's1', nom: 'juge-200', type: 'juge', etat: 'ouvert', n: 3, cible: 200 } } }, verite: { statut: 409, json: { success: false, erreur: { code: 'CONFLIT', detail: 'juge-scelle' } } } }); await f.ctrl.demarrer();
+        await f.ctrl.entrer('777'); await f.ctrl.confirmer();
+        H.v('13. vérité refusée parce que le juge est scellé : phrase française', f.textes.some(t => /Le juge est scellé/.test(t)), true);
+        aucunBrut('vérité refusée', f);
+
+        f = fabrique({ liste: OK([]) }); await f.ctrl.demarrer(); await f.ctrl.arreter();
+        H.v('13. « Arrêter » : POST /_arreter puis l\'écran d\'arrêt', [f.appels.includes('POST /_arreter'), f.E.arret], [true, 1]);
     });
 
     // ── BALAYAGE DE SECRET : ni le mot de passe, ni le jeton, ni le cookie, ni l'identifiant, dans rien de ce que le lanceur a écrit, dit ou servi

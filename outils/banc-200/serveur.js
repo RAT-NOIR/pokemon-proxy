@@ -41,7 +41,7 @@ function creerServeur({ apiBase = process.env.RM_API_BASE || ESSAI, jeton = proc
     const csrf = crypto.randomBytes(24).toString('hex');
     let jetonAcces = typeof jeton === 'string' && jeton.trim() ? jeton.trim() : null;
     let connexion = lanceur ? { etat: 'en-cours', message: null } : null;
-    let port = null;
+    let port = null, derniereActivite = Date.now();
     const hotes = () => [`127.0.0.1:${port}`, `localhost:${port}`];
     const origines = () => hotes().map(h => `http://${h}`);
     const entetesSurs = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY',
@@ -88,6 +88,13 @@ function creerServeur({ apiBase = process.env.RM_API_BASE || ESSAI, jeton = proc
             const site = req.headers['sec-fetch-site'];
             if (site !== undefined && site !== 'same-origin' && site !== 'none') return json(res, 403, { success: false, erreur: { code: 'ORIGINE' } });
             const u = new URL(req.url, 'http://x'), chemin = u.pathname;
+            if (!(req.method === 'GET' && chemin === '/_etat')) derniereActivite = Date.now();      // le suivi de l'état par la page n'est pas une activité de l'éditeur (arrêt seul après inactivité)
+            if (req.method === 'POST' && chemin === '/_arreter' && lanceur) {                       // arrêt volontaire (bouton « Arrêter ») : jeton anti-falsification exigé ; la réponse part AVANT l'arrêt
+                if (req.headers['x-rm-csrf'] !== csrf) return json(res, 403, { success: false, erreur: { code: 'ORIGINE' } });
+                json(res, 200, { success: true });
+                if (typeof lanceur.arreter === 'function') setTimeout(() => { try { lanceur.arreter(); } catch { /* l'arrêt ne doit jamais lever */ } }, 50);
+                return;
+            }
             if (req.method === 'GET' && (chemin === '/' || chemin === '/index.html')) {
                 const html = fichier('page.html').toString('utf8').replace('__CSRF__', csrf);
                 return repondre(res, 200, lanceur ? html.replace(SESSION_RE, '') : html.replace(/<!--SESSION-(DEBUT|FIN)-->/g, ''), 'text/html; charset=utf-8');
@@ -111,6 +118,8 @@ function creerServeur({ apiBase = process.env.RM_API_BASE || ESSAI, jeton = proc
 
     return {
         serveur, csrf,
+        /** Depuis combien de ms l'éditeur n'a-t-il rien demandé au serveur (hors suivi de l'état) ? */
+        inactifDepuisMs: () => Date.now() - derniereActivite,
         /** Le lanceur pose le jeton (EN MÉMOIRE seulement) : la connexion passe à « ok ». */
         poserJeton: j => { jetonAcces = typeof j === 'string' && j.trim() ? j.trim() : null; if (connexion) connexion = jetonAcces ? { etat: 'ok', message: null } : { etat: 'echec', message: 'aucun jeton' }; },
         /** Le lanceur dit l'état de sa connexion : { etat: 'en-cours' | 'ok' | 'echec', message } — le message est une phrase française SANS secret, affichée telle quelle par la page. */

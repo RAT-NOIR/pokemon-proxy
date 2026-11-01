@@ -15,7 +15,8 @@ const { creerServeur, ESSAI, IDENTITE } = require('./serveur');
 const PORT_DEFAUT = 4747;
 const ENV_DEFAUT = 'C:\\Users\\Yung\\Desktop\\pokemon-proxy-api-v2\\.env';
 const PING_ESSAIS = 10, PING_PAUSE_MS = 10000, CHAINE_ESSAIS = 3, CHAINE_PAUSE_MS = 5000, DELAI_REQUETE_MS = 30000, SORTIE_APRES_ECHEC_MS = 60000;
-const PHRASE = raison => `Connexion à l'essai impossible (${raison}) — fermez la fenêtre, attendez une minute et relancez ; si ça persiste, prévenez l'agent API`;
+const INACTIVITE_MS = 2 * 3600e3, INACTIVITE_PAS_MS = 60000;
+const PHRASE = raison => `Connexion à l'essai impossible (${raison}) — attendez une minute puis double-cliquez de nouveau sur « Juge Rat-Market » ; si ça persiste, prévenez l'agent API`;
 
 const dossierJournalDefaut = env => path.join((env && env.LOCALAPPDATA) || os.tmpdir(), 'rat-market-juge');
 /** Le journal : une phrase par ligne, datée. N'écrit que ce qu'on lui donne ; l'appelant ne lui donne JAMAIS une valeur secrète. Un journal indisponible ne fait jamais échouer le lanceur. */
@@ -96,6 +97,7 @@ async function lancer(o = {}) {
     const ouvrir = o.ouvrir || ouvrirNavigateur, pause = o.pause || (ms => new Promise(r => setTimeout(r, ms)));
     const quitter = o.quitter || (code => process.exit(code)), sortie = o.sortie || (() => { });
     const delaiSortieMs = o.delaiSortieMs === undefined ? SORTIE_APRES_ECHEC_MS : o.delaiSortieMs;
+    const delaiInactiviteMs = o.delaiInactiviteMs === undefined ? INACTIVITE_MS : o.delaiInactiviteMs, pasInactiviteMs = o.pasInactiviteMs === undefined ? INACTIVITE_PAS_MS : o.pasInactiviteMs;
     const J = ouvrirJournal(o.dossierJournal || dossierJournalDefaut(env)), journal = t => J.ecrire(t);
     const ouvrirPage = url => { try { ouvrir(url); journal('navigateur ouvert'); } catch (e) { journal(`navigateur : ouverture impossible (${raisonCourte(e)}) ; page à ouvrir à la main : ${url}`); } };
     journal('démarrage du lanceur');
@@ -111,12 +113,26 @@ async function lancer(o = {}) {
         if (qui === 'autre') return refusPort();
     }
 
-    let sortieAuto = null, etatFinal = 'en-cours';
-    const lanceur = { surRefusJeton: () => { if (etatFinal === 'ok') echec('jeton refusé (401)'); } };
+    let sortieAuto = null, etatFinal = 'en-cours', veille = null, arrete = false;
+    const arreterTout = async motif => {
+        if (arrete) return; arrete = true;
+        journal(motif); if (sortieAuto) clearTimeout(sortieAuto); if (veille) clearInterval(veille);
+        try { await S.fermer(); } finally { quitter(0); }
+    };
+    const lanceur = { surRefusJeton: () => { if (etatFinal === 'ok') echec('jeton refusé (401)'); }, arreter: () => arreterTout('arrêt demandé par le bouton « Arrêter »') };
     const S = creerServeur({ apiBase: ESSAI, fetchFn, lanceur });
     let ecoute;
     try { ecoute = await S.ecouter(port); }
-    catch (e) { if (e && e.code === 'EADDRINUSE') return refusPort(); journal(`écoute impossible (${raisonCourte(e)})`); sortie(`Le juge n'a pas pu démarrer (${raisonCourte(e)}). Voir ${J.fichier}`); return { resultat: 'port-pris', code: 1, port, url: null, message: raisonCourte(e), journal: J.fichier }; }
+    catch (e) {
+        if (e && e.code === 'EADDRINUSE') {
+            // double clic SIMULTANÉ : l'autre lanceur a pris le port juste après notre sonde ; son /_etat répond dans un instant — on réessaie avant de conclure « autre programme »
+            for (let i = 0; i < 4; i++) {
+                await pause(500);
+                if (await sonder(port, fetchLocal) === 'nous') { const url = `http://127.0.0.1:${port}/`; journal(`port ${port} : le juge venait d'être lancé par un autre double-clic ; ouverture de la page seule`); ouvrirPage(url); return { resultat: 'deja-lance', code: 0, port, url, journal: J.fichier }; }
+            }
+            return refusPort();
+        }
+        journal(`écoute impossible (${raisonCourte(e)})`); sortie(`Le juge n'a pas pu démarrer (${raisonCourte(e)}). Voir ${J.fichier}`); return { resultat: 'port-pris', code: 1, port, url: null, message: raisonCourte(e), journal: J.fichier }; }
     journal(`serveur à l'écoute sur ${ecoute.url}`);
     ouvrirPage(ecoute.url);
 
@@ -124,19 +140,24 @@ async function lancer(o = {}) {
         etatFinal = 'echec';
         S.poserConnexion({ etat: 'echec', message: PHRASE(raison) });
         journal(`connexion : échec — ${raison}`);
-        if (!sortieAuto) sortieAuto = setTimeout(() => { journal('arrêt automatique après l\'échec de connexion'); S.fermer().then(() => quitter(0), () => quitter(0)); }, delaiSortieMs);
+        if (!sortieAuto) sortieAuto = setTimeout(() => { arreterTout('arrêt automatique après l\'échec de connexion'); }, delaiSortieMs);
     }
+    // arrêt seul après 2 h sans activité de l'éditeur (le suivi de l'état par la page n'en est pas une)
+    veille = setInterval(() => { if (S.inactifDepuisMs() >= delaiInactiviteMs) arreterTout('arrêt automatique après inactivité'); }, pasInactiviteMs);
+    veille.unref();
     const connexionFinie = (async () => {
-        const ids = CN.lireIdentifiants(env, envFile);
-        const presents = Boolean(ids);
-        journal(`identifiants du compte de mesure : ${presents ? 'présents' : 'absents'} (fichier ${envFile})`);
-        if (!ids) return echec('identifiants du compte de mesure absents');
         try {
+            let ids;
+            try { ids = CN.lireIdentifiants(env, envFile); } catch { return echec('lecture des identifiants impossible'); }
+            const presents = Boolean(ids);
+            journal(`identifiants du compte de mesure : ${presents ? 'présents' : 'absents'} (fichier ${envFile})`);
+            if (!ids) return echec('identifiants du compte de mesure absents');
             const jeton = await connecter({ base: o.base || ESSAI, ids, fetchF: fetchFn, pause, journal });
-            S.poserJeton(jeton); etatFinal = 'ok';            journal('connexion : ok (compte de mesure, administrateur ; jeton gardé en mémoire)');
+            S.poserJeton(jeton); etatFinal = 'ok';
+            journal('connexion : ok (compte de mesure, administrateur ; jeton gardé en mémoire)');
         } catch (e) { echec(raisonCourte(e)); }
     })();
-    return { resultat: 'lance', code: 0, port: ecoute.port, url: ecoute.url, connexionFinie, journal: J.fichier, fermer: async () => { if (sortieAuto) clearTimeout(sortieAuto); await S.fermer(); } };
+    return { resultat: 'lance', code: 0, port: ecoute.port, url: ecoute.url, connexionFinie, journal: J.fichier, fermer: async () => { arrete = true; if (sortieAuto) clearTimeout(sortieAuto); if (veille) clearInterval(veille); await S.fermer(); } };
 }
 
 module.exports = { lancer, connecter, sonder, ouvrirJournal, raisonCourte, transitoire, PORT_DEFAUT, ENV_DEFAUT, PHRASE };
