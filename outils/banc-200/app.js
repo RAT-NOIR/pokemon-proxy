@@ -25,9 +25,19 @@
     }
     var ctrl;
     var ui = {
-        montrerSession: function (v) { $('session').hidden = !v; if (v) $('vue').textContent = 'Posez le jeton pour commencer.'; },
+        montrerSession: function (v) { if (!$('session')) return; $('session').hidden = !v; if (v) $('vue').textContent = 'Posez le jeton pour commencer.'; },     // piloté par le lanceur, le champ n'existe pas dans la page
+        montrerConnexion: function (c) {
+            var z = $('connexion'), vue = $('vue');
+            if (c.etat === 'ok') { z.textContent = 'connecté à l\'essai'; z.className = 'bon'; vue.textContent = ''; return; }
+            if (c.etat === 'echec') {
+                z.textContent = 'non connecté'; z.className = 'erreur'; vue.textContent = '';
+                var g = document.createElement('div'); g.className = 'grave'; g.textContent = c.message || 'Connexion à l\'essai impossible.'; vue.appendChild(g); return;
+            }
+            z.textContent = 'connexion à l\'essai…'; z.className = 'doux'; vue.textContent = 'Connexion à l\'essai en cours (jusqu\'à une minute si le service dormait)…';
+        },
         montrerProgres: function (p) {
             $('progres').textContent = 'vérités : ' + p.fait + '/' + p.total;
+            $('compteur').textContent = p.seau ? p.seau.n + '/' + p.seau.cible : '';
             $('seau').textContent = p.seau ? p.seau.nom + ' (' + p.seau.type + ', ' + p.seau.n + '/' + p.seau.cible + ')' : 'Aucun seau ouvert (le dernier est utilisé pour la liste).';
         },
         montrerScan: function (s, carte) {
@@ -63,7 +73,7 @@
     $('voir').addEventListener('click', function () { ctrl.voirCandidats(); });
     $('pasCarte').addEventListener('click', function () { ctrl.aucune('pas-une-carte'); });
     $('horsCatalogue').addEventListener('click', function () { ctrl.aucune('hors-catalogue'); });
-    $('poser').addEventListener('click', function () { var j = $('jeton').value; $('jeton').value = ''; ctrl.poserJeton(j); });
+    if ($('poser')) $('poser').addEventListener('click', function () { var j = $('jeton').value; $('jeton').value = ''; ctrl.poserJeton(j); });
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') { ctrl.annuler(); return; }
         if (!e.altKey) return;

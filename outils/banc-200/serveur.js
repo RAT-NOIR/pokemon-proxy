@@ -31,10 +31,16 @@ function baseAutorisee(base) {
     return u.origin;
 }
 
-function creerServeur({ apiBase = process.env.RM_API_BASE || ESSAI, jeton = process.env.RM_BANC_JETON || null, fetchFn = fetch, dossier = __dirname } = {}) {
+// JUGE EN UN CLIC (ordre n°30) : `lanceur` (objet) dit que ce serveur est piloté par outils/banc-200/lancer-juge.js, qui se connecte à l'essai et pose le jeton EN MÉMOIRE (poserJeton) : alors la page n'a AUCUN champ « jeton » (retiré du HTML servi, /_session refusée),
+// /_etat dit l'état de la connexion, et un 401 de l'API (jeton périmé) est signalé au lanceur (`surRefusJeton`). Sans `lanceur`, le comportement d'avant est intact (jeton de l'environnement ou saisi dans la page).
+const IDENTITE = 'rm-juge-banc200';                       // ce que /_etat dit de lui : le lanceur reconnaît ainsi « notre » serveur déjà lancé, et rien d'autre
+const SESSION_RE = /<!--SESSION-DEBUT-->[\s\S]*?<!--SESSION-FIN-->/;
+
+function creerServeur({ apiBase = process.env.RM_API_BASE || ESSAI, jeton = process.env.RM_BANC_JETON || null, fetchFn = fetch, dossier = __dirname, lanceur = null } = {}) {
     const base = baseAutorisee(apiBase);
     const csrf = crypto.randomBytes(24).toString('hex');
     let jetonAcces = typeof jeton === 'string' && jeton.trim() ? jeton.trim() : null;
+    let connexion = lanceur ? { etat: 'en-cours', message: null } : null;
     let port = null;
     const hotes = () => [`127.0.0.1:${port}`, `localhost:${port}`];
     const origines = () => hotes().map(h => `http://${h}`);
@@ -67,6 +73,7 @@ function creerServeur({ apiBase = process.env.RM_API_BASE || ESSAI, jeton = proc
                 headers: { authorization: `Bearer ${jetonAcces}`, ...(corps ? { 'content-type': 'application/json' } : {}) }, ...(corps ? { body: corps } : {})
             });
         } catch { return json(res, 502, { success: false, erreur: { code: 'INDISPONIBLE', message: 'l\'API ne répond pas' } }); }
+        if (lanceur && r.status === 401 && typeof lanceur.surRefusJeton === 'function') { try { lanceur.surRefusJeton(); } catch { /* le lanceur ne doit jamais faire échouer le relais */ } }
         const tampon = Buffer.from(await r.arrayBuffer());
         if (tampon.length > REPONSE_MAX) return json(res, 502, { success: false, erreur: { code: 'INDISPONIBLE', message: 'réponse trop grande' } });
         const type = r.headers.get('content-type') || 'application/octet-stream';
@@ -81,11 +88,15 @@ function creerServeur({ apiBase = process.env.RM_API_BASE || ESSAI, jeton = proc
             const site = req.headers['sec-fetch-site'];
             if (site !== undefined && site !== 'same-origin' && site !== 'none') return json(res, 403, { success: false, erreur: { code: 'ORIGINE' } });
             const u = new URL(req.url, 'http://x'), chemin = u.pathname;
-            if (req.method === 'GET' && (chemin === '/' || chemin === '/index.html')) return repondre(res, 200, fichier('page.html').toString('utf8').replace('__CSRF__', csrf), 'text/html; charset=utf-8');
+            if (req.method === 'GET' && (chemin === '/' || chemin === '/index.html')) {
+                const html = fichier('page.html').toString('utf8').replace('__CSRF__', csrf);
+                return repondre(res, 200, lanceur ? html.replace(SESSION_RE, '') : html.replace(/<!--SESSION-(DEBUT|FIN)-->/g, ''), 'text/html; charset=utf-8');
+            }
             if (req.method === 'GET' && (chemin === '/app.js' || chemin === '/controleur.js')) return repondre(res, 200, fichier(chemin.slice(1)), 'text/javascript; charset=utf-8');
-            if (req.method === 'GET' && chemin === '/_etat') return json(res, 200, { success: true, jeton: Boolean(jetonAcces), api: base });
+            if (req.method === 'GET' && chemin === '/_etat') return json(res, 200, { success: true, appli: IDENTITE, jeton: Boolean(jetonAcces), api: base, lanceur: Boolean(lanceur), connexion });
             if (req.method === 'POST' && chemin === '/_session') {
                 if (req.headers['x-rm-csrf'] !== csrf) return json(res, 403, { success: false, erreur: { code: 'ORIGINE' } });
+                if (lanceur) return json(res, 403, { success: false, erreur: { code: 'LANCEUR', message: 'le jeton est posé par le lanceur, jamais saisi' } });
                 let b; try { b = JSON.parse((await lireCorps(req)).toString('utf8')); } catch { return json(res, 400, { success: false, erreur: { code: 'ENTREE' } }); }
                 if (!b || typeof b.jeton !== 'string' || b.jeton.length < 8 || b.jeton.length > 200 || /\s/.test(b.jeton)) return json(res, 400, { success: false, erreur: { code: 'ENTREE', detail: 'jeton' } });
                 jetonAcces = b.jeton; return json(res, 200, { success: true, jeton: true });
@@ -100,12 +111,16 @@ function creerServeur({ apiBase = process.env.RM_API_BASE || ESSAI, jeton = proc
 
     return {
         serveur, csrf,
+        /** Le lanceur pose le jeton (EN MÉMOIRE seulement) : la connexion passe à « ok ». */
+        poserJeton: j => { jetonAcces = typeof j === 'string' && j.trim() ? j.trim() : null; if (connexion) connexion = jetonAcces ? { etat: 'ok', message: null } : { etat: 'echec', message: 'aucun jeton' }; },
+        /** Le lanceur dit l'état de sa connexion : { etat: 'en-cours' | 'ok' | 'echec', message } — le message est une phrase française SANS secret, affichée telle quelle par la page. */
+        poserConnexion: c => { if (connexion) connexion = { etat: c.etat, message: c.message || null }; if (connexion && connexion.etat === 'echec') jetonAcces = null; },
         ecouter: (p = 4747) => new Promise((resolve, reject) => { serveur.once('error', reject); serveur.listen(p, '127.0.0.1', () => { port = serveur.address().port; resolve({ port, url: `http://127.0.0.1:${port}/` }); }); }),
         fermer: () => new Promise(r => { serveur.close(() => r()); if (serveur.closeAllConnections) serveur.closeAllConnections(); })
     };
 }
 
-module.exports = { creerServeur, baseAutorisee, RELAIS, ESSAI };
+module.exports = { creerServeur, baseAutorisee, RELAIS, ESSAI, IDENTITE };
 
 if (require.main === module) {
     const arg = process.argv.slice(2);

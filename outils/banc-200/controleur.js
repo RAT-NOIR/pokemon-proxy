@@ -12,7 +12,10 @@
 
     function creer(o) {
         var api = o.api, ui = o.ui;
-        var etat = { seau: null, scans: [], scan: null, carte: 0, attente: null, occupe: false };
+        var etat = { seau: null, scans: [], scan: null, carte: 0, attente: null, occupe: false, lanceur: false };
+        var attendreMs = o.attendre || function (f, ms) { setTimeout(f, ms); };            // injectable : un banc n'attend pas pour de vrai
+        function connexion(c) { if (ui.montrerConnexion) ui.montrerConnexion(c); }
+        var PHRASE_EXPIREE = 'Connexion à l\'essai impossible (jeton refusé) — fermez la fenêtre, attendez une minute et relancez ; si ça persiste, prévenez l\'agent API';
         function attendre(a) { etat.attente = a; ui.montrerAttente(a); }
         function afficher() {
             ui.montrerCandidats(null); attendre(null);
@@ -22,7 +25,10 @@
         }
         function charger() {
             return api('GET', '/api/banc/seau/courant').then(function (r) {
-                if (r.statut === 401) { ui.montrerSession(true); return null; }
+                if (r.statut === 401) {
+                    if (etat.lanceur) { connexion({ etat: 'echec', message: PHRASE_EXPIREE }); return null; }       // piloté par le lanceur : jamais de champ « jeton » à remplir
+                    ui.montrerSession(true); return null;
+                }
                 if (r.statut !== 200 || !r.json) { ui.dire('L\'API ne répond pas (' + r.statut + ').', 'erreur'); return null; }
                 etat.seau = r.json.seau;
                 return api('GET', '/api/banc/seau/a-etiqueter' + (etat.seau ? '?seau=' + etat.seau.id : ''));
@@ -39,7 +45,16 @@
         }
         function demarrer() {
             return api('GET', '/_etat').then(function (r) {
-                if (r.json && r.json.jeton) return charger();
+                var j = r.json || {};
+                if (j.lanceur) {                                      // le lanceur se connecte à l'essai en arrière-plan : la page suit son état, sans jamais demander de jeton
+                    etat.lanceur = true;
+                    var c = j.connexion || { etat: 'en-cours' };
+                    connexion(c);
+                    if (c.etat === 'ok' && j.jeton) return charger();
+                    if (c.etat === 'echec') return null;
+                    return new Promise(function (fin) { attendreMs(function () { fin(demarrer()); }, 2000); });
+                }
+                if (j.jeton) return charger();
                 ui.montrerSession(true);
             });
         }
