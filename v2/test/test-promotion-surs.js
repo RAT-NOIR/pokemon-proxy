@@ -9,7 +9,8 @@
 const H = require('./_harnais');
 const { lireConfig } = require('../config');
 const { encoderVecteur } = require('../identifier/empreinte-vecteur');
-const { questionParLaRoute } = require('../identifier/adaptateur');
+const { questionParLaRoute, affirmerParLaRoute } = require('../identifier/adaptateur');
+const GM = require('../identifier/garde-marqueurs');
 const CA = require('../identifier/critere-a');
 const L = require('../identifier/leviers-abde');
 const PS = require('../identifier/promotion-surs');
@@ -101,9 +102,10 @@ const regle = o => { const r = promo(o); return r.promu ? r.regle : null; };
 
     // ═════ l'ÉTAPE de la route (appliquerLeviers) sur un monde fabriqué : index d'empreintes factice, archive factice avec jumeaux, catalogue factice
     const MODELE = { id: 'p8000-banc', sha256: 'b'.repeat(64) };
-    const cfgBase = { ...lireConfig({}), probable: true, leviersAbde: true, leviersEcart: 0.1, empreinteExtension: true, modeleEmpreinte: MODELE };
+    const ab = (o, k = 'promotion') => (o && k in o ? 'présent' : 'absent');       // distingue ABSENT de nul (H.v compare en JSON : undefined et null s'y confondent)
+    const cfgBase = { ...lireConfig({}), probable: true, leviersAbde: true, gardeMarqueurs: true, leviersEcart: 0.1, empreinteExtension: true, modeleEmpreinte: MODELE };
     const VEC = Float32Array.from({ length: 256 }, () => 1 / 16);
-    function monde({ cos, lignes: lg, vivier = [], base = [], jum = {}, sansColonne = false, promotion = true, groupes = [], lecture: lec = {}, ext = '2.0.1' } = {}) {
+    function monde({ cos, lignes: lg, vivier = [], base = [], jum = {}, sansColonne = false, promotion = true, groupes = [], lecture: lec = {}, ext = '2.0.1', unCandidat = false, jumeauxEnQuestion = false, garde = true } = {}) {
         const ids = Object.keys(cos).map(Number);
         const cleDe = id => `k${(groupes.find(g => g.includes(id)) || [id])[0]}`;
         const entrees = new Map(ids.map(id => [id, { idProduct: id, grande: { cle: cleDe(id) }, vignette: { cle: cleDe(id) + 'v' }, idMetacard: groupes.some(g => g.includes(id)) ? 77 : id, numero: '86', setNom: 'Unseen Forces', mention: null }]));
@@ -112,10 +114,10 @@ const regle = o => { const r = promo(o); return r.promu ? r.regle : null; };
         const index = { voisins: (q, n) => { const top = Object.entries(parCle).sort((a, b) => b[1] - a[1]).slice(0, n).map(([k, c]) => [k, c]); return { top, meilleur: top[0][1] }; }, similarites: (q, cles) => cles.map(k => parCle[k] ?? 0) };
         const etat = { courante: () => ({ index, meta: { modele: MODELE } }) };
         const produits = new Map(Object.entries(lg).map(([id, l]) => [Number(id), l]));
-        const cfg = { ...cfgBase, ...(promotion ? { promotionSurs: true } : {}) };
+        const cfg = { ...cfgBase, ...(promotion ? { promotionSurs: true } : {}), ...(unCandidat ? { leviersUnCandidat: true } : {}), gardeMarqueurs: garde };
         const corps = { ...lecture(lec), carte: { ...lecture(lec).carte, idProduct: base[0] }, lectureGarde: { ...lecture(lec).lectureGarde, vivierIds: vivier }, candidats: base.map(idProduct => ({ idProduct })), etat: { estimeIA: 'EX', confianceIA: 'haute', defautsVus: [], declareVendeur: null, retenu: 'GD' }, reverse: { attendue: false, strategie: null }, codeLangue: 2 };
         const ctxQuestion = { langueInterface: 'fr', cfg, ficheServie: false, jumeaux: () => ({ conclu: true, ids: [] }) };
-        const resultat = questionParLaRoute(corps, base, { ...ctxQuestion, produits });
+        const resultat = { ...questionParLaRoute(corps, base, { ...ctxQuestion, produits }), ...(jumeauxEnQuestion ? { jumeauxEnQuestion: true } : {}) };
         const entree = { versionExtension: ext, empreintes: { modele: MODELE, rejet: null, entrees: [{ photo: 0, vecteur: encoderVecteur(VEC), redressee: true, carte: null }] } };
         const lues = [];
         const catalogue = { lire: async idsL => { lues.push([...idsL]); return new Map(idsL.filter(i => lg[i]).map(i => [i, lg[i]])); }, indexAliasFrSansAttente: () => new Map() };
@@ -128,7 +130,7 @@ const regle = o => { const r = promo(o); return r.promu ? r.regle : null; };
     const mondeS3 = (o = {}) => monde({ cos: COS, lignes: LG, base: [2, 3], vivier: [1], ...o });
 
     const eteint = await lancer(mondeS3({ promotion: false }));
-    H.v('drapeau ÉTEINT : le probable est désigné comme avant, AUCUNE promotion (ni champ, ni ligne lue en plus)', [eteint.r.probable && eteint.r.probable.idProduct, eteint.r.promotion, eteint.r.lignes], [1, undefined, undefined]);
+    H.v('drapeau ÉTEINT : le probable est désigné comme avant, AUCUNE promotion (ni champ, ni ligne lue en plus)', [eteint.r.probable && eteint.r.probable.idProduct, ab(eteint.r), ab(eteint.r, 'lignes')], [1, 'absent', 'absent']);
     const allume = await lancer(mondeS3());
     H.v('drapeau ALLUMÉ : le même probable (1) est promu par S3 (aucun jumeau connu)', [allume.r.probable && allume.r.probable.idProduct, allume.r.promotion && allume.r.promotion.regle], [1, 'S3']);
     H.v('   la promotion porte les lignes à passer à l\'affirmation (le désigné y est) et son critère', [allume.r.promotion.lignes instanceof Map, allume.r.promotion.lignes.has(1), typeof allume.r.promotion.critere], [true, true, 'string']);
@@ -137,7 +139,7 @@ const regle = o => { const r = promo(o); return r.promu ? r.regle : null; };
     H.v('une attaque lue qui contredit le désigné : il reste probable et S3 le promeut', [att.r.probable && att.r.probable.idProduct, att.r.promotion && att.r.promotion.regle], [1, 'S3']);
     // seulement des PROBABLES : une question dont l'écart c3 est trop petit n'est pas un probable, donc jamais promue, même si la tête passe S3
     const serree = await lancer(monde({ cos: { 1: 0.50, 5: 0.55, 2: 0.30, 3: 0.20 }, lignes: { ...LG, 5: ligne(5) }, base: [2, 3], vivier: [1, 5] }));
-    H.v('seulement des PROBABLES : écart c3 < 0,1 (question) => ni probable ni promotion, même si la tête passerait S3', [serree.r && serree.r.probable, serree.r && serree.r.promotion], [null, undefined]);
+    H.v('seulement des PROBABLES : écart c3 < 0,1 (question) => ni probable ni promotion, même si la tête passerait S3', [serree.r && serree.r.probable, ab(serree.r)], [null, 'absent']);
     H.v('   (témoin : la tête de ce classement passe bien la règle pure)', (() => { const m = monde({ cos: { 1: 0.50, 5: 0.55, 2: 0.30, 3: 0.20 }, lignes: { ...LG, 5: ligne(5) }, base: [2, 3], vivier: [1, 5] }); return PS.promouvoirEnSur({ corps: m.corps, id: 5, produits: m.produits, jumeaux: [], pool: [], second: 1, cleDe: () => null, top1Cle: null, i2i3: true }).regle; })(), 'S3');
     // les jumeaux RÉELS : lus dans l'archive, leurs lignes chargées au catalogue (une lecture)
     const mj = mondeS3({ jum: { 1: [7] } });
@@ -148,13 +150,13 @@ const regle = o => { const r = promo(o); return r.promu ? r.regle : null; };
     const mj2 = mondeS3({ jum: { 1: [7] } }); mj2.catalogue.lire = async () => { throw new Error('base en panne'); };
     const av = L.echecs();
     const rj2 = await lancer(mj2);
-    H.v('la lecture des jumeaux échoue : le probable reste, AUCUNE promotion, l\'échec est compté', [rj2.r.probable && rj2.r.probable.idProduct, rj2.r.promotion, (L.echecs()['jumeaux-en-panne'] || 0) - (av['jumeaux-en-panne'] || 0)], [1, undefined, 1]);
+    H.v('la lecture des jumeaux échoue : le probable reste, AUCUNE promotion, l\'échec est compté', [rj2.r.probable && rj2.r.probable.idProduct, ab(rj2.r), (L.echecs()['jumeaux-en-panne'] || 0) - (av['jumeaux-en-panne'] || 0)], [1, 'absent', 1]);
     const mj3 = mondeS3({ jum: { 1: Array.from({ length: PS.MAX_JUMEAUX + 1 }, (_, i) => 500 + i) } });
     const rj3 = await lancer(mj3);
-    H.v('plus de MAX_JUMEAUX jumeaux : le probable reste, aucune promotion, AUCUNE ligne de jumeau n\'est lue', [rj3.r.probable && rj3.r.probable.idProduct, rj3.r.promotion, mj3.lues.some(l => l.some(i => i >= 500))], [1, undefined, false]);
+    H.v('plus de MAX_JUMEAUX jumeaux : le probable reste, aucune promotion, AUCUNE ligne de jumeau n\'est lue', [rj3.r.probable && rj3.r.probable.idProduct, ab(rj3.r), mj3.lues.some(l => l.some(i => i >= 500))], [1, 'absent', false]);
     const msc = mondeS3({ sansColonne: true });
     const rsc = await lancer(msc);
-    H.v('l\'archive ne sait pas dire les jumeaux (pas de colonne) : le probable reste, aucune promotion', [rsc.r.probable && rsc.r.probable.idProduct, rsc.r.promotion], [1, undefined]);
+    H.v('l\'archive ne sait pas dire les jumeaux (pas de colonne) : le probable reste, aucune promotion', [rsc.r.probable && rsc.r.probable.idProduct, ab(rsc.r)], [1, 'absent']);
     const mjx = mondeS3({ jum: { 1: [2] } });
     const rjx = await lancer(mjx);
     H.v('un jumeau (2) au numéro CONTREDIT, sa ligne déjà lue : S2 sans lecture de plus', [rjx.r.promotion && rjx.r.promotion.regle, mjx.lues.length], ['S2', 0]);
@@ -164,11 +166,66 @@ const regle = o => { const r = promo(o); return r.promu ? r.regle : null; };
     H.v('I dans l\'étape : voisin n°1 de l\'index, écart de cosinus 0,25 => promu par I', [ri.r.probable && ri.r.probable.idProduct, ri.r.promotion && ri.r.promotion.regle], [1, 'I']);
     const mi2 = monde({ cos: { 1: 0.70, 2: 0.60, 3: 0.40, 4: 0.30 }, lignes: LG, base: [2, 3], vivier: [1], lecture: { numero: null, setCode: null, total: null } });
     const ri2 = await lancer(mi2);
-    H.v('I dans l\'étape : écart de cosinus 0,10 < 0,2 => probable (écart c3 >= 0,1) mais pas promu', [ri2.r.probable && ri2.r.probable.idProduct, ri2.r.promotion], [1, undefined]);
+    H.v('I dans l\'étape : écart de cosinus 0,10 < 0,2 => probable (écart c3 >= 0,1) mais pas promu', [ri2.r.probable && ri2.r.probable.idProduct, ab(ri2.r)], [1, 'absent']);
     const mi3 = monde({ cos: { 1: 0.70, 2: 0.45, 3: 0.40, 4: 0.30, 9: 0.72 }, lignes: { ...LG, 9: ligne(9, { numero: '15', total: '99' }) }, base: [2, 3], vivier: [1], lecture: { numero: null, setCode: null, total: null } });
     const ri3 = await lancer(mi3);
-    H.v('I dans l\'étape : le voisin n°1 de l\'index (9, hors pool classé en tête) n\'est pas le désigné => pas promu', [ri3.r.promotion], [undefined]);
+    H.v('I dans l\'étape : le voisin n°1 de l\'index (9, hors pool classé en tête) n\'est pas le désigné => pas promu', [ab(ri3.r)], ['absent']);
 
+    // C1 (relecture) : la promotion ne touche QUE les probables d'une question de la chaîne à AU MOINS DEUX candidats ; ni une question à UN candidat (V2_LEVIERS_UN_CANDIDAT), ni une question née du levier e (jumeauxEnQuestion)
+    {
+        const un = await lancer(monde({ cos: { 1: 0.4, 2: 0.6 }, lignes: LG, base: [2], vivier: [], unCandidat: true }));
+        H.v('C1 : question à UN candidat (V2_LEVIERS_UN_CANDIDAT) : le probable est servi comme avant, JAMAIS promu en sûr', [un.r && un.r.probable && un.r.probable.idProduct, ab(un.r)], [1, 'absent']);
+        const e = await lancer(monde({ cos: COS, lignes: LG, base: [2, 3], vivier: [1], jumeauxEnQuestion: true }));
+        H.v('C1 : question née du levier e (jumeauxEnQuestion) : le probable reste, JAMAIS promu en sûr', [e.r && e.r.probable && e.r.probable.idProduct, ab(e.r)], [1, 'absent']);
+        const deux = await lancer(monde({ cos: COS, lignes: LG, base: [2, 3], vivier: [1] }));
+        H.v('   témoin : à deux candidats, sans e, le même monde est promu', ab(deux.r), 'présent');
+        // M3 : sans la garde des marqueurs un rival de groupe passerait : aucune promotion
+        const sg = await lancer(monde({ cos: COS, lignes: LG, base: [2, 3], vivier: [1], garde: false }));
+        H.v('M3 : V2_GARDE_MARQUEURS éteint : le probable reste, aucune promotion (un rival de groupe ne serait pas vu)', [sg.r && sg.r.probable && sg.r.probable.idProduct, ab(sg.r)], [1, 'absent']);
+    }
+    // I4 (relecture) : la preuve EXÉCUTÉE que le drapeau éteint rend la réponse d'avant. La vraie fonction de route (etapeLeviers : l'étape + la décision de promotion + la garde des marqueurs) sur un jeu fabriqué, comparée
+    // EN PROFONDEUR à ce que rendait la route d'avant (l'étape seule : `resultat = lv.resultat || resultat`, `probableDecide = lv.probable`), puis drapeau allumé.
+    {
+        const ouvrir = async (m, cfg, appliquer) => {
+            let derniere = null;
+            return PSR.etapeLeviers({ cfg, entree: m.entree, resultat: m.resultat, c: m.corps, produits: m.produits, version: m.version, traceMarqueurs: null, catalogue: m.catalogue, ctxQuestion: m.ctxQuestion, etat: m.etat, ...(appliquerSeule(appliquer)), noter: r => { if (r && r.issue === 'question') derniere = r; },
+                affirmer: (id, surcharge, critere) => affirmerParLaRoute(m.corps, id, { produits: surcharge || m.produits, langueInterface: 'fr', cfg, ficheServie: false }, critere),
+                marqueurs: (aff, lp) => GM.appliquerMarqueurs({ cfg, titre: null, resultat: aff, derniereQuestion: derniere, c: m.corps, desaccordG: null, empreinteInfo: null, produits: lp, version: m.version, langueInterface: 'fr', jumeaux: m.ctxQuestion.jumeaux, journal: () => { } }) });
+        };
+        const appliquerSeule = a => (a ? { appliquer: a } : {});
+        // la route d'AVANT : l'étape seule, sans le module de promotion
+        const avant = async (m, cfg) => { const lv = await L.appliquerLeviers({ cfg, entree: m.entree, resultat: m.resultat, corpsChaine: m.corps, produits: m.produits, version: m.version, traceMarqueurs: null, catalogue: m.catalogue, ctxQuestion: m.ctxQuestion, etat: m.etat, memo: undefined });
+            return { resultat: lv && lv.resultat ? lv.resultat : m.resultat, probableDecide: lv ? lv.probable : null, traceMarqueurs: null, tracePromotion: null }; };
+        const mondes = {
+            'probable S3': () => mondeS3(), 'probable S2': () => mondeS3({ jum: { 1: [2] } }), 'question sans probable': () => monde({ cos: { 1: 0.50, 5: 0.55, 2: 0.30, 3: 0.20 }, lignes: { ...LG, 5: ligne(5) }, base: [2, 3], vivier: [1, 5] }),
+            'un candidat': () => monde({ cos: { 1: 0.4, 2: 0.6 }, lignes: LG, base: [2], vivier: [], unCandidat: true }), 'levier e': () => monde({ cos: COS, lignes: LG, base: [2, 3], vivier: [1], jumeauxEnQuestion: true }),
+            'probable I': () => monde({ cos: { 1: 0.70, 2: 0.45, 3: 0.40, 4: 0.30 }, lignes: LG, base: [2, 3], vivier: [1], lecture: { numero: null, setCode: null, total: null } }), 'sans colonne': () => mondeS3({ sansColonne: true }) };
+        const diffs = [];
+        for (const [nom, f] of Object.entries(mondes)) {
+            const off = f(); off.cfg = { ...off.cfg, promotionSurs: false };
+            const a = await avant(f(), { ...f().cfg, promotionSurs: false }), b = await ouvrir(off, off.cfg);
+            if (JSON.stringify(a) !== JSON.stringify(b)) diffs.push(nom);
+        }
+        H.v('drapeau ÉTEINT : la route (etapeLeviers) rend, EN PROFONDEUR, ce que rendait la route d\'avant sur 7 mondes (probable S3, S2, I, question sans probable, un candidat, levier e, sans colonne)', diffs, []);
+        const allumes = {};
+        for (const nom of ['probable S3', 'probable S2', 'probable I']) { const m = mondes[nom](); allumes[nom] = await ouvrir(m, m.cfg); }
+        H.v('drapeau ALLUMÉ : un probable prouvé devient un SÛR (affirmee), sans probable, avec sa trace', ['probable S3', 'probable S2', 'probable I'].map(n => [allumes[n].resultat.issue, allumes[n].resultat.analyse.cartes[0].carte.idProduct, allumes[n].probableDecide, allumes[n].tracePromotion.issue]), [['affirmee', 1, null, 'sur'], ['affirmee', 1, null, 'sur'], ['affirmee', 1, null, 'sur']]);
+        H.v('drapeau ALLUMÉ, un candidat / levier e / sans colonne / question sans probable : la réponse d\'avant, octet pour octet', await (async () => { const d = []; for (const nom of ['un candidat', 'levier e', 'question sans probable', 'sans colonne']) { const m = mondes[nom](); const a = await avant(mondes[nom](), m.cfg), b = await ouvrir(m, m.cfg); if (JSON.stringify(a) !== JSON.stringify(b)) d.push(nom); } return d; })(), []);
+        // la garde des marqueurs rend le sûr à la question (un rival de MÊME DESSIN aux marqueurs différents) : le probable reste
+        const mg = mondeS3({ groupes: [[1, 4]] });
+        const rg = await ouvrir(mg, mg.cfg, async args => { const r = await L.appliquerLeviers(args); return r; });
+        H.v('rival de groupe : la garde relue sur le sûr le rend à la question, le probable de l\'étape reste (ou aucune promotion décidée)', [rg.resultat.issue !== 'affirmee'], [true]);
+        // les traces (M2) : la trace de la première garde n'est écrasée que par un sûr CONFIRMÉ ; un sûr refusé garde la première et dit la seconde dans la trace de promotion
+        const lignesF = lignes(ligne(1)), qAvant = { issue: 'question', analyse: { cartes: [{ statut: 'a-trancher', candidats: [{ idProduct: 1 }, { idProduct: 5 }] }] } };
+        const faux2 = (gm) => PSR.etapeLeviers({ cfg: { promotionSurs: true }, resultat: qAvant, traceMarqueurs: { garde: { issue: 'premiere' } }, noter: () => { }, appliquer: async () => ({ resultat: null, probable: { idProduct: 1 }, promotion: { regle: 'S3', raison: 'x', critere: 'c', lignes: lignesF } }),
+            affirmer: id => ({ issue: 'affirmee', analyse: { cartes: [{ statut: 'identifiee', carte: { idProduct: id } }] } }), marqueurs: () => gm });
+        const conf2 = await faux2({ trace: { garde: { issue: 'sur-confirme' } } }), ref2 = await faux2({ resultat: qAvant, trace: { garde: { issue: 'question' } } });
+        H.v('traces : un sûr confirmé remplace la trace des marqueurs ; un sûr refusé garde la première trace, le probable reste, la seconde est dans la trace de promotion', [conf2.resultat.issue, conf2.traceMarqueurs.garde.issue, ref2.resultat.issue, ref2.probableDecide && ref2.probableDecide.idProduct, ref2.traceMarqueurs.garde.issue, ref2.tracePromotion.marqueurs.garde.issue], ['affirmee', 'sur-confirme', 'question', 1, 'premiere', 'question']);
+        const sansNote = []; await PSR.etapeLeviers({ cfg: { promotionSurs: true }, resultat: qAvant, noter: r => sansNote.push(r.issue), appliquer: async () => ({ resultat: null, probable: { idProduct: 1 }, promotion: { regle: 'S3', raison: 'x', critere: 'c', lignes: lignesF } }), affirmer: id => ({ issue: 'affirmee', analyse: { cartes: [{ statut: 'identifiee', carte: { idProduct: id } }] } }), marqueurs: () => null });
+        H.v('la question d\'avant est notée AVANT l\'affirmation (la garde des marqueurs la rend si elle refuse)', sansNote, ['question']);
+        const sansProm = []; await PSR.etapeLeviers({ cfg: { promotionSurs: true }, resultat: qAvant, noter: r => sansProm.push(r), appliquer: async () => ({ resultat: null, probable: { idProduct: 1 } }), affirmer: () => { throw new Error('jamais'); }, marqueurs: () => { throw new Error('jamais'); } });
+        H.v('un probable sans promotion prouvée : ni note, ni affirmation, ni garde appelée', sansProm, []);
+    }
     // ═════ la DÉCISION de la route (promotion-surs-route.js) : l'affirmation, la garde des marqueurs une seconde fois, le retour au probable
     {
         const promotion = { regle: 'S3', raison: 'x', critere: 'promotion en sûr (S3) : x', lignes: lignes(ligne(1)) };
@@ -201,18 +258,17 @@ const regle = o => { const r = promo(o); return r.promu ? r.regle : null; };
         let leve = false; try { lireConfig({ V2_PROMOTION_SURS: 'oui' }); } catch { leve = true; }
         H.v('config : une valeur autre que 0 ou 1 est une configuration invalide', leve, true);
         const servi = env => capacitesServies(lireConfig(env), undefined, null, null);
-        H.v('/ping : le jeton promotion-surs, EN DERNIER, seulement avec les trois drapeaux (V2_PROMOTION_SURS, V2_LEVIERS_ABDE, V2_PROBABLE)', [
-            servi({ V2_PROMOTION_SURS: '1', V2_LEVIERS_ABDE: '1', V2_PROBABLE: '1' }).slice(-2), servi({ V2_PROMOTION_SURS: '1', V2_LEVIERS_ABDE: '1' }).includes('promotion-surs'), servi({ V2_PROMOTION_SURS: '1', V2_PROBABLE: '1' }).includes('promotion-surs'),
-            servi({ V2_LEVIERS_ABDE: '1', V2_PROBABLE: '1' }).includes('promotion-surs'), servi({}).includes('promotion-surs')], [['leviers-abde', 'promotion-surs'], false, false, false, false]);
+        H.v('/ping : le jeton promotion-surs, EN DERNIER, seulement avec les quatre drapeaux (V2_PROMOTION_SURS, V2_LEVIERS_ABDE, V2_PROBABLE, V2_GARDE_MARQUEURS)', [
+            servi({ V2_PROMOTION_SURS: '1', V2_LEVIERS_ABDE: '1', V2_PROBABLE: '1', V2_GARDE_MARQUEURS: '1' }).slice(-2), servi({ V2_PROMOTION_SURS: '1', V2_LEVIERS_ABDE: '1', V2_GARDE_MARQUEURS: '1' }).includes('promotion-surs'), servi({ V2_PROMOTION_SURS: '1', V2_PROBABLE: '1', V2_GARDE_MARQUEURS: '1' }).includes('promotion-surs'),
+            servi({ V2_LEVIERS_ABDE: '1', V2_PROBABLE: '1', V2_GARDE_MARQUEURS: '1' }).includes('promotion-surs'), servi({}).includes('promotion-surs'), servi({ V2_PROMOTION_SURS: '1', V2_LEVIERS_ABDE: '1', V2_PROBABLE: '1' }).includes('promotion-surs')], [['leviers-abde', 'promotion-surs'], false, false, false, false, false]);
         const fs = require('fs'), path = require('path');
         const lire = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8').replace(/\r\n/g, '\n');
         const routes = lire('identifier/routes.js');
-        const iLv = routes.indexOf('const lv = await appliquerLeviers('), iPromo = routes.indexOf('promouvoirDansLaRoute(', iLv), iCredit = routes.indexOf('// CRITERE-A (relecture r1, C1)');
-        H.v('route : la promotion est décidée APRÈS l\'étape des leviers et AVANT le règlement du crédit réservé', [iLv > 0, iPromo > iLv, iCredit > iPromo], [true, true, true]);
+        const iEp = routes.indexOf('await etapeLeviers('), iCredit = routes.indexOf('// CRITERE-A (relecture r1, C1)');
+        H.v('route : l\'étape et la promotion sont UNE fonction exécutée (etapeLeviers), appelée avant le règlement du crédit réservé', [iEp > 0, iCredit > iEp, /resultat = ep\.resultat; probableDecide = ep\.probableDecide; traceMarqueurs = ep\.traceMarqueurs; tracePromotion = ep\.tracePromotion;/.test(routes)], [true, true, true]);
+        H.v('route : la garde des marqueurs est relue par la MÊME fonction (appliquerMarqueurs) sur les lignes de la promotion, avec la question d\'avant notée', [/marqueurs: \(aff, lignesPromo\) => appliquerMarqueurs\(\{[^}]*resultat: aff[^}]*derniereQuestion[^}]*produits: lignesPromo/.test(routes), /noter: r => \{ if \(r && r\.issue === 'question'\) derniereQuestion = r; \}/.test(routes)], [true, true]);
         H.v('route : le règlement du crédit réservé d\'une affirmation (branche du critère A) est celui qui sert la promotion', /if \(resultat\.issue === 'affirmee' && reqH\.questionId && !admin && credit\)/.test(routes), true);
-        H.v('route : la garde des marqueurs est relue par la MÊME fonction (appliquerMarqueurs) sur le sûr promu, avec la question d\'avant', /marqueurs: \(aff, lignesPromo\) => appliquerMarqueurs\(\{[^}]*resultat: aff[^}]*derniereQuestion/.test(routes), true);
-        H.v('route : la promotion n\'est consultée que si l\'étape en a prouvé une, après avoir noté la question d\'avant ; la garde est relue sur les lignes de la promotion', [/if \(lv && lv\.promotion\) \{\s*noterQuestion\(\); const pr = promouvoirDansLaRoute\(/.test(routes), /produits: lignesPromo, version: version0/.test(routes)], [true, true]);
-        H.v('route : la trace des marqueurs remonte, le sûr remplace la question et ne laisse aucun probable', [/if \(pr\.traceMarqueurs\) traceMarqueurs = pr\.traceMarqueurs;/.test(routes), /if \(pr\.resultat\) \{ resultat = pr\.resultat; probableDecide = null; \}/.test(routes), /\.\.\.\(tracePromotion \? \{ promotionSurs: tracePromotion \} : \{\}\)/.test(routes)], [true, true, true]);
+        H.v('route : la trace de la promotion remonte de la décision à la sortie de la route', /\.\.\.\(tracePromotion \? \{ promotionSurs: tracePromotion \} : \{\}\)/.test(routes), true);
         H.v('route : la promotion est journalisée (analyses.promotionSurs), interne', /sortie\.promotionSurs \? \{ promotionSurs: sortie\.promotionSurs \}/.test(routes), true);
     }
     H.bilan();

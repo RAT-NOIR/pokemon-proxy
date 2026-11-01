@@ -219,7 +219,9 @@ async function appliquerLeviers({ cfg, entree, resultat, corpsChaine, produits, 
         // DECISION-SURS (V2_PROMOTION_SURS, éteint par défaut) : un PROBABLE — et lui seul — peut devenir un SÛR (S2 ∪ S3 ∪ I). La tête du classement est le désigné du probable (d.top3[0] === d.id) ; ses VRAIS jumeaux sont lus
         // dans l'archive, leurs lignes au catalogue. La décision de l'affirmer est celle de la route (promotion-surs-route.js) ; ici seulement la preuve. Toute lecture qui échoue : le probable reste.
         let promotion = null;
-        if (probable && cfg.promotionSurs === true) {
+        // Écrit par ce qu'il AUTORISE (relecture C1, M3) : une question de la chaîne à AU MOINS DEUX candidats (ni la confirmation à un candidat de V2_LEVIERS_UN_CANDIDAT, ni la question née du levier e : le contrat dit « jamais un sûr », et ces
+        // populations n'ont pas été mesurées) ET la garde des marqueurs allumée (sans elle un rival de même dessin ne serait pas vu sur le sûr).
+        if (probable && cfg.promotionSurs === true && cfg.gardeMarqueurs === true && baseIds.length >= 2 && resultat.jumeauxEnQuestion !== true) {
             promotion = await promotionDe({ tete: d.top3[0], second: d.top3[1], pool, lignes, corpsChaine, version, catalogue, top1Cle: p.trouve.top.length ? p.trouve.top[0][0] : null, diag });
         }
         if (!nouveau && !probable) { if (!(diag && diag.raison)) note('inchangee'); return null; }

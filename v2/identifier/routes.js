@@ -159,9 +159,8 @@ const mongoose = require('mongoose');
 const registre = require('../registre');
 const { fauxRes } = require('./captureres');
 const { adapter, codeLangueDe, prixLiveDe, affirmerParLaRoute } = require('./adaptateur');
-const { appliquerLeviers } = require('./leviers-abde');       // LEVIERS-ABDE (V2_LEVIERS_ABDE, éteint par défaut : jamais appelée)
 const { consulterProbable, avecNiveau, actif: niveauServi, cosinusDesCandidats, estGroupe } = require('./probable-route');   // PROBABLE : le niveau « probable » (V2_PROBABLE, éteint : jamais appelée), et `niveau` servi aux extensions >= 2.0.1
-const { promouvoirDansLaRoute } = require('./promotion-surs-route');       // DECISION-SURS (V2_PROMOTION_SURS, éteint par défaut : jamais appelée)
+const { etapeLeviers } = require('./promotion-surs-route');       // DECISION-SURS (V2_PROMOTION_SURS, éteint par défaut : jamais appelée)
 const { appliquerMarqueurs } = require('./garde-marqueurs');       // MARQUEURS : le jumbo par le titre et la garde des groupes, derrière V2_JUMBO_TITRE et V2_GARDE_MARQUEURS (éteints : jamais appelée)
 const { fournisseurParDefaut, idsAffirmes, idsACharger } = require('./jumeaux');
 const { idsDeLaGarde } = require('./garde-contradiction');
@@ -651,20 +650,13 @@ function traiterIdentifier(cfg, deps = {}) {
                             if (cfg.leviersAbde === true) {
                                 // LEVIERS-ABDE (V2_LEVIERS_ABDE, essai seulement) : à la place de l'admission d'avant, le pool de 10 trié par c3, l'écart c3, les alias français (identifier/leviers-abde.js). Elle ne lit qu'une QUESTION et ne
                                 // rend qu'une question (les 3 premiers du classement) et au plus un désigné : un sûr ne change jamais. Une exception laisse la question d'avant.
-                                const lv = await appliquerLeviers({ cfg, entree, resultat, corpsChaine: c, produits, version: version0, traceMarqueurs, catalogue, ctxQuestion: { langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux, ...ctxLD }, memo: te.voisinsUneFois === true });
-                                if (lv) { if (lv.resultat) resultat = lv.resultat; probableDecide = lv.probable; }
-                                // DECISION-SURS (V2_PROMOTION_SURS) : un probable PROUVÉ promouvable devient l'affirmation de son produit ; la garde des marqueurs est relue sur ce sûr (le point de sortie unique des sûrs est AVANT cette étape).
-                                // Le crédit réservé se règle plus bas comme pour toute affirmation qui remplace une question (branche du critère A). Elle ne laisse aucun probable derrière elle ; sinon le probable d'avant reste.
-                                if (lv && lv.promotion) {
-                                    noterQuestion(); const pr = promouvoirDansLaRoute({ cfg, lv, journal: journalErreur,
-                                        affirmer: (id, surcharge, critere) => affirmerParLaRoute(c, id, { produits: surcharge || produits, langueInterface: entree.langueInterface, cfg, ficheServie: false }, critere),
-                                        marqueurs: (aff, lignesPromo) => appliquerMarqueurs({ cfg, titre: annonce.titre, resultat: aff, derniereQuestion, c, desaccordG, empreinteInfo, produits: lignesPromo, version: version0, langueInterface: entree.langueInterface, jumeaux, journal: journalErreur }) });
-                                    if (pr) {
-                                        tracePromotion = pr.trace;
-                                        if (pr.traceMarqueurs) traceMarqueurs = pr.traceMarqueurs;
-                                        if (pr.resultat) { resultat = pr.resultat; probableDecide = null; }
-                                    }
-                                }
+                                // DECISION-SURS (V2_PROMOTION_SURS, éteint par défaut) : l'étape ET la décision de la promotion sont UNE fonction (promotion-surs-route.js::etapeLeviers), exécutée par les bancs ; drapeau éteint, elle rend exactement ce que rendait l'étape seule.
+                                // Un probable PROUVÉ promouvable devient l'affirmation de son produit, la garde des marqueurs relue sur ce sûr ; le crédit réservé se règle plus bas comme pour toute affirmation qui remplace une question (branche du critère A).
+                                const ep = await etapeLeviers({ cfg, entree, resultat, c, produits, version: version0, traceMarqueurs, catalogue, ctxQuestion: { langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux, ...ctxLD }, memo: te.voisinsUneFois === true, journal: journalErreur,
+                                    noter: r => { if (r && r.issue === 'question') derniereQuestion = r; },
+                                    affirmer: (id, surcharge, critere) => affirmerParLaRoute(c, id, { produits: surcharge || produits, langueInterface: entree.langueInterface, cfg, ficheServie: false }, critere),
+                                    marqueurs: (aff, lignesPromo) => appliquerMarqueurs({ cfg, titre: annonce.titre, resultat: aff, derniereQuestion, c, desaccordG, empreinteInfo, produits: lignesPromo, version: version0, langueInterface: entree.langueInterface, jumeaux, journal: journalErreur }) });
+                                resultat = ep.resultat; probableDecide = ep.probableDecide; traceMarqueurs = ep.traceMarqueurs; tracePromotion = ep.tracePromotion;
                             } else probableDecide = consulterProbable({ cfg, entree, resultat, corpsChaine: c, produits, version: version0, traceMarqueurs, memo: te.voisinsUneFois === true });
                         }
                         catch (e) { journalErreur('probable', e); probableDecide = null; }

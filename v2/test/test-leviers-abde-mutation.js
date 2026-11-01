@@ -114,7 +114,7 @@ const MUTATIONS = [
     { nom: '/ping : le jeton est annoncé quel que soit le drapeau', fichier: 'v2/capacites.js', de: "'leviers-abde': (cfg) => cfg.leviersAbde === true && cfg.probable === true", vers: "'leviers-abde': (cfg) => true" },
     { nom: '/ping : le jeton sort de la liste fermée', fichier: 'v2/capacites.js', de: "'probable', 'leviers-abde', 'promotion-surs']);", vers: "'probable', 'promotion-surs']);" },
     { nom: 'route : l\'étape n\'est plus derrière le drapeau', fichier: 'v2/identifier/routes.js', de: 'if (cfg.leviersAbde === true) {', vers: 'if (cfg.probable === true) {' },
-    { nom: 'route : la question de l\'étape ne remplace plus celle de la chaîne', fichier: 'v2/identifier/routes.js', de: 'if (lv) { if (lv.resultat) resultat = lv.resultat; probableDecide = lv.probable; }', vers: 'if (lv) { probableDecide = lv.probable; }' },
+    { nom: 'route : la question de l\'étape ne remplace plus celle de la chaîne', fichier: 'v2/identifier/promotion-surs-route.js', de: 'if (lv.resultat) res = lv.resultat;', vers: '' },
     { nom: 'lot : le contexte d\'un lot ne dit plus `lot: true`', fichier: 'v2/identifier/lot.js', de: '...ctxLD, lot: true }', vers: '...ctxLD }' },
     { nom: 'catalogue : un index d\'alias tronqué est accepté', fichier: 'v2/identifier/catalogue.js', de: 'if (lus < attendu) throw', vers: 'if (false) throw' },
     { nom: 'catalogue : le plancher de l\'index d\'alias est retiré', fichier: 'v2/identifier/catalogue.js', de: 'if (lus < INDEX_CODE_NUMERO_MIN) throw', vers: 'if (false) throw' }

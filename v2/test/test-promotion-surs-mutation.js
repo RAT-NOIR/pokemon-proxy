@@ -11,6 +11,7 @@ const H = require('./_harnais');
 const BANC = 'test-promotion-surs.js';
 const PRECHARGE = path.join(__dirname, '_mutation-precharge.js');
 const PS = 'v2/identifier/promotion-surs.js', LV = 'v2/identifier/leviers-abde.js', PSR = 'v2/identifier/promotion-surs-route.js', CA = 'v2/identifier/critere-a.js', RT = 'v2/identifier/routes.js', CFG = 'v2/config.js', CAP = 'v2/capacites.js';
+const JETON = 'cfg.promotionSurs === true && cfg.leviersAbde === true && cfg.probable === true && cfg.gardeMarqueurs === true';
 const MUTATIONS = [
     // ── S2 : le numéro d'un jumeau peut être inconnu tant qu'aucun ne concorde
     { nom: 'S2 : le numéro inconnu d\'un jumeau n\'est plus permis par la promotion', fichier: PS, de: 'jumeauxInconnusPermis: true', vers: 'jumeauxInconnusPermis: false' },
@@ -39,25 +40,34 @@ const MUTATIONS = [
     { nom: 'I : le nom lu qui contredit le désigné est toléré', fichier: PS, de: 'if (formes.length && !nomCompatible(formes, ligne)) return non(\'le nom lu', vers: 'if (false) return non(\'le nom lu' },
     { nom: 'I : un cosinus inconnu est toléré', fichier: PS, de: 'if (a === null || b === null || !(a - b', vers: 'if (!(a - b' },
     // ── « seulement des probables » et le drapeau, à l'étape
-    { nom: 'probables : la promotion s\'applique aussi à une question (tête du classement)', fichier: LV, de: 'if (probable && cfg.promotionSurs === true) {', vers: 'if (cfg.promotionSurs === true) {' },
-    { nom: 'drapeau : l\'étape promeut drapeau éteint', fichier: LV, de: 'if (probable && cfg.promotionSurs === true) {', vers: 'if (probable) {' },
+    { nom: 'probables : la promotion s\'applique aussi à une question (tête du classement)', fichier: LV, de: 'if (probable && cfg.promotionSurs === true && ', vers: 'if (cfg.promotionSurs === true && ' },
+    { nom: 'drapeau : l\'étape promeut drapeau éteint', fichier: LV, de: 'cfg.promotionSurs === true && cfg.gardeMarqueurs === true && baseIds', vers: 'cfg.gardeMarqueurs === true && baseIds' },
+    { nom: 'C1 : une question à UN candidat est promue (V2_LEVIERS_UN_CANDIDAT)', fichier: LV, de: 'baseIds.length >= 2 && resultat.jumeauxEnQuestion', vers: 'resultat.jumeauxEnQuestion' },
+    { nom: 'C1 : une question née du levier e est promue', fichier: LV, de: ' && resultat.jumeauxEnQuestion !== true) {', vers: ') {' },
+    { nom: 'C1 : deux candidats minimum devient un seul (>= 1)', fichier: LV, de: 'baseIds.length >= 2 && resultat.jumeauxEnQuestion', vers: 'baseIds.length >= 1 && resultat.jumeauxEnQuestion' },
+    { nom: 'M3 : la garde des marqueurs n\'est plus exigée pour promouvoir', fichier: LV, de: 'cfg.gardeMarqueurs === true && baseIds', vers: 'baseIds' },
     // ── la décision de la route
     { nom: 'route : le drapeau n\'est plus lu par la décision', fichier: PSR, de: 'if (!(cfg && cfg.promotionSurs === true)) return null;', vers: '' },
     { nom: 'route : l\'affirmation d\'un AUTRE produit est acceptée', fichier: PSR, de: 'c.carte.idProduct === id))', vers: 'true))' },
     { nom: 'route : la garde des marqueurs ne renvoie plus le sûr à la question', fichier: PSR, de: 'if (gm && gm.resultat) return', vers: 'if (false) return' },
     { nom: 'route : une garde des marqueurs en erreur laisse passer le sûr', fichier: PSR, de: "journal('promotion en sûr (marqueurs)', e); return { trace: { issue: 'garde-marqueurs-en-erreur', regle: p.regle, produit: id } };", vers: "journal('promotion en sûr (marqueurs)', e); gm = null;" },
-    { nom: 'route : l\'étape de la promotion n\'est plus appelée', fichier: RT, de: 'if (lv && lv.promotion) {', vers: 'if (false) {' },
-    { nom: 'route : la question d\'avant n\'est plus notée avant la promotion', fichier: RT, de: 'noterQuestion(); const pr = promouvoirDansLaRoute(', vers: 'const pr = promouvoirDansLaRoute(' },
+    { nom: 'route : la décision de la promotion n\'est plus consultée', fichier: PSR, de: 'if (lv.promotion) {', vers: 'if (false) {' },
+    { nom: 'route : la question d\'avant n\'est plus notée avant la promotion', fichier: PSR, de: 'noter(res);', vers: '' },
+    { nom: 'route : le résultat de l\'étape n\'est plus repris par la route', fichier: RT, de: 'resultat = ep.resultat; probableDecide = ep.probableDecide;', vers: 'probableDecide = ep.probableDecide;' },
+    { nom: 'route : le sûr confirmé ne remplace plus le résultat', fichier: PSR, de: 'if (pr.resultat) { res = pr.resultat; probableDecide = null;', vers: 'if (false) { res = pr.resultat; probableDecide = null;' },
+    { nom: 'route : le probable reste servi à côté du sûr', fichier: PSR, de: 'res = pr.resultat; probableDecide = null;', vers: 'res = pr.resultat;' },
     { nom: 'route : la garde relue ne voit plus les lignes de la promotion', fichier: RT, de: 'produits: lignesPromo, version: version0', vers: 'produits, version: version0' },
-    { nom: 'route : la trace des marqueurs de la promotion est perdue', fichier: RT, de: 'if (pr.traceMarqueurs) traceMarqueurs = pr.traceMarqueurs;', vers: '' },
+    { nom: 'route : la trace des marqueurs du sûr confirmé est perdue', fichier: PSR, de: 'if (pr.traceMarqueurs) tm = pr.traceMarqueurs;', vers: '' },
+    { nom: 'M2 : la trace de la première garde est écrasée par un sûr refusé', fichier: PSR, de: 'else if (pr.traceMarqueurs) tracePromotion = { ...pr.trace, marqueurs: pr.traceMarqueurs };', vers: 'else if (pr.traceMarqueurs) { tm = pr.traceMarqueurs; }' },
     { nom: 'route : le règlement du crédit réservé d\'une affirmation est retiré', fichier: RT, de: "if (resultat.issue === 'affirmee' && reqH.questionId && !admin && credit) {", vers: 'if (false) {' },
     { nom: 'route : la promotion n\'est plus journalisée', fichier: RT, de: '...(tracePromotion ? { promotionSurs: tracePromotion } : {})', vers: '' },
     // ── configuration et /ping
     { nom: 'config : V2_PROMOTION_SURS allumé par défaut', fichier: CFG, de: "booleen('V2_PROMOTION_SURS', env.V2_PROMOTION_SURS, false)", vers: "booleen('V2_PROMOTION_SURS', env.V2_PROMOTION_SURS, true)" },
     { nom: 'config : toute valeur non vide allume V2_PROMOTION_SURS', fichier: CFG, de: "booleen('V2_PROMOTION_SURS', env.V2_PROMOTION_SURS, false)", vers: "Boolean(env.V2_PROMOTION_SURS)" },
-    { nom: '/ping : le jeton est annoncé sans le drapeau de la promotion', fichier: CAP, de: "cfg.promotionSurs === true && cfg.leviersAbde === true && cfg.probable === true", vers: 'cfg.leviersAbde === true && cfg.probable === true' },
-    { nom: '/ping : le jeton est annoncé sans V2_LEVIERS_ABDE', fichier: CAP, de: "cfg.promotionSurs === true && cfg.leviersAbde === true && cfg.probable === true", vers: 'cfg.promotionSurs === true && cfg.probable === true' },
-    { nom: '/ping : le jeton est annoncé sans V2_PROBABLE', fichier: CAP, de: "cfg.promotionSurs === true && cfg.leviersAbde === true && cfg.probable === true", vers: 'cfg.promotionSurs === true && cfg.leviersAbde === true' },
+    { nom: '/ping : le jeton est annoncé sans le drapeau de la promotion', fichier: CAP, de: JETON, vers: 'cfg.leviersAbde === true && cfg.probable === true && cfg.gardeMarqueurs === true' },
+    { nom: '/ping : le jeton est annoncé sans V2_LEVIERS_ABDE', fichier: CAP, de: JETON, vers: 'cfg.promotionSurs === true && cfg.probable === true && cfg.gardeMarqueurs === true' },
+    { nom: '/ping : le jeton est annoncé sans V2_PROBABLE', fichier: CAP, de: JETON, vers: 'cfg.promotionSurs === true && cfg.leviersAbde === true && cfg.gardeMarqueurs === true' },
+    { nom: '/ping : le jeton est annoncé sans V2_GARDE_MARQUEURS (M3)', fichier: CAP, de: JETON, vers: 'cfg.promotionSurs === true && cfg.leviersAbde === true && cfg.probable === true' },
     { nom: '/ping : le jeton sort de la liste fermée', fichier: CAP, de: "'leviers-abde', 'promotion-surs']);", vers: "'leviers-abde']);" }
 ];
 

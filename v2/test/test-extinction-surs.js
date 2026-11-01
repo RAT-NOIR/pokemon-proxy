@@ -4,6 +4,7 @@
 const fs = require('fs'), os = require('os'), path = require('path');
 const H = require('./_harnais');
 const S = require('../mesures/serie-essai');
+const SP = require('../mesures/serie-probable');
 
 const SECRET = 'mot-de-passe-de-banc-NE-JAMAIS-AFFICHER-0123456789', IDENTIFIANT = 'banc-mesure@rat-market.invalid';
 const JETON_INST = 'jeton-installation-SECRET-aaaa1111', JETON_LIE = 'jeton-lie-SECRET-bbbb2222', COOKIE = 'cookie-session-SECRET-cccc3333', CODE = 'ABC123';
@@ -21,7 +22,7 @@ function fauxServeur(sures) {
     const rep = (statut, corps, entetes = {}) => ({ status: statut, json: async () => corps, headers: { get: n => entetes[String(n).toLowerCase()] ?? null } });
     const fetch = async (url, init = {}) => {
         const u = new URL(url); appels.push({ chemin: u.pathname });
-        if (u.pathname === '/ping') return rep(200, { ok: true, mongo: true, version: 'x', versionMinExtension: '2.5.0', capacites: ['langue-impression', 'empreinte'] });
+        if (u.pathname === '/ping') return rep(200, { ok: true, mongo: true, version: 'x', versionMinExtension: '2.5.0', capacites: SP.CAPACITES_ATTENDUES.length ? [...new Set(['langue-impression', 'empreinte', ...SP.CAPACITES_ATTENDUES])] : ['langue-impression', 'empreinte'] });
         if (u.pathname === '/api/installation') return rep(201, { success: true, jetonInstallation: JETON_INST });
         if (u.pathname === '/api/compte/connexion') return rep(200, { success: true }, { 'set-cookie': `rm_session=${COOKIE}; HttpOnly` });
         if (u.pathname === '/api/compte/code') return rep(200, { success: true, code: CODE });
@@ -90,10 +91,31 @@ const nId = srv => srv.appels.filter(a => a.chemin === '/api/identifier').length
         const srv2 = fauxServeur([101, 999, 103]); let n2 = 0;
         const r2 = await S.serie(base(), deps(srv2, { eteindre: async () => { n2++; return { ok: true }; } }));
         H.v('SANS l\'option : le sûr faux ne change rien (le client est celui d\'avant : 3 scans, aucune extinction)', [nId(srv2), n2, r2.extinction], [3, 0, undefined]);
+        // I2 : un sûr sur une ligne SANS vérité ne peut pas être jugé faux : il n'éteint rien, mais il est COMPTÉ, listé (carnet, rapport, journal)
         const srv3 = fauxServeur([101, 999, 103]); let n3 = 0;
-        const r3 = await S.serie(base({ cles: ['k1:0', 'k4:0', 'k3:0'], eteindreSiSurFaux: V, commitEssai: COMMIT }), deps(srv3, { eteindre: async () => { n3++; return { ok: true }; } }));
-        H.v('une ligne SANS vérité (k4) qui rend un sûr : rien ne se juge, rien n\'est éteint', [n3, r3.extinction], [0, undefined]);
-    }
+        const d3 = deps(srv3, { eteindre: async () => { n3++; return { ok: true }; } });
+        const o3 = base({ cles: ['k1:0', 'k4:0', 'k3:0'], eteindreSiSurFaux: V, commitEssai: COMMIT });
+        const r3 = await S.serie(o3, d3);
+        H.v('I2 : une ligne SANS vérité (k4) qui rend un sûr : rien ne s\'éteint, mais le sûr NON JUGÉ est listé (rapport, carnet, journal rouge)', [n3, r3.extinction, r3.sursNonJuges.map(x => [x.cle, x.produit]), d3.logs.some(m => m.includes('SÛR NON JUGÉ') && m.includes('k4:0')), d3.logs.some(m => m.includes('SÛRS NON JUGÉS : 1')),
+            fs.readFileSync(o3.carnet, 'utf8').split('\n').filter(Boolean).map(JSON.parse).some(x => x.surNonJuge && x.surNonJuge.cle === 'k4:0')], [0, undefined, [['k4:0', 999]], true, true, true]);
+        const srv3b = fauxServeur([101, 102, 103]);
+        const r3b = await S.serie(base({ eteindreSiSurFaux: V, commitEssai: COMMIT }), deps(srv3b));
+        H.v('   aucun sûr non jugé quand toutes les lignes ont une vérité', r3b.sursNonJuges, []);
+        // --cles-avec-verite-seulement : la série ne tire que des lignes qui ont une vérité
+        const srv3c = fauxServeur([101, 102, 103, 104]);
+        const r3c = await S.serie(base({ cles: undefined, n: 4, graine: 5, clesAvecVeriteSeulement: true }), deps(srv3c));
+        H.v('--cles-avec-verite-seulement : les lignes tirées ont TOUTES une vérité (k4 jamais tirée), et sans l\'option elle peut l\'être', [r3c.lignes.includes('k4:0'), r3c.lignes.length, (await S.serie(base({ cles: undefined, n: 4, graine: 5 }), deps(fauxServeur([]))).catch(() => ({ lignes: [] }))).lignes.includes('k4:0')], [false, 3, true]);
+        // I1 : le jugement se fait AVANT la suite (en mode --g-probable : ni second envoi, ni déclaration après un sûr faux)
+        const srv4 = fauxServeur([101, 999, 103]); let n4 = 0;
+        const d4 = deps(srv4, { eteindre: async () => { n4++; return { ok: true }; } });
+        const o4 = base({ gProbable: true, cartes: photos, eteindreSiSurFaux: V, commitEssai: COMMIT, scans: [] });
+        const r4 = await S.serie(o4, d4).catch(e => ({ arretExc: e instanceof S.Arret ? e.raison : String(e && e.message) }));
+        H.v('I1 : en mode --g-probable, un sûr faux est jugé AVANT la suite : variable posée, aucune déclaration (/reponse) ni second envoi (/mesures) après lui', [r4.arretExc || null, n4, srv4.appels.some(a => a.chemin === '/api/identifier/reponse' || a.chemin === '/api/identifier/mesures') || fs.readFileSync(o4.carnet, 'utf8').split('\n').filter(Boolean).map(JSON.parse).some(x => x.premierVerdict && x.rang === 2) || d4.logs.slice(d4.logs.findIndex(m => m.startsWith('EXTINCTION'))).some(m => /^\s+premier verdict \d+ ms/.test(m)), r4.extinction && r4.extinction.cle], [null, 1, false, 'k2:0']);
+        // I1 : une exception ou un Arret de la suite ne saute pas le jugement (la suite est coupée par deps : suiteProbable lève après un sûr faux)
+        const srv5 = fauxServeur([101, 999, 103]); let n5 = 0;
+        const d5 = deps(srv5, { eteindre: async () => { n5++; return { ok: true }; }, lireReference: () => { throw new Error('bug de la suite'); } });
+        const r5 = await S.serie(base({ gProbable: true, cartes: photos, eteindreSiSurFaux: V, commitEssai: COMMIT, scans: [] }), d5).catch(e => ({ arretExc: String(e && e.message) }));
+        H.v('I1 : même quand la suite lèverait, le sûr faux de la première réponse a éteint la variable (une fois)', [n5, r5.extinction && r5.extinction.cle], [1, 'k2:0']);    }
     // ═════ les refus AVANT toute requête
     {
         const srv = fauxServeur([]);

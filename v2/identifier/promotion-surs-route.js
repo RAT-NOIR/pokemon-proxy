@@ -25,4 +25,30 @@ function promouvoirDansLaRoute({ cfg, lv, affirmer, marqueurs, journal = () => {
     } catch (e) { try { journal('promotion en sûr', e); } catch { /* journal muet */ } return null; }
 }
 
-module.exports = { promouvoirDansLaRoute };
+/**
+ * L'ÉTAPE des leviers ET la décision de la promotion, telles que la route les enchaîne (relecture I4 : exécutable par un banc, sans base). Drapeau éteint, le résultat est EXACTEMENT celui de l'étape seule :
+ * `resultat = lv.resultat || resultat`, `probableDecide = lv.probable`, la trace des marqueurs et la trace de promotion inchangées.
+ * @param noter   (resultat) => void : la route y note la dernière QUESTION vue (celle que la garde des marqueurs rend si elle refuse le sûr)
+ * @param appliquer  l'étape (leviers-abde.js::appliquerLeviers par défaut, injectable en banc)
+ * @returns { resultat, probableDecide, traceMarqueurs, tracePromotion }
+ */
+async function etapeLeviers({ cfg, entree, resultat, c, produits, version, traceMarqueurs = null, catalogue, ctxQuestion, memo, noter = () => { }, affirmer, marqueurs, journal = () => { }, appliquer = require('./leviers-abde').appliquerLeviers, etat } = {}) {
+    let res = resultat, probableDecide = null, tm = traceMarqueurs, tracePromotion = null;
+    const lv = await appliquer({ cfg, entree, resultat, corpsChaine: c, produits, version, traceMarqueurs, catalogue, ctxQuestion, memo, ...(etat ? { etat } : {}) });
+    if (lv) {
+        if (lv.resultat) res = lv.resultat;
+        probableDecide = lv.probable;
+        if (lv.promotion) {
+            noter(res);
+            const pr = promouvoirDansLaRoute({ cfg, lv, journal, affirmer, marqueurs });
+            if (pr) {
+                tracePromotion = pr.trace;
+                if (pr.resultat) { res = pr.resultat; probableDecide = null; if (pr.traceMarqueurs) tm = pr.traceMarqueurs; }       // la trace de la première garde n'est écrasée que par un sûr CONFIRMÉ (relecture M2)
+                else if (pr.traceMarqueurs) tracePromotion = { ...pr.trace, marqueurs: pr.traceMarqueurs };
+            }
+        }
+    }
+    return { resultat: res, probableDecide, traceMarqueurs: tm, tracePromotion };
+}
+
+module.exports = { promouvoirDansLaRoute, etapeLeviers };

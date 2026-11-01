@@ -41,7 +41,7 @@ const DRAPEAUX_MARQUEURS = { jumboTitre: true, gardeMarqueurs: true };
     const { c, db } = await ouvrir();
     dbV2.brancher(db);
     const cfg0 = lireConfig({});
-    const cfgBase = { ...cfg0, probable: true, empreinteExtension: true, modeleEmpreinte: MODELE, leviersAbde: true, leviersEcart: 0.1, leviersUnCandidat: true };
+    const cfgBase = { ...cfg0, probable: true, empreinteExtension: true, modeleEmpreinte: MODELE, leviersAbde: true, leviersEcart: 0.1, leviersUnCandidat: true, gardeMarqueurs: true };
     const cfgEteint = { ...cfgBase, promotionSurs: false }, cfgAllume = { ...cfgBase, promotionSurs: true };
     const cat = creerCatalogue({ cfg: cfg0, visuels: { entree: id => V.entree(id), tirage: id => V.tirageJumeaux(id), resoudre: async () => null, impressions: async () => [] } });
     await cat.indexCodeNumero(); await cat.indexFamilles(); await cat.indexAliasFr();
@@ -81,6 +81,7 @@ const DRAPEAUX_MARQUEURS = { jumboTitre: true, gardeMarqueurs: true };
             if (gm) { trace = gm.trace; if (gm.resultat) res = gm.resultat; }
             const avant = issueDe(res);
             let lv = null, probable = null, promo = null;
+            const baseN = res.issue === 'question' && res.analyse && res.analyse.cartes[0] && Array.isArray(res.analyse.cartes[0].candidats) ? res.analyse.cartes[0].candidats.length : null, levierE = res.jumeauxEnQuestion === true;
             if (res.issue === 'question') {
                 lv = await muet(() => LV.appliquerLeviers({ cfg, entree: entreeDe(cle.split(':')[0]), resultat: res, corpsChaine: corps, produits: ctx.produits, version: V, traceMarqueurs: trace, catalogue: cat, ctxQuestion: { langueInterface: 'fr', cfg, ficheServie: false, jumeaux: ctx.jumeaux }, etat }));
                 if (lv && lv.resultat) res = lv.resultat;
@@ -93,7 +94,7 @@ const DRAPEAUX_MARQUEURS = { jumboTitre: true, gardeMarqueurs: true };
                     if (promo && promo.resultat) { res = promo.resultat; probable = null; }
                 }
             }
-            return { avant, apres: issueDe(res), probable: probable ? probable.idProduct : null, promotionDecidee: Boolean(lv && lv.promotion), regle: lv && lv.promotion ? lv.promotion.regle : null, promoIssue: promo ? promo.trace.issue : null };
+            return { avant, apres: issueDe(res), probable: probable ? probable.idProduct : null, promotionDecidee: Boolean(lv && lv.promotion), regle: lv && lv.promotion ? lv.promotion.regle : null, promoIssue: promo ? promo.trace.issue : null, baseN, levierE };
         };
         const off = await run(cfgEteint), on = await run(cfgAllume);
         sorties.push({ cle, off, on });
@@ -124,11 +125,14 @@ const DRAPEAUX_MARQUEURS = { jumboTitre: true, gardeMarqueurs: true };
     for (const [cle, id] of attendues) {
         const s = sorties.find(x => x.cle === cle), sim = SIM.get(cle);
         const sert = s && s.on.apres.issue === 'affirmee' && s.on.apres.id === id;
-        if (!sert) ecarts.push({ cle: cle.slice(0, 8), attendu: id, route: s ? (s.on.probable !== null ? `probable ${s.on.probable}` : JSON.stringify(s.on.apres)) : 'ligne non rejouée', promo: s && s.on.promoIssue, cause: !s ? 'ligne non rejouée par la route (sans journal ou corps non reconstructible)' : s.on.probable !== id ? 'la route ne désigne pas le même probable que le simulateur' : 'la promotion est décidée mais refusée par la route' });
+        if (!sert) ecarts.push({ cle: cle.slice(0, 8), attendu: id, route: s ? (s.on.probable !== null ? `probable ${s.on.probable}` : JSON.stringify(s.on.apres)) : 'ligne non rejouée', promo: s && s.on.promoIssue, cause: !s ? 'ligne non rejouée par la route (sans journal ou corps non reconstructible)' : s.on.levierE ? 'C1 : question née du levier e (jamais promue)' : s.on.baseN !== null && s.on.baseN < 2 ? 'C1 : question de la chaîne à UN candidat (jamais promue)' : s.on.probable !== id ? 'la route ne désigne pas le même probable que le simulateur' : 'la promotion est décidée mais refusée par la route' });
     }
     const imprevues = promues.filter(s => !attendues.has(s.cle));
     console.log(`    promotions du simulateur : ${attendues.size} · servies par la route ${attendues.size - ecarts.length} · ÉCARTS ${ecarts.length} · promotions de la route sur des lignes que le simulateur ne rejoue pas (sans vérité, NON JUGÉES : à regarder à la main, jamais comptées juste) ${imprevues.length}`);
-    for (const e of ecarts) console.log('    écart', JSON.stringify(e));
+    const parCause = {}; for (const e of ecarts) parCause[e.cause] = (parCause[e.cause] || 0) + 1;
+    console.log('    écarts par cause :', JSON.stringify(parCause));
+    const inexpliques = ecarts.filter(e => !/^C1 :/.test(e.cause));
+    for (const e of inexpliques) console.log('    écart NON EXPLIQUÉ', JSON.stringify(e));
     for (const s of imprevues) console.log('    imprévue', s.cle.slice(0, 8), JSON.stringify(s.on));
     // ═════ (3) le tableau par population (les lignes promues par la ROUTE jugées contre la vérité)
     const POPS = [['série', l => l.enSerie], ['réglage', l => l.pop === 'reglage'], ['réglage sans 137', l => l.pop === 'reglage' && !l.is137], ['ordinaires', l => l.pop === 'ordinaire'], ['tamponnées', l => l.pop === 'tamponnee'], ['union', () => true]];
@@ -142,5 +146,5 @@ const DRAPEAUX_MARQUEURS = { jumboTitre: true, gardeMarqueurs: true };
     }
     if (argv('sortie')) fs.writeFileSync(argv('sortie'), JSON.stringify({ le: new Date().toISOString(), lignes: sorties.length, promotionsEteint, diffEteintAllume: diffEteintAllume.length, surs, surChange, promues: promues.length, attendues: attendues.size, ecarts, imprevues: imprevues.map(s => s.cle), surFaux: faux }, null, 1));
     await c.close();
-    process.exit(promotionsEteint || diffEteintAllume.length || nonPromuesChangees.length || surChange || ecarts.length || faux ? 1 : 0);
+    process.exit(promotionsEteint || diffEteintAllume.length || nonPromuesChangees.length || surChange || inexpliques.length || faux ? 1 : 0);
 })().catch(e => { console.log('ERREUR', e.code || e.name, String(e.message || '').slice(0, 300), String(e.stack || '').split('\n').slice(1, 4).join(' | ')); process.exit(1); });
