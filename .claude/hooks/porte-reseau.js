@@ -31,7 +31,11 @@ const { execFileSync } = require('child_process');
 // Dossier effectif : shell = le dossier courant calculé ici (cwd de l'entrée, mis à jour par un cd littéral en tête d'instruction) pour CHAQUE instruction autre qu'un cd, et une commande
 // n'est libre que si toutes le sont (un dossier incertain n'est pas libre) ; Write/Edit/NotebookEdit = le fichier visé ; tout autre outil = le cwd. cwd absent, vide, non textuel ou
 // relatif => pas libre. La comparaison est sans casse, sur le chemin résolu ET le chemin réel (jonctions, noms courts 8.3), par dossier (« …\api-v2-bis » n'est pas dans « …\api-v2 »).
-// LIMITE CONNUE : un agent qui fait `cd` vers un dossier de l'API sort de la garde (elle vise l'erreur d'un agent de bonne foi, comme la limite 16 ci-dessous).
+// « Libre » ne lève QUE les raisons RÉSEAU : les protections de la porte (écriture/suppression/déplacement dans arrets-hotes\ et le dossier de la porte, ARRET/LEVEE/PAUSE-HOTE même placés dans
+// un dossier de l'API, `porte-reseau.js lever`, hook et modules de la copie principale, variables interdites) valent pour tout le monde. Start-Process/saps/start -WorkingDirectory rend le dossier incertain
+// sauf littéral dans un dossier libre.
+// LIMITES CONNUES : un agent qui fait `cd` vers un dossier de l'API sort de la garde (elle vise l'erreur d'un agent de bonne foi, comme la limite 16 ci-dessous). Une jonction ou un nom court qui mène
+// DANS l'API reste refusé (décision du coordinateur : plus strict, fermé par défaut).
 const DOSSIERS_LIBRES = ['C:\\Users\\Yung\\Desktop\\pokemon-proxy-api-v2', 'C:\\Users\\Yung\\rat-market-travail\\api'];
 const MESSAGE_WEBFETCH ='accès réseau par la porte seulement : node collecte-cartes/porte-reseau.js lire <url> --texte --sortie=<fichier>';
 const MAX_SCRIPT = 2 * 1024 * 1024;
@@ -343,15 +347,17 @@ function sousExpressions(texte) {
 function verdictShell(cmd, cwd) {
     cmd = cmd.replace(/`(?=[A-Za-z0-9_])/g, '');        // I1 : l'accent grave PowerShell (Invoke-Web`Request) ne cache rien
     const raisons = [];
+    const protections = [];      // « libre » ne lève QUE les raisons réseau : celles-ci (porte, arrêts, variables fixes, levée) restent pour tout le monde
+    const prot = r => { raisons.push(r); protections.push(r); };
     // B2 : une commande ne pose ni le dossier des arrêts, ni celui de la porte, ni le module de banc ; I2 : NODE_OPTIONS précharge du code
     for (const m of cmd.matchAll(VARIABLES_FIXES)) {
         const avant = cmd.slice(Math.max(0, m.index - 40), m.index), apres = cmd.slice(m.index + m[0].length, m.index + m[0].length + 10);
-        if (/^["'`\]\)]*\s*[=,]/.test(apres) || /(env:|\bset|\bexport|\bsetx|environment\w*\(?|\benv)\s*["'(]?\s*$/i.test(avant)) raisons.push(`${m[0]} : les dossiers des arrêts et de la porte sont FIXES, une commande ne les change pas`);
+        if (/^["'`\]\)]*\s*[=,]/.test(apres) || /(env:|\bset|\bexport|\bsetx|environment\w*\(?|\benv)\s*["'(]?\s*$/i.test(avant)) prot(`${m[0]} : les dossiers des arrêts et de la porte sont FIXES, une commande ne les change pas`);
     }
-    if (/NODE_OPTIONS/i.test(cmd)) raisons.push('NODE_OPTIONS précharge du code node : refusé');
+    if (/NODE_OPTIONS/i.test(cmd)) prot('NODE_OPTIONS précharge du code node : refusé');
     // I1 : dot-source d'une variable ou d'une expression (équivalent de &)
     if (/(^|[;|&\r\n{(])\s*\.\s+[$(]/.test(cmd)) raisons.push('dot-source (. $x, . (…)) : cible non résolue');
-    if (mentionneProtege(cmd) && MODIFIE.test(cmd)) raisons.push('modification du dossier de la porte ou des arrêts (robots\\, cadence\\, journal, arrets-hotes\\, ARRET/LEVEE/PAUSE-HOTE) : la levée ou la suppression d\'un arrêt est une action de l\'utilisateur, à la main dans son terminal');
+    if (mentionneProtege(cmd) && MODIFIE.test(cmd)) prot('modification du dossier de la porte ou des arrêts (robots\\, cadence\\, journal, arrets-hotes\\, ARRET/LEVEE/PAUSE-HOTE) : la levée ou la suppression d\'un arrêt est une action de l\'utilisateur, à la main dans son terminal');
     // H1/H3 : l'opérateur d'appel & sur une cible non résolue ; seule la forme $g du CLAUDE.md §3 (définie dans la même commande, une seule fois) est admise
     if (/&\s*\(/.test(cmd)) raisons.push('opérateur & sur une expression (cible non résolue)');
     const gOk = G_DEFINITION.test(cmd) && (cmd.match(/\$g\s*=/gi) || []).length === 1;
@@ -373,14 +379,20 @@ function verdictShell(cmd, cwd) {
             continue;
         }
         if (CD_PARTOUT.test(ins)) ctx.incertain = true;
-        executees++; if (ctx.incertain || !estLibre(ctx.cwd)) horsLibre++;
+        // Start-Process/saps/start -WorkingDirectory <x> : l'instruction s'exécute dans <x> ; libre seulement si <x> est un littéral dans un dossier libre, sinon dossier incertain
+        let dirIns = ctx.cwd, incIns = ctx.incertain;
+        if (/(^|[^\w.-])(start-process|saps|start)(\.exe)?(?![\w-])/i.test(ins)) {
+            const wd = /\s-wo\w*(?::|\s+)\s*("[^"]*"|'[^']*'|[^\s;|&]+)/i.exec(ins);
+            if (wd) { const v = wd[1].replace(/^["']|["']$/g, ''); if (nonResolu(v)) incIns = true; else dirIns = path.resolve(ctx.cwd, v); }
+        }
+        executees++; if (incIns || !estLibre(dirIns)) horsLibre++;
         if (/^\s*(&\s*)?(["'][^"']*git(\.exe)?["']|\$g\b|git(\.exe)?(?![\w-]))/i.test(ins)) { const g = verdictGit(ins); if (g) raisons.push(g); continue; }
         hors.push(ins);
         const tl = jetons(ins.replace(/^\s*&\s*/, '')), ip = tl.findIndex(x => /^porte-reseau(\.js)?$/i.test(path.basename(x)));       // B3 : `lever` est une action de l'utilisateur
-        if (ip >= 0 && tl.slice(ip + 1).some(x => x.toLowerCase() === 'lever')) raisons.push('porte-reseau.js lever : un agent ne lève pas un arrêt ; la levée est une action de l\'utilisateur, à la main dans son terminal');
-        const ar = verdictArrets(ins, ctx); if (ar) raisons.push(ar);
+        if (ip >= 0 && tl.slice(ip + 1).some(x => x.toLowerCase() === 'lever')) prot('porte-reseau.js lever : un agent ne lève pas un arrêt ; la levée est une action de l\'utilisateur, à la main dans son terminal');
+        const ar = verdictArrets(ins, ctx); if (ar) prot(ar);
         // B3 : un verbe d'écriture sur le dossier des arrêts, ou une redirection dont la CIBLE y est (lister vers un autre fichier reste permis)
-        if (mentionneArrets(ins) && (MODIFIE_VERBE.test(ins) || [...ins.matchAll(/>>?\s*("[^"]*"|'[^']*'|[^\s"'>]+)/g)].some(r => mentionneArrets(r[1])))) raisons.push('écriture dans le dossier des arrêts (arrets-hotes\\) : un agent n\'y écrit rien ; la levée ou la suppression d\'un arrêt est une action de l\'utilisateur, à la main dans son terminal');
+        if (mentionneArrets(ins) && (MODIFIE_VERBE.test(ins) || [...ins.matchAll(/>>?\s*("[^"]*"|'[^']*'|[^\s"'>]+)/g)].some(r => mentionneArrets(r[1])))) prot('écriture dans le dossier des arrêts (arrets-hotes\\) : un agent n\'y écrit rien ; la levée ou la suppression d\'un arrêt est une action de l\'utilisateur, à la main dans son terminal');
         if (OUVRE_ADRESSE.test(ins)) raisons.push('Start-Process / Invoke-Item / saps / ii avec une adresse http(s)');
         if (/(^|[^\w.-])(start-process|saps)(?![\w-])/i.test(ins)) { const t = OUTILS.filter(m => m.re.test(ins) && !(m.sauf && m.sauf.test(ins))).map(m => m.nom); if (t.length) raisons.push(`Start-Process vers un outil réseau (${t.join(', ')})`); }
         const n = verdictScriptNode(ins, ctx); if (n) raisons.push(n);
@@ -403,6 +415,7 @@ function verdictShell(cmd, cwd) {
     const reste = hors.join(' ; ');
     if (ECRIT_SCRIPT.test(reste) && LANCE_SCRIPT.test(reste)) raisons.push('écriture d\'un script (.js, .py, .ps1) puis exécution dans la même commande');
     raisons.libre = executees > 0 && horsLibre === 0;
+    raisons.protections = protections;
     return raisons;
 }
 
@@ -420,15 +433,14 @@ function verdict(entree) {
     if (nom === 'write' || nom === 'edit' || nom === 'notebookedit') {
         const f = entreeOutil.file_path ?? entreeOutil.notebook_path ?? entreeOutil.path;
         if (typeof f !== 'string' || !f) return { refus: `${e.tool_name} sans chemin lisible : refusé par prudence` };
-        if (estLibre(path.isAbsolute(f) ? f : (cwdLu ? path.resolve(cwdLu, f) : null))) return { refus: null };     // le fichier visé est dans un dossier de l'API
         const c = cibleProtegee(path.resolve(cwd, f));
         return { refus: c ? `écriture refusée (${c}) : ${f}` : null };
     }
     if (nom !== 'powershell' && nom !== 'bash') return estLibre(cwdLu) ? { refus: null } : { refus: `outil « ${e.tool_name} » non prévu par la porte : fermé par défaut` };
     if (typeof entreeOutil.command !== 'string') return { refus: `commande ${e.tool_name} sans texte lisible : refusé par prudence` };
     const raisons = verdictShell(entreeOutil.command, cwdLu || cwd);
-    if (cwdLu && raisons.libre) return { refus: null };      // chaque instruction s'exécute dans un dossier de l'API
-    return { refus: raisons.length ? `accès réseau refusé par la porte : ${raisons.join(' ; ')}. ${MESSAGE_WEBFETCH}` : null };
+    const aRaisons = cwdLu && raisons.libre ? raisons.protections : raisons;      // chaque instruction dans un dossier de l'API : les raisons RÉSEAU tombent, les protections de la porte restent
+    return { refus: aRaisons.length ? `accès réseau refusé par la porte : ${aRaisons.join(' ; ')}. ${MESSAGE_WEBFETCH}` : null };
 }
 
 if (require.main === module) {
