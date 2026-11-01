@@ -22,7 +22,7 @@
 //     candidats, « aucune » sinon ; --sans-declarations les coupe) ; ARRÊT IMMÉDIAT au premier probable FAUX ou sûr FAUX, avant le scan suivant (code de sortie 10 / 11, ligne fautive au carnet et au rapport). Il ne touche à AUCUNE variable
 //     du service. Sans l'option, rien de ce qui précède n'existe : le client est celui d'avant, octet pour octet (banc test-serie-essai.js).
 //   · MODE --compte=ordinaire (01/11, COMPTE-TEST) : la série des 9 lignes du compte de test ORDINAIRE (serie-compte-test.js::TABLEAU, §7 de serie-P-verifications.md) — débits, remboursements « aucune », plafond `probable-aucune`, introuvable. Les
-//     identifiants sont l'AUTRE couple (V2_ESSAI_ORDINAIRE_IDENTIFIANT / _MOT_DE_PASSE) ; le client annonce la version 2.0.1 et ne produit AUCUNE mesure : AUCUN second envoi sur /api/identifier/mesures. Pour chaque ligne il inscrit au carnet la facturation
+//     identifiants sont l'AUTRE couple (V2_ESSAI_ORDINAIRE_IDENTIFIANT / _MOT_DE_PASSE) ; le client suit EXACTEMENT le chemin d'un client réel de l'extension 2.0.1 : il annonce la version 2.0.1 et `capacitesClient: ['mesures-1']`, et quand le serveur propose un complément il fait le second envoi /api/identifier/mesures avec le code de --g-probable (secondEnvoiDesMesures : mesures de production, références de l'hôte R2 public, `--cartes=` exigé) — sans appel de plus au modèle payant. Le SEUL écart permis : la photo est déposée par /api/photo au lieu d'être téléchargée chez Vinted. Pour chaque ligne il inscrit au carnet la facturation
 //     servie, le solde (offre) avant et après (POST /api/solde, lecture pure) et la déclaration envoyée, les compare à la ligne du TABLEAU et s'ARRÊTE au premier écart (code 14) ; un compte ordinaire ne peut pas déposer de photo (POST /api/photo est réservée à
 //     l'administrateur) : tout refus de dépôt arrête la série AVANT /api/identifier (code 15), jamais de retombée sur l'adresse de l'annonce. Les lignes viennent du tableau (--cles, --n, --graine, --g-probable, --sans-declarations sont refusés).
 // Usage : node v2/mesures/serie-essai.js --resultats=<resultats-*.json> --nav=<nav-bancs.json> --photos=<dossier des photos des bancs, <clé de photo>.jpg|png|webp> --n=<N> --graine=<entier> --plafond-usd=<USD> --carnet=<fichier.jsonl>
@@ -192,10 +192,10 @@ async function serie(o, deps = {}) {
     const versionClient = gp ? (o.versionExtension === undefined ? SP.VERSION_PROBABLE : o.versionExtension) : ct ? (o.versionExtension === undefined ? CT.VERSION_CLIENT : o.versionExtension) : null;
     if (ct && (typeof versionClient !== 'string' || !/^\d+\.\d+\.\d+$/.test(versionClient))) throw new Arret('--version-extension doit être de la forme x.y.z');
     let lireReference = null;
-    if (gp) {
-        if (o.deuxiemeApresSignal) throw new Arret('--g-probable ne se combine pas avec --deuxieme-apres-signal (le code de sortie et l\'arrêt au premier faux ne couvrent que la série 1)');
+    if (gp || ct) {                                                                                 // le second envoi des mesures est celui de l'extension : --compte=ordinaire le fait comme --g-probable
+        if (gp && o.deuxiemeApresSignal) throw new Arret('--g-probable ne se combine pas avec --deuxieme-apres-signal (le code de sortie et l\'arrêt au premier faux ne couvrent que la série 1)');
         if (typeof versionClient !== 'string' || !/^\d+\.\d+\.\d+$/.test(versionClient)) throw new Arret('--version-extension doit être de la forme x.y.z');
-        if (!o.cartes) throw new Arret('--g-probable exige --cartes= (la carte redressée de chaque ligne : les mesures du client se calculent dessus)');
+        if (!o.cartes) throw new Arret(`${gp ? '--g-probable' : '--compte=ordinaire'} exige --cartes= (la carte redressée de chaque ligne : les mesures du client se calculent dessus)`);
         lireReference = deps.lireReference || (Array.isArray(o.scans) && o.scans.length ? SP.lecteurDeReferences(o.scans) : null);
         // le cache local (--scans) n'est qu'un RACCOURCI facultatif : sans lui, les références se téléchargent de l'hôte public, comme l'extension (serie-probable.js::lecteurDeReferencesComplet)
     }
@@ -260,7 +260,7 @@ async function serie(o, deps = {}) {
         const manque = SP.CAPACITES_ATTENDUES.filter(c => !(dernier && dernier.corps && Array.isArray(dernier.corps.capacites) && dernier.corps.capacites.includes(c)));
         throw new Arret(`capacités du /ping incomplètes après l'attente : il manque ${manque.join(', ') || '(deux /ping complets de suite)'} : rien n'est lancé`);
     };
-    const ping = gp ? await attendrePing() : await appeler('/ping', { method: 'GET' }, null);
+    const ping = gp || ct ? await attendrePing() : await appeler('/ping', { method: 'GET' }, null);
     if (ping.statut !== 200 || !ping.corps || typeof ping.corps.versionMinExtension !== 'string') throw new Arret(`/ping inattendu (${ping.statut}) : la v2 n'est pas annoncée, rien n'est envoyé`);
     const capacites = Array.isArray(ping.corps.capacites) ? ping.corps.capacites : [];
     log(`/ping : versionMinExtension ${ping.corps.versionMinExtension} ; capacités ${capacites.join(', ') || '(aucune)'} ; jeton empreinte ${capacites.includes('empreinte') ? 'PRÉSENT' : 'ABSENT (le serveur ne se sert pas encore des vecteurs)'}`);
@@ -311,6 +311,38 @@ async function serie(o, deps = {}) {
     const statutDeArret = raison => (/\(401\)/.test(raison) ? 401 : /^429 /.test(raison) ? 429 : null);       // le statut HTTP que dit un arrêt du client (null : une redirection, pas un statut)
     const incertainApresSecond = code => `${code} : issue incertaine après le second envoi sur /api/identifier/mesures : série arrêtée avant toute déclaration sur ce scan (le serveur a pu poser le marqueur probable avant de répondre)`;
     const statutIncertain = raison => { const m = /^statut (\d{3})/.exec(raison); return m ? Number(m[1]) : null; };
+    /**
+     * LE SECOND ENVOI, exactement comme l'extension >= 2.0.1 : quand la première réponse est une QUESTION qui porte un `complement`, produire les mesures demandées avec les fonctions de PRODUCTION (serie-probable.js::produireMesures :
+     * ratmarket/zones.js, carte-redressee.js, validerResultats) sur la carte redressée et les références (cache local `--scans` facultatif, sinon l'hôte R2 PUBLIC comme l'extension), puis POST /api/identifier/mesures avec
+     * `accepteProbable: true`. Partagé par --g-probable et --compte=ordinaire. Il n'ajoute AUCUN appel au modèle payant (le serveur ne rejoue que la règle G sur les mesures reçues). Ne lève jamais : un refus (401, 429, issue incertaine)
+     * est rendu dans `arretReseau`. @returns {{ secondEnvoi, mesuresClient, classe, chemin, facturation2, arretReseau }} — `classe` est celle du résultat CHANGÉ (probable ou sûr) quand `change: true`, sinon `classe1` ; `facturation2` est celle du second envoi.
+     */
+    const secondEnvoiDesMesures = async ({ rang, serieId, etiquette, carteB64, issue, classe1 }) => {
+        const scanId = typeof issue.scanId === 'string' ? issue.scanId : null, cplt = issue.complement;
+        const r = { secondEnvoi: null, mesuresClient: null, classe: classe1, chemin: classe1.niveau === 'probable' ? 'PROBABLE' : classe1.niveau === 'question' ? 'QUESTION' : 'PREMIER', facturation2: null, arretReseau: null };
+        const cle = suffixe => `serie-${serieId}-${rang}-${etiquette}-${suffixe}`;
+        if (!(classe1.niveau === 'question' && scanId && cplt && typeof cplt === 'object' && typeof cplt.jeton === 'string' && Array.isArray(cplt.mesures) && cplt.mesures.length > 0)) return r;
+        if (!carteB64) { r.secondEnvoi = { envoye: false, raison: 'carte-absente' }; return r; }
+        const prod = await SP.produireMesures({ demande: cplt.mesures, carteB64, lireReference: SP.lecteurDeReferencesComplet({ local: lireReference, references: cplt.references, fetchFn: fetchF, cache: cacheHote, delaiMs: deps.delaiReferenceMs }), zones: deps.zones || require('../../ratmarket/zones'), carteRedressee: deps.carteRedressee || require('../identifier/carte-redressee'), validerResultats: require('../identifier/calcul-client').validerResultats });
+        if (!prod.ok) { r.secondEnvoi = { envoye: false, raison: prod.raison }; return r; }
+        r.mesuresClient = prod.resultats;
+        try {
+            const m = await appeler('/api/identifier/mesures', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': cle('m') }, body: JSON.stringify({ scanId, jeton: cplt.jeton, opencv: o.opencv || 'serie-essai-node', accepteProbable: true, resultats: prod.resultats }) });
+            if (m.statut === 401) throw new Arret('jeton refusé (401) sur /api/identifier/mesures : le jeton d\'installation n\'est plus accepté ; série arrêtée');
+            if (m.statut === 429) throw new Arret(`429 sur /api/identifier/mesures (reessayerDans ${m.retryApres ?? '?'}) : la série s'arrête, sans boucle`);
+            // écrite par ce qu'elle AUTORISE : seuls 200 (corps lisible), 409 et 410 laissent continuer ; tout autre statut ou corps illisible ARRÊTE (le serveur a pu poser le marqueur probable avant de répondre)
+            if (!(m.statut === 409 || m.statut === 410 || (m.statut === 200 && m.corps && typeof m.corps === 'object'))) throw new Arret(incertainApresSecond(m.statut === 200 ? '200 sans corps lisible' : `statut ${m.statut}`));
+            r.secondEnvoi = { envoye: true, statut: m.statut, ...(m.statut === 200 && m.corps ? { change: m.corps.change === true } : {}) };
+            if (m.statut === 200 && m.corps && m.corps.change === true) {
+                const c2 = SP.classerCarte(m.corps.carte);
+                if (c2.niveau === 'probable' || c2.niveau === 'sur') { r.classe = c2; r.chemin = c2.niveau === 'probable' ? 'G-GROUPE' : 'G-PROMOTION'; r.facturation2 = m.corps.facturation ?? null; }
+            }
+        } catch (e) {
+            if (e instanceof Arret) { r.arretReseau = e.raison; r.secondEnvoi = { envoye: true, statut: statutDeArret(e.raison) ?? statutIncertain(e.raison) }; }
+            else { const code = (e && (e.code || e.name)) || 'erreur'; r.arretReseau = incertainApresSecond(`exception ${code}`); r.secondEnvoi = { envoye: true, statut: null, erreur: code }; }
+        }
+        return r;
+    };
     const suiteProbable = async ({ l, rang, serieId, etiquette, carteB64, issue, premierMs }) => {
         const scanId = typeof issue.scanId === 'string' ? issue.scanId : null, verite = l.verite;
         const classe1 = SP.classerCarte(issue.analyse && Array.isArray(issue.analyse.cartes) ? issue.analyse.cartes[0] : null), j1 = SP.jugerVerdict(classe1, verite);
@@ -319,31 +351,9 @@ async function serie(o, deps = {}) {
         const cle = suffixe => `serie-${serieId}-${rang}-${etiquette}-${suffixe}`;
         carnet.noter({ serie: serieId, rang, cle: l.cle, premierVerdict: { verdict: j1.verdict, niveau: classe1.niveau, ms: premierMs } });
         const cplt = issue.complement;
-        if (!SP.fautif(j1.verdict) && classe1.niveau === 'question' && scanId && cplt && typeof cplt === 'object' && typeof cplt.jeton === 'string' && Array.isArray(cplt.mesures) && cplt.mesures.length > 0) {
-            if (!carteB64) secondEnvoi = { envoye: false, raison: 'carte-absente' };
-            else {
-                const prod = await SP.produireMesures({ demande: cplt.mesures, carteB64, lireReference: SP.lecteurDeReferencesComplet({ local: lireReference, references: cplt.references, fetchFn: fetchF, cache: cacheHote, delaiMs: deps.delaiReferenceMs }), zones: deps.zones || require('../../ratmarket/zones'), carteRedressee: deps.carteRedressee || require('../identifier/carte-redressee'), validerResultats: require('../identifier/calcul-client').validerResultats });
-                if (!prod.ok) secondEnvoi = { envoye: false, raison: prod.raison };
-                else {
-                    mesuresClient = prod.resultats;
-                    try {
-                        const m = await appeler('/api/identifier/mesures', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': cle('m') }, body: JSON.stringify({ scanId, jeton: cplt.jeton, opencv: o.opencv || 'serie-essai-node', accepteProbable: true, resultats: prod.resultats }) });
-                        if (m.statut === 401) throw new Arret('jeton refusé (401) sur /api/identifier/mesures : le jeton d\'installation n\'est plus accepté ; série arrêtée');
-                        if (m.statut === 429) throw new Arret(`429 sur /api/identifier/mesures (reessayerDans ${m.retryApres ?? '?'}) : la série s'arrête, sans boucle`);
-                        // écrite par ce qu'elle AUTORISE : seuls 200 (corps lisible), 409 et 410 laissent continuer ; tout autre statut ou corps illisible ARRÊTE (le serveur a pu poser le marqueur probable avant de répondre)
-                        if (!(m.statut === 409 || m.statut === 410 || (m.statut === 200 && m.corps && typeof m.corps === 'object'))) throw new Arret(incertainApresSecond(m.statut === 200 ? '200 sans corps lisible' : `statut ${m.statut}`));
-                        secondEnvoi = { envoye: true, statut: m.statut, ...(m.statut === 200 && m.corps ? { change: m.corps.change === true } : {}) };
-                        if (m.statut === 200 && m.corps && m.corps.change === true) {
-                            const c2 = SP.classerCarte(m.corps.carte);
-                            if (c2.niveau === 'probable' || c2.niveau === 'sur') { classe = c2; j = SP.jugerVerdict(c2, verite); chemin = c2.niveau === 'probable' ? 'G-GROUPE' : 'G-PROMOTION'; }
-                        }
-                    } catch (e) {
-                        if (e instanceof Arret) { arretReseau = e.raison; secondEnvoi = { envoye: true, statut: statutDeArret(e.raison) ?? statutIncertain(e.raison) }; }
-                        else { const code = (e && (e.code || e.name)) || 'erreur'; arretReseau = incertainApresSecond(`exception ${code}`); secondEnvoi = { envoye: true, statut: null, erreur: code }; }
-                    }
-                }
-            }
-        }
+        const se = await secondEnvoiDesMesures({ rang, serieId, etiquette, carteB64, issue, classe1 });       // LE MÊME code que le mode --compte=ordinaire (jamais une copie)
+        secondEnvoi = se.secondEnvoi; mesuresClient = se.mesuresClient; arretReseau = se.arretReseau;
+        if (se.classe !== classe1) { classe = se.classe; j = SP.jugerVerdict(classe, verite); chemin = se.chemin; }
         // les déclarations du client (celles de l'extension) : même après un faux (« aucune » sur un probable faux) ; jamais si le serveur vient de refuser
         const decl = declarer && !arretReseau ? SP.declarationDe(classe, j.verdict, verite) : null;
         if (decl && scanId) {
@@ -367,23 +377,28 @@ async function serie(o, deps = {}) {
     };
     /**
      * MODE --compte=ordinaire : ce qui suit la première réponse de /api/identifier pour UNE ligne du tableau. JAMAIS d'exception (une issue incertaine arrête la série, elle ne la fait pas continuer). Dans l'ordre :
-     * (1) la première réponse (niveau, produit, facturation) face au tableau — au premier écart, RIEN n'est déclaré ; (2) la déclaration du tableau, envoyée à POST /api/identifier/reponse (aucune mesure n'est envoyée, jamais) ;
+     * (1) le second envoi des mesures quand le serveur propose un complément (secondEnvoiDesMesures, le code de --g-probable : le chemin de l'extension), puis l'issue (première réponse → niveau final), le produit et les facturations face à la liste fermée d'issues de la ligne — au premier écart, RIEN n'est déclaré ; (2) la déclaration de l'issue, envoyée à POST /api/identifier/reponse ;
      * (3) le solde après (POST /api/solde) ; (4) la ligne entière face au tableau. Tout est inscrit au carnet : facturation servie, solde avant et après, déclaration envoyée, réponse du serveur.
      */
-    const suiteCompteTest = async ({ l, rang, serieId, etiquette, issue, att }) => {
+    const suiteCompteTest = async ({ l, rang, serieId, etiquette, carteB64, issue, att }) => {
         const scanId = typeof issue.scanId === 'string' ? issue.scanId : null;
-        const classe = SP.classerCarte(issue.analyse && Array.isArray(issue.analyse.cartes) ? issue.analyse.cartes[0] : null);
+        const classe1 = SP.classerCarte(issue.analyse && Array.isArray(issue.analyse.cartes) ? issue.analyse.cartes[0] : null);
         const avant = soldeCourant;
-        const obs = { niveau: classe.niveau, produit: classe.produit, facturation: issue.facturation, choixEnvoye: null, statutReponse: null, reponse: null, restantAvant: avant.offre.restant, restantApres: null };
+        // 1. le chemin d'un client réel : le second envoi des mesures quand le serveur propose un complément (le code partagé avec --g-probable) ; il n'ajoute aucun appel au modèle payant
+        const se = await secondEnvoiDesMesures({ rang, serieId, etiquette, carteB64, issue, classe1 });
+        const classe = se.classe;
+        const obs = { niveauPremier: classe1.niveau, niveau: classe.niveau, produit: classe.produit, facturation: issue.facturation, facturation2: se.facturation2, choixEnvoye: null, statutReponse: null, reponse: null, restantAvant: avant.offre.restant, restantApres: null };
         const resume = s => ({ offre: { nom: s.offre.nom, restant: s.offre.restant }, total: s.solde.total, achete: s.solde.achete });
-        let arretReseau = null, apres = null, soldeApresIllisible = null;
+        let arretReseau = se.arretReseau, apres = null, soldeApresIllisible = null;
         const lireApres = async () => { try { apres = await lireSolde(); soldeCourant = apres; } catch (e) { soldeApresIllisible = e instanceof Arret ? e.raison : `exception ${(e && (e.code || e.name)) || 'erreur'} sur /api/solde`; } };
-        const premier = CT.comparerPremiere(att, obs);
+        const premier = arretReseau ? null : CT.comparerAvantDeclaration(att, obs);
         let e = premier;
-        if (!e) {
-            const choix = att.declaration === null ? null : att.declaration === 'aucune' ? 'aucune'
-                : (classe.choix.find(c => c.idProduct === (att.declaration === 'verite' ? att.verite : classe.produit)) || {}).id || null;
-            if (att.declaration !== null && choix !== null && scanId && (!att.lettre || choix === att.lettre)) {      // la lettre que le tableau attend (ligne 3 : « a ») se vérifie AVANT d'envoyer : une déclaration que le tableau ne prévoit pas ne part pas
+        if (arretReseau) await lireApres();                                                              // un second envoi d'issue incertaine : RIEN n'est déclaré, la série s'arrête
+        else if (!e) {
+            const iss = CT.trouverIssue(att, obs);                                                        // non nulle : comparerAvantDeclaration vient de la trouver
+            const choix = iss.declaration === null ? null : iss.declaration === 'aucune' ? 'aucune'
+                : (classe.choix.find(c => c.idProduct === (iss.declaration === 'verite' ? att.verite : classe.produit)) || {}).id || null;
+            if (iss.declaration !== null && choix !== null && scanId && (!iss.lettre || choix === iss.lettre)) {      // la lettre que le tableau attend (ligne 3 : « a ») se vérifie AVANT d'envoyer : une déclaration que le tableau ne prévoit pas ne part pas
                 obs.choixEnvoye = choix;
                 try {
                     const rp = await appeler('/api/identifier/reponse', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': `serie-${serieId}-${rang}-${etiquette}-r` }, body: JSON.stringify({ scanId, carte: 0, choix }) });
@@ -397,7 +412,7 @@ async function serie(o, deps = {}) {
             if (apres) obs.restantApres = apres.offre.restant;
             e = arretReseau || soldeApresIllisible ? null : CT.comparerLigne(att, obs);
         } else await lireApres();
-        const entree = { rang: att.rang, niveau: classe.niveau, produit: classe.produit, scanId, facturation: issue.facturation ?? null, declarationEnvoyee: obs.choixEnvoye, reponse: obs.reponse ? { statut: obs.statutReponse, ...obs.reponse } : null,
+        const entree = { rang: att.rang, niveauPremier: classe1.niveau, niveau: classe.niveau, produit: classe.produit, chemin: se.chemin, secondEnvoi: se.secondEnvoi, scanId, facturation: issue.facturation ?? null, facturation2: se.facturation2, declarationEnvoyee: obs.choixEnvoye, reponse: obs.reponse ? { statut: obs.statutReponse, ...obs.reponse } : null,
             soldeAvant: resume(avant), soldeApres: apres ? resume(apres) : null, ecart: e || null };
         carnet.noter({ serie: serieId, rang, cle: l.cle, compteTest: entree });
         return { entree, ecart: e, arretReseau: arretReseau || soldeApresIllisible };
@@ -425,7 +440,7 @@ async function serie(o, deps = {}) {
                 if (o.cartes) { const cf = trouverFichier(o.cartes, cp); if (cf) entree.carte = fs.readFileSync(cf.fichier).toString('base64'); }
                 // `contrat: 2` : sans lui l'aiguilleur (monter.js) renvoie vers la route HÉRITÉE, qui répond 401. Les autres champs sont ceux que la v2 attend (verifierEntree).
                 carteB64 = entree.carte || null;
-                const corps = { contrat: 2, versionExtension: gp || ct ? versionClient : versionMin, ...(gp ? { capacitesClient: ['mesures-1'] } : {}), marche: 'vinted.fr', title: '', description: '', prixVinted: null, devise: null, langueInterface: 'fr', imageUrls: [IMAGE_ANNONCE], photoIds: [{ index: 0, photoId: up.corps.photoId }], empreintes: [entree], modeleEmpreinte: { id: modele.id, sha256: modele.sha256 } };
+                const corps = { contrat: 2, versionExtension: gp || ct ? versionClient : versionMin, ...(gp || ct ? { capacitesClient: ['mesures-1'] } : {}), marche: 'vinted.fr', title: '', description: '', prixVinted: null, devise: null, langueInterface: 'fr', imageUrls: [IMAGE_ANNONCE], photoIds: [{ index: 0, photoId: up.corps.photoId }], empreintes: [entree], modeleEmpreinte: { id: modele.id, sha256: modele.sha256 } };
                 carnet.inscrire({ serie: serieId, rang, cle: l.cle, graine: o.graine, ...(passe > 1 ? { passe } : {}) });                 // inscrit AVANT l'appel payant : un arrêt brutal ne laisse pas un scan hors carnet
                 // DÈS QUE LA PHOTO EST DÉPOSÉE, la garde s'écrit par ce qu'elle AUTORISE : un SEUL chemin continue la série — « 200 avec `analyse.photoRecue === true` ». Toute autre issue (statut non 200, 429, corps vide, pas d'`analyse`, photoRecue absent ou faux,
                 // exception, délai, redirection) ARRÊTE la série : on ne peut pas savoir si le serveur est retombé sur l'adresse factice de l'annonce, donc chez Vinted. Jamais de nouvel essai.
@@ -443,7 +458,7 @@ async function serie(o, deps = {}) {
                     premierMs = horloge() - debut;                                                                                // le PREMIER VERDICT : le dépôt de la photo + la première réponse de /api/identifier
                     suite = await suiteProbable({ l, rang, serieId, etiquette: etiquetteCle, carteB64, issue, premierMs });      // jamais d'exception : un refus du serveur est rendu dans `suite.arretReseau`
                 }
-                if (ct) suiteCT = await suiteCompteTest({ l, rang, serieId, etiquette: etiquetteCle, issue, att: CT.TABLEAU[rang - 1] });   // jamais d'exception : une issue incertaine est rendue dans `arretReseau`
+                if (ct) suiteCT = await suiteCompteTest({ l, rang, serieId, etiquette: etiquetteCle, carteB64, issue, att: CT.TABLEAU[rang - 1] });   // jamais d'exception : une issue incertaine est rendue dans `arretReseau`
             } catch (e) {
                 if (e instanceof Arret) { arret = e.raison; break; }
                 erreurs.push({ cle: l.cle, code: (e && (e.code || e.name)) || 'erreur' });
@@ -537,7 +552,7 @@ if (require.main === module) {
         // MODE --g-probable : les dossiers des visuels de référence (lecture seule), le relevé des tampons (famille « tamponnee »), les déclarations ; les valeurs par défaut sont celles de extraire-mesures-groupe.js
         const gProbable = process.argv.includes('--g-probable');
         const DOSSIER_ARCHIVES = 'C:/Users/Yung/rat-market-travail/api/';
-        const scans = gProbable ? (arg('scans') ? arg('scans').split(',').filter(Boolean) : [DOSSIER_ARCHIVES + 'index-empreintes-essai/images', DOSSIER_ARCHIVES + 'index-empreintes/images', DOSSIER_ARCHIVES + 'modele-visuel-hors-ligne/cache-archive/img']) : undefined;
+        const scans = gProbable || arg('compte') === 'ordinaire' ? (arg('scans') ? arg('scans').split(',').filter(Boolean) : [DOSSIER_ARCHIVES + 'index-empreintes-essai/images', DOSSIER_ARCHIVES + 'index-empreintes/images', DOSSIER_ARCHIVES + 'modele-visuel-hors-ligne/cache-archive/img']) : undefined;
         const fTampons = gProbable ? (arg('tampons') || DOSSIER_ARCHIVES + 'tampons/controle-tampons-2026-10-18.json') : null;
         const releveTampons = fTampons ? new Set(JSON.parse(fs.readFileSync(fTampons, 'utf8')).lignes.flatMap(l => l.scans.flatMap(s => s.cartes.map(k => k.cle)))) : undefined;
         // --cles=<fichier> : une liste de clés (tableau JSON de chaînes ou d'objets { cle }, ou une clé par ligne, « # » = commentaire), rejouée EXACTEMENT, dans cet ordre ; remplace --n et --graine
