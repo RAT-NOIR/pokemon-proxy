@@ -66,7 +66,13 @@ async function principal(argv, deps = {}) {
         log(`   pages Poképédia présentes : ${lues}/${especes.length}`);
         const decisions = P.candidats.map(c => {
             const fr = M.decomposerFr(c.nomTcgdex);
-            return { ...c, ...M.confirmer(c, pages.get(fr.base) || null) };
+            const d = M.confirmer(c, pages.get(fr.base) || null);
+            // lot des 210 : une carte à propriétaire n'a pas de page d'espèce ; sa propre page (lue par la porte) la confirme ou non
+            if (niveaux.length && d.raison === 'proprietaire-non-verifiable') {
+                const f = path.join(PAGES, `carte-${c.carteId}.txt`);
+                if (fs.existsSync(f)) return { ...c, ...M.confirmerCarte(c, M.lirePageCarte(fs.readFileSync(f, 'utf8'))) };
+            }
+            return { ...c, ...d };
         });
         const nommer = decisions.filter(d => d.decision === 'nommer');
         const restes = decisions.filter(d => d.decision !== 'nommer');

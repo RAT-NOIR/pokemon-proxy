@@ -20,11 +20,13 @@ const M = require('./collecte-cartes/plan-noms-fr-379');
         cartes: [
             { famille: 'data', setId: 'ex13', localId: '80', noms: { en: 'Poochyena', fr: 'Medhyena' }, dex: [], cardmarket: [] },
             { famille: 'data', setId: 'sv9', localId: '1', noms: { en: 'Fletchling', fr: 'Passerouge' }, dex: [], cardmarket: [] },
+            { famille: 'data', setId: 'me02.5', localId: '003', noms: { en: "Erika's Vileplume ex", fr: "Rafflesia-ex d'Erika" }, dex: [], cardmarket: [9999] },
         ] }) };`, 'utf8');
+    fs.writeFileSync(path.join(pages, 'carte-13.txt'), "Rafflesia-ex d'Erika (Méga-Évolution Héros Transcendants 003) — Poképédia\n\nNom anglais\nErika's Vileplume\n\nNumérotation\n003/217\n", 'utf8');
     const base = [`--lecteur-clone=${lecteur}`, `--pages=${pages}`, `--sortie=${sortie}`];
     // 10 : Poochyena, id absent du clone, cle B ; 11 : un autre Fletchling sans ligne (espece) ; 12 : un Dresseur
-    const docs = [{ _id: 10, nomEn: 'Poochyena', categorie: 'pokemon', impressions: [] }, { _id: 11, nomEn: 'Fletchling', categorie: 'pokemon', impressions: [] }, { _id: 12, nomEn: 'Potion', categorie: 'dresseur', impressions: [] }];
-    const lignes = [{ carteId: 10, idProduct: 5001, idExpansion: 1551, numeroFiche: '80' }, { carteId: 12, idProduct: 5002 }];
+    const docs = [{ _id: 10, nomEn: 'Poochyena', categorie: 'pokemon', impressions: [] }, { _id: 11, nomEn: 'Fletchling', categorie: 'pokemon', impressions: [] }, { _id: 12, nomEn: 'Potion', categorie: 'dresseur', impressions: [] }, { _id: 13, nomEn: "Erika's Vileplume ex", categorie: 'pokemon', impressions: [] }];
+    const lignes = [{ carteId: 10, idProduct: 5001, idExpansion: 1551, numeroFiche: '80' }, { carteId: 12, idProduct: 5002 }, { carteId: 13, idProduct: 9999 }];
     const projections = [];
     const ouvrirLecture = async () => ({
         cartes: { collection: nom => ({ find: (_f, o) => { projections.push([nom, Object.keys((o && o.projection) || {}).sort()]); return { toArray: async () => nom === 'cartes' ? docs : lignes }; } }) },
@@ -52,19 +54,20 @@ const M = require('./collecte-cartes/plan-noms-fr-379');
     j = faux();
     egal('M1 mesure avec les deux niveaux : code 0, aucune connexion d\'ecriture', [await principal([...base, '--niveaux=cles,espece'], j.deps), j.ouvertures], [0, 0]);
     const plan = JSON.parse(fs.readFileSync(path.join(sortie, 'PLAN-379.json'), 'utf8'));
-    egal('M2 le plan nomme 10 (cles:B) et 11 (espece), pas le Dresseur', plan.nommer.map(d => [d.carteId, d.nomFr, d.lien]), [[10, 'Medhyena', 'cles:B'], [11, 'Passerouge', 'espece']]);
+    egal('M2 le plan nomme 10 (cles:B), 11 (espece) et 13 (page de carte), pas le Dresseur', plan.nommer.map(d => [d.carteId, d.nomFr, d.lien]), [[10, 'Medhyena', 'cles:B'], [11, 'Passerouge', 'espece'], [13, "Rafflesia-ex d'Erika", 'page-carte']]);
     egal('M3 la lecture projette categorie, impressions et slugSet (sinon les niveaux ne voient rien)',
         [projections.find(p => p[0] === 'cartes')[1].includes('categorie'), projections.find(p => p[0] === 'cartes')[1].includes('impressions'), projections.find(p => p[0] === 'cartes_produits')[1].includes('slugSet')], [true, true, true]);
 
     j = faux();
-    egal('E1 ecriture : code 0', await principal([...base, '--niveaux=cles,espece', '--ecrire', '--attendu=2'], j.deps), 0);
+    egal('E1 ecriture : code 0', await principal([...base, '--niveaux=cles,espece', '--ecrire', '--attendu=3'], j.deps), 0);
     egal('E2 les $set portent nomFrLien', j.ecritures.map(o => o.map(x => [x.updateOne.filter, Object.keys(x.updateOne.update.$set), x.updateOne.update.$set.nomFrLien])),
-        [[[{ _id: 10, nomFr: { $exists: false } }, ['nomFr', 'nomFrSource', 'nomFrLe', 'nomFrLien'], 'cles:B'], [{ _id: 11, nomFr: { $exists: false } }, ['nomFr', 'nomFrSource', 'nomFrLe', 'nomFrLien'], 'espece']]]);
+        [[[{ _id: 10, nomFr: { $exists: false } }, ['nomFr', 'nomFrSource', 'nomFrLe', 'nomFrLien'], 'cles:B'], [{ _id: 11, nomFr: { $exists: false } }, ['nomFr', 'nomFrSource', 'nomFrLe', 'nomFrLien'], 'espece'],
+            [{ _id: 13, nomFr: { $exists: false } }, ['nomFr', 'nomFrSource', 'nomFrLe', 'nomFrLien'], 'page-carte']]]);
     egal('E3 connexion fermee, hors production', [j.fermetures, j.opts], [1, { production: false }]);
     j = faux();
-    egal('E4 compte different : code 3, rien d\'ecrit', [await principal([...base, '--niveaux=cles,espece', '--ecrire', '--attendu=3'], j.deps), j.ouvertures], [3, 0]);
+    egal('E4 compte different : code 3, rien d\'ecrit', [await principal([...base, '--niveaux=cles,espece', '--ecrire', '--attendu=4'], j.deps), j.ouvertures], [3, 0]);
     j = faux();
-    egal('E5 --niveaux=cles seul : le compte attendu suit les niveaux (1), 2 refuse', [await principal([...base, '--niveaux=cles', '--ecrire', '--attendu=2'], j.deps), await principal([...base, '--niveaux=cles', '--ecrire', '--attendu=1'], faux().deps)], [3, 0]);
+    egal('E5 --niveaux=cles seul : le compte attendu suit les niveaux (2 : 10 et 13), 3 refuse', [await principal([...base, '--niveaux=cles', '--ecrire', '--attendu=3'], j.deps), await principal([...base, '--niveaux=cles', '--ecrire', '--attendu=2'], faux().deps)], [3, 0]);
 
     console.log(`${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);

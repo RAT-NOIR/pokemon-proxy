@@ -68,6 +68,32 @@ const liensConflit = [ligne(19, 777, { idExpansion: 9, numeroFiche: '1' })];    
 P = M.planifierCandidats({ cartes: [{ _id: 19, nomEn: 'Fletchling', categorie: 'pokemon', impressions: [] }], liens: liensConflit, clone, niveaux: ['cles'] });
 egal('N15 id et cle designent deux cartes : refus', [P.candidats.length, P.sansNom[0].raison], [0, 'cles-contredisent-l-id']);
 
+// le nom d'une carte TCGdex qui contredit l'ESPECE (faute de saisie chez la source, comme « Gradhyena ex » face a « Grahyèna ») : l'espece l'emporte
+const cloneFaute = { sets: clone.sets, cartes: [...clone.cartes, T('sv9', '20', 'Mightyena', 'Grahyèna'), T('sv9', '21', 'Mightyena', 'Grahyena'), T('ex13', '101', 'Mightyena ex', 'Gradhyena ex', { cardmarket: [888] })] };
+P = M.planifierCandidats({ cartes: [{ _id: 20, nomEn: 'Mightyena ex', categorie: 'pokemon', impressions: [] }], liens: [ligne(20, 888)], clone: cloneFaute, niveaux: ['espece'] });
+egal('N19 faute de saisie TCGdex : le nom de l\'espece (Grahyèna ex), l\'ecart est garde', [P.candidats[0].nomTcgdex, P.candidats[0].lien, P.candidats[0].ecartLien], ['Grahyèna ex', 'espece', 'Gradhyena ex']);
+P = M.planifierCandidats({ cartes: [{ _id: 20, nomEn: 'Mightyena ex', categorie: 'pokemon', impressions: [] }], liens: [ligne(20, 888)], clone: cloneFaute });
+egal('N20 sans le niveau espece : le nom de la carte TCGdex, comme avant', [P.candidats[0].nomTcgdex, P.candidats[0].lien], ['Gradhyena ex', undefined]);
+
+// meme espece, forme plus accentuee ailleurs (Medhyena / Medhyèna) : la forme accentuee, que la page officielle porte
+const cloneAccent = { sets: clone.sets, cartes: [...clone.cartes, T('sv9', '30', 'Poochyena', 'Medhyèna')] };
+P = M.planifierCandidats({ cartes: [{ _id: 21, nomEn: 'Poochyena', categorie: 'pokemon', impressions: [] }], liens: [ligne(21, 777)], clone: cloneAccent, niveaux: ['espece'] });
+egal('N21 forme accentuee de l\'espece, lien conserve', [P.candidats[0].nomTcgdex, P.candidats[0].temoin, P.candidats[0].lien], ['Medhyèna', 'nom-en', undefined]);
+
+// cartes a proprietaire : la page de CARTE (titre = nom TCGdex, nom anglais = le notre sans le suffixe, numero = celui de la carte TCGdex liee)
+const texteCarte = (titre, anglais, num) => `${titre} — Poképédia\n\nAller au contenu\n\nNom japonais\nエリカ\n\nNom anglais\n${anglais}\n\nExtension\nX\n\nNumérotation\n${num}\n`;
+const pc = M.lirePageCarte(texteCarte("Rafflesia-ex d'Erika (Méga-Évolution Héros Transcendants 003)", "Erika's Vileplume", '003/217'));
+egal('P1 lirePageCarte', pc, { titre: "Rafflesia-ex d'Erika (Méga-Évolution Héros Transcendants 003)", anglais: "Erika's Vileplume", numero: '003/217' });
+const candP = { carteId: 30, nomEn: "Erika's Vileplume ex", nomTcgdex: "Rafflesia-ex d'Erika", temoin: 'nom-en', refsTcgdex: ['data|me02.5|003'] };
+let rc = M.confirmerCarte(candP, pc);
+egal('P2 confirmee : nom officiel de la page, lien ecrit', [rc.decision, rc.nomFr, rc.paire, rc.lien], ['nommer', "Rafflesia-ex d'Erika", 'tcgdex+pokepedia', 'page-carte']);
+egal('P3 le nom anglais de la page differe : refus', M.confirmerCarte(candP, { ...pc, anglais: "Erika's Gloom" }).raison, 'sources-contradictoires');
+egal('P4 le numero de la page differe de celui de la carte TCGdex : refus', M.confirmerCarte(candP, { ...pc, numero: '004/217' }).raison, 'sources-contradictoires');
+egal('P5 le titre differe du nom TCGdex : refus', M.confirmerCarte({ ...candP, nomTcgdex: "Rafflesia d'Erika" }, pc).raison, 'sources-contradictoires');
+egal('P6 le suffixe differe (notre nom sans ex) : refus', M.confirmerCarte({ ...candP, nomEn: "Erika's Vileplume" }, pc).raison, 'sources-contradictoires');
+egal('P7 sans page : refus nomme', M.confirmerCarte(candP, null).raison, 'page-carte-absente');
+egal('P8 sans carte TCGdex liee (rien a rapprocher du numero) : refus', M.confirmerCarte({ ...candP, refsTcgdex: [] }, pc).raison, 'sources-contradictoires');
+
 // ecriture : le lien est ecrit, sans nom de source public
 const ops = M.construireOps({ nommer: [{ carteId: 11, nomFr: 'Passerouge', paire: 'tcgdex+pokepedia', lien: 'espece' }, { carteId: 10, nomFr: 'Medhyena', paire: 'tcgdex+pokepedia' }], le: new Date(0) });
 egal('N16 $set avec nomFrLien quand il existe', ops.map(o => Object.keys(o.updateOne.update.$set)), [['nomFr', 'nomFrSource', 'nomFrLe', 'nomFrLien'], ['nomFr', 'nomFrSource', 'nomFrLe']]);

@@ -82,7 +82,7 @@ function confirmer(cand, page) {
         const sep = /-[A-Za-z]+$/.test(String(cand.nomEn).trim()) ? '-' : ' ';
         nomFr = nomFr.replace(SUFFIXE, (_m, s) => sep + s);
     }
-    return { carteId: cand.carteId, decision: 'nommer', nomFr, paire: 'tcgdex+pokepedia', ...(cand.lien ? { lien: cand.lien } : {}), identiqueAnglais: cle(nomFr) === cle(cand.nomEn), temoin: cand.temoin, nomTcgdex: cand.nomTcgdex, titrePage: page.titre, anglaisPage: page.anglais };
+    return { carteId: cand.carteId, decision: 'nommer', nomFr, paire: 'tcgdex+pokepedia', ...(cand.lien ? { lien: cand.lien } : {}), ...(cand.ecartLien ? { ecartLien: cand.ecartLien } : {}), identiqueAnglais: cle(nomFr) === cle(cand.nomEn), temoin: cand.temoin, nomTcgdex: cand.nomTcgdex, titrePage: page.titre, anglaisPage: page.anglais };
 }
 
 // ---------- NIVEAUX du lot des 210 (option `niveaux`, absente = comportement du lot 379) ----------
@@ -95,28 +95,37 @@ const NIVEAUX = ['cles', 'espece'];
 const SUFFIXE_FR = { ex: 'ex', gx: 'GX', vmax: 'VMAX', vstar: 'VSTAR', v: 'V' };
 const refCarte = t => `${t.famille}|${t.setId}|${t.localId}`;
 
-/** nom anglais nu (clé `cle`) -> Map(clé du nom français nu -> sa forme la plus accentuée), sur les cartes TCGdex dont suffixe/Méga/région concordent. */
-function indexEspeces(clone, exclure = new Set()) {
+/** nom anglais nu (clé `cle`) -> [{ ref, forme (nom français nu) }], sur les cartes TCGdex dont suffixe/Méga/région concordent. */
+function indexEspeces(clone) {
     const m = new Map();
     for (const t of clone.cartes) {
-        if (!t.noms || !t.noms.en || !t.noms.fr || exclure.has(refCarte(t))) continue;
+        if (!t.noms || !t.noms.en || !t.noms.fr) continue;
         const e = decomposerEn(t.noms.en), f = decomposerFr(t.noms.fr);
         if (e.proprietaire || f.proprietaire || e.region || f.region || e.suffixe !== f.suffixe || e.mega !== f.mega || !e.base || !f.base) continue;
-        const k = cle(e.base), g = m.get(k) || m.set(k, new Map()).get(k), kf = cle(f.base);
-        if (!g.has(kf) || accents(f.base) > accents(g.get(kf))) g.set(kf, f.base);
+        const k = cle(e.base);
+        (m.get(k) || m.set(k, []).get(k)).push({ ref: refCarte(t), forme: f.base });
     }
     return m;
 }
-/** -> { ok:true, nomTcgdex } | { ok:false, raison, detail? } */
-function nomParEspece(carte, especes) {
+/**
+ * -> { ok:true, nomTcgdex, base } | { ok:false, raison, detail? }. `exclure` : les cartes TCGdex liées à NOTRE carte (elles ne témoignent pas
+ * de l'espèce : une faute de saisie sur la carte liée ne se corrige pas par elle-même). Une seule forme française aux accents près, sinon refus.
+ */
+function nomParEspece(carte, especes, exclure = []) {
     if (!carte.nomEn || !String(carte.nomEn).trim()) return { ok: false, raison: 'nom-en-absent' };
     const e = decomposerEn(carte.nomEn);
     if (e.proprietaire) return { ok: false, raison: 'espece-proprietaire' };
     if (e.region) return { ok: false, raison: 'espece-forme-regionale' };
-    const g = especes.get(cle(e.base));
-    if (!g || !g.size) return { ok: false, raison: 'espece-inconnue' };
+    const g = new Map();
+    for (const x of (especes.get(cle(e.base)) || [])) {
+        if (exclure.includes(x.ref)) continue;
+        const kf = cle(x.forme);
+        if (!g.has(kf) || accents(x.forme) > accents(g.get(kf))) g.set(kf, x.forme);
+    }
+    if (!g.size) return { ok: false, raison: 'espece-inconnue' };
     if (g.size > 1) return { ok: false, raison: 'espece-ambigue', detail: [...g.values()].join(' / ') };
-    return { ok: true, nomTcgdex: (e.mega ? 'Méga-' : '') + [...g.values()][0] + (e.suffixe ? ' ' + SUFFIXE_FR[e.suffixe] : '') };
+    const base = [...g.values()][0];
+    return { ok: true, base, nomTcgdex: (e.mega ? 'Méga-' : '') + base + (e.suffixe ? ' ' + SUFFIXE_FR[e.suffixe] : '') };
 }
 
 /** Les candidats : positives SANS champ nomFr, lien prouvé avec UNE carte TCGdex (ou plusieurs qui donnent le même fr) portant un fr. */
@@ -163,9 +172,56 @@ function planifierCandidats({ cartes, liens, clone, niveaux = [] }) {
         const temoin = [...new Set(valides.map(p => p.temoin))].sort().join('+');
         if (!frs.size) { parEspece('tcgdex-sans-fr', temoin); continue; }
         if (frs.size > 1) { non('tcgdex-contradictoire', [...frs.values()].join(' / ')); continue; }
-        candidats.push({ carteId: c._id, nomEn: c.nomEn ?? null, nomTcgdex: [...frs.values()][0], temoin, ...(lien ? { lien } : {}), refsTcgdex: [...uniques.keys()] });
+        const nomLien = [...frs.values()][0];
+        // la carte TCGdex liée peut porter une faute de saisie (« Gradhyena ex » pour Grahyèna) : si les AUTRES cartes TCGdex de la même espèce
+        // s'accordent sur une autre forme, c'est elle qui est confirmée par la page, et l'écart est gardé
+        if (eligible && especes) {
+            const r = nomParEspece(c, especes, [...uniques.keys()]);
+            if (r.ok && cle(r.base) !== cle(decomposerFr(nomLien).base)) {
+                candidats.push({ carteId: c._id, nomEn: c.nomEn ?? null, nomTcgdex: r.nomTcgdex, temoin: 'espece', lien: 'espece', ecartLien: nomLien, refsTcgdex: [] });
+                continue;
+            }
+            // même espèce, forme plus accentuée chez les autres cartes (la page officielle porte les accents) : on prend la forme accentuée
+            if (r.ok) {
+                const b = decomposerFr(nomLien).base;
+                if (b && accents(r.base) > accents(b) && nomLien.includes(b)) {
+                    candidats.push({ carteId: c._id, nomEn: c.nomEn ?? null, nomTcgdex: nomLien.replace(b, r.base), temoin, ...(lien ? { lien } : {}), refsTcgdex: [...uniques.keys()] });
+                    continue;
+                }
+            }
+        }
+        candidats.push({ carteId: c._id, nomEn: c.nomEn ?? null, nomTcgdex: nomLien, temoin, ...(lien ? { lien } : {}), refsTcgdex: [...uniques.keys()] });
     }
     return { candidats, sansNom, population };
+}
+
+// ---------- cartes à PROPRIÉTAIRE : la page Poképédia de la CARTE (pas de l'espèce) ----------
+/** Page de carte (texte de la porte) -> { titre, anglais, numero } ; null si vide. */
+function lirePageCarte(texte) {
+    const t = String(texte ?? '');
+    if (!t.trim()) return null;
+    const titre = t.split('\n')[0].replace(/\s+—\s+Poképédia\s*$/, '').trim();
+    const a = /^Nom anglais\s+(.+)$/m.exec(t), n = /^Numérotation\s+(\S+)/m.exec(t);
+    return { titre, anglais: a ? a[1].trim() : null, numero: n ? n[1] : null };
+}
+const SUFFIXE_MOT = /(?:\s+|-)(ex|gx|vmax|vstar|v)(?=\s|$)/i;
+const sansZerosNum = s => String(s ?? '').trim().toUpperCase().replace(/^0+(?=\d)/, '');
+/**
+ * Confirme le nom TCGdex d'une carte à propriétaire par SA page : titre (sans la parenthèse d'extension) = nom TCGdex, « Nom anglais » = notre nomEn
+ * (au suffixe près, qui doit être le même des deux côtés), numéro de la page = numéro de la carte TCGdex liée. Tout le reste bloque.
+ */
+function confirmerCarte(cand, page) {
+    const non = (raison, plus = {}) => ({ carteId: cand.carteId, decision: 'sans-nom', raison, ...plus });
+    if (!page || !page.titre) return non('page-carte-absente');
+    const titreNu = page.titre.replace(/\s*\([^)]*\)\s*$/, '').trim();
+    const contra = detail => non('sources-contradictoires', { detail });
+    if (cle(titreNu) !== cle(cand.nomTcgdex)) return contra(`titre « ${titreNu} » / TCGdex « ${cand.nomTcgdex} »`);
+    const sEn = SUFFIXE_MOT.exec(String(cand.nomEn ?? '')), sFr = SUFFIXE_MOT.exec(titreNu);
+    if ((sEn && sEn[1].toLowerCase()) !== (sFr && sFr[1].toLowerCase())) return contra(`suffixe « ${cand.nomEn} » / « ${titreNu} »`);
+    if (!page.anglais || cle(page.anglais) !== cle(String(cand.nomEn ?? '').replace(SUFFIXE_MOT, ''))) return contra(`nom anglais « ${page.anglais} » / « ${cand.nomEn} »`);
+    const locaux = (cand.refsTcgdex || []).map(r => sansZerosNum(String(r).split('|')[2]));
+    if (!locaux.length || !page.numero || !locaux.every(l => l === sansZerosNum(String(page.numero).split('/')[0]))) return contra(`numéro « ${page.numero} » / carte TCGdex ${(cand.refsTcgdex || []).join(', ')}`);
+    return { carteId: cand.carteId, decision: 'nommer', nomFr: titreNu, paire: 'tcgdex+pokepedia', lien: 'page-carte', identiqueAnglais: false, temoin: cand.temoin, nomTcgdex: cand.nomTcgdex, titrePage: page.titre, anglaisPage: page.anglais };
 }
 
 /** Les espèces dont il faut lire la page (uniques, dans l'ordre) : celles que `confirmer` ira consulter. */
@@ -193,4 +249,4 @@ function construireOps({ nommer, le }) {
     });
 }
 
-module.exports = { NIVEAUX, indexEspeces, nomParEspece, decomposerEn, decomposerFr, lirePage, fichierPage, urlPage, confirmer, planifierCandidats, especesAChercher, construireOps };
+module.exports = { lirePageCarte, confirmerCarte, NIVEAUX, indexEspeces, nomParEspece, decomposerEn, decomposerFr, lirePage, fichierPage, urlPage, confirmer, planifierCandidats, especesAChercher, construireOps };
