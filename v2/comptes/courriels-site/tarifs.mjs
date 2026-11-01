@@ -125,13 +125,11 @@ export function economieAnnuelle()                                              
 }
 
 /**
- * La démonstration de verdict de /fr/tarifs (lot C) : des prix FICTIFS, dits tels à l'écran (« Exemple illustratif : prix
- * fictifs »), sur une carte DESSINÉE (aucune vraie carte, aucun prix de catalogue — règle : aucun prix Cardmarket réel en public).
+ * LES TEXTES QUI DÉPENDENT D'UN LANCEMENT (tour 1 de l'étape 2, 2026-10-31) : la page Tarifs ne promet pas ce qui n'est pas lancé.
+ * « au lancement » (le quota du compte gratuit) tombe quand les comptes sont lancés (`COMPTES_LANCES`, lib/promesse.ts) ; la Communauté
+ * n'est nommée que si elle est visible (`COMMUNAUTE_VISIBLE`, lib/communaute.ts : le drapeau qui garde la galerie).
  */
-export const DEMO_VERDICT = { annonce: 18, cote: 27 }         ;
-
-/** Le verdict de la démonstration, par la règle de l'accueil (components/sections/HowItWorks.tsx) : ≤ −10 % bonne affaire, ≤ 10 % correct. */
-export function verdictDeLaDemo()                                                                             {
-  const ecart = Math.round(((DEMO_VERDICT.annonce - DEMO_VERDICT.cote) / DEMO_VERDICT.cote) * 100);
-  return { ecart, libelle: ecart <= -10 ? "Bonne affaire" : ecart <= 10 ? "Prix correct" : "Trop cher" };
-}
+export const libelleCompteGratuit = (comptesLances         )         => (comptesLances ? "avec un compte gratuit" : "avec un compte gratuit, au lancement");
+export const ligneMaCollection = (communaute         )         =>
+  communaute ? "Ma collection, l\u2019Atelier et la Communaut\u00e9, gratuits avec un compte" : "Ma collection et l\u2019Atelier, gratuits avec un compte";
+export const ligneAtelier = (communaute         )         => (communaute ? "Atelier et Communaut\u00e9" : "Atelier");

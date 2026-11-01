@@ -9,8 +9,8 @@ const R = require('../chargeur/copier-regle-site');
 
 const DOSSIER = path.join(__dirname, 'courriels-site');
 const SITE_LIB = R.SITE_LIB, REPO_SITE = R.REPO_SITE;
-// LE COMMIT NOMMÉ du site dont la copie est tirée (main du site au 2026-10-27 : lib/courriels.ts date de c472a82). Le changer est un geste volontaire : relancer l'outil, relire le diff des .mjs.
-const COMMIT = '0ae0736';
+// LE COMMIT NOMMÉ du site dont la copie est tirée (main du site au 2026-11-01 : f17614c ; lib/tarifs.ts a changé depuis 0ae0736, prix inchangés). Le changer est un geste volontaire : relancer l'outil, relire le diff des .mjs.
+const COMMIT = 'f17614c';
 // la fermeture TRANSITIVE des imports de courriels.ts (vérifiée par `fermeture` : tout import relatif hors de cette liste fait lever l'outil)
 const SOURCES = Object.freeze(['courriels.ts', 'courrielsGabarit.ts', 'site.ts', 'extension.ts', 'tarifs.ts', 'montants.ts']);
 const sha = b => crypto.createHash('sha256').update(b).digest('hex');

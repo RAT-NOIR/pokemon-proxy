@@ -1,12 +1,12 @@
 {
-  "commentaire": "sha256 des fichiers SOURCE du site (rat-market-site/lib, lus au commit 0ae0736 par git show) et des fichiers produits ici ; refait par v2/comptes/copier-courriels-site.js",
-  "commit": "0ae0736b25bbc3ad94a1cb2159e072100aef045f",
+  "commentaire": "sha256 des fichiers SOURCE du site (rat-market-site/lib, lus au commit f17614c par git show) et des fichiers produits ici ; refait par v2/comptes/copier-courriels-site.js",
+  "commit": "f17614ce9ac799e000c76fef11ba562b6a1a383c",
   "sources": {
     "courriels.ts": "28bd1eeb2484d17c9015d4abd5c5614200fe0553b44291dec5760929321c4965",
     "courrielsGabarit.ts": "09aa14a8f014e4411bde6585755d02751830a73a8e57eaa8b4ab1648a40f8e76",
     "site.ts": "0a4906afc5a38167c8bd9e8b38d8a7cef29bf8c0becb4c6a8aaa6c70248b6238",
     "extension.ts": "e179a4fac59c798a56b38fd7e40f1462e6c54b75747d052ec7ea63b72358726e",
-    "tarifs.ts": "4ea44c47f04522b0aa85bcbab46198bcab2bb20c54c5b7bf2cc3de7b67d627b0",
+    "tarifs.ts": "746d81eefacb51ca07f07f90527c4ebd119a8077a21d736065b741b26b4c9607",
     "montants.ts": "31766a75b1020db50170dc03a3430f38052354b3b0ae8250cb266fcc7928f8c4"
   },
   "produits": {
@@ -14,7 +14,7 @@
     "courrielsGabarit.mjs": "92810e1d2f2c418e8ad262b889a119037523d5081094684a5aa0260a5ea8f56c",
     "site.mjs": "d2a7688ed48ce35ccd53e38bba192f8f172a4bd44d47ba0c90042759b83dd494",
     "extension.mjs": "9b94a35ee06b4e34b29fbfbe2b654e8ec33d7a3a6d1af995e7a4ada4d96671b4",
-    "tarifs.mjs": "2314615404f08e7717f6b5626b506adc85a160ee9f215d3270d3fa07452d1d00",
+    "tarifs.mjs": "2c00e61815efa3dbcd06f8873f74d02a38ec14f29346893ee481ed250e1ad25e",
     "montants.mjs": "8798b4eada7ad978c184ff6a018840df9866e4e05ee4ddc0e41c0e95f3bbdbee"
   }
 }
