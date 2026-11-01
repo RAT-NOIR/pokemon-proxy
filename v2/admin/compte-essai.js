@@ -6,6 +6,8 @@
 //   node v2/admin/compte-essai.js --base=rm_essai --banc         (NON interactif : le compte « banc-mesure@rat-market.invalid », confirmé, administrateur, marqué `banc: true`, mot de passe GÉNÉRÉ ; les deux identifiants
 //                                                                  V2_ESSAI_BANC_IDENTIFIANT et V2_ESSAI_BANC_MOT_DE_PASSE sont écrits dans le .env de l'agent API — ces deux lignes seulement — et jamais affichés)
 //   node v2/admin/compte-essai.js --base=rm_essai --banc --reprendre   (le compte existe déjà : mot de passe régénéré, sessions d'avant révoquées)
+//   node v2/admin/compte-essai.js --base=rm_essai --banc --ordinaire   (COMPTE-TEST : « banc-ordinaire@rat-market.invalid », confirmé, SANS rôle, marqué banc + bancOrdinaire, mot de passe GÉNÉRÉ ; les deux identifiants
+//                                                                  V2_ESSAI_ORDINAIRE_IDENTIFIANT et V2_ESSAI_ORDINAIRE_MOT_DE_PASSE sont AJOUTÉS au .env — ajout seul, le reste vérifié octet pour octet — et jamais affichés ; --reprendre le régénère)
 // Écrit par ce qu'il AUTORISE : les seuls arguments admis sont ci-dessus ; la seule base admise est rm_essai ; il n'existe AUCUNE option pour la production.
 // Rien d'écrit à la main qui diverge du service : le document vient de nouveauCompte (modeles), le hachage et la politique de mots-de-passe, la clé d'adresse de email-cle,
 // le rôle de poser-role, le code de liaison.creerCode (la fonction de POST /api/compte/code). Aucune URI, aucun hôte, aucun message de pilote, jamais le mot de passe, à l'écran.
@@ -24,25 +26,60 @@ class ErreurSaisie extends Error { constructor(message) { super(message); this.n
 /** Arguments : seuls --base=rm_essai, --reprendre, --code (jamais les deux) et --banc (non interactif, avec ou sans --reprendre). Ne répète jamais un argument refusé. → { ok, reprendre, code, banc } | { ok:false, raison } */
 function lireArgs(argv) {
     if (!Array.isArray(argv)) return { ok: false, raison: 'arguments illisibles' };
-    let base = null, reprendre = false, code = false, banc = false, bases = 0;
+    let base = null, reprendre = false, code = false, banc = false, ordinaire = false, bases = 0;
     for (const a of argv) {
         if (typeof a === 'string' && a.startsWith('--base=')) { bases++; base = a.slice(7); }
         else if (a === '--reprendre') reprendre = true;
         else if (a === '--code') code = true;
         else if (a === '--banc') banc = true;
-        else return { ok: false, raison: 'argument non reconnu (seuls --base=rm_essai, --reprendre, --code et --banc existent)' };
+        else if (a === '--ordinaire') ordinaire = true;
+        else return { ok: false, raison: 'argument non reconnu (seuls --base=rm_essai, --reprendre, --code, --banc et --ordinaire existent)' };
     }
     if (bases !== 1) return { ok: false, raison: `une et une seule base : --base=${BASE_ESSAI}` };
     if (base !== BASE_ESSAI) return { ok: false, raison: `seule la base ${BASE_ESSAI} est admise : cet outil n'a aucune option pour une autre base` };
     if (reprendre && code) return { ok: false, raison: '--reprendre et --code ne se combinent pas' };
     if (banc && code) return { ok: false, raison: '--banc et --code ne se combinent pas (le compte de mesure ne se lie à aucune extension)' };
-    return { ok: true, reprendre, code, banc };
+    if (ordinaire && !banc) return { ok: false, raison: '--ordinaire ne s\'emploie qu\'avec --banc (le compte de test ordinaire est un compte de banc)' };
+    return { ok: true, reprendre, code, banc, ordinaire };
 }
 
 // ── LE COMPTE DE MESURE (25/10) : non interactif, sur l'essai seulement. Il porte `banc: true` (ses scans sont marqués « banc » au journal et exclus des statistiques d'usage) et ses deux identifiants vont DANS le .env, jamais à l'écran.
 const ADRESSE_BANC = 'banc-mesure@rat-market.invalid';                       // domaine réservé (RFC 2606) : aucun courriel ne peut en partir ni y arriver
 const NOM_IDENTIFIANT = 'V2_ESSAI_BANC_IDENTIFIANT', NOM_MOT_DE_PASSE = 'V2_ESSAI_BANC_MOT_DE_PASSE';
 const ENV_REEL = 'C:\\Users\\Yung\\Desktop\\pokemon-proxy-api-v2\\.env';      // l'environnement de l'agent API ; un banc injecte `deps.fichierEnv` (un fichier FACTICE), jamais celui-ci
+
+// ── LE COMPTE DE TEST ORDINAIRE (01/11) : un compte NON administrateur de l'essai, qui garde tous les débits, quotas et plafonds d'un compte gratuit. L'adresse vit dans l'exemption d'installations (une seule définition).
+const { ADRESSE_ORDINAIRE } = require('../installations/exemption-banc');
+const NOM_ORDINAIRE_IDENTIFIANT = 'V2_ESSAI_ORDINAIRE_IDENTIFIANT', NOM_ORDINAIRE_MOT_DE_PASSE = 'V2_ESSAI_ORDINAIRE_MOT_DE_PASSE';
+
+/**
+ * AJOUT SEUL : `apres` est `avant` plus les lignes des `noms`, rien d'autre. Deux formes admises, et seulement elles :
+ *  · les noms étaient absents d'`avant` : `avant` est un PRÉFIXE exact d'`apres` (à une fin de ligne près si `avant` n'en avait pas), et ce qui suit est exactement une ligne par nom, chacun une fois, dans les fins de ligne d'`avant` ;
+ *  · des noms déjà présents sont remplacés en place : retirer les lignes de ces noms des deux textes rend deux textes identiques, et chaque nom figure exactement une fois dans `apres`.
+ * Toute autre entrée (illisible, noms vides) ou tout autre écart : false. Ne lève jamais.
+ */
+function verifierAjoutSeul(avant, apres, noms) {
+    try {
+        if (typeof avant !== 'string' || typeof apres !== 'string' || !Array.isArray(noms) || noms.length === 0 || !noms.every(n => typeof n === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(n))) return false;
+        const nom = l => { const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(l); return m ? m[1] : null; };
+        const finAvant = avant.includes('\r\n') ? '\r\n' : '\n';
+        if (apres.includes('\r\n') !== avant.includes('\r\n') && avant.includes('\n')) return false;
+        const lignesApres = apres.split(/\r?\n/);
+        const compte = n => lignesApres.filter(l => nom(l) === n).length;
+        if (!noms.every(n => compte(n) === 1)) return false;
+        const sansNoms = t => t.split(/\r?\n/).filter(l => !noms.includes(nom(l))).join('\n').replace(/\n+$/, '');
+        const dejaLa = avant.split(/\r?\n/).some(l => noms.includes(nom(l)));
+        if (dejaLa) return sansNoms(avant) === sansNoms(apres) && avant.split(/\r?\n/).filter(l => noms.includes(nom(l))).length >= 1;
+        if (!apres.startsWith(avant)) {
+            if (avant === '' || avant.endsWith('\n')) return false;
+            if (!apres.startsWith(avant + finAvant)) return false;           // un fichier sans fin de ligne en reçoit UNE avant l'ajout
+            const reste = apres.slice(avant.length + finAvant.length).split(/\r?\n/).filter(l => l !== '');
+            return reste.length === noms.length && reste.every(l => noms.includes(nom(l)));
+        }
+        const reste = apres.slice(avant.length).split(/\r?\n/).filter(l => l !== '');
+        return reste.length === noms.length && reste.every(l => noms.includes(nom(l)));
+    } catch { return false; }
+}
 
 /** Un mot de passe tiré au hasard (crypto), 32 caractères URL-sûrs (A-Za-z0-9_-) : conforme à la politique (10 à 200, différent de l'adresse). */
 function genererMotDePasse(octets = require('crypto').randomBytes(24)) { return Buffer.from(octets).toString('base64url'); }
@@ -165,30 +202,48 @@ async function main(argv, deps = {}) {
         if (!pr || pr.ok !== true) return refuser(`la cible n'est pas prouvée — ${(pr && typeof pr.raison === 'string' && pr.raison) || 'je ne sais pas'}. Rien n'a été fait.`);
         ecrire(`Base ${BASE_ESSAI} : non vide, grappe distincte de la production et de cartes, utilisateur limité à l'écriture sur ${BASE_ESSAI} (prouvé côté serveur).`);
 
-        if (a.banc) {                                                          // le compte de MESURE : ni adresse ni mot de passe saisis, aucun code de liaison, rien de secret à l'écran
+        if (a.banc) {                                                          // le compte de MESURE (ou, avec --ordinaire, le compte de TEST ordinaire) : ni adresse ni mot de passe saisis, aucun code de liaison, rien de secret à l'écran
             if (!deps.fichierEnv && process.env.BANC_ISOLE === '1') return refuser('un banc ne réécrit jamais le .env réel : fichier d\'environnement factice exigé. Rien n\'a été fait.');
-            const cleBanc = emailCle(ADRESSE_BANC), maintenantB = deps.maintenant ? deps.maintenant() : new Date();
+            const ord = a.ordinaire === true;
+            const adresse = ord ? ADRESSE_ORDINAIRE : ADRESSE_BANC, nomId = ord ? NOM_ORDINAIRE_IDENTIFIANT : NOM_IDENTIFIANT, nomMdp = ord ? NOM_ORDINAIRE_MOT_DE_PASSE : NOM_MOT_DE_PASSE;
+            const quoi = ord ? 'le compte de test ordinaire' : 'le compte de mesure', option = ord ? '--banc --ordinaire' : '--banc';
+            const cleBanc = emailCle(adresse), maintenantB = deps.maintenant ? deps.maintenant() : new Date();
             const existant = await col('comptes').findOne({ emailCle: cleBanc });
-            if (existant && !a.reprendre) return refuser('le compte de mesure existe déjà. Pour régénérer son mot de passe : --banc --reprendre. Rien n\'a été fait.');
-            if (!existant && a.reprendre) return refuser('le compte de mesure n\'existe pas : lancer --banc sans --reprendre. Rien n\'a été fait.');
+            if (existant && !a.reprendre) return refuser(`${quoi} existe déjà. Pour régénérer son mot de passe : ${option} --reprendre. Rien n'a été fait.`);
+            if (!existant && a.reprendre) return refuser(`${quoi} n'existe pas : lancer ${option} sans --reprendre. Rien n'a été fait.`);
             if (existant && existant.banc !== true) return refuser('ce compte existe mais n\'est pas un compte de mesure (pas de marque banc) : refus, rien n\'a été fait.');
+            if (existant && ord && existant.bancOrdinaire !== true) return refuser('ce compte existe mais n\'est pas le compte de test ordinaire (pas de marque bancOrdinaire) : refus, rien n\'a été fait.');
+            if (existant && ord && existant.role !== undefined && existant.role !== null) return refuser('le compte de test ordinaire porte un rôle : il ne se reprend jamais administrateur. Refus, rien n\'a été fait.');
             const mdp = (deps.genererMotDePasse || genererMotDePasse)();
             const faute = P.politique(mdp, cleBanc) || (typeof mdp === 'string' && !mdp.trim() ? 'espaces-seulement' : null);
             if (faute) return refuser(`mot de passe généré refusé par la politique (${faute}). Rien n'a été fait.`);
             const hache = await P.hacher(mdp);
             if (!existant) {
-                const doc = M.nouveauCompte({ email: ADRESSE_BANC, emailCle: cleBanc, motDePasse: hache, now: maintenantB });
+                const doc = M.nouveauCompte({ email: adresse, emailCle: cleBanc, motDePasse: hache, now: maintenantB });
                 doc.verifie = true; doc.verifieLe = maintenantB; doc.banc = true;
+                if (ord) doc.bancOrdinaire = true;                             // la marque de la liste fermée de l'exemption d'installations (installations/exemption-banc.js) : posée par CET outil, sur l'essai seulement
                 try { await col('comptes').insertOne(doc); }
-                catch (e) { return refuser(e && e.code === 11000 ? 'le compte de mesure existe déjà. Rien n\'a été fait.' : `écriture du compte impossible (${(e && e.name) || 'erreur'}). Rien n'a été fait.`); }
+                catch (e) { return refuser(e && e.code === 11000 ? `${quoi} existe déjà. Rien n'a été fait.` : `écriture du compte impossible (${(e && e.name) || 'erreur'}). Rien n'a été fait.`); }
             } else {
-                await col('comptes').updateOne({ _id: existant._id }, { $set: { motDePasse: hache, verifie: true, banc: true }, $inc: { generation: 1 } });   // comme une réinitialisation : les sessions d'avant tombent
+                await col('comptes').updateOne({ _id: existant._id }, { $set: { motDePasse: hache, verifie: true, banc: true, ...(ord ? { bancOrdinaire: true } : {}) }, $inc: { generation: 1 } });   // comme une réinitialisation : les sessions d'avant tombent
             }
-            const r = await roleAdmin.poserRole(cleBanc, 'administrateur');
-            if (!r.modifie) return refuser('le compte de mesure est écrit mais le rôle n\'a pas pu être posé : relancer avec --banc --reprendre');
-            try { ecrireEnv(deps.fichierEnv || ENV_REEL, { [NOM_IDENTIFIANT]: ADRESSE_BANC, [NOM_MOT_DE_PASSE]: mdp }); }
-            catch (e) { return refuser(`le compte est écrit mais les identifiants n'ont PAS pu être enregistrés dans le fichier d'environnement (${e && e.sure ? e.message : (e && (e.code || e.name)) || 'erreur'}) : relancer avec --banc --reprendre`); }
-            ecrire(`Compte de mesure ${roleAdmin.masquer(ADRESSE_BANC)} ${existant ? 'repris : mot de passe régénéré' : 'créé : confirmé, administrateur, marqué banc'}. Les deux identifiants (${NOM_IDENTIFIANT}, ${NOM_MOT_DE_PASSE}) sont écrits dans le fichier d'environnement ; rien n'est affiché.`);
+            if (!ord) {
+                const r = await roleAdmin.poserRole(cleBanc, 'administrateur');
+                if (!r.modifie) return refuser('le compte de mesure est écrit mais le rôle n\'a pas pu être posé : relancer avec --banc --reprendre');
+            }                                                                  // le compte ordinaire n'a AUCUN rôle : poserRole n'est jamais appelée
+            const fichierEnv = deps.fichierEnv || ENV_REEL, ecrireLe = deps.ecrireEnv || ecrireEnv;
+            let avant = null; try { avant = require('fs').readFileSync(fichierEnv, 'utf8'); } catch { /* ecrireEnv refuse un fichier absent avec sa propre cause */ }
+            try { ecrireLe(fichierEnv, { [nomId]: adresse, [nomMdp]: mdp }); }
+            catch (e) { return refuser(`le compte est écrit mais les identifiants n'ont PAS pu être enregistrés dans le fichier d'environnement (${e && e.sure ? e.message : (e && (e.code || e.name)) || 'erreur'}) : relancer avec ${option} --reprendre`); }
+            if (ord) {                                                         // AJOUT SEUL : le reste du .env doit rester octet pour octet identique, vérifié sur le fichier relu ; sinon l'état d'avant est RESTAURÉ
+                let apres = null; try { apres = require('fs').readFileSync(fichierEnv, 'utf8'); } catch { /* illisible : ne conclut pas */ }
+                if (!verifierAjoutSeul(avant, apres, [nomId, nomMdp])) {
+                    let restaure = false;
+                    try { if (typeof avant === 'string') { require('fs').writeFileSync(fichierEnv, avant, { encoding: 'utf8', mode: 0o600 }); restaure = true; } } catch { /* restauration impossible : dite */ }
+                    return refuser(`l'écriture du fichier d'environnement aurait touché une autre ligne que les deux noms (ajout seul exigé) : ${restaure ? 'le fichier d\'avant est restauré' : 'RESTAURATION IMPOSSIBLE, vérifier le fichier'}. Relancer avec ${option} --reprendre.`);
+                }
+            }
+            ecrire(`${ord ? 'Compte de test ordinaire' : 'Compte de mesure'} ${roleAdmin.masquer(adresse)} ${existant ? 'repris : mot de passe régénéré' : ord ? 'créé : confirmé, sans rôle, marqué banc ordinaire' : 'créé : confirmé, administrateur, marqué banc'}. Les deux identifiants (${nomId}, ${nomMdp}) sont écrits dans le fichier d'environnement ; rien n'est affiché.`);
             return 0;
         }
         const brut = String(await saisie.ligne('Adresse du compte : ')).normalize('NFKC').trim();
@@ -247,4 +302,4 @@ if (require.main === module) {
     require('dotenv').config();
     main(process.argv.slice(2)).then(code => process.exit(code)).catch(e => { console.error(`❌ ${(e && e.name) || 'erreur'}`); process.exit(1); });
 }
-module.exports = { main, saisieTerminal, ErreurSaisie, lireArgs, BASE_ESSAI, ecrireEnv, genererMotDePasse, ADRESSE_BANC, NOM_IDENTIFIANT, NOM_MOT_DE_PASSE, prouverCible: PC.prouverCible, jugerHotes: PC.jugerHotes, jugerStatut: PC.jugerStatut };
+module.exports = { main, saisieTerminal, ErreurSaisie, lireArgs, BASE_ESSAI, ecrireEnv, genererMotDePasse, ADRESSE_BANC, NOM_IDENTIFIANT, NOM_MOT_DE_PASSE, ADRESSE_ORDINAIRE, NOM_ORDINAIRE_IDENTIFIANT, NOM_ORDINAIRE_MOT_DE_PASSE, verifierAjoutSeul, prouverCible: PC.prouverCible, jugerHotes: PC.jugerHotes, jugerStatut: PC.jugerStatut };
