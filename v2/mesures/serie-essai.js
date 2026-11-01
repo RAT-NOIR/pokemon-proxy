@@ -464,6 +464,7 @@ async function serie(o, deps = {}) {
          * I2 : un sûr sur une ligne SANS vérité ne peut pas être jugé faux, donc n'éteint rien ; il est COMPTÉ, écrit au carnet et listé en rouge au rapport de série.
          */
         const jugerSurs = async (l, rang, serieId, issue, observations) => {
+            if (eteindre === null) return;                                                             // sans --eteindre-si-sur-faux, le client est celui d'avant, octet pour octet (ni carnet, ni journal, ni clé de résultat)
             const surs = observations.filter(x => x && x.sur === true);
             if (surs.length && !Number.isInteger(l.verite) && !sursNonJuges.some(x => x.cle === l.cle)) {
                 const nj = { rang, cle: l.cle, produit: surs[0].produit, scanId: typeof issue.scanId === 'string' ? issue.scanId : null };
@@ -574,7 +575,7 @@ async function serie(o, deps = {}) {
             log(`rapport probable : sûrs ${T_.surJuste} justes / ${T_.surFaux} FAUX · probables ${T_.probableJuste} justes / ${T_.probableFaux} FAUX · questions ${T_.questionDansCandidats} (vérité dans les candidats) / ${T_.questionHorsCandidats} (hors) · introuvables ${T_.introuvable} · sans vérité ${T_.sansVerite} · réponse directe juste ${T_.reponseDirecteJuste} %`);
             log(`premier verdict : n ${rapportProbable.premierVerdict.n}, p50 ${rapportProbable.premierVerdict.p50} ms, p95 ${rapportProbable.premierVerdict.p95} ms ; total : p50 ${rapportProbable.dureeTotale.p50} ms, p95 ${rapportProbable.dureeTotale.p95} ms`);
         }
-        return { arret, resultats, durees, stats, comparaison, erreurs, capacites, jetonEmpreinteAnnonce: capacites.includes('empreinte'), depenseUsd: carnet.total(), serie: serieId, lignes: lignes.map(l => l.cle), ...(gp ? { fautif: fautifLigne, alerte, rapportProbable } : {}), ...(extinction ? { extinction } : {}), sursNonJuges, ...(ct ? { compteTest: true, ecart: ecartLigne, ligneNonJugee } : {}) };
+        return { arret, resultats, durees, stats, comparaison, erreurs, capacites, jetonEmpreinteAnnonce: capacites.includes('empreinte'), depenseUsd: carnet.total(), serie: serieId, lignes: lignes.map(l => l.cle), ...(gp ? { fautif: fautifLigne, alerte, rapportProbable } : {}), ...(extinction ? { extinction } : {}), ...(eteindre !== null ? { sursNonJuges } : {}), ...(ct ? { compteTest: true, ecart: ecartLigne, ligneNonJugee } : {}) };
     };
 
     const r1 = await jouer(1, ping.corps.versionMinExtension);
