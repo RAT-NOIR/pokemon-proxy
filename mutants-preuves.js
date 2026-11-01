@@ -100,6 +100,38 @@ const GROUPES = [
         ['trous : date non exigée', "if (!le) throw new Error(`trou ${t.idProduct} : date valide exigée`);", ""],
         ['trous : produit qui reçoit un visuel gardé', "(recus.has(t.idProduct) ? ecartes.push(", "(false ? ecartes.push("]
     ] },
+    // ➕ HD-ZH : chaque condition de « remplacement-meme-dessin » retirée doit faire échouer son banc
+    { module: 'collecte-cartes/preuves.js', bancs: ['test-preuves-remplacement.js'], mutants: [
+        ['même dessin : liste des langues élargie (en)', "Object.freeze(['zh-hans', 'zh-hant', 'ja', 'ko', 'th'])", "Object.freeze(['zh-hans', 'zh-hant', 'ja', 'ko', 'th', 'en'])"],
+        ['même dessin : langue latine acceptée', "else if (!LANGUES_NON_LATINES.includes(langueProduit)) motifs.push('langue-latine');", ""],
+        ['même dessin : langue du tirage inconnue acceptée', "if (langueProduit == null) motifs.push('langue-du-tirage-inconnue');   // (a) tirage", "if (false) motifs.push('langue-du-tirage-inconnue');   // (a) tirage"],
+        ['même dessin : preuve absente acceptée', "if (memeDessinManquants(m).length) motifs.push('preuve-absente');", "if (false) motifs.push('preuve-absente');"],
+        ['même dessin : score sous le seuil accepté', "else if (!(m.score >= m.seuil)) motifs.push('score-sous-le-seuil');", ""],
+        ['même dessin : seuil hors (0, 1] accepté', "if (!(nombre(m.seuil) && m.seuil > 0 && m.seuil <= 1)) manque.push('seuil');", ""],
+        ['même dessin : vide non exigé', "if (!(nombre(m.vide) && m.vide > 0)) manque.push('vide');", ""],
+        ['même dessin : forme du manifeste non vérifiée', "const manque = memeDessinManquants(e.memeDessin);", "const manque = [];"],
+        ['même dessin : langue lue non comparée', "if (langueProduit != null && lu.langue !== langueProduit) motifs.push('langue-differente');", ""],
+        ['même dessin : numéro lu absent accepté', "if (n === '') motifs.push('numero-lu-absent');", "if (false) motifs.push('numero-lu-absent');"],
+        ['même dessin : numéro lu non comparé', "else if (np == null || J.cleNumero(n) !== J.cleNumero(np)) motifs.push('numero-different');", ""],
+        ['même dessin : moyen de lecture non exigé', "if (!MOYENS_DE_LECTURE.includes(lu.moyen)) motifs.push('moyen-de-lecture-absent');", ""],
+        ['même dessin : entrée servie non exigée', "if (nommees.length !== 1) motifs.push('aucune-entree-servie');", "if (false) motifs.push('aucune-entree-servie');"],
+        ['même dessin : entrée comparée d\'un autre set acceptée', "i.set === produit.slugSet && J.cleNumero(i.numero)", "J.cleNumero(i.numero)"],
+        ['même dessin : entrée comparée d\'un autre numéro acceptée', "&& J.cleNumero(i.numero) === J.cleNumero(np) && i.langue === langueProduit)", "&& i.langue === langueProduit)"],
+        ['même dessin : entrée comparée d\'une autre langue acceptée', "J.cleNumero(i.numero) === J.cleNumero(np) && i.langue === langueProduit) : [];", "J.cleNumero(i.numero) === J.cleNumero(np)) : [];"],
+        ['même dessin : largeur illisible acceptée', "else if (!nombre(largeur) || largeur <= 0) motifs.push('largeur-illisible');", "else if (false) motifs.push('largeur-illisible');"],
+        ['même dessin : la décision de remplacement n\'est pas appelée (toujours désignée)', "if (!designees.includes(nommees[0])) {", "if (false) {"],
+        ['même dessin : remplacement ambigu accepté', "} else if (designees.length !== 1) motifs.push('remplacement-ambigu');", "}"],
+        ['même dessin : documents des entrées ignorés', "const documents = produit.documentsServis instanceof Map ? produit.documentsServis : new Map();", "const documents = new Map([[null, null]]); void produit.documentsServis;"],
+        ['même dessin : tampon non comparé', "else if (norm(lu.tampon) !== norm(ta.valeur)) motifs.push('tampon-different');   // (g) tampon", "// (g) tampon"],
+        ['même dessin : contradictions ignorées', "if (!Array.isArray(entree.contradictions) || entree.contradictions.length > 0) motifs.push('contradictions');   // (h) contradictions", "// (h) contradictions"],
+        ['même dessin : clé de l\'entrée comparée écrite dans la preuve', "memeDessin: { score: e.memeDessin.score,", "memeDessin: { cleR2: e.memeDessin.cleR2, score: e.memeDessin.score,"],
+        ['même dessin : preuve neutre = celle des deux sources', "e.regle === REGLE_MEME_DESSIN ? `même dessin que l'image servie", "false ? `même dessin que l'image servie"],
+        ['même dessin : moyen de lecture non écrit', "{ lu: { ...lu, moyen: e.lu.moyen }, memeDessin: { score:", "{ memeDessin: { score:"]
+    ] },
+    { module: 'collecteur-images-preuves.js', bancs: ['test-preuves-remplacement.js'], mutants: [
+        ['même dessin : entrées servies de la carte non fournies', "produit.imagesServies = s?.images ?? [];", "produit.imagesServies = [];"],
+        ['même dessin : documents des entrées servies non fournis', "produit.documentsServis = s?.documents ?? new Map();", "produit.documentsServis = new Map();"]
+    ] },
     { module: 'collecte-cartes/recolte-commun.js', bancs: BANC, mutants: [
         ['source par unité : la langue de la source au lieu de celle de l\'unité', "if (!parUnite) return LANGUE; if (typeof l", "if (true) return LANGUE; if (typeof l"],
         ['source par unité : tirage attendu ignoré', "(set.tirage ?? set.region) !== p.u.tirageAttendu);", "false);"],

@@ -22,6 +22,7 @@ const RC = require('./collecte-cartes/recolte-commun');
 const CLI = require('./collecte-cartes/recolte-cli');
 const CO = require('./collecte-cartes/comblement');
 const PV = require('./collecte-cartes/preuves');
+const BD = require('./collecte-cartes/basse-definition');
 
 const DOSSIER_PHASE4 = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\couverture\\S8\\PHASE4';
 const DOSSIER = path.join(DOSSIER_PHASE4, 'PRV');
@@ -92,6 +93,17 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
         const numerosDe = new Map((ids.length ? await lire.numeros(ids) : []).map(n => [n.idProduct, n]));
         const slugs = [...new Set([...lignesDe.values()].flat().map(l => l.slugSet).filter(Boolean))];
         const setsDe = new Map((slugs.length ? await lire.sets(slugs) : []).map(s => [s._id, s]));
+        // ➕ HD-ZH : la règle de remplacement lit ce que la carte SERT déjà (cartes.images) et les documents de ces entrées (lecture seule, par le lecteur du plan) — jamais ce que le manifeste en dit
+        const servies = new Map();
+        const carteIdsRemplacement = [...new Set(r.appariees.filter(a => a.entree.regle === PV.REGLE_MEME_DESSIN).flatMap(a => (lignesDe.get(a.entree.idProduct) ?? []).map(l => l.carteId)).filter(c => c != null))];
+        if (carteIdsRemplacement.length) {
+            const docsLus = await lecteur.images(carteIdsRemplacement);
+            for (const c of await lecteur.cartes(carteIdsRemplacement)) {
+                // (de préférence le document « ok », comme RC.decider)
+                const docs = docsLus.filter(d => d.carteId === c._id);
+                servies.set(c._id, { images: Array.isArray(c.images) ? c.images : [], documents: BD.documentsDeLaListe([...docs.filter(d => d.etat !== 'ok'), ...docs.filter(d => d.etat === 'ok')]) });
+            }
+        }
         const acceptees = [], produits = new Map();
         for (const a of r.appariees) {
             const e = a.entree, id = e.idProduct, non = (motif, detail) => refus.push({ famille, idProduct: id, motif, ...(detail ? { detail } : {}) });
@@ -106,6 +118,7 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
             if (!set) { non('set-absent', L.slugSet); continue; }
             if ((set.tirage ?? set.region) !== E.langue) { non('tirage-du-set-different', `set ${set.tirage ?? set.region}, état ${E.langue}`); continue; }
             const produit = { idProduct: id, idExpansion: E.idExpansion ?? L.idExpansion ?? null, tirage: E.langue, tamponnee: E.tamponnee ?? null, numero: L.numeroFiche ?? numerosDe.get(id)?.numero ?? null, carteId: L.carteId, slugSet: L.slugSet, slug: L.slug ?? numerosDe.get(id)?.slug ?? null, nomEn: E.name ?? null, nomFr: numerosDe.get(id)?.nomFr ?? null };
+            if (e.regle === PV.REGLE_MEME_DESSIN) { const s = servies.get(L.carteId); produit.imagesServies = s?.images ?? []; produit.documentsServis = s?.documents ?? new Map(); }
             // tour 4 (2) : pour une position (Battle Academy, Trainer Kit), la règle a besoin de TOUS les produits de ces sets et des impressions de la carte (lecture seule)
             if (PV.setAdmisPourPosition(L.slugSet)) {
                 produit.candidatsPosition = await positionsConnues();

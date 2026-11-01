@@ -1,0 +1,219 @@
+// Banc de la règle « remplacement-meme-dessin » de collecte-cartes/preuves.js (HD-ZH, 2026-11-01) : une preuve SANS NOM, réservée à un tirage à écriture non latine, qui REMPLACE une entrée déjà servie.
+// AUCUNE base réelle, AUCUN réseau. Chaque condition de la règle doit pouvoir faire dire NON : un cas par condition (et mutants-preuves.js retire chaque garde).
+'use strict';
+const assert = require('assert');
+const os = require('os');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const sharp = require('sharp');
+const PV = require('./collecte-cartes/preuves');
+const RC = require('./collecte-cartes/recolte-commun');
+const HOTE = require('./collecte-cartes/recolte-hote');
+const CLI = require('./collecte-cartes/recolte-cli');
+const BD = require('./collecte-cartes/basse-definition');
+
+let ok = 0, ko = 0;
+const test = async (nom, f) => { try { await f(); ok++; } catch (e) { ko++; console.log(`ECHEC ${nom}\n   ${(e.stack || e.message).split('\n').slice(0, 10).join('\n   ')}`); } };
+const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'prv-zh-'));
+const sha = b => crypto.createHash('sha256').update(b).digest('hex');
+const png = (w, h = Math.round(w * 1.4)) => sharp({ create: { width: w, height: h, channels: 3, background: { r: 40, g: 120, b: 200 } } }).png().toBuffer();
+
+const SLUG = 'Scarlet-Violet-Simplified-Chinese-Promos', R = 'remplacement-meme-dessin';
+const CLE_ANCIENNE = 'ancienne/Scarlet-Violet-Simplified-Chinese-Promos/419--917920-zh-hans.webp';
+const H1 = 'a'.repeat(64);
+const servie = (o = {}) => ({ set: SLUG, source: 'ancienne', cleR2: CLE_ANCIENNE, numero: '419', langue: 'zh-hans', w: 300, wOriginal: 300, basseDefinition: true, ...o });
+const docDe = e => ({ source: e.source, set: e.set, cleR2: e.cleR2, etat: 'ok' });
+const produit = (o = {}) => {
+    const images = o.imagesServies ?? [servie()];
+    return { idProduct: 917920, idExpansion: 6000, tirage: 'zh-hans', tamponnee: null, numero: '419', carteId: -917920, slugSet: SLUG, slug: null, nomEn: 'Luminous Energy', nomFr: null,
+        imagesServies: images, documentsServis: new Map(images.map(e => [`${e.source}|${e.set}|${e.cleR2}`, docDe(e)])), ...o };
+};
+const entree = (o = {}) => ({ idProduct: 917920, regle: R, url: 'https://img.alpha.test/z/419.png', hote: 'img.alpha.test', fichier: 'C:\\x\\z.bin', sha256: H1,
+    lu: { nom: null, numero: '419', total: 'SV-P', langue: 'zh-hans', tampon: null, moyen: 'ocr', marques: ['SV-P'] }, attendu: { numero: '419' },
+    memeDessin: { cleR2: CLE_ANCIENNE, score: 0.998, seuil: 0.875, vide: 0.198 }, contradictions: [], luLe: '2026-11-01T00:00:00.000Z', ...o });
+const lu = o => ({ ...entree().lu, ...o });
+const md = o => ({ ...entree().memeDessin, ...o });
+const evaluer = async (e, p = produit(), largeur = 868) => PV.evaluerEntree({ entree: e, produit: p, octets: { a: await png(largeur) } });
+const non = async (e, p, motif, largeur) => { const r = await evaluer(e, p, largeur); assert.strictEqual(r.ok, false, 'ACCEPTÉE à tort'); assert.strictEqual(r.motif, `${R}:${motif}`, `motifs : ${(r.motifs || []).join(',')}`); return r; };
+
+(async () => {
+    await test('la règle existe : REGLES la nomme ; les validations du coordinateur la reconnaissent (même shape)', () => {
+        assert.ok(PV.REGLES.includes(R));
+        assert.strictEqual(PV.lireValidations([{ idProduct: 917920, sha256: H1, regle: R, valideLe: '2026-11-01T10:00:00Z', par: 'coordinateur', planche: 'A-prouvees-SV-P-01.jpg' }]).length, 1);
+        assert.throws(() => PV.lireValidations([{ idProduct: 917920, sha256: H1, regle: R, valideLe: '2026-11-01T10:00:00Z', par: 'agent', planche: 'p.jpg' }]), /coordinateur/);
+    });
+    await test('liste FERMÉE des langues non latines : zh-hans, zh-hant, ja, ko, th — rien d\'autre', () => {
+        assert.deepStrictEqual([...PV.LANGUES_NON_LATINES].sort(), ['ja', 'ko', 'th', 'zh-hans', 'zh-hant']);
+        assert.ok(Object.isFrozen(PV.LANGUES_NON_LATINES));
+    });
+    await test('OUI : tirage zh-hans, entrée servie en basse définition, même dessin prouvé, numéro et langue lus, résolution supérieure', async () => {
+        const r = await evaluer(entree());
+        assert.deepStrictEqual([r.ok, r.regle], [true, R]);
+    });
+    await test('OUI : les autres langues de la liste (ja, zh-hant, th) passent avec leur tirage', async () => {
+        for (const [tirage, langue] of [['jp', 'ja'], ['zh-hant', 'zh-hant'], ['th', 'th']]) {
+            const p = produit({ tirage, imagesServies: [servie({ langue })] });
+            assert.strictEqual((await evaluer(entree({ lu: lu({ langue }) }), p)).ok, true, tirage);
+        }
+    });
+    await test('OUI : une entrée à 350 px NON marquée est remplacée dès ×1,5 (525), pas avant (524)', async () => {
+        const p = () => produit({ imagesServies: [servie({ basseDefinition: undefined, w: 350, wOriginal: 350 })] });
+        assert.strictEqual((await evaluer(entree(), p(), 525)).ok, true);
+        await non(entree(), p(), 'resolution-insuffisante', 524);
+    });
+
+    // ───────── les NON, un par condition ─────────
+    await test('NON (a) : langue latine — tirage intl (en), français (2361), indonésien (id)', async () => {
+        await non(entree({ lu: lu({ langue: 'en' }) }), produit({ tirage: 'intl', imagesServies: [servie({ langue: 'en' })] }), 'langue-latine');
+        await non(entree({ lu: lu({ langue: 'fr' }) }), produit({ tirage: 'intl', idExpansion: 2361, imagesServies: [servie({ langue: 'fr' })] }), 'langue-latine');
+        await non(entree({ lu: lu({ langue: 'id' }) }), produit({ tirage: 'id', imagesServies: [servie({ langue: 'id' })] }), 'langue-latine');
+    });
+    await test('NON (a) : tirage sans langue (idth, inconnu) = langue du tirage inconnue', async () => {
+        await non(entree(), produit({ tirage: 'idth' }), 'langue-du-tirage-inconnue');
+        await non(entree(), produit({ tirage: undefined }), 'langue-du-tirage-inconnue');
+    });
+    await test('NON (b) : aucune entrée servie (carte sans visuel : elle n\'entre PAS par cette règle)', async () => {
+        await non(entree(), produit({ imagesServies: [] }), 'aucune-entree-servie');
+        await non(entree(), produit({ imagesServies: undefined }), 'aucune-entree-servie');
+    });
+    await test('NON (b) : l\'entrée comparée n\'est pas celle du set, du numéro ou de la langue du produit (ou n\'existe pas)', async () => {
+        await non(entree(), produit({ imagesServies: [servie({ set: 'Autre-Set' })] }), 'aucune-entree-servie');
+        await non(entree(), produit({ imagesServies: [servie({ numero: '420' })] }), 'aucune-entree-servie');
+        await non(entree(), produit({ imagesServies: [servie({ langue: 'ja' })] }), 'aucune-entree-servie');
+        await non(entree(), produit({ imagesServies: [servie({ langue: null })] }), 'aucune-entree-servie');
+        await non(entree({ memeDessin: md({ cleR2: 'ancienne/inconnue.webp' }) }), produit(), 'aucune-entree-servie');
+    });
+    await test('NON (b) : la décision de remplacement est celle de basse-definition.js — deux entrées remplaçables = ambigu ; document introuvable = non autorisé ; variante d\'un seul côté = non autorisé', async () => {
+        const deux = [servie(), servie({ cleR2: 'autre/419.webp', source: 'autre' })];
+        await non(entree(), produit({ imagesServies: deux }), 'remplacement-ambigu');
+        const sansDoc = produit(); sansDoc.documentsServis = new Map();
+        await non(entree(), sansDoc, 'remplacement-non-autorise');
+        await non(entree(), produit({ imagesServies: [servie({ noteVariante: 'Master Ball' })] }), 'remplacement-non-autorise');
+    });
+    await test('NON (b) : une entrée correcte au-dessus du seuil n\'est jamais remplacée par une équivalente (500 -> 868 = 1,7 ×, mais 600 -> 868 = 1,45 ×)', async () => {
+        assert.strictEqual((await evaluer(entree(), produit({ imagesServies: [servie({ basseDefinition: undefined, w: 500, wOriginal: 500 })] }))).ok, true);
+        await non(entree(), produit({ imagesServies: [servie({ basseDefinition: undefined, w: 600, wOriginal: 600 })] }), 'resolution-insuffisante');
+    });
+    await test('NON (c) : score sous le seuil (0,874 < 0,875) ; score = seuil admis', async () => {
+        await non(entree({ memeDessin: md({ score: 0.874 }) }), produit(), 'score-sous-le-seuil');
+        assert.strictEqual((await evaluer(entree({ memeDessin: md({ score: 0.875 }) }))).ok, true);
+    });
+    await test('NON (c) : champ de preuve absent ou mal formé — memeDessin, cleR2, score, seuil, vide', async () => {
+        await non(entree({ memeDessin: undefined }), produit(), 'preuve-absente');
+        await non(entree({ memeDessin: null }), produit(), 'preuve-absente');
+        for (const k of ['cleR2', 'score', 'seuil', 'vide']) await non(entree({ memeDessin: md({ [k]: undefined }) }), produit(), 'preuve-absente');
+        for (const [k, v] of [['score', '0.99'], ['score', NaN], ['seuil', 0], ['seuil', 1.5], ['vide', 0], ['vide', -0.1], ['cleR2', ' ']]) await non(entree({ memeDessin: md({ [k]: v }) }), produit(), 'preuve-absente');
+    });
+    await test('NON (c) : la forme du manifeste refuse aussi (entree-mal-formee) une entrée de cette règle sans preuve de même dessin', () => {
+        assert.strictEqual(PV.formeEntree(entree()), null);
+        assert.match(PV.formeEntree(entree({ memeDessin: undefined })) ?? 'ACCEPTÉE', /memeDessin/);
+        assert.match(PV.formeEntree(entree({ memeDessin: md({ score: undefined }) })) ?? 'ACCEPTÉE', /memeDessin/);
+        assert.match(PV.formeEntree(entree({ memeDessin: md({ vide: 0 }) })) ?? 'ACCEPTÉE', /memeDessin/);
+    });
+    await test('NON (d) : numéro lu différent ; numéro lu absent ; moyen de lecture absent ou hors liste', async () => {
+        await non(entree({ lu: lu({ numero: '420' }) }), produit(), 'numero-different');
+        await non(entree({ lu: lu({ numero: '39' }) }), produit({ numero: '397', imagesServies: [servie({ numero: '397' })] }), 'numero-different');
+        await non(entree({ lu: lu({ numero: '' }) }), produit(), 'numero-lu-absent');
+        await non(entree({ lu: lu({ numero: null }) }), produit(), 'numero-lu-absent');
+        await non(entree({ lu: lu({ moyen: undefined }) }), produit(), 'moyen-de-lecture-absent');
+        await non(entree({ lu: lu({ moyen: 'devine' }) }), produit(), 'moyen-de-lecture-absent');
+        assert.strictEqual((await evaluer(entree({ lu: lu({ moyen: 'oeil' }) }))).ok, true);
+        assert.strictEqual((await evaluer(entree({ lu: lu({ numero: '0419' }) }))).ok, true, 'même clé de jointure');
+    });
+    await test('NON (e) : langue lue différente de celle du tirage (ja lu sur un tirage zh-hans, en, absente)', async () => {
+        await non(entree({ lu: lu({ langue: 'ja' }) }), produit(), 'langue-differente');
+        await non(entree({ lu: lu({ langue: 'en' }) }), produit(), 'langue-differente');
+        await non(entree({ lu: lu({ langue: null }) }), produit(), 'langue-differente');
+    });
+    await test('NON (f) : résolution insuffisante — candidate sous le seuil (340, marquée), ou pas assez plus grande', async () => {
+        await non(entree(), produit(), 'resolution-insuffisante', 340);
+        await non(entree(), produit(), 'resolution-insuffisante', 200);
+        assert.strictEqual((await evaluer(entree(), produit(), 350)).ok, true, '350 px remplace une basse définition (règle de basse-definition.js)');
+    });
+    await test('NON (f) : octets absents ou illisibles = largeur illisible', async () => {
+        assert.strictEqual((await PV.evaluerEntree({ entree: entree(), produit: produit(), octets: {} })).motif, `${R}:largeur-illisible`);
+        assert.strictEqual((await PV.evaluerEntree({ entree: entree(), produit: produit(), octets: { a: Buffer.from('pas une image') } })).motif, `${R}:largeur-illisible`);
+    });
+    await test('NON : tampon lu sur un produit sans tampon, contradictions, marques vides ou qui nomment une source', async () => {
+        await non(entree({ lu: lu({ tampon: 'pps' }) }), produit(), 'tampon-different');
+        await non(entree({ contradictions: ['une boutique dit 420'] }), produit(), 'contradictions');
+        await non(entree({ lu: lu({ marques: [] }) }), produit(), 'marques-vides');
+        await non(entree({ lu: lu({ marques: ['pikaqian'] }) }), produit(), 'marque-nomme-une-source');
+    });
+    await test('les règles existantes ne bougent pas : preuve-lue sur un tirage zh-hans reste refusée pour son nom (nom-langue-non-anglaise)', async () => {
+        const e = entree({ regle: 'preuve-lue' }); delete e.memeDessin;
+        const r = await PV.evaluerEntree({ entree: e, produit: produit(), octets: {} });
+        assert.strictEqual(r.ok, false); assert.match(r.motifs.join(','), /nom-langue-non-anglaise/);
+    });
+    await test('le nom n\'est jamais lu : un lu.nom quelconque ne change rien à la décision', async () => {
+        assert.strictEqual((await evaluer(entree({ lu: lu({ nom: 'n\'importe quoi' }) }))).ok, true);
+    });
+
+    // ───────── le plan, sur une FAUSSE base : l'unité, la décision de remplacement et la neutralité ─────────
+    const K = require('./collecteur-images-preuves');
+    const poserAuCache = (dossier, url, octets) => {
+        fs.mkdirSync(dossier, { recursive: true });
+        const f = path.join(dossier, HOTE.nomCache(url)), fb = f.replace(/\.json$/, '.bin');
+        fs.writeFileSync(fb, octets); fs.writeFileSync(f, JSON.stringify({ url, statut: 'ok', status: 200, type: 'image/png', octets: octets.length, sha256: sha(octets), le: '2026-11-01T08:00:00.000Z' }));
+        return fb;
+    };
+    async function monde({ largeur = 868, imagesServies = [servie()], documents = null, nCartes = 1, aucuneImage = false } = {}) {
+        const racine = tmp(), cache = path.join(racine, 'CACHE'), famille = 'ZH-HD-SC';
+        fs.mkdirSync(path.join(racine, famille), { recursive: true }); fs.mkdirSync(path.join(racine, 'VALIDATIONS'), { recursive: true }); fs.mkdirSync(cache, { recursive: true });
+        const entrees = [], validations = [], lignes = [], etat = [], cartes = [], docs = [];
+        for (let i = 0; i < nCartes; i++) {
+            const id = 917920 + i, carteId = -id, numero = String(419 - i), octets = await png(largeur + i);
+            const url = `https://img.alpha.test/z/${numero}.png`, fb = poserAuCache(cache, url, octets);
+            const mes = imagesServies.map(e => ({ ...e, cleR2: e.cleR2.replace('419', numero), numero }));
+            entrees.push(entree({ idProduct: id, url, fichier: fb, sha256: sha(octets), lu: lu({ numero }), attendu: { numero }, memeDessin: md({ cleR2: mes[0].cleR2 }) }));
+            validations.push({ idProduct: id, sha256: sha(octets), regle: R, valideLe: '2026-11-01T10:00:00.000Z', par: 'coordinateur', planche: 'A-prouvees-SV-P-01.jpg' });
+            lignes.push({ idProduct: id, carteId, slugSet: SLUG, numeroFiche: numero, idExpansion: 6000 });
+            etat.push({ idProduct: id, idExpansion: 6000, langue: 'zh-hans', tamponnee: null, name: 'Luminous Energy' });
+            cartes.push({ _id: carteId, images: aucuneImage ? [] : mes });
+            if (!aucuneImage) for (const e of mes) docs.push({ carteId, ...docDe(e) });
+        }
+        fs.writeFileSync(path.join(racine, famille, 'preuves.json'), JSON.stringify({ famille, le: '2026-11-01T00:00:00.000Z', entrees, trous: [] }));
+        fs.writeFileSync(path.join(racine, 'VALIDATIONS', `valide-${famille}.json`), JSON.stringify(validations));
+        const lire = { lignes: async ids => lignes.filter(l => ids.includes(l.idProduct)), fiches: async (cs, ss) => lignes.filter(l => cs.includes(l.carteId) && ss.includes(l.slugSet)),
+            numeros: async () => [], sets: async slugs => [{ _id: SLUG, tirage: 'zh-hans' }].filter(s => slugs.includes(s._id)), positions: async () => [], impressions: async ids => ids.map(i => ({ _id: i, impressions: [] })) };
+        const lesDocs = documents ?? docs;
+        const db = { collection: n => ({ cartes: { find: q => ({ project: () => ({ toArray: async () => cartes.filter(c => q._id.$in.includes(c._id)) }) }) }, images: { find: q => ({ toArray: async () => lesDocs.filter(d => q.carteId.$in.includes(d.carteId)) }), findOne: async () => null } })[n] };
+        return { racine, cache, lire, etat, db, F: CLI.fichiersDe('prv', path.join(racine, 'sortie'), cache) };
+    }
+    const planDe = w => K.construirePlanAvec({ dossier: w.racine, cache: w.cache, lire: w.lire, etat: w.etat, lecteur: RC.lecteurNatif(w.db), fichiers: w.F });
+
+    await test('plan : une entrée de la règle sur une carte à entrée servie en basse définition = « ajouter » qui remplace exactement 1 entrée', async () => {
+        const w = await monde({ nCartes: 3 });
+        const plan = await planDe(w);
+        assert.deepStrictEqual(plan.resume.refus, []);
+        assert.strictEqual(plan.resume.parRegle[R], 3);
+        assert.strictEqual(plan.unites.length, 3);
+        for (const u of plan.unites) { assert.strictEqual(u.decision.action, 'ajouter'); assert.strictEqual(u.decision.remplace.length, 1); assert.strictEqual(u.decision.remplace[0].cleR2.startsWith('ancienne/'), true); }
+        assert.strictEqual(plan.resume.aAjouter, 3); assert.strictEqual(plan.resume.dontRemplacentUneBasseDefinition, 3);
+    });
+    await test('plan : une carte SANS entrée servie n\'entre pas par cette règle (refus nommé, aucune unité)', async () => {
+        const plan = await planDe(await monde({ aucuneImage: true }));
+        assert.strictEqual(plan.unites.length, 0);
+        assert.match(plan.resume.refus.map(r => r.motif).join(','), new RegExp(`${R}:aucune-entree-servie`));
+    });
+    await test('plan : candidate pas assez plus grande = refus resolution-insuffisante, aucune unité', async () => {
+        const plan = await planDe(await monde({ largeur: 340 }));
+        assert.strictEqual(plan.unites.length, 0);
+        assert.match(plan.resume.refus.map(r => r.motif).join(','), new RegExp(`${R}:resolution-insuffisante`));
+    });
+    await test('NEUTRALITÉ : ni l\'unité (clé R2, preuve, mention, champs écrits) ni la source ne portent le nom d\'une source ; la clé R2 est prv/…', async () => {
+        const plan = await planDe(await monde());
+        const u = plan.unites[0];
+        assert.strictEqual(u.cleR2, 'prv/Scarlet-Violet-Simplified-Chinese-Promos/419--917920-zh-hans.webp');
+        const publics = JSON.stringify({ cleR2: u.cleR2, languePreuve: u.languePreuve, preuveNeutre: u.preuveNeutre, champsEntree: u.champsEntree, champsDocument: u.champsDocument, mention: PV.SRC.MENTION, source: PV.SRC.SOURCE, lot: PV.SRC.LOT });
+        assert.ok(!/pokipair|poki|tcgcsv|scrydex|packmagik|pokellector|pokumon|pikaqian|cardtrader|bulbapedia|tcgdex|artofpkm|pokedata|pkmncards|cardmarket|simplifiedcollector|alpha\.test|ancienne/i.test(publics), publics);
+        assert.match(u.preuveNeutre, /même dessin/); assert.doesNotMatch(u.preuveNeutre, /deux sources/);
+        assert.deepStrictEqual(Object.keys(u.champsEntree.preuveLue.memeDessin).sort(), ['score', 'seuil', 'vide']);
+        assert.strictEqual(u.champsEntree.preuveLue.lu.moyen, 'ocr');
+        assert.strictEqual(u.url, 'https://img.alpha.test/z/419.png', 'urlOriginal garde l\'hôte comme pour toute source (traçabilité, retrait)');
+    });
+
+    console.log(`\ntest-preuves-remplacement : ${ok} OK, ${ko} KO`);
+    process.exitCode = ko ? 1 : 0;
+})();
