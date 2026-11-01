@@ -127,12 +127,18 @@ function admissionDuCatalogue({ ligne, set, carte, regle, positions }) {
 //       et nommée sur chaque ligne de la liste), une famille de la table (prize-packs, 30th-celebration, Trick or Trade, image-empruntee), une image que la règle de langue du site admet pour la région du set. WCD et
 //       Battle Academy ont leurs règles ((B), (A)). Sans liste (null) : aucun effet. Dès qu'un VRAI scan du set existe, choisirVisuel le donne avant le repli : (D) ne se déclenche pas, le remplacement est automatique.
 const MENTION_EMPRUNT_TAMPONNEE = MENTION_EDITION_1;
-const FAMILLES_TAMPONNEES = Object.freeze(['prize-packs', '30th-celebration', 'image-empruntee']);
-function admissionTamponneeEmpruntee({ ligne, set, im, refus, regle, liste }) {
+// L'ÉLIGIBILITÉ se lit sur le SET (sa famille, par `familleDuSet`), jamais sur le seul refus : le refus « image-empruntee » est rendu pour n'importe quel set, WCD et Battle Academy compris (relecture I1).
+// Autorisé : un set Prize Pack, un set 30th Celebration, un set Trick or Trade (le bandeau TRICK_OR_TRADE que le set dérive), ou un set d'AUCUNE famille fermée dont l'image est l'emprunt du catalogue ; et un refus
+// de la famille du set ou « image-empruntee » (jamais « staff-prerelease », jamais une autre famille). Le MARQUEUR concret est IMPOSÉ (relecture I2) : sans bandeau (dérivé du set, ou écrit sur la ligne), le produit
+// reste refusé, avec sa raison dédiée { sansBandeau: true }, comptée par l'appelant.
+function admissionTamponneeEmpruntee({ ligne, set, im, refus, regle, liste, ecrits = false }) {
     if (!liste || !im || !liste.has(ligne.idProduct)) return null;
-    const eligible = FAMILLES_TAMPONNEES.includes(refus) || (refus === 'tamponnees-nommees' && /^Trick-or-Trade-\d{4}$/.test(String(set._id)));
-    if (!eligible) return null;
+    const f = familleDuSet(set._id), derive = MQ.marqueursDuSet(set._id);
+    const setAutorise = f === 'prize-packs' || f === '30th-celebration' || (f === 'tamponnees-nommees' && derive.some(x => x.type === 'TRICK_OR_TRADE')) || f === null;
+    const refusAdmis = refus === 'image-empruntee' || (f !== null && refus === f);
+    if (!setAutorise || !refusAdmis || (f === null && refus !== 'image-empruntee')) return null;
     if (!regle.visuelAdmisPourLaRegion(im, set.tirage ?? set.region, editionLocaleDuSet(set.editionLocale))) return null;
+    if (!(ecrits === true || derive.some(x => x.type !== 'WCD' && x.type !== 'NON_LEGAL'))) return { sansBandeau: true };
     return { im, visuel: 'autre-tirage', mention: MENTION_EMPRUNT_TAMPONNEE, nature: 'tamponnee-empruntee' };
 }
 // JUMBO-VISUEL (décision du coordinateur, 27/10) — BASE SET : les 69 fiches Pokémon (n° 1 à 69) de la page « Base Set » portent le scan « Édition 1 » de TCGdex, servi à TOUS les produits de la fiche ; Cardmarket ne dit pas lequel
@@ -206,6 +212,7 @@ function verifierRegle(regle) {
  * @returns {Promise<{ entrees: object[], denominateurs: object, liens: Map<string, Map<string, number[]>> }>} — n'écrit rien nulle part.
  */
 async function decider({ sets, docs, lignes, metacarte, regle, journal = () => { }, cederLaMain = true, sink = null, exclureBasseDefinition = EXCLURE_BASSE_DEFINITION, jumbosVisuel = null, tamponneesEmpruntees = null }) {
+    if (tamponneesEmpruntees !== null && !(tamponneesEmpruntees instanceof Set)) throw new Error('tamponneesEmpruntees : un Set d\'idProduct (entiers) est attendu, ou null');          // relecture M3 : refus explicite avant tout traitement
     // `jumbosVisuel` (JUMBO-VISUEL) : null, ou la Map idProduct → 'emprunt' | 'sans-visuel' du fichier du catalogue (jumbos-visuel.js, jugée ici par la MÊME garde). 'emprunt' : le JUMBO est identique à sa carte, son visuel est
     // EMPRUNTÉ (entrée `autre-tirage` sans mention, bandeau JUMBO). 'sans-visuel' : le scan de la carte normale n'est pas le sien, l'entrée reste (marqueurs, partages, groupe) mais aucun visuel ne sera servi (sink.masque).
     // `sink` { entree(e), lien(setId, cle, idProducts) } : les résultats sortent UN À UN (le chargeur les range en colonnes sans jamais tenir le tableau des entrées ni la Map des liens) ;
@@ -281,6 +288,8 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         emprunts: 0, empruntsParNature: { 'autre-tirage': 0, substitut: 0 },
         // ADMISSION-CATALOGUE : les entrées admises par la règle fermée (à part du repli refusé), et les scans de position retirés d'un autre produit (somme : avecLigne compte aussi positionContredite)
         admisCatalogue: { 'prv-position': 0, 'wcd-emprunt': 0, 'tamponnee-empruntee': 0 }, positionContredite: 0,
+        // (D) : les produits de la liste fermée que le repli refuse ENCORE parce qu'aucun bandeau ne dit ce qu'est le produit (le marqueur concret est imposé) — comptés par ligne, jamais servis
+        tamponneeSansBandeau: 0,
         // MARQUEURS : un emprunt WCD admis par la règle dont le set n'est pas reconnu SUR L'ENTRÉE (lien Cardmarket ou nom « WCD <année> ») : pas d'entrée (la validation d'entrée la refuserait sans mention) — somme : avecLigne le compte aussi
         wcdSansSetReconnu: 0,
         // ARCHIVE-4 — les marqueurs ÉCRITS par le catalogue (cartes_produits.marqueurs + marqueursPreuve), lus par UNE fonction (marqueurs.js::ecritsDeLaLigne) pour TOUTES les lignes, avant tout écartement :
@@ -344,8 +353,9 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         // REPLI-REIMPRESSIONS : APRÈS le choix (la fonction partagée n'est pas touchée), AVANT toute entrée : jamais l'image d'un autre tirage à une réimpression
         let refus = im ? refusDeRepli({ ligne: l, set: s, im, visuel }) : null;
         if (!im || refus) {
-            const a = admissionDuCatalogue({ ligne: l, set: s, carte: c, regle, positions }) || admissionTamponneeEmpruntee({ ligne: l, set: s, im, refus, regle, liste: tamponneesEmpruntees });
-            if (a) { ({ im, visuel, mention } = a); refus = null; contredit = false; admise = a.nature; }
+            const a = admissionDuCatalogue({ ligne: l, set: s, carte: c, regle, positions }) || admissionTamponneeEmpruntee({ ligne: l, set: s, im, refus, regle, liste: tamponneesEmpruntees, ecrits: Boolean(ecritsDe.get(l)?.elements?.length) });
+            if (a && a.sansBandeau) d.tamponneeSansBandeau++;
+            else if (a) { ({ im, visuel, mention } = a); refus = null; contredit = false; admise = a.nature; }
         }
         if (contredit) { d.positionContredite++; continue; }
         if (!im) { d.aucun++; d.aucunDetail['aucun visuel']++; continue; }
@@ -436,4 +446,4 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
     return { entrees, denominateurs: d, liens, ...(sink ? {} : { jumeaux, melanges: [...melanges].sort((a, b) => a - b), emprunts: [...empruntes].sort((a, b) => a - b), masques: [...masques].sort((a, b) => a - b) }) };
 }
 
-module.exports = { baseSetEdition1, BASE_SET, decider, verifierRegle, cleFiche, REGLE_REQUISE, FAMILLES_SANS_REPLI, refusDeRepli, estEmprunt, positionDuSlug, admissionDuCatalogue, EXCLURE_BASSE_DEFINITION, partageIncoherent, varianteAvecPreuve };
+module.exports = { baseSetEdition1, BASE_SET, decider, verifierRegle, cleFiche, REGLE_REQUISE, FAMILLES_SANS_REPLI, refusDeRepli, estEmprunt, positionDuSlug, admissionDuCatalogue, admissionTamponneeEmpruntee, EXCLURE_BASSE_DEFINITION, partageIncoherent, varianteAvecPreuve };
