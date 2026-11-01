@@ -121,8 +121,7 @@ const masquer = e => String(e && e.stack || e).replace(/mongodb(\+srv)?:\/\/\S+/
     const { cartes: cx, fermer } = await ouvrirConnexions({ production: false });
     try {
         const C = cx.db.collection('cartes');
-        const opsA = A.ecrire.map(x => ({ updateOne: { filter: { _id: x.carteId, nomFr: { $exists: false } }, update: { $set: { nomFr: x.nomFr, nomFrSource: 'cardmarket', nomFrLe: le } } } }));
-        const opsB = remplir.map(d => ({ updateOne: { filter: { _id: d.carteId, nomFr: { $type: 'null' }, nomFrSource: 'cardmarket' }, update: { $set: { nomFr: d.nomFr, nomFrSource: d.source, nomFrLe: le } } } }));
+        const { opsA, opsB } = require('./collecte-cartes/plan-noms-fr-fiches').construireOps({ ecrireA: A.ecrire, remplirB: remplir, le });
         let mA = 0, mB = 0;
         for (let i = 0; i < opsA.length; i += 500) mA += (await C.bulkWrite(opsA.slice(i, i + 500), { ordered: false })).modifiedCount;
         for (let i = 0; i < opsB.length; i += 500) mB += (await C.bulkWrite(opsB.slice(i, i + 500), { ordered: false })).modifiedCount;

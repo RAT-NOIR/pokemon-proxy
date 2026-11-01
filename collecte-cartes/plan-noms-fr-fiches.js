@@ -99,4 +99,15 @@ function planifierB({ cartes, liens, frDuProduit, clone }) {
     return { decisions };
 }
 
-module.exports = { planifierA, planifierB, prouverLien, indexClone };
+/**
+ * Les opérations d'écriture, PURES (le banc asserte leurs filtres exacts). Un filtre s'écrit par ce qu'il AUTORISE :
+ *   (A) la carte n'a PAS de champ nomFr ; (B) nomFr est null ET nomFrSource vaut 'cardmarket'.
+ * Une carte qui a bougé depuis la lecture ne correspond plus : elle n'est pas touchée.
+ */
+function construireOps({ ecrireA, remplirB, le }) {
+    const opsA = ecrireA.map(x => ({ updateOne: { filter: { _id: x.carteId, nomFr: { $exists: false } }, update: { $set: { nomFr: x.nomFr, nomFrSource: 'cardmarket', nomFrLe: le } } } }));
+    const opsB = remplirB.map(d => ({ updateOne: { filter: { _id: d.carteId, nomFr: { $type: 'null' }, nomFrSource: 'cardmarket' }, update: { $set: { nomFr: d.nomFr, nomFrSource: d.source, nomFrLe: le } } } }));
+    return { opsA, opsB };
+}
+
+module.exports = { planifierA, planifierB, prouverLien, indexClone, construireOps };

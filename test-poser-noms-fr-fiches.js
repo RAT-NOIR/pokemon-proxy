@@ -151,5 +151,27 @@ const produitsB = [prod(3, 'Double Énergie Incolore'), prod(4, 'Double Colorles
     egal('E2 argument inconnu : refus avant toute connexion (code 2)', r2.status, 2);
 }
 
+// ============ les opérations d'écriture : le filtre EXACT et le $set de chacune (mutants M1, M1b) ============
+{
+    const le = new Date('2026-11-01T00:00:00Z');
+    const { opsA, opsB } = P.construireOps({
+        ecrireA: [{ carteId: -7, nomFr: 'Léo' }, { carteId: -8, nomFr: null }],
+        remplirB: [{ carteId: 11408, nomFr: 'Double Énergie Incolore', source: 'cardmarket+tcgdex' }], le });
+    egal('O1 filtre (A) exact : _id + nomFr absent', opsA[0].updateOne.filter, { _id: -7, nomFr: { $exists: false } });
+    egal('O2 $set (A) exact', opsA[0].updateOne.update, { $set: { nomFr: 'Léo', nomFrSource: 'cardmarket', nomFrLe: le } });
+    egal('O3 (A) conflit : null écrit, même filtre', [opsA[1].updateOne.filter, opsA[1].updateOne.update.$set.nomFr], [{ _id: -8, nomFr: { $exists: false } }, null]);
+    egal('O4 filtre (B) exact : _id + nomFr null + nomFrSource cardmarket', opsB[0].updateOne.filter, { _id: 11408, nomFr: { $type: 'null' }, nomFrSource: 'cardmarket' });
+    egal('O5 $set (B) exact', opsB[0].updateOne.update, { $set: { nomFr: 'Double Énergie Incolore', nomFrSource: 'cardmarket+tcgdex', nomFrLe: le } });
+    egal('O6 une opération par carte, rien d\'autre que updateOne', [opsA.length, opsB.length, [...opsA, ...opsB].every(o => Object.keys(o).join() === 'updateOne')], [2, 1, true]);
+}
+
+// ============ --attendu : les comptes ont bougé -> code 3, SANS connexion d'écriture (lectures seules ; banc long, --reel) ============
+if (process.argv.includes('--reel')) {
+    const r = spawnSync(process.execPath, [path.join(__dirname, 'poser-noms-fr-fiches.js'), '--ecrire', '--attendu=A:0,B:0'], { encoding: 'utf8', env: { ...process.env, LOT_ADDITIF_PID: '1' }, timeout: 600000 });
+    egal('R1 --attendu faux : code 3', r.status, 3);
+    egal('R2 ... message « Rien n\'a été écrit »', /Rien n'a été écrit/.test(r.stderr), true);
+    egal('R3 ... aucune connexion d\'écriture ouverte (pas de ligne « cible » de garde.js)', /cible : "cartes"/.test(r.stdout + r.stderr), false);
+}
+
 console.log(`${ko ? '❌' : '✅'} test-poser-noms-fr-fiches : ${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);
