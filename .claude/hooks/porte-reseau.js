@@ -1,18 +1,23 @@
-// Hook PreToolUse : LA PORTE RÉSEAU UNIQUE (décision du testeur, 2026-11-01 ; corrigé au tour 1 de relecture).
+// Hook PreToolUse : LA PORTE RÉSEAU UNIQUE (décision du testeur, 2026-11-01 ; corrigé aux tours 1 et 2 de relecture).
 // Deux écarts du 01/11 (une page lue avant son robots.txt, une requête vers un hôte fermé) venaient d'outils qui ignorent nos règles. Tout accès réseau d'un agent passe donc par
 //   node collecte-cartes/porte-reseau.js lire <url> --texte --sortie=<fichier>
 // qui refuse un hôte fermé et toute page tant que le robots.txt de l'hôte n'a pas été lu et respecté. Ce hook ferme les autres chemins.
 //
-// FERMÉ PAR DÉFAUT (H6) : le nom de l'outil est comparé sans casse ; seuls PowerShell et Bash (analysés), Write/Edit/NotebookEdit (protection du dossier de la porte et des arrêts) sont
-// examinés ; WebFetch, les outils de navigation (mcp__claude-in-chrome__*, mcp__Claude_Browser__*, mcp__remote-devices__*) et TOUT AUTRE outil reçu sont refusés ; une entrée qui n'est pas
-// un objet à tool_name est refusée. => le matcher de .claude/settings.json ne doit nommer QUE les outils à examiner (WebFetch|PowerShell|Bash|Write|Edit|NotebookEdit|mcp__…) : un outil
-// inoffensif (Read, WebSearch…) qui arriverait ici serait refusé.
-// SHELL : voir les listes ci-dessous ; un script (node, python, .ps1) qui porte une primitive réseau ne passe QUE s'il est SUIVI par git DANS CE DÉPÔT et IDENTIQUE à HEAD
-// (git diff --quiet HEAD) — « suivi » seul ne prouve rien (un script suivi modifié, un fichier seulement ajouté à l'index). Il n'y a PLUS de dérogation « requiert la porte ».
+// FERMÉ PAR DÉFAUT (H6) : le nom de l'outil est comparé sans casse ; seuls PowerShell et Bash (analysés), Write/Edit/NotebookEdit (protection du dossier de la porte, des arrêts
+// ARRET/LEVEE/PAUSE-HOTE et, dans la COPIE PRINCIPALE, du hook et des deux modules de la porte) sont examinés ; WebFetch, les outils de navigation (mcp__claude-in-chrome__*,
+// mcp__Claude_Browser__*, mcp__remote-devices__*) et TOUT AUTRE outil reçu sont refusés ; une entrée qui n'est pas un objet à tool_name est refusée. => le matcher de .claude/settings.json ne
+// doit nommer QUE les outils à examiner (WebFetch|PowerShell|Bash|Write|Edit|NotebookEdit|mcp__…) : un outil inoffensif (Read, WebSearch…) qui arriverait ici serait refusé.
+// SHELL : un script (node, python, .ps1) qui porte une primitive réseau ne passe QUE s'il est SUIVI par git dans CE dépôt OU un de ses worktrees (même git-common-dir) et IDENTIQUE au
+// HEAD de ce worktree (git diff --quiet HEAD) — « suivi » seul ne prouve rien. Il n'y a PLUS de dérogation « requiert la porte ».
+//   · `cd`/`Set-Location`/`pushd` en TÊTE d'instruction, avec un seul argument littéral qui est un dossier existant : le dossier courant est mis à jour pour la suite de la commande. Toute
+//     autre forme (variable, `cd -`, Pop-Location, cd dans un bloc { }, if, cmd /c) rend le dossier INCERTAIN : un script relatif qui porte une primitive est alors refusé.
+//   · les chaînes littérales qui sont des ARGUMENTS (après -m, here-strings, entre guillemets hors position de commande) ne sont pas cherchées comme des outils ; une chaîne en position de
+//     COMMANDE (& 'curl.exe', ."wget") ou donnée à -Command / -c / /c reste lue.
 // Code 2 = refus : le message part sur stderr et revient à l'agent. Toute panne, toute entrée illisible REFUSE (une garde qui ne peut pas conclure bloque et le dit).
 //
 // LIMITE ÉCRITE (16) : ce hook est une liste de motifs pour le shell ; il arrête les erreurs d'un agent de bonne foi (le cas réel : WebFetch, curl), pas un agent qui cherche à le contourner
-// (un binaire renommé, un langage non listé, un script suivi qui en appelle un autre — pas suivi transitivement). WebFetch, lui, est refusé sans exception.
+// (un binaire renommé, un langage non listé, un script suivi qui en appelle un autre — pas suivi transitivement ; un worktree d'agent dont le script a été commité). WebFetch, lui, est refusé
+// sans exception. Faux refus connus et acceptés : `rg curl`, `Select-String "curl"` (utiliser l'outil Grep).
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
@@ -24,26 +29,33 @@ const PORTE_JS = path.join(DEPOT, 'collecte-cartes', 'porte-reseau.js').toLowerC
 
 const mot = nom => new RegExp(`(^|[^\\w.-])${nom}(\\.exe)?(?![\\w-])`, 'i');
 const OUTILS = [
-    ...['curl', 'wget', 'iwr', 'irm', 'iex', 'bitsadmin', 'ssh', 'scp', 'sftp', 'nc', 'ncat', 'telnet', 'ftp', 'tftp', 'npx', 'deno', 'bun', 'ruby', 'perl', 'php', 'wsl'].map(n => ({ re: mot(n), nom: n })),
+    ...['curl', 'wget', 'iwr', 'irm', 'iex', 'bitsadmin', 'ssh', 'scp', 'sftp', 'nc', 'ncat', 'telnet', 'ftp', 'tftp', 'npx', 'deno', 'bun', 'ruby', 'perl', 'php', 'wsl',
+        'winget', 'choco', 'scoop', 'nslookup', 'ping'].map(n => ({ re: mot(n), nom: n })),
     { re: /\bInvoke-WebRequest\b/i, nom: 'Invoke-WebRequest' },
     { re: /\bInvoke-RestMethod\b/i, nom: 'Invoke-RestMethod' },
     { re: /\bInvoke-Expression\b/i, nom: 'Invoke-Expression' },
     { re: /\bStart-BitsTransfer\b/i, nom: 'Start-BitsTransfer' },
     { re: /\bcertutil(\.exe)?\b[\s\S]*-urlcache/i, nom: 'certutil -urlcache' },
     { re: /\bTest-NetConnection\b/i, nom: 'Test-NetConnection' },
+    { re: /\bResolve-DnsName\b/i, nom: 'Resolve-DnsName' },
     { re: /Net\.WebClient|Net\.Http|WebRequest\]::|TcpClient|UdpClient|System\.Net\.Sockets|XMLHTTP|Msxml2|WinHttp/i, nom: 'classe réseau .NET/COM' },
     { re: /\b(npm\s+exec|pnpm\s+dlx|yarn\s+dlx)\b/i, nom: 'exécution de paquet distant' },
     { re: /\b(powershell|pwsh)(\.exe)?\b[^\n]*\s-e(c|nc?\w*)?(\s|:|$)/i, nom: 'powershell -EncodedCommand' },
+    { re: /(^|[^\w.-])pip3?(\.exe)?\s+(install|download)\b/i, nom: 'pip install/download' },
+    { re: /(^|[^\w.-])docker(\.exe)?\s+(pull|run|build|compose)\b/i, nom: 'docker pull/run/build' },
+    { re: mot('gh'), nom: 'gh', sauf: /(^|[^\w.-])gh(\.exe)?\s+--version\s*$/i },
 ];
 const PRIMITIVES = [
     { re: /\bfetch\s*\(/, nom: 'fetch(' },
+    { re: /=\s*fetch\b(?!\s*\()/, nom: 'alias de fetch' },
+    { re: /\b(?:globalThis|global|self|window)\s*(?:\.\s*fetch\b|\[\s*['"`]fetch['"`]\s*\])/, nom: 'globalThis.fetch' },
     { re: /(?:require\s*\(\s*|from\s+|import\s*\(?\s*)['"`](?:node:)?(?:https?|http2|net|tls|dgram|child_process|undici|node-fetch|axios|got|puppeteer(?:-core)?|playwright(?:-core)?|ws)['"`]/, nom: 'module réseau ou child_process' },
     { re: /\b(?:net|tls)\.(?:connect|createConnection)\b/, nom: 'net/tls.connect' },
     { re: /\bWebSocket\b/, nom: 'WebSocket' },
     { re: /\bXMLHttpRequest\b/, nom: 'XMLHttpRequest' },
     { re: /\bimport\s*\(/, nom: 'import() dynamique' },
 ];
-const PY_RESEAU = /\bimport\b[^\n]*\b(?:requests|urllib3?|httpx|aiohttp|socket|http\.client|ftplib|smtplib|telnetlib)\b|^\s*from\s+(?:requests|urllib3?|httpx|aiohttp|socket|http\.client|ftplib|smtplib|telnetlib)\b/m;
+const PY_RESEAU = /\bimport\b[^\n]*\b(?:requests|urllib3?|httpx|aiohttp|socket|http\.client|ftplib|smtplib|telnetlib|subprocess)\b|^\s*from\s+(?:requests|urllib3?|httpx|aiohttp|socket|http(?:\.client)?|ftplib|smtplib|telnetlib|subprocess)\b|\bos\.(?:system|popen)\b|__import__\s*\(/m;
 const PY_MODULES_REFUSES = /^(http|urllib|socket|ftplib|smtplib|telnetlib|requests|pip|ensurepip|xmlrpc)/i;
 const NODE_VALEURS = new Set(['-r', '--require', '--import', '--loader', '--experimental-loader', '--env-file', '--conditions', '-c', '--stack-size', '--max-old-space-size']);
 const NODE_EVAL = /^(-e|-p|-pe|--eval|--print|--input-type)/;
@@ -53,14 +65,30 @@ const GIT_HOTES_PERMIS = new Set(['github.com', 'www.github.com']);
 const MODIFIE = /(^|[^\w-])(remove-item|del|erase|rm|rmdir|rd|set-content|add-content|clear-content|out-file|copy-item|cp|copy|move-item|mv|move|rename-item|ren|new-item|ni|tee|tee-object|sc|ac|ri|mi|ci|cpi)(?![\w-])|>/i;
 const ECRIT_SCRIPT = /(?:>>?|(?:^|[^\w-])(?:set-content|add-content|out-file|new-item|copy-item|move-item|rename-item|tee|tee-object|sc|ac|ni|cp|mv|copy|move)(?![\w-]))[^\n;|&]{0,160}?\.(?:c?m?js|py|ps1)\b/i;
 const LANCE_SCRIPT = /(^|[^\w.-])(node|python3?|py|powershell|pwsh)(\.exe)?(?![\w-])|\.ps1\b/i;
-const CHANGE_DOSSIER = /(^|[;&|\r\n]\s*)(cd|chdir|sl|set-location|push-location|pushd)(?![\w-])/i;
+const CD_TETE = /^\s*(?:cd|chdir|sl|set-location|pushd|push-location)(?![\w-])\s*(.*?)\s*$/i;
+const CD_PARTOUT = /(^|[^\w-])(cd|chdir|sl|set-location|pushd|push-location|popd|pop-location)(?![\w-])/i;
+const OUVRE_ADRESSE = /(^|[^\w.-])(start-process|invoke-item|saps|ii)(?![\w-])[^\n]*https?:\/\//i;
+const POSITION_COMMANDE = /(^|[;|&\r\n{(]|\.)\s*$/;
+const ARGUMENT_DE_SHELL = /(^|\s)(-c|-command|\/c|\/k|-lc)\s*$/i;
 
 const DEFAUT_PORTE = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\porte-reseau';
 const DEFAUT_ARRETS = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\arrets-hotes';
+const DEFAUT_PRINCIPALE = 'C:\\Users\\Yung\\Desktop\\pokemon-proxy';
 const dossierPorte = () => (process.env.PORTE_RESEAU_DOSSIER || DEFAUT_PORTE);
 const dossierArrets = () => (process.env.ARRETS_HOTES_DOSSIER || DEFAUT_ARRETS);
+const copiePrincipale = () => (process.env.COPIE_PRINCIPALE || DEFAUT_PRINCIPALE);
 const bas = p => path.resolve(p).toLowerCase();
 const sous = (a, d) => { const x = bas(d); return a === x || a.startsWith(x.endsWith(path.sep) ? x : x + path.sep); };
+/** M1 : le chemin RÉEL natif du parent existant le plus proche (développe les noms courts 8.3 et les jonctions), le reste du chemin recollé. */
+function reel(abs) {
+    let reste = '', cur = path.resolve(abs);
+    for (;;) {
+        try { return path.join(fs.realpathSync.native(cur), reste); } catch { /* inexistant : on remonte */ }
+        const parent = path.dirname(cur);
+        if (parent === cur) return path.resolve(abs);
+        reste = path.join(path.basename(cur), reste); cur = parent;
+    }
+}
 
 /** git, résolu comme au CLAUDE.md §3 (jamais un numéro de version en dur). */
 let gitMemo = null;
@@ -73,11 +101,13 @@ function cheminGit() {
     return (gitMemo = 'git');
 }
 const git = (args, cwd) => execFileSync(cheminGit(), args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 15000, windowsHide: true });
-/** D2 : suivi par git DANS CE DÉPÔT ET identique à HEAD (ni modifié, ni seulement ajouté à l'index). Un échec, quel qu'il soit, vaut « non ». */
+let communDepot = null;
+const dirCommun = dir => bas(fs.realpathSync.native(path.resolve(dir, git(['rev-parse', '--git-common-dir'], dir).trim())));
+/** D2/C3 : suivi par git dans CE dépôt ou un de ses worktrees (même git-common-dir) ET identique au HEAD de ce worktree (ni modifié, ni seulement ajouté à l'index). Un échec vaut « non ». */
 function identiqueAHead(fichier) {
     try {
         const dir = path.dirname(fichier);
-        if (bas(git(['rev-parse', '--show-toplevel'], dir).trim()) !== bas(DEPOT)) return false;
+        if (dirCommun(dir) !== (communDepot ||= dirCommun(DEPOT))) return false;
         git(['ls-files', '--error-unmatch', '--', fichier], dir);
         git(['diff', '--quiet', 'HEAD', '--', fichier], dir);
         return true;
@@ -93,6 +123,14 @@ function lireScript(fichier) {
         if (st.size > MAX_SCRIPT) return { trop: true, texte: '' };
         return { texte: fs.readFileSync(fichier, 'utf8') };
     } catch { return null; }
+}
+/** I1 : retire les chaînes qui sont des ARGUMENTS ; garde celles en position de commande et celles données à -Command / -c / /c. */
+function sansChaines(cmd) {
+    const s = cmd.replace(/@'[\s\S]*?'@/g, '""').replace(/@"[\s\S]*?"@/g, '""');
+    return s.replace(/"(?:[^"`]|`[\s\S])*"|'(?:[^']|'')*'/g, (m, idx) => {
+        const avant = s.slice(0, idx);
+        return POSITION_COMMANDE.test(avant) || ARGUMENT_DE_SHELL.test(avant) ? m : '""';
+    });
 }
 
 function verdictGit(ins) {
@@ -135,13 +173,13 @@ function verdictScriptNode(ins, ctx) {
     }
     if (script === null) return 'node sans script lisible (stdin ?)';
     if (nonResolu(script) || !/\.[cm]?js$/i.test(script)) return `script node « ${script} » non résolu (variable, sans extension .js) : refusé`;
-    if (ctx.changeDossier && !path.isAbsolute(script)) return `script node « ${script} » relatif après un changement de dossier dans la commande : chemin incertain`;
     const abs = path.resolve(ctx.cwd, script), s = lireScript(abs);
     if (!s) return `script node « ${script} » introuvable : non résolu, refusé`;
     if (abs.toLowerCase() === PORTE_JS) ctx.estPorte = true;
     const prim = s.trop ? ['fichier trop gros pour être lu'] : PRIMITIVES.filter(m => m.re.test(s.texte)).map(m => m.nom);
     if (!prim.length) return null;
-    return identiqueAHead(abs) ? null : `script node « ${script} » avec accès réseau (${prim.join(', ')}) qui n'est pas suivi par git dans ce dépôt ET identique à HEAD`;
+    if (ctx.incertain && !path.isAbsolute(script)) return `script node « ${script} » avec accès réseau (${prim.join(', ')}) lu depuis un dossier incertain (cd non résolu) : refusé`;
+    return identiqueAHead(abs) ? null : `script node « ${script} » avec accès réseau (${prim.join(', ')}) qui n'est pas suivi par git dans ce dépôt (ou un de ses worktrees) ET identique à HEAD`;
 }
 function verdictScriptPython(ins, ctx) {
     const t = jetons(ins);
@@ -157,7 +195,7 @@ function verdictScriptPython(ins, ctx) {
         if (nonResolu(o) || !/\.py$/i.test(o)) return `script python « ${o} » non résolu : refusé`;
         const s = lireScript(path.resolve(ctx.cwd, o));
         if (!s) return `script python « ${o} » introuvable : non résolu, refusé`;
-        return s.trop || PY_RESEAU.test(s.texte) ? `script python « ${o} » à accès réseau (requests, urllib, httpx, aiohttp, socket, http.client…)` : null;
+        return s.trop || PY_RESEAU.test(s.texte) ? `script python « ${o} » à accès réseau (requests, urllib, httpx, aiohttp, socket, http.client, subprocess…)` : null;
     }
     return 'python sans script lisible (stdin ?)';
 }
@@ -176,42 +214,65 @@ function verdictScriptPs1(ins, ctx) {
     if (!s) return `script PowerShell « ${cible} » introuvable : non résolu, refusé`;
     const prim = s.trop ? ['fichier trop gros'] : OUTILS.filter(m => m.re.test(s.texte)).map(m => m.nom);
     if (!prim.length) return null;
-    return identiqueAHead(abs) ? null : `script PowerShell « ${cible} » avec accès réseau (${prim.join(', ')}) qui n'est pas suivi par git dans ce dépôt ET identique à HEAD`;
+    return identiqueAHead(abs) ? null : `script PowerShell « ${cible} » avec accès réseau (${prim.join(', ')}) qui n'est pas suivi par git dans ce dépôt (ou un de ses worktrees) ET identique à HEAD`;
 }
 
-/** D4 : une écriture vers le dossier de la porte (robots\, cadence\, journal) ou vers un ARRET/LEVEE/PAUSE-HOTE est refusée. */
+/** D4/C1/I3 : refus d'écrire vers le dossier de la porte (robots\, cadence\, journal), un ARRET/LEVEE/PAUSE-HOTE, ou — copie principale seulement — le hook et les deux modules de la porte. */
 function cibleProtegee(abs) {
-    const porte = dossierPorte(), arrets = dossierArrets();
-    if (/^(arret|levee|pause)-hote-.*\.json$/i.test(path.basename(abs))) return 'fichier ARRET-HOTE / LEVEE-HOTE / PAUSE-HOTE (fermer passe par porte-reseau.js fermer)';
-    if (sous(abs, path.join(porte, 'robots')) || sous(abs, path.join(porte, 'cadence')) || abs === bas(path.join(porte, 'journal.jsonl'))) return 'dossier de la porte (robots\\, cadence\\, journal.jsonl)';
-    if (sous(abs, arrets)) return 'dossier des arrêts';
+    const porte = path.resolve(dossierPorte()), porteR = reel(porte), princ = path.resolve(copiePrincipale()), princR = reel(princ);
+    for (const a of [bas(abs), bas(reel(abs))]) {
+        if (/^(arret|levee|pause)-hote-.*\.json$/i.test(path.basename(a))) return 'fichier ARRET-HOTE / LEVEE-HOTE / PAUSE-HOTE (fermer et lever passent par porte-reseau.js)';
+        for (const p of [porte, porteR]) if (sous(a, path.join(p, 'robots')) || sous(a, path.join(p, 'cadence')) || a === bas(path.join(p, 'journal.jsonl'))) return 'dossier de la porte (robots\\, cadence\\, journal.jsonl)';
+        for (const p of [princ, princR]) {
+            if (sous(a, path.join(p, '.claude', 'hooks')) || a === bas(path.join(p, 'collecte-cartes', 'porte-reseau.js')) || a === bas(path.join(p, 'collecte-cartes', 'reponse-hote.js'))) return 'hook ou module de la porte dans la copie principale (ils changent par une branche et une fusion)';
+        }
+    }
     return null;
 }
 function mentionneProtege(cmd) {
     const t = cmd.toLowerCase().replace(/\//g, '\\');
-    const porte = bas(dossierPorte()), arrets = bas(dossierArrets());
-    return /(arret|levee|pause)-hote-/.test(t) || t.includes(arrets) || t.includes(path.join(porte, 'robots')) || t.includes(path.join(porte, 'cadence')) || t.includes(path.join(porte, 'journal.jsonl'))
-        || /porte-reseau\\(robots|cadence|journal\.jsonl)/.test(t) || /arrets-hotes/.test(t);
+    const porte = bas(dossierPorte());
+    return /(arret|levee|pause)-hote-/.test(t) || t.includes(path.join(porte, 'robots')) || t.includes(path.join(porte, 'cadence')) || t.includes(path.join(porte, 'journal.jsonl'))
+        || /porte-reseau\\(robots|cadence|journal\.jsonl)/.test(t);
 }
 
 function verdictShell(cmd, cwd) {
     const raisons = [];
-    if (mentionneProtege(cmd) && MODIFIE.test(cmd)) raisons.push('modification du dossier de la porte ou des arrêts (ARRET/LEVEE/PAUSE-HOTE, robots\\, cadence\\, journal)');
+    if (mentionneProtege(cmd) && MODIFIE.test(cmd)) raisons.push('modification du dossier de la porte ou d\'un ARRET/LEVEE/PAUSE-HOTE (robots\\, cadence\\, journal ; lever passe par porte-reseau.js lever)');
     // H1/H3 : l'opérateur d'appel & sur une cible non résolue ; seule la forme $g du CLAUDE.md §3 (définie dans la même commande, une seule fois) est admise
     if (/&\s*\(/.test(cmd)) raisons.push('opérateur & sur une expression (cible non résolue)');
     const gOk = G_DEFINITION.test(cmd) && (cmd.match(/\$g\s*=/gi) || []).length === 1;
     for (const m of cmd.matchAll(/&\s*["']?\$(\w+)/g)) if (!(m[1].toLowerCase() === 'g' && gOk)) raisons.push(`& $${m[1]} : cible non résolue (seul $g défini comme au CLAUDE.md §3 est admis)`);
-    const ctx = { cwd, changeDossier: CHANGE_DOSSIER.test(cmd), estPorte: false };
+    const ctx = { cwd, incertain: false, estPorte: false };
     const hors = [];
+    // boucle A : sur le texte ORIGINAL (cd, git, scripts, ouverture d'adresse)
     for (const ins of cmd.split(/[;|&\r\n]+/)) {
         if (!ins.trim()) continue;
+        const cd = CD_TETE.exec(ins);
+        if (cd) {
+            const jt = jetons(cd[1].replace(/^-(?:path|literalpath)(?::|\s+)/i, ''));
+            if (jt.length === 1 && !nonResolu(jt[0])) {
+                const cible = path.resolve(ctx.cwd, jt[0]);
+                let dossier = false; try { dossier = fs.statSync(cible).isDirectory(); } catch { /* inexistant */ }
+                if (dossier) ctx.cwd = cible; else ctx.incertain = true;
+            } else ctx.incertain = true;
+            continue;
+        }
+        if (CD_PARTOUT.test(ins)) ctx.incertain = true;
         if (/^\s*(&\s*)?(["'][^"']*git(\.exe)?["']|\$g\b|git(\.exe)?(?![\w-]))/i.test(ins)) { const g = verdictGit(ins); if (g) raisons.push(g); continue; }
         hors.push(ins);
+        if (OUVRE_ADRESSE.test(ins)) raisons.push('Start-Process / Invoke-Item / saps / ii avec une adresse http(s)');
+        if (/(^|[^\w.-])(start-process|saps)(?![\w-])/i.test(ins)) { const t = OUTILS.filter(m => m.re.test(ins) && !(m.sauf && m.sauf.test(ins))).map(m => m.nom); if (t.length) raisons.push(`Start-Process vers un outil réseau (${t.join(', ')})`); }
         const n = verdictScriptNode(ins, ctx); if (n) raisons.push(n);
         const p = verdictScriptPython(ins, ctx); if (p) raisons.push(p);
         const s = verdictScriptPs1(ins, ctx); if (s) raisons.push(s);
-        if (ctx.estPorte && /^\s*(node|"?[^"\s]*node(\.exe)?"?)\b/i.test(ins)) { ctx.estPorte = false; continue; }      // la porte elle-même : l'adresse qu'on lui donne n'est pas un outil
-        const touches = OUTILS.filter(m => m.re.test(ins)).map(m => m.nom);
+    }
+    // boucle B : outils réseau, cherchés sur le texte SANS les chaînes-arguments (I1)
+    for (const ins of sansChaines(cmd).split(/[;|&\r\n]+/)) {
+        if (!ins.trim()) continue;
+        if (/^\s*(&\s*)?(["'][^"']*git(\.exe)?["']|\$g\b|git(\.exe)?(?![\w-]))/i.test(ins)) continue;
+        if (/(^|[^\w.-])node(\.exe)?\s[^\n]*porte-reseau\.js(\s|$)/i.test(ins) && ctx.estPorte) continue;        // la porte elle-même : l'adresse qu'on lui donne n'est pas un outil
+        const touches = OUTILS.filter(m => m.re.test(ins) && !(m.sauf && m.sauf.test(ins))).map(m => m.nom);
         if (touches.length) raisons.push(`outil réseau (${touches.join(', ')})`);
     }
     const reste = hors.join(' ; ');
@@ -231,7 +292,7 @@ function verdict(entree) {
     if (nom === 'write' || nom === 'edit' || nom === 'notebookedit') {
         const f = entreeOutil.file_path ?? entreeOutil.notebook_path ?? entreeOutil.path;
         if (typeof f !== 'string' || !f) return { refus: `${e.tool_name} sans chemin lisible : refusé par prudence` };
-        const c = cibleProtegee(bas(path.resolve(cwd, f)));
+        const c = cibleProtegee(path.resolve(cwd, f));
         return { refus: c ? `écriture refusée (${c}) : ${f}` : null };
     }
     if (nom !== 'powershell' && nom !== 'bash') return { refus: `outil « ${e.tool_name} » non prévu par la porte : fermé par défaut` };

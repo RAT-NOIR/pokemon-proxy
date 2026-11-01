@@ -9,7 +9,9 @@ const HOOK = path.join(__dirname, '.claude', 'hooks', 'porte-reseau.js');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'hook-porte-'));
 const PORTE = path.join(TMP, 'porte'), ARRETS = path.join(TMP, 'arrets');
 fs.mkdirSync(PORTE); fs.mkdirSync(ARRETS);
-const ENV = { ...process.env, PORTE_RESEAU_DOSSIER: PORTE, ARRETS_HOTES_DOSSIER: ARRETS };
+const PRINCIPALE = path.join(TMP, 'principale');     // I3 : la « copie principale » du banc (variable COPIE_PRINCIPALE)
+const ENV = { ...process.env, PORTE_RESEAU_DOSSIER: PORTE, ARRETS_HOTES_DOSSIER: ARRETS, COPIE_PRINCIPALE: PRINCIPALE };
+const GIT = (() => { try { const base = path.join(process.env.LOCALAPPDATA || '', 'GitHubDesktop'); const a = fs.readdirSync(base).filter(n => /^app-/.test(n)).sort().reverse()[0]; return path.join(base, a, 'resources', 'app', 'git', 'cmd', 'git.exe'); } catch { return 'git'; } })();
 
 function lancer(entree, preload) {
     const args = preload ? ['-r', preload, HOOK] : [HOOK];
@@ -44,6 +46,33 @@ ecrire('propre.py', "print(1)\n");
 ecrire('get.ps1', "Invoke-WebRequest https://exemple.test\n");
 ecrire('neutre.ps1', "Write-Output 1\n");
 fs.mkdirSync(path.join(TMP, 'sous'), { recursive: true }); fs.writeFileSync(path.join(TMP, 'sous', 'net.js'), "fetch('https://exemple.test');\n");
+fs.writeFileSync(path.join(TMP, 'sous', 'ok.js'), "console.log('ok');\n");
+ecrire('sub.py', "import subprocess\n"); ecrire('fh.py', "from http import client\n"); ecrire('rq2.py', "import requests as r\n"); ecrire('hx.py', "import httpx\n");
+ecrire('alias1.js', "const get = fetch;\nget('https://exemple.test');\n"); ecrire('alias2.js', "globalThis.fetch('https://exemple.test');\n"); ecrire('alias3.js', "globalThis[\"fetch\"]('https://exemple.test');\n");
+ecrire('verrou-a.js', "console.log('a');\n"); ecrire('verrou-b.js', "console.log('b');\n"); ecrire('sonde.js', "const { MongoClient } = require('mongodb');\n"); ecrire('lignes-zh.js', "console.log('zh');\n"); ecrire('eveil.ps1', "Start-Sleep 1\n");
+// C3 : un VRAI worktree temporaire du dépôt (checkout réduit à trois fichiers suivis) et un dépôt ÉTRANGER
+const WT = path.join(TMP, 'wt'), ETR = path.join(TMP, 'etranger');
+execFileSync(GIT, ['worktree', 'add', '-q', '--no-checkout', '--detach', WT, 'HEAD'], { cwd: __dirname, stdio: 'ignore' });
+execFileSync(GIT, ['checkout', 'HEAD', '--', 'smoke-test.js', 'test-hook-commandes.js', 'test-hook-panne-simulee.js'], { cwd: WT, stdio: 'ignore' });
+fs.mkdirSync(ETR); execFileSync(GIT, ['init', '-q'], { cwd: ETR, stdio: 'ignore' });
+fs.writeFileSync(path.join(ETR, 'etr.js'), "fetch('https://exemple.test');\n");
+execFileSync(GIT, ['add', 'etr.js'], { cwd: ETR, stdio: 'ignore' });
+execFileSync(GIT, ['-c', 'user.name=banc', '-c', 'user.email=banc@exemple.test', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'x'], { cwd: ETR, stdio: 'ignore' });
+function nettoyerWorktree() {      // règle commune : jamais de suppression récursive sur un dossier qui contient une jonction ou un lien
+    const liens = []; const marcher = d => { for (const n of fs.readdirSync(d)) { const p = path.join(d, n), s = fs.lstatSync(p); if (s.isSymbolicLink()) liens.push(p); else if (s.isDirectory()) marcher(p); } };
+    try { marcher(WT); } catch { /* déjà retiré */ }
+    if (liens.length) { console.log(`⚠️ worktree temporaire laissé en place (liens : ${liens.join(', ')})`); return; }
+    try { fs.rmSync(WT, { recursive: true, force: true }); } catch { /* déjà retiré */ }
+    try { execFileSync(GIT, ['worktree', 'prune'], { cwd: __dirname, stdio: 'ignore' }); } catch { /* rien à élaguer */ }
+}
+const alias = dir => {      // M1 : un nom court 8.3 réel si le système en fournit un, sinon une jonction temporaire vers un dossier SANS données (retirée par rmdir non récursif)
+    const r = spawnSync('cmd', ['/d', '/c', `for %I in ("${dir}") do @echo %~sI`], { encoding: 'utf8', windowsVerbatimArguments: true });
+    const court = (r.stdout || '').trim();
+    if (court && court.toLowerCase() !== dir.toLowerCase() && court.includes('~')) return { chemin: court, nettoyer() {} };
+    const lien = `${dir}-lien`; spawnSync('cmd', ['/d', '/c', 'mklink', '/J', lien, dir], { encoding: 'utf8' });
+    return { chemin: lien, nettoyer() { spawnSync('cmd', ['/d', '/c', 'rmdir', lien]); } };
+};
+const T = TMP;
 
 const arret = path.join(ARRETS, 'ARRET-HOTE-x.test.json');
 const CAS = [
@@ -129,7 +158,10 @@ const CAS = [
     ['php', ps('php a.php'), 2],
     ['wsl', ps('wsl curl x'), 2],
     ['curl derrière un git (une instruction par morceau)', ps('git status; curl https://x'), 2],
-    ['chaîne littérale « curl.exe »', ps('Write-Output "curl.exe"'), 2],
+    ['I1 : chaîne en position de COMMANDE & \'curl.exe\'', ps("& 'curl.exe' https://x"), 2],
+    ['I1 : chaîne en position de commande & "wget"', ps('& "wget" https://x'), 2],
+    ['I1 : chaîne en position de commande ."curl"', ps('."curl" https://x'), 2],
+    ['I1 : chaîne ARGUMENT contenant curl.exe : passe', ps('Write-Output "curl.exe"'), 0],
     ['.ps1 introuvable (non résolu)', ps('.\\get-absent.ps1'), 2],
     ['powershell -File d\'un .ps1 avec réseau, non suivi', ps(`powershell -File ${path.join(TMP, 'get.ps1')}`), 2],
     ['& .ps1 avec réseau, non suivi', ps(`& ${path.join(TMP, 'get.ps1')}`), 2],
@@ -201,6 +233,95 @@ const CAS = [
     ['la porte : verifier (adresse avec « irm »)', ps('node collecte-cartes/porte-reseau.js verifier https://x.test/irm/a', __dirname), 0],
     ['Get-ChildItem', ps('Get-ChildItem . -Filter *.js'), 0],
     ['npm test', ps('npm test'), 0],
+    // ═══ TOUR 2 ═══
+    // ── C1 : seuls ARRET/LEVEE/PAUSE-HOTE sont protégés dans le dossier des arrêts ──
+    ['C1 : Write de arrets\\JOURNAL-HOTES.md', outil('Write', { file_path: path.join(ARRETS, 'JOURNAL-HOTES.md'), content: 'x' }), 0],
+    ['C1 : Edit de arrets\\JOURNAL-HOTES.md', outil('Edit', { file_path: path.join(ARRETS, 'JOURNAL-HOTES.md'), old_string: 'a', new_string: 'b' }), 0],
+    ['C1 : Add-Content de arrets\\JOURNAL-HOTES.md', ps(`Add-Content ${path.join(ARRETS, 'JOURNAL-HOTES.md')} "ligne"`), 0],
+    ['C1 : listage du dossier des arrêts redirigé vers un fichier ordinaire', ps(`Get-ChildItem ${ARRETS} > ${T}\\liste.txt`), 0],
+    ['C1 : Get-ChildItem du dossier des arrêts', ps(`Get-ChildItem ${ARRETS}`), 0],
+    // ── C2 : cd résolu en tête d'instruction ──
+    ['C2 : cd absolu puis script sans primitive', ps(`cd ${path.join(T, 'sous')}; node ok.js`), 0],
+    ['C2 : cd relatif (cwd de l\'entrée) puis script', ps('cd sous; node ok.js', T), 0],
+    ['C2 : Set-Location -Path', ps('Set-Location -Path sous; node ok.js', T), 0],
+    ['C2 : pushd', ps('pushd sous; node ok.js', T), 0],
+    ['C2 : cd entre guillemets', ps('cd "sous"; node ok.js', T), 0],
+    ['C2 : cd résolu puis script à primitive non suivi', ps('cd sous; node net.js', T), 2],
+    ['C2 : cd vers un dossier inexistant + script à primitive', ps('cd absent; node reseau.js', T), 2],
+    ['C2 : cd vers un dossier inexistant + script sans primitive', ps('cd absent; node sans.js', T), 0],
+    ['C2 : cd dans un bloc & { }', ps('& { cd sous; node net.js }', T), 2],
+    ['C2 : cd dans un if { }', ps('if ($true) { cd sous }; node reseau.js', T), 2],
+    ['C2 : cd -', ps('cd -; node reseau.js', T), 2],
+    ['C2 : cd par variable', ps('cd $env:TEMP; node reseau.js', T), 2],
+    ['C2 : Pop-Location', ps('Pop-Location; node reseau.js', T), 2],
+    ['C2 : cmd /c "cd … && node …"', ps('cmd /c "cd sous && node net.js"', T), 2],
+    // ── C3 : worktree du même dépôt ──
+    ['C3 : script du worktree (suivi, identique à son HEAD), cwd = worktree', ps('node smoke-test.js', WT), 0],
+    ['C3 : script du worktree par chemin absolu', ps(`node ${path.join(WT, 'smoke-test.js')}`, T), 0],
+    ['C3 : cd vers le worktree puis script à child_process', ps(`cd ${WT}; node -r dotenv/config test-hook-commandes.js`), 0],
+    ['C3 : script d\'un dépôt ÉTRANGER (suivi, identique à son HEAD)', ps('node etr.js', ETR), 2],
+    // ── I1 : les chaînes qui sont des arguments ne sont pas des commandes ──
+    ['I1 : message de commit en here-string multi-lignes', ps(`${G}; & $g commit -q -m @'\nCorrige le curl\nssh et nc cités ici\n'@`), 0],
+    ['I1 : here-string double', ps(`git commit -m @"\nwget partout\n"@`), 0],
+    ['I1 : -m "a; curl; b"', ps('git commit -m "a; curl; b"'), 0],
+    ['I1 : argument entre guillemets simples', ps("Write-Output 'nc et ssh'"), 0],
+    ['I1 : l\'outil réel après la chaîne reste vu', ps('Write-Output "x"; curl https://x'), 2],
+    // ── I3 : la copie principale (hook, porte, reponse-hote) ne se réécrit pas ──
+    ['I3 : Write de .claude\\hooks\\porte-reseau.js (copie principale)', outil('Write', { file_path: path.join(PRINCIPALE, '.claude', 'hooks', 'porte-reseau.js'), content: 'x' }), 2],
+    ['I3 : Edit de .claude\\hooks\\* quelconque', outil('Edit', { file_path: path.join(PRINCIPALE, '.claude', 'hooks', 'autre.js'), old_string: 'a', new_string: 'b' }), 2],
+    ['I3 : Write de collecte-cartes\\porte-reseau.js', outil('Write', { file_path: path.join(PRINCIPALE, 'collecte-cartes', 'porte-reseau.js'), content: 'x' }), 2],
+    ['I3 : Write de collecte-cartes\\reponse-hote.js', outil('Write', { file_path: path.join(PRINCIPALE, 'collecte-cartes', 'reponse-hote.js'), content: 'x' }), 2],
+    ['I3 : NotebookEdit sous .claude\\hooks', outil('NotebookEdit', { notebook_path: path.join(PRINCIPALE, '.claude', 'hooks', 'n.ipynb') }), 2],
+    ['I3 : casse différente', outil('Write', { file_path: path.join(PRINCIPALE, '.CLAUDE', 'HOOKS', 'x.js'), content: 'x' }), 2],
+    ['I3 : .claude\\settings.json N\'est PAS protégé', outil('Write', { file_path: path.join(PRINCIPALE, '.claude', 'settings.json'), content: '{}' }), 0],
+    ['I3 : .claude\\settings.local.json non protégé', outil('Write', { file_path: path.join(PRINCIPALE, '.claude', 'settings.local.json'), content: '{}' }), 0],
+    ['I3 : un autre fichier de la copie principale', outil('Write', { file_path: path.join(PRINCIPALE, 'collecte-cartes', 'autre.js'), content: 'x' }), 0],
+    ['I3 : le hook d\'un worktree reste modifiable', outil('Write', { file_path: path.join(WT, '.claude', 'hooks', 'porte-reseau.js'), content: 'x' }), 0],
+    // ── M4 ──
+    ['M4 : pip install', ps('pip install requests'), 2],
+    ['M4 : pip3 download', ps('pip3 download x'), 2],
+    ['M4 : python -m pip install', ps('python -m pip install x'), 2],
+    ['M4 : gh api', ps('gh api repos/x/y'), 2],
+    ['M4 : gh pr list', ps('gh pr list'), 2],
+    ['M4 : gh --version passe', ps('gh --version'), 0],
+    ['M4 : docker pull', ps('docker pull x'), 2],
+    ['M4 : docker run', ps('docker run x'), 2],
+    ['M4 : docker build', ps('docker build .'), 2],
+    ['M4 : winget', ps('winget install x'), 2],
+    ['M4 : choco', ps('choco install x'), 2],
+    ['M4 : scoop', ps('scoop install x'), 2],
+    ['M4 : Start-Process avec adresse', ps('Start-Process https://x'), 2],
+    ['M4 : saps avec adresse', ps('saps "https://x"'), 2],
+    ['M4 : Invoke-Item avec adresse', ps('Invoke-Item https://x'), 2],
+    ['M4 : ii avec adresse', ps('ii https://x'), 2],
+    ['M4 : Resolve-DnsName', ps('Resolve-DnsName x.test'), 2],
+    ['M4 : nslookup', ps('nslookup x.test'), 2],
+    ['M4 : ping', ps('ping x.test'), 2],
+    ['M4 : python subprocess', ps(`python ${path.join(T, 'sub.py')}`), 2],
+    ['M4 : python from http import', ps(`python ${path.join(T, 'fh.py')}`), 2],
+    ['M4 : python import requests as r', ps(`python ${path.join(T, 'rq2.py')}`), 2],
+    ['M4 : python import httpx', ps(`python ${path.join(T, 'hx.py')}`), 2],
+    ['M4 : node alias de fetch (= fetch)', ps(`node ${path.join(T, 'alias1.js')}`), 2],
+    ['M4 : node globalThis.fetch', ps(`node ${path.join(T, 'alias2.js')}`), 2],
+    ['M4 : node globalThis["fetch"]', ps(`node ${path.join(T, 'alias3.js')}`), 2],
+    ['M4 : git pull sans adresse passe', ps('git pull'), 0],
+    ['M4 : git submodule update sans adresse passe', ps('git submodule update --init'), 0],
+    ['M4 : npm run passe', ps('npm run test'), 0],
+    ['M4 : git fetch origin passe', ps('git fetch origin'), 0],
+    // ── 12. LES DIX COMMANDES RÉELLES DU COORDINATEUR (COMMANDES-REELLES.txt) : TOUTES doivent PASSER ──
+    ['RÉELLE 1 : fetch / log / push avec $g et cd', ps(`${G}; cd ${__dirname}; & $g fetch -q origin; & $g log --oneline main..origin/main; & $g push origin main; "push $LASTEXITCODE"`), 0],
+    ['RÉELLE 2 : cd worktree; node -r dotenv/config <script à child_process>', ps(`cd ${WT}; $env:NODE_PATH='C:\\x\\node_modules'; $env:DOTENV_CONFIG_PATH='C:\\x\\.env'; node -r dotenv/config test-hook-commandes.js --quoi="logos preuve lue" --collections=sets -- node poser-niveau-logos.js --preuve-lue=collecte-cartes/logos-preuves-lues.json --ecrire --attendu=148; "exit $LASTEXITCODE"`), 0],
+    ['RÉELLE 3 : cd; verrou-charges | verrou-avant-push', ps(`cd ${T}; $env:NODE_PATH='C:\\x\\node_modules'; node verrou-a.js --base=test | Select-Object -Last 3; "charges exit=$LASTEXITCODE"; node verrou-b.js | Select-Object -Last 5`), 0],
+    ['RÉELLE 4 : sonde Mongo du scratchpad', ps(`cd ${__dirname}; $env:NODE_PATH='C:\\x\\node_modules'; $env:DOTENV_CONFIG_PATH='C:\\x\\.env'; node -r dotenv/config ${path.join(T, 'sonde.js')} 6704 6922`), 0],
+    ['RÉELLE 5 : script du scratchpad', ps(`node ${path.join(T, 'lignes-zh.js')}`), 0],
+    ['RÉELLE 6 : cd worktree; test; git add; git commit', ps(`${G}; cd ${WT}; $env:NODE_PATH='C:\\x\\node_modules'; node test-hook-panne-simulee.js | Select-Object -Last 3; & $g add creer-sets-sans-page.js JOURNAL-LOTS.md; & $g commit -q -m "Sets ... (signal du site)"`), 0],
+    ['RÉELLE 7 : git worktree add', ps(`${G}; & $g worktree add -q -b catalogue/x ${path.join(T, 'c-x')} main`), 0],
+    ['RÉELLE 8 : powershell -File eveil.ps1', ps(`powershell -NoProfile -ExecutionPolicy Bypass -File ${path.join(T, 'eveil.ps1')} -Heures 8`), 0],
+    ['RÉELLE 9 : git clone github.com', ps(`${G}; & $g clone --depth 1 --quiet https://github.com/tcgdex/cards-database.git ${path.join(T, 'cards-database')}`), 0],
+    ['RÉELLE 10 : la porte lire', ps(`node collecte-cartes/porte-reseau.js lire https://www.example.org/page --texte --sortie=${path.join(PORTE, 'sorties', 'x.txt')}`, __dirname), 0],
+    ['RÉELLE : Write de RAPPORT-CATALOGUE.md (sous catalogue\\)', outil('Write', { file_path: path.join(T, 'catalogue-fictif', 'RAPPORT-CATALOGUE.md'), content: 'x' }), 0],
+    ['RÉELLE : Write de DEMANDE-CATALOGUE.md (site)', outil('Write', { file_path: path.join(T, 'rat-market-site', 'DEMANDE-CATALOGUE.md'), content: 'x' }), 0],
+    ['RÉELLE : Write dans le scratchpad', outil('Write', { file_path: path.join(T, 'scratchpad', 'a.js'), content: 'x' }), 0],
 ];
 
 let ok = 0, ko = 0;
@@ -237,11 +358,29 @@ for (const [lib, entree, attendu] of CAS) { const r = lancer(entree); rendre(lib
         try { fs.unlinkSync(neuf); } catch { /* déjà retiré */ }
     }
 }
+{   // C3 : dans le worktree, « suivi » ne suffit pas non plus : modifié = refusé
+    const f = path.join(WT, 'smoke-test.js'), original = fs.readFileSync(f);
+    try {
+        fs.writeFileSync(f, Buffer.concat([original, Buffer.from("\nfetch('https://n-importe-quoi');\n")]));
+        const r = lancer(ps('node smoke-test.js', WT));
+        rendre('C3 : script du worktree MODIFIÉ (non commité)', r.code, 2, r.err);
+    } finally { fs.writeFileSync(f, original); }
+}
+{   // M1 : noms courts / jonction : la protection juge le chemin RÉEL
+    const ap = alias(PORTE), aa = alias(ARRETS);
+    try {
+        rendre(`M1 : Write dans robots\\ par ${ap.chemin}`, lancer(outil('Write', { file_path: path.join(ap.chemin, 'robots', 'h.test.json'), content: '{}' })).code, 2);
+        rendre('M1 : Write dans cadence\\ par un nom court/lien', lancer(outil('Write', { file_path: path.join(ap.chemin, 'cadence', 'h.json'), content: '{}' })).code, 2);
+        rendre('M1 : Write du journal par un nom court/lien', lancer(outil('Write', { file_path: path.join(ap.chemin, 'journal.jsonl'), content: '' })).code, 2);
+        rendre('M1 : Write de JOURNAL-HOTES.md par un nom court/lien reste permis', lancer(outil('Write', { file_path: path.join(aa.chemin, 'JOURNAL-HOTES.md'), content: 'x' })).code, 0);
+    } finally { ap.nettoyer(); aa.nettoyer(); }
+}
 {   // UN HOOK QUI PLANTE DOIT REFUSER : toute RegExp.test lève
     const r = lancer(ps('curl https://x'), path.join(__dirname, 'test-hook-panne-simulee.js'));
     rendre('hook qui plante en plein verdict', r.code, 2, r.err);
     const r2 = lancer(ps('git status'), path.join(__dirname, 'test-hook-panne-simulee.js'));
     rendre('hook qui plante sur une commande innocente', r2.code, 2, r2.err);
 }
+nettoyerWorktree();
 console.log(`\n${ok}/${ok + ko} cas justes${ko ? ` — ${ko} en échec` : ''}`);
 process.exit(ko ? 1 : 0);
