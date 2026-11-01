@@ -77,6 +77,10 @@ const GROUPES = [
         ['tour 4 : nom non exigé avec position', "const mn = motifDeNom(lu, produit, langueProduit); if (mn) motifs.push(mn);       // tour 4 (1) : le nom, branche position", ""],
         ['tour 4 : nom non exigé avec numéro', "const mn = motifDeNom(lu, produit, langueProduit); if (mn) motifs.push(mn);       // tour 4 (1) : le nom aussi, avec numéro", ""],
         ['tour 4 : nom non exigé sans numéro', "const mn = motifDeNom(lu, produit, langueProduit); if (mn) motifs.push(mn);       // tour 4 (1) : le nom, branche sans numéro", ""],
+        ['a-reste : nom japonais accepté sur un produit non japonais', "if (lu.langue === 'ja' && langueProduit === 'ja')", "if (lu.langue === 'ja')"],
+        ['a-reste : nom japonais non comparé', "return memeNomJaponais(lu.nom, produit?.nomJa) ? null : 'nom-different';", "return null;"],
+        ['a-reste : nom japonais comparé au nom anglais', "return memeNomJaponais(lu.nom, produit?.nomJa) ? null", "return memeNomJaponais(lu.nom, produit?.nomJa ?? produit?.nomEn) ? null"],
+        ['a-reste : rien à comparer vaut concordance', "cleJaponaise(lu) !== '' && cleJaponaise(lu) === cleJaponaise(nomJa)", "cleJaponaise(lu) === cleJaponaise(nomJa)"],
         ['tour 4 : position unique non exigée', "if (!(memes.length === 1 && memes[0].idProduct === produit.idProduct)) m.push('position-ambigue');", ""],
         ['tour 4 : plusieurs produits à la même position acceptés', "memes.length === 1 &&", "memes.length >= 1 &&"],
         ['tour 4 : le candidat unique n\'est pas forcément ce produit', "memes[0].idProduct === produit.idProduct", "true"],
@@ -178,6 +182,8 @@ const GROUPES = [
         ['prv refusé en argument du retrait', "(ppr|tcs|scx|pmk|prv)$/];", "(ppr|tcs|scx|pmk)$/];"]
     ] },
     { module: 'collecteur-images-preuves.js', bancs: BANC, mutants: [
+        ['a-reste : nomJa de la carte non transmis à la règle', "nomJa: nomsJa.get(L.carteId) ?? null };", "nomJa: null };"],
+        ['a-reste : nom japonais d\'une autre carte (nomJa = celui du premier produit)', "if (carteIdsJa.length && lire.nomsJa) for (const c of await lire.nomsJa(carteIdsJa)) nomsJa.set(c._id, c.nomJa ?? null);", "if (carteIdsJa.length && lire.nomsJa) for (const c of await lire.nomsJa(carteIdsJa)) nomsJa.set(c._id, 'フシギダネ');"],
         ['écriture hors lot-additif.js', "if (['--ecrire', '--trous'].includes(mode)) require('./collecte-cartes/images-empruntees').garderSousLot(", "if (false) require('./collecte-cartes/images-empruntees').garderSousLot("],
         ['plan périmé accepté', "if (perime) throw new Error(", "if (false) throw new Error("],
         ['--ecrire sans --attendu', "if (['--ecrire', '--trous'].includes(mode) && !a('attendu'))", "if (false)"],
