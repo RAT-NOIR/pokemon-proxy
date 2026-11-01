@@ -12,7 +12,7 @@ const { creerConstructeur } = require('./version');
 // JUMBO-VISUEL — `jumbosVisuel` : null, ou la Map idProduct → 'emprunt' | 'sans-visuel' du fichier du catalogue (jumbos-visuel.js). Un JUMBO « emprunt » entre dans la colonne des emprunts (sans mention, sous son bandeau) ; un JUMBO
 // « sans-visuel » reste une ENTRÉE COMPLÈTE (marqueurs, partages, groupe { JUMBO, normale }) mais est inscrit dans la colonne des masqués (format 5) : aucun visuel ne lui est servi. Ce n'est PAS une exclusion : l'exclusion retirerait
 // aussi le produit des partages. Un masqué EXCLU par la liste d'exclusions n'a plus d'entrée donc n'est plus masqué (la marque suit l'entrée). Un nommé sans marqueur JUMBO dans le catalogue refuse la construction.
-async function calculer({ sets, docs, lignes, metacarte, regle, decider = a => require('./decision').decider(a), exclusions = null, verdictsEmprunts = null, jumbosVisuel = null }) {
+async function calculer({ sets, docs, lignes, metacarte, regle, decider = a => require('./decision').decider(a), exclusions = null, verdictsEmprunts = null, jumbosVisuel = null, tamponneesEmpruntees = null }) {
     const X = require('./exclusions');
     // MARQUE-EMPRUNT / VERDICTS : « exclu » rejoint les exclusions (motif visuel-faux ; un motif explicite de la liste prime) ; « juste » rend l'emprunt VÉRIFIÉ (il ne va pas dans la colonne des emprunts) ; null ou aucune ligne : l'emprunt reste non vérifié
     const verdicts = verdictsEmprunts instanceof Map ? verdictsEmprunts : null, parVerdict = new Set(), verifies = new Set();
@@ -27,7 +27,7 @@ async function calculer({ sets, docs, lignes, metacarte, regle, decider = a => r
     const masquesDecides = new Set(), jumbosClasses = new Set();                                       // JUMBO-VISUEL : un JUMBO classé par la liste (emprunt) ou un masqué n'est jamais « vérifié » par un verdict d'emprunt (leur classe vient de la liste du catalogue)
     const b = creerConstructeur({ marquages: true, emprunts: true, ecrits: true, masques: true });       // JUMBO-VISUEL : la colonne des masqués (format 5) est toujours écrite, vide s'il n'y en a pas ; MARQUE-EMPRUNT : la colonne des emprunts (format 3) est toujours écrite, vide s'il n'y en a pas ; REPLI-REIMPRESSIONS : la colonne des marquages (format 2) est toujours écrite, même quand aucun produit n'est marqué (« aucun » est une réponse, l'absence de colonne n'en est pas une)
     const complet = suivi ? creerConstructeur({ marquages: true, emprunts: true, ecrits: true, masques: true }) : null;
-    const r = await decider({ sets, docs, lignes, metacarte, regle, cederLaMain: true, ...(jumbosVisuel ? { jumbosVisuel } : {}), sink: {
+    const r = await decider({ sets, docs, lignes, metacarte, regle, cederLaMain: true, ...(jumbosVisuel ? { jumbosVisuel } : {}), ...(tamponneesEmpruntees ? { tamponneesEmpruntees } : {}), sink: {
         // JUMBO-VISUEL : la marque d'un masqué exclu ne va pas dans l'archive (plus d'entrée) ; le constructeur complet la garde (comparerMarques)
         jumbo: id => { jumbosClasses.add(id); },
         masque: id => { masquesDecides.add(id); if (complet) complet.masque(id); if (!(exclusions && exclusions.has(id))) b.masque(id); },

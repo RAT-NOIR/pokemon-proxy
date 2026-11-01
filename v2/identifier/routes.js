@@ -124,9 +124,13 @@ function verifierEntree(corps, cfg) {
     const empreintes = cfg.empreinteExtension === true ? lireEnveloppe(corps, urls.length) : null;
     // CALCUL-CLIENT : `capacitesClient` n'est LU que si V2_MESURES_CLIENT=1 (éteint : un champ inconnu, ignoré comme aujourd'hui). Il ne refuse jamais la requête : seule la valeur exacte « mesures-1 » dans un tableau compte.
     const mesuresClient = cfg.mesuresClient === true && Array.isArray(corps.capacitesClient) && corps.capacitesClient.length <= 8 && corps.capacitesClient.includes('mesures-1');
+    // MENTION-LANGUES : le champ additif `visuelMentionLangues` du Produit n'est servi QU'AU client qui annonce `capacitesClient: ["mention-langues-1"]` (même garde que `mesures-1` : un tableau de 8 éléments au plus, la valeur EXACTE dedans).
+    // Pas de drapeau de configuration : le champ est purement additif ; qui ne l'annonce pas reçoit la réponse d'avant, octet pour octet (test-mention-langues-route.js).
+    const mentionLangues = Array.isArray(corps.capacitesClient) && corps.capacitesClient.length <= 8 && corps.capacitesClient.includes('mention-langues-1');
     return { entree: {
         ...(photoIds ? { photoIds } : {}),
         ...(mesuresClient ? { mesuresClient: true } : {}),
+        ...(mentionLangues ? { mentionLangues: true } : {}),
         imageUrls: [...urls], title: (corps.title || '').slice(0, TITRE_MAX), description: (corps.description || '').slice(0, DESCRIPTION_MAX),
         prixVinted: prix, devise, marche: corps.marche, vintedUrl,
         vintedEtat: typeof corps.vintedEtat === 'string' ? corps.vintedEtat.slice(0, 100) : null,   // REÇU et JOURNALISÉ, jamais utilisé (ETAT-VENDEUR, 2026-10-18) : passé à la chaîne héritée, qui le journalise et ne le lit pour aucune décision ; borné (mineur reporté de B1b.1)
@@ -159,6 +163,8 @@ const mongoose = require('mongoose');
 const registre = require('../registre');
 const { fauxRes } = require('./captureres');
 const { adapter, codeLangueDe, prixLiveDe, affirmerParLaRoute } = require('./adaptateur');
+// MENTION-LANGUES : la clé n'entre dans un contexte de Produit QUE si la requête a déclaré la capacité (sinon l'objet est celui d'avant, sans clé de plus).
+const ML = e => (e && e.mentionLangues === true ? { mentionLangues: true } : {});
 const { consulterProbable, avecNiveau, actif: niveauServi, cosinusDesCandidats, estGroupe } = require('./probable-route');   // PROBABLE : le niveau « probable » (V2_PROBABLE, éteint : jamais appelée), et `niveau` servi aux extensions >= 2.0.1
 const { etapeLeviers } = require('./promotion-surs-route');       // DECISION-SURS (V2_PROMOTION_SURS, éteint par défaut : jamais appelée)
 const { appliquerMarqueurs } = require('./garde-marqueurs');       // MARQUEURS : le jumbo par le titre et la garde des groupes, derrière V2_JUMBO_TITRE et V2_GARDE_MARQUEURS (éteints : jamais appelée)
@@ -335,7 +341,7 @@ async function appliquerDecisionG({ cfg, entree, resultat, corpsChaine, produits
         const c = corpsChaine || {};
         const corps = { ...c, success: true, carte: { ...(c.carte || {}), idProduct: Q, ambigu: false }, candidats: [{ idProduct: Q }] };
         let r = null;
-        try { r = adapterFn({ statutHttp: 200, corps }, { produits: tout, langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux: id => (id === Q ? { conclu: true, ids: [] } : (typeof jumeaux === 'function' ? jumeaux(id) : { conclu: false, ids: [] })) }); }
+        try { r = adapterFn({ statutHttp: 200, corps }, { produits: tout, langueInterface: entree.langueInterface, cfg, ficheServie: false, ...ML(entree), jumeaux: id => (id === Q ? { conclu: true, ids: [] } : (typeof jumeaux === 'function' ? jumeaux(id) : { conclu: false, ids: [] })) }); }
         catch (e) { journalErreur('promotion (adaptateur)', e); return garder('promotion-impossible'); }
         if (!r || r.issue !== 'affirmee' || !r.analyse || r.analyse.cartes[0].carte.idProduct !== Q) return garder('promotion-impossible');
         return { resultat: r, desaccord: arb.desaccord, questionNeuve: false, promotion: true, concordante: arb.concordante === true };
@@ -349,7 +355,7 @@ async function appliquerDecisionG({ cfg, entree, resultat, corpsChaine, produits
         journalErreur('catalogue (règle G)', e);
         return { resultat: { issue: 'panne', analyse: null, erreur: { code: 'INDISPONIBLE' } }, desaccord: { ...arb.desaccord, retenue: 'panne-catalogue' }, questionNeuve: false };
     }
-    const ctx = { produits: tout, langueInterface: entree.langueInterface, cfg, ficheServie: false };
+    const ctx = { produits: tout, langueInterface: entree.langueInterface, cfg, ficheServie: false, ...ML(entree) };
     const c = corpsChaine || {};
     const question = ids => {
         try {
@@ -572,11 +578,11 @@ function traiterIdentifier(cfg, deps = {}) {
                     let jumeaux = jumeaux0, ctxLD = {};
                     if (produits !== null) { const pr = await T.mesurer('base', () => preparerLD({ corpsListe: [c], produits, jumeaux: jumeaux0, catalogue, version: version0, deps })); produits = pr.produits; jumeaux = pr.jumeaux; if (pr.codeNumeroExiste) ctxLD = { codeNumeroExiste: pr.codeNumeroExiste }; }
                     resultat = produits === null ? { issue: 'panne', analyse: null, erreur: { code: 'INDISPONIBLE' } }
-                        : (deps.adapter || adapter)({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux, ...ctxLD, ...(cfg.leviersAbde === true && niveauServi(cfg, entree) ? { leviersE: true } : {}) });
+                        : (deps.adapter || adapter)({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, ...ML(entree), jumeaux, ...ctxLD, ...(cfg.leviersAbde === true && niveauServi(cfg, entree) ? { leviersE: true } : {}) });
                     noterQuestion();
                     // SECONDE-LECTURE : seulement le cas visé, derrière son interrupteur ; la réponse d'avant reste si elle ne CONFIRME pas (jamais pire). AVANT la réservation ci-dessous : une affirmation confirmée n'en a pas.
                     if (resultat.issue === 'question' && !resultat.jumeauxEnQuestion) {
-                        const rejouer = jum => (deps.adapter || adapter)({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux: jum, ...ctxLD });
+                        const rejouer = jum => (deps.adapter || adapter)({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, ...ML(entree), jumeaux: jum, ...ctxLD });
                         let sl = null;
                         try { sl = await T.mesurer('seconde', () => consulterSecondeLecture({ deps, cfg, entree, scanId, resultat, corpsChaine: c, produits, jumeaux, rejouer })); } catch (e) { journalErreur('seconde lecture', e); }
                         if (sl) { traceSeconde = sl.trace; if (sl.resultat) resultat = sl.resultat; }
@@ -586,7 +592,7 @@ function traiterIdentifier(cfg, deps = {}) {
                     if ((resultat.issue === 'question' || resultat.issue === 'affirmee') && !resultat.jumeauxEnQuestion) {
                         try {
                             const lt = await T.mesurer('tampon', () => consulterLectureTampon({ deps, cfg, entree, scanId, resultat, corpsChaine: c, produits, version: version0, avecBorne,
-                                affirmer: (id, surcharge, critere) => affirmerParLaRoute(c, id, { produits: surcharge || produits, langueInterface: entree.langueInterface, cfg, ficheServie: false }, critere), journal: journalErreur }));
+                                affirmer: (id, surcharge, critere) => affirmerParLaRoute(c, id, { produits: surcharge || produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, ...ML(entree) }, critere), journal: journalErreur }));
                             if (lt) { traceTampon = lt.trace; if (lt.resultat) resultat = lt.resultat; }
                         } catch (e) { journalErreur('lecture du tampon', e); }
                     }
@@ -619,7 +625,7 @@ function traiterIdentifier(cfg, deps = {}) {
                     // contredit la chaîne (deux sources en conflit ne donnent pas un sûr), jamais sur autre chose qu'une question. La réponse d'avant reste si la preuve n'est pas faite.
                     if (resultat.issue === 'question' && cfg.surParImage === true && entree.empreintes && !desaccordG && !(empreinteInfo && empreinteInfo.influence) && !resultat.jumeauxEnQuestion) {
                         try {
-                            const si = await T.mesurer('sur', () => consulterSurParImage({ cfg, entree, resultat, corpsChaine: c, produits, version: version0, jumeaux, affirmer: (id, surcharge, critere) => affirmerParLaRoute(c, id, { produits: surcharge || produits, langueInterface: entree.langueInterface, cfg, ficheServie: false }, critere),
+                            const si = await T.mesurer('sur', () => consulterSurParImage({ cfg, entree, resultat, corpsChaine: c, produits, version: version0, jumeaux, affirmer: (id, surcharge, critere) => affirmerParLaRoute(c, id, { produits: surcharge || produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, ...ML(entree) }, critere),
                                 charger: cfg.vivierImage === true ? ids => catalogue.lire(ids) : undefined,         // VIVIER-IMAGE : les lignes des produits ajoutés au vivier (éteint : rien n'est passé, rien n'est lu)
                                 marquesLues: traceTampon && Array.isArray(traceTampon.marques) ? traceTampon.marques : null, journal: journalErreur, chrono: T }));
                             if (si) {
@@ -634,7 +640,7 @@ function traiterIdentifier(cfg, deps = {}) {
                     if (resultat.issue === 'question' || resultat.issue === 'affirmee') {
                         noterQuestion();
                         try {
-                            const gm = appliquerMarqueurs({ cfg, titre: annonce.titre, resultat, derniereQuestion, c, desaccordG, empreinteInfo, produits, version: version0, langueInterface: entree.langueInterface, jumeaux, journal: journalErreur });
+                            const gm = appliquerMarqueurs({ cfg, titre: annonce.titre, resultat, derniereQuestion, c, desaccordG, empreinteInfo, produits, version: version0, langueInterface: entree.langueInterface, mentionLangues: entree.mentionLangues === true, jumeaux, journal: journalErreur });
                             if (gm) {
                                 traceMarqueurs = gm.trace;
                                 if (gm.resultat) {
@@ -652,10 +658,10 @@ function traiterIdentifier(cfg, deps = {}) {
                                 // rend qu'une question (les 3 premiers du classement) et au plus un désigné : un sûr ne change jamais. Une exception laisse la question d'avant.
                                 // DECISION-SURS (V2_PROMOTION_SURS, éteint par défaut) : l'étape ET la décision de la promotion sont UNE fonction (promotion-surs-route.js::etapeLeviers), exécutée par les bancs ; drapeau éteint, elle rend exactement ce que rendait l'étape seule.
                                 // Un probable PROUVÉ promouvable devient l'affirmation de son produit, la garde des marqueurs relue sur ce sûr ; le crédit réservé se règle plus bas comme pour toute affirmation qui remplace une question (branche du critère A).
-                                const ep = await etapeLeviers({ cfg, entree, resultat, c, produits, version: version0, traceMarqueurs, catalogue, ctxQuestion: { langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux, ...ctxLD }, memo: te.voisinsUneFois === true, journal: journalErreur,
+                                const ep = await etapeLeviers({ cfg, entree, resultat, c, produits, version: version0, traceMarqueurs, catalogue, ctxQuestion: { langueInterface: entree.langueInterface, cfg, ficheServie: false, ...ML(entree), jumeaux, ...ctxLD }, memo: te.voisinsUneFois === true, journal: journalErreur,
                                     noter: r => { if (r && r.issue === 'question') derniereQuestion = r; },
-                                    affirmer: (id, surcharge, critere) => affirmerParLaRoute(c, id, { produits: surcharge || produits, langueInterface: entree.langueInterface, cfg, ficheServie: false }, critere),
-                                    marqueurs: (aff, lignesPromo) => appliquerMarqueurs({ cfg, titre: annonce.titre, resultat: aff, derniereQuestion, c, desaccordG, empreinteInfo, produits: lignesPromo, version: version0, langueInterface: entree.langueInterface, jumeaux, journal: journalErreur }) });
+                                    affirmer: (id, surcharge, critere) => affirmerParLaRoute(c, id, { produits: surcharge || produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, ...ML(entree) }, critere),
+                                    marqueurs: (aff, lignesPromo) => appliquerMarqueurs({ cfg, titre: annonce.titre, resultat: aff, derniereQuestion, c, desaccordG, empreinteInfo, produits: lignesPromo, version: version0, langueInterface: entree.langueInterface, mentionLangues: entree.mentionLangues === true, jumeaux, journal: journalErreur }) });
                                 resultat = ep.resultat; probableDecide = ep.probableDecide; traceMarqueurs = ep.traceMarqueurs; tracePromotion = ep.tracePromotion;
                             } else probableDecide = consulterProbable({ cfg, entree, resultat, corpsChaine: c, produits, version: version0, traceMarqueurs, memo: te.voisinsUneFois === true });
                         }

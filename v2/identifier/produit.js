@@ -6,6 +6,7 @@ const { lienServi } = require('./lien-cardmarket');
 const { reservesDe, fiable, BASE_DE, badgeDe, versionDe } = require('./fiabilite-prix');
 const MT = require('./marques-tampon');
 const MQ = require('./marqueurs');
+const { MENTION_EDITION_1 } = require('./emprunt');      // MENTION-LANGUES : la seule mention que le serveur sait dire en anglais
 
 const VARIANTES = Object.freeze(['normale', 'reverse', 'holo', 'premiere-edition', 'tampon', 'jumbo']);
 let CFG_DEFAUT = null;
@@ -74,6 +75,20 @@ function mention(m, langue) {
     if (m && typeof m === 'object') return texte(langue === 'fr' ? m.fr : m.en);
     return texte(m);
 }
+// MENTION-LANGUES (additif, pour les extensions qui DÉCLARENT la capacité « mention-langues-1 ») : `visuelMentionLangues` = { fr, en }, la mention dans les deux langues, indépendante de la langue de l'interface.
+// L'archive ne porte aujourd'hui qu'UNE chaîne (française) : la mention des emprunts a son équivalent anglais ici (UNE table, texte PROPOSÉ à l'éditeur, 1 à 40 caractères) ; toute autre chaîne seule reste le
+// FRANÇAIS et l'anglais vaut null (jamais une langue pour une autre) ; un objet { fr, en } est repris côté par côté. null quand aucun texte n'est lisible.
+const MENTIONS_EN = Object.freeze({ [MENTION_EDITION_1]: 'Image from another printing' });
+// La BORNE (tour 1 de la relecture) : chaque côté fait 1 à 40 CARACTÈRES (points de code, après nettoyage des blancs) — le lecteur fermé de l'extension rejette le reste. Un côté hors borne est écarté SEUL : l'anglais trop
+// long retombe sur le français ({ fr, en: null }) ; le français trop long n'a pas de repli (null de ce côté) ; les deux hors borne : null. Jamais tronqué (un texte coupé serait un autre texte).
+const MENTION_MAX = 40;
+const borne = x => { const s = texte(x); if (s === null) return null; const t = s.trim(); return t.length >= 1 && [...t].length <= MENTION_MAX ? t : null; };
+function mentionLangues(m) {
+    const objet = m && typeof m === 'object';
+    const fr = objet ? borne(m.fr) : borne(m);
+    const en = objet ? borne(m.en) : (fr !== null && MENTIONS_EN[fr] !== undefined ? MENTIONS_EN[fr] : null);
+    return fr === null && en === null ? null : Object.freeze({ fr, en });
+}
 
 // CONTRAT 7a : les quinze langues de Cardmarket, en code fermé minuscule (idLanguage 2 1 3 4 5 8 12 13 9 14 15 7 10 6 11 ; extension v2, DEMANDE-SERVEUR-EXTENSION.md §Lot 8). Tout autre texte : null.
 const LANGUES = Object.freeze(['fr', 'en', 'de', 'es', 'it', 'pt', 'nl', 'pl', 'ru', 'cs', 'hu', 'ja', 'ko', 'zh-hans', 'zh-hant']);
@@ -117,6 +132,7 @@ function construireProduit(source, ctx = {}) {
         version: versionDe(source.version), rarete,
         visuel: visuel && Object.freeze(visuel),
         visuelMention: visuel ? mention(source.visuelMention, ctx.langueInterface) : null,   // une mention n'accompagne qu'un visuel servi
+        ...(ctx.mentionLangues === true ? { visuelMentionLangues: visuel ? mentionLangues(source.visuelMention) : null } : {}),   // MENTION-LANGUES : seul le booléen `true` déclare ; sinon aucune clé de plus
         prixGuide: prixGuideDe(source.prixGuide, source.prixMelangeTampon === true, source.nonLu === true, source.tamponLu === true),     // F1-TAMPON règle 2 : posé par la route SEULEMENT quand une marque de la liste est lue deux fois à l'identique
         // `source.lienCardmarket` = le lien de la FICHE PRODUIT (ligne de catalogue) ; `lien` d'une impression (i.lien, plus haut) = le lien de CETTE impression.
         liens: Object.freeze({ cardmarket: lienCardmarket(source.lienCardmarket, numero),

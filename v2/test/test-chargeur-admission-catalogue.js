@@ -132,7 +132,7 @@ const { lireEntree } = require('../identifier/visuels');
     H.v('B13. l\'exception ne vaut QUE pour « autre-tirage » : un substitut sans mention d\'un set WCD reste refusé ; avec mention, tout reste admis', [lire({ visuel: 'substitut' }), lire({ visuel: 'substitut', mention: 'x' }), lire({ setNom: 'Set A', lien: null, mention: 'Visuel d\'un autre tirage' })], [SANS, 'ok', 'ok']);
 
     // ── comptes
-    H.v('C1. compteurs nommés : 4 admis par la position (A34, P26, C37, MWT ; A21 et C05 sont choisis par choisirVisuel lui-même), 3 emprunts WCD', d.admisCatalogue, { 'prv-position': 4, 'wcd-emprunt': 3 });
+    H.v('C1. compteurs nommés : 4 admis par la position (A34, P26, C37, MWT ; A21 et C05 sont choisis par choisirVisuel lui-même), 3 emprunts WCD', d.admisCatalogue, { 'prv-position': 4, 'wcd-emprunt': 3, 'tamponnee-empruntee': 0 });
     H.v('C2. la somme tient : avecLigne = écrites + aucun + sans fiche + refus + partage incohérent + position contredite', d.avecLigne, d.ecrites + d.aucun + d.sansFicheDuSite + d.repliRefuse.total + d.partageIncoherent + d.basseDefinitionExclue + d.positionContredite + d.wcdSansSetReconnu);
     const lues = r.entrees.map(x => lireEntree(JSON.parse(JSON.stringify(x))));
     const motifs = {}; for (const x of lues) if (!x.ok) motifs[x.motif] = (motifs[x.motif] || 0) + 1;

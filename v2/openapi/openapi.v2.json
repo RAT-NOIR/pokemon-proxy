@@ -4506,6 +4506,37 @@
               "null"
             ]
           },
+          "visuelMentionLangues": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "fr": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1,
+                "maxLength": 40
+              },
+              "en": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1,
+                "maxLength": 40
+              }
+            },
+            "required": [
+              "fr",
+              "en"
+            ],
+            "additionalProperties": false,
+            "x-conditionnel": "capacitesClient mention-langues-1",
+            "description": "AJOUT FACULTATIF (additif, MENTION-LANGUES) : la mention du visuel dans les DEUX langues, indépendante de la langue de l'interface. Servi SEULEMENT aux extensions qui déclarent la capacité `mention-langues-1` (champ `capacitesClient` de la requête) ; absent sinon (le Produit est celui d'avant, clé comprise). `fr` et `en` valent chacun un texte de 1 à 40 caractères ou `null` ; une mention que le serveur ne sait dire qu'en français a `en: null` (jamais une langue pour une autre). Le tout vaut `null` sans visuel servi ou sans mention. `visuelMention` (la chaîne résolue par la langue de l'interface) ne change pas."
+          },
           "prixGuide": {
             "oneOf": [
               {
@@ -7130,7 +7161,7 @@
               "type": "string"
             },
             "x-conditionnel": "V2_MESURES_CLIENT",
-            "description": "AJOUT FACULTATIF (contrat « calcul client ») : ce que le CLIENT sait calculer. Lu SEULEMENT si `V2_MESURES_CLIENT=1` ; seule la valeur `mesures-1` compte (le client calcule les mesures d'image de la règle G et fera le second envoi `POST /api/identifier/mesures`). Une valeur inconnue est ignorée, jamais un refus."
+            "description": "AJOUT FACULTATIF (contrat « calcul client ») : ce que le CLIENT sait calculer. Lu SEULEMENT si `V2_MESURES_CLIENT=1` ; seule la valeur `mesures-1` compte (le client calcule les mesures d'image de la règle G et fera le second envoi `POST /api/identifier/mesures`). Une valeur inconnue est ignorée, jamais un refus. AUTRE VALEUR LUE, indépendante de `V2_MESURES_CLIENT` (aucun drapeau) : `mention-langues-1` — le Produit porte alors `visuelMentionLangues` { fr, en } (voir le schéma Produit) ; même garde (tableau de 8 au plus, valeur exacte)."
           }
         },
         "required": [

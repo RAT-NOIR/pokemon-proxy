@@ -152,11 +152,11 @@ async function executerLot(p) {
     const motifs = [];                                                             // JUMEAU-V2 : le motif de la garde PAR CARTE (interne : écrit dans analyses.cartes[i], jamais servi)
     const cartes = resultats.map((r, i) => {
         let a = null;
-        try { a = adapterFn({ statutHttp: r && r.statutHttp, corps: r && r.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux, ...ctxLD, lot: true }); } catch (e) { journal('adaptateur', e); }       // LEVIERS-ABDE : `lot: true` — le levier e (jumeaux-trop-nombreux en question) ne s'applique qu'à UNE carte
+        try { a = adapterFn({ statutHttp: r && r.statutHttp, corps: r && r.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, ...(entree.mentionLangues === true ? { mentionLangues: true } : {}), jumeaux, ...ctxLD, lot: true }); } catch (e) { journal('adaptateur', e); }       // LEVIERS-ABDE : `lot: true` — le levier e (jumeaux-trop-nombreux en question) ne s'applique qu'à UNE carte
         // MARQUEURS (I1 de la relecture) : le MÊME point de sortie que la route d'une carte (garde-marqueurs.js::appliquerMarqueurs, une seule fonction) ; un sûr avec un rival de groupe redevient la question du groupe, qui suit
         // le chemin des autres questions du lot (réservée plus bas, `lot: true`). Le titre décrit plusieurs cartes : V2_JUMBO_TITRE n'y agit jamais. Éteint : jamais appelée.
         if (a && (a.issue === 'affirmee' || a.issue === 'question')) {
-            try { const gm = appliquerMarqueurs({ cfg, titre: annonce.titre, resultat: a, c: corpsDe(r), produits, version: version0, langueInterface: entree.langueInterface, jumeaux, lot: true, journal }); if (gm && gm.resultat) a = gm.resultat; }
+            try { const gm = appliquerMarqueurs({ cfg, titre: annonce.titre, resultat: a, c: corpsDe(r), produits, version: version0, langueInterface: entree.langueInterface, mentionLangues: entree.mentionLangues === true, jumeaux, lot: true, journal }); if (gm && gm.resultat) a = gm.resultat; }
             catch (e) { journal('marqueurs', e); }
         }
         motifs[i] = a && typeof a.motif === 'string' ? a.motif : null;

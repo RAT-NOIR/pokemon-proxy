@@ -61,6 +61,23 @@ async function principal(argv = process.argv, env = process.env, deps = {}) {
         if (comparaisonSource.etat === 'ecart') return stop(`--jumbos-visuel : le sha256Source de la liste (${lecture.sha256Source}) n'est pas l'empreinte de son fichier source « ${lecture.source} » (${comparaisonSource.sha256}) : la liste est périmée ou modifiée, aucune construction`);
         jumbos = lecture;
     }
+    // TAMPONNÉES-EMPRUNTÉES : la liste fermée de l'admission (D), lue et jugée AVANT toute lecture de source ; empreinte ÉPINGLÉE obligatoire ; la CIBLE est l'ESSAI seulement (garde écrite par ce qu'elle autorise)
+    let tamponnees = null;
+    if (argv.some(x => x === '--tamponnees-empruntees' || (x.startsWith('--tamponnees-empruntees') && !x.startsWith('--tamponnees-empruntees=') && !x.startsWith('--tamponnees-empruntees-sha256')))) return stop('--tamponnees-empruntees : la forme est --tamponnees-empruntees=<fichier.json> (un fichier est requis)');
+    if (argv.some(x => x === '--tamponnees-empruntees-sha256')) return stop('--tamponnees-empruntees-sha256 : la forme est --tamponnees-empruntees-sha256=<empreinte SHA-256 de la copie> (64 hexadécimaux minuscules)');
+    const nomTamponnees = arg('tamponnees-empruntees'), pinTamponnees = arg('tamponnees-empruntees-sha256');
+    if (nomTamponnees === null && pinTamponnees !== null) return stop('--tamponnees-empruntees-sha256 sans --tamponnees-empruntees : aucune liste à épingler');
+    if (nomTamponnees !== null) {
+        const TE = require('../chargeur/tamponnees-empruntees');
+        const cible = TE.cibleEstEssai(env, { deposer });
+        if (!cible.ok) return stop(`--tamponnees-empruntees : refus, ${cible.raison}`);
+        if (pinTamponnees === null) return stop('--tamponnees-empruntees : l\'empreinte de la copie doit être épinglée (--tamponnees-empruntees-sha256=<64 hexadécimaux>) — une liste dont on ne connaît pas l\'empreinte n\'est pas reconnue, aucune construction');
+        const lecture = TE.lireFichierTamponnees(nomTamponnees, { sha256Attendu: pinTamponnees });
+        if (!lecture.ok) return stop(`--tamponnees-empruntees : liste refusée, aucune construction : ${lecture.raison}`);
+        tamponnees = lecture;
+        // I2 (relecture p8) : sans --catalogue=<fichier>, le catalogue se lit par une connexion à la base `test` — la PRODUCTION ; avec la liste, la construction n'ouvre aucune connexion à la production
+        if (catalogueJson === null && !deps.catalogue) return stop('--tamponnees-empruntees : le catalogue doit venir de --catalogue=<fichier> (sans lui il se lit par une connexion à la base `test`, la production) : refus, aucune construction');
+    }
     const LS = require('../chargeur/lecture-seule'); const S = require('../chargeur/scellement'); const R2 = require('../chargeur/r2-prive'); const F = require('../chargeur/format'); const DEPOT = require('./depot-r2');
     if (!S.secretValide(env.V2_VISUELS_HMAC)) return stop(`V2_VISUELS_HMAC absent ou trop court (${S.SECRET_MIN} caractères au moins) : une archive non scellée n'est jamais produite`);
     let ecriture = null;
@@ -82,8 +99,18 @@ async function principal(argv = process.argv, env = process.env, deps = {}) {
             for await (const c of f.collection('catalogue_produits').find({}, { projection: { idProduct: 1, idMetacard: 1 } })) catalogue.set(c.idProduct, c.idMetacard);
         } finally { await cx.close(); }
     }
+    // TAMPONNÉES-EMPRUNTÉES (tour 4) : « base connectée = rm_essai » est LU sur la connexion réelle de la source et jugé AVANT la première lecture (sourceCartes, `controleBase`) ; une source qui ne l'exécute pas
+    // laisse la garde sans conclusion : REFUS (jamais un passage par défaut). Sans l'option, la source est appelée comme avant.
+    let controleFait = false;
+    const controleBase = nom => { controleFait = true; return require('../chargeur/tamponnees-empruntees').cibleEstEssai(env, { deposer, baseConnectee: typeof nom === 'string' ? nom : '' }); };
+    const sourceBrute = deps.source ? () => deps.source({ env, controleBase }) : () => sourceCartes({ env, controleBase });
+    const sourceUtilisee = !tamponnees ? (deps.source || (() => sourceCartes({ env }))) : async () => {
+        const s = await sourceBrute();
+        if (s && s.ok && !controleFait) { try { await s.fermer(); } catch { /* déjà fermée */ } return { ok: false, raison: 'la base de la connexion n\'a pas été contrôlée (rm_essai) : la garde ne peut pas conclure, refus' }; }
+        return s;
+    };
     let f;
-    try { f = await fabriquerFichier({ source: deps.source || (() => sourceCartes({ env })), catalogue, secret: env.V2_VISUELS_HMAC, exclusions: exclure ? exclure.exclusions : null, verdictsEmprunts: verdicts ? verdicts.verdicts : null, jumbosVisuel: jumbos ? jumbos.classes : null, ...(deps.decider ? { decider: deps.decider } : {}) }); }       // deps.decider : un moyen de banc (jamais fourni par la ligne de commande)
+    try { f = await fabriquerFichier({ source: sourceUtilisee, catalogue, secret: env.V2_VISUELS_HMAC, exclusions: exclure ? exclure.exclusions : null, verdictsEmprunts: verdicts ? verdicts.verdicts : null, jumbosVisuel: jumbos ? jumbos.classes : null, ...(tamponnees ? { tamponneesEmpruntees: tamponnees.produits } : {}), ...(deps.decider ? { decider: deps.decider } : {}) }); }       // deps.decider : un moyen de banc (jamais fourni par la ligne de commande)
     catch (e) { return stop(e && e.motif ? e.motif : `calcul impossible (${(e && (e.name || e.code)) || 'erreur'})`); }
     const c = f.comptes;
     console.log(`   calculé en ${(f.dureeMs / 1000).toFixed(0)} s : sets ${c.sets} · cartes ${c.cartes} · cartes_produits ${c.produits} · catalogue ${c.catalogue} · entrées ${c.visuels} · refusées ${c.refusees} · doublons d'idProduct identiques ${c.doublons || 0} (une seule entrée gardée) · contradictoires ${c.doublonsContradictoires || 0} (visuels différents : AUCUN visuel pour ces produits) · fiches liées ${c.fichesLiees} (produits ${c.produitsLies}, sets ${c.setsAvecLiens})`);

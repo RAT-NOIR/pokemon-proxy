@@ -64,7 +64,7 @@ function source(ctx, id) {
     if (!s) panne('SERVEUR', `idProduct ${id} absent de ctx.produits`);
     return s;
 }
-const pctx = ctx => ({ langueInterface: ctx.langueInterface, ficheServie: ctx.ficheServie, cfg: ctx.cfg });
+const pctx = ctx => ({ langueInterface: ctx.langueInterface, ficheServie: ctx.ficheServie, cfg: ctx.cfg, ...(ctx.mentionLangues === true ? { mentionLangues: true } : {}) });   // MENTION-LANGUES : la clé ne passe que déclarée (sinon le contexte du Produit est celui d'avant)
 const entiers = xs => [...new Set((Array.isArray(xs) ? xs : []).map(c => c && c.idProduct).filter(Number.isInteger))];
 
 function carte(statut, o) {
