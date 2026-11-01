@@ -196,7 +196,7 @@ const GROUPES = [
         ['tour 4 : trous automatiques oubliés à l\'écriture', "...duManifeste, ...auto]", "...duManifeste]"],
         ['tour 4 : candidats de position non fournis', "produit.candidatsPosition = await positionsConnues();", ""],
         ['tour 4 : impressions de la carte non fournies', "produit.impressions = await impressionsDe(L.carteId);", ""],
-        ['27/10 : nom français du produit non fourni au plan', "nomFr: numerosDe.get(id)?.nomFr ?? null };", "nomFr: null };"],
+        ['27/10 : nom français du produit non fourni au plan', "nomFr: numerosDe.get(id)?.nomFr ?? null, nomJa:", "nomFr: null, nomJa:"],
         ['tour 3 : slug du produit pris de la ligne seule (jamais de numeros_cartes)', "slug: L.slug ?? numerosDe.get(id)?.slug ?? null", "slug: L.slug ?? null"],
         ['tour 1 : écart de famille ni dit ni compté', "if (manifeste.ecartDeFamille) avertissements.push(", "if (false) avertissements.push("],
         ['tirage du set non comparé à l\'état', "if ((set.tirage ?? set.region) !== E.langue) {", "if (false) {"],
