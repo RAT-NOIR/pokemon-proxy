@@ -1,0 +1,206 @@
+[
+ {
+  "url": "/fr/Pokemon/Products/Singles/Beginning-Set-Pikachu?searchMode=v2&idCategory=51&idExpansion=6510&idRarity=0&perSite=30",
+  "slugSet": "Beginning-Set-Pikachu",
+  "attendu": 6510,
+  "forme": "1|idCategory,idExpansion,idRarity,perSite,searchMode"
+ },
+ {
+  "url": "/fr/Pokemon/Products/Singles/Beginning-Set-Pikachu?searchMode=v2&idCategory=51&idExpansion=6510&idRarity=0&site=2",
+  "slugSet": "Beginning-Set-Pikachu",
+  "attendu": 6510,
+  "forme": "1|idCategory,idExpansion,idRarity,searchMode,site"
+ },
+ {
+  "url": "/fr/Pokemon/Products/Singles/Primal-Clash",
+  "slugSet": "Primal-Clash",
+  "attendu": null,
+  "forme": "1|"
+ },
+ {
+  "url": "/fr/Pokemon/Products/Singles/Primal-Clash?searchMode=v2&idCategory=51&idExpansion=1585&idRarity=0&sortBy=idRarity_asc&perSite=30",
+  "slugSet": "Primal-Clash",
+  "attendu": 1585,
+  "forme": "1|idCategory,idExpansion,idRarity,perSite,searchMode,sortBy"
+ },
+ {
+  "url": "/fr/Pokemon/Products/Singles/Primal-Clash?searchMode=v2&idCategory=51&idExpansion=1585&idRarity=0&sortBy=idRarity_asc&site=2",
+  "slugSet": "Primal-Clash",
+  "attendu": 1585,
+  "forme": "1|idCategory,idExpansion,idRarity,searchMode,site,sortBy"
+ },
+ {
+  "url": "/fr/Pokemon/Products/Singles/Primal-Clash?searchMode=v2&idCategory=51&idExpansion=1585&idRarity=0&sortBy=idRarity_asc&site=5&__cf_chl_rt_tk=ANONYME",
+  "slugSet": "Primal-Clash",
+  "attendu": null,
+  "forme": "1|__cf_chl_rt_tk,idCategory,idExpansion,idRarity,searchMode,site,sortBy"
+ },
+ {
+  "url": "/fr/Pokemon/Products/Singles?idCategory=51&idExpansion=6219&__cf_chl_rt_tk=ANONYME",
+  "slugSet": null,
+  "attendu": null,
+  "forme": "0|__cf_chl_rt_tk,idCategory,idExpansion"
+ },
+ {
+  "url": "/fr/Pokemon/Products/Singles/Master-Strategy-Deck-Building-Sets?searchMode=v2&idCategory=51&idExpansion=6442&idRarity=0&sortBy=name_desc&perSite=30&__cf_chl_rt_tk=ANONYME",
+  "slugSet": "Master-Strategy-Deck-Building-Sets",
+  "attendu": null,
+  "forme": "1|__cf_chl_rt_tk,idCategory,idExpansion,idRarity,perSite,searchMode,sortBy"
+ },
+ {
+  "url": "/fr/Pokemon/Products/Singles/Chaos-Rising/Frogadier-V2-CRI089",
+  "slugSet": "Chaos-Rising",
+  "attendu": null,
+  "forme": "2|"
+ },
+ {
+  "url": "/fr/Pokemon/Products/Singles/Unnumbered-Promos?searchMode=v2&idCategory=51&idExpansion=4170&searchString=boss&idRarity=0&sortBy=idRarity_asc&perSite=30",
+  "slugSet": "Unnumbered-Promos",
+  "attendu": 4170,
+  "forme": "1|idCategory,idExpansion,idRarity,perSite,searchMode,searchString,sortBy"
+ },
+ {
+  "url": "/fr/Pokemon/Products/Singles?idCategory=51&idExpansion=4214",
+  "slugSet": null,
+  "attendu": 4214,
+  "forme": "0|idCategory,idExpansion"
+ },
+ {
+  "url": "/en/Pokemon/Products/Singles/Gem-Pack-Vol-6?msockid=ANONYME",
+  "slugSet": "Gem-Pack-Vol-6",
+  "attendu": null,
+  "forme": "1|msockid"
+ },
+ {
+  "url": "/en/Pokemon/Products/Singles/Gem-Pack-Vol-6?msockid=ANONYME&site=2",
+  "slugSet": "Gem-Pack-Vol-6",
+  "attendu": null,
+  "forme": "1|msockid,site"
+ },
+ {
+  "url": "/fr/Pokemon/Products/Singles/M-P-Traditional-Chinese-Promos?site=2",
+  "slugSet": "M-P-Traditional-Chinese-Promos",
+  "attendu": null,
+  "forme": "1|site"
+ },
+ {
+  "url": "/fr/Pokemon/Products/Singles/Happy-Set-Mewtwo-Dragonite-Camerupt-Sinistcha?site=3&__cf_chl_rt_tk=ANONYME",
+  "slugSet": "Happy-Set-Mewtwo-Dragonite-Camerupt-Sinistcha",
+  "attendu": null,
+  "forme": "1|__cf_chl_rt_tk,site"
+ },
+ {
+  "url": "/fr/Pokemon/Products/Singles/Plasma-Storm?searchMode=v2&idCategory=51&idExpansion=1578&searchString=hypno&idRarity=0&perSite=30",
+  "slugSet": "Plasma-Storm",
+  "attendu": 1578,
+  "forme": "1|idCategory,idExpansion,idRarity,perSite,searchMode,searchString"
+ },
+ {
+  "url": "/fr/Pokemon/Products/Singles/Chilling-Reign?__cf_chl_rt_tk=ANONYME",
+  "slugSet": "Chilling-Reign",
+  "attendu": null,
+  "forme": "1|__cf_chl_rt_tk"
+ },
+ {
+  "url": "/fr/Pokemon/Products/Singles/Shining-Legends/Mewtwo-GX-V4-SLG78?msockid=ANONYME&__cf_chl_rt_tk=ANONYME",
+  "slugSet": "Shining-Legends",
+  "attendu": null,
+  "forme": "2|__cf_chl_rt_tk,msockid"
+ },
+ {
+  "url": "/fr/Pokemon/Products/Singles/Shining-Legends/Mewtwo-GX-V4-SLG78?msockid=ANONYME",
+  "slugSet": "Shining-Legends",
+  "attendu": null,
+  "forme": "2|msockid"
+ },
+ {
+  "url": "/fr/Pokemon/Products/Singles/Shining-Legends/Mewtwo-GX-V4-SLG78?language=2",
+  "slugSet": "Shining-Legends",
+  "attendu": null,
+  "forme": "2|language"
+ },
+ {
+  "url": "/en/Pokemon/Products/Singles/Sun-Moon-Promos?searchMode=v2&idCategory=51&idExpansion=3324&idRarity=0&sortBy=name_asc",
+  "slugSet": "Sun-Moon-Promos",
+  "attendu": 3324,
+  "forme": "1|idCategory,idExpansion,idRarity,searchMode,sortBy"
+ },
+ {
+  "url": "/en/Pokemon/Products/Singles",
+  "slugSet": null,
+  "attendu": null,
+  "forme": "0|"
+ },
+ {
+  "url": "/en/Pokemon/Products/Singles/Raid-Battle?searchMode=v2&idCategory=51&idExpansion=5861&idRarity=0&sortBy=name_asc&__cf_chl_rt_tk=ANONYME",
+  "slugSet": "Raid-Battle",
+  "attendu": null,
+  "forme": "1|__cf_chl_rt_tk,idCategory,idExpansion,idRarity,searchMode,sortBy"
+ },
+ {
+  "url": "/en/Pokemon/Products/Singles/Prismatic-Evolutions-Additionals?perSite=50",
+  "slugSet": "Prismatic-Evolutions-Additionals",
+  "attendu": null,
+  "forme": "1|perSite"
+ },
+ {
+  "url": "/en/Pokemon/Products/Singles/VSTAR-Universe/Simisear-VSTAR-V2-s12a214?__cf_chl_rt_tk=ANONYME",
+  "slugSet": "VSTAR-Universe",
+  "attendu": null,
+  "forme": "2|__cf_chl_rt_tk"
+ },
+ {
+  "url": "/en/Pokemon/Products/Singles/MEGA-Start-Deck-100-Battle-Collection?searchMode=v2&idCategory=51&idExpansion=6381&searchString=Houndoom&idRarity=0&sortBy=name_asc",
+  "slugSet": "MEGA-Start-Deck-100-Battle-Collection",
+  "attendu": 6381,
+  "forme": "1|idCategory,idExpansion,idRarity,searchMode,searchString,sortBy"
+ },
+ {
+  "url": "/en/Pokemon/Products/Singles/MEGA-Start-Deck-100-Battle-Collection?searchMode=v2&idCategory=51&idExpansion=6381&searchString=Iron%20Boulder&idRarity=0&sortBy=name_asc&__cf_chl_rt_tk=ANONYME",
+  "slugSet": "MEGA-Start-Deck-100-Battle-Collection",
+  "attendu": null,
+  "forme": "1|__cf_chl_rt_tk,idCategory,idExpansion,idRarity,searchMode,searchString,sortBy"
+ },
+ {
+  "url": "/en/Pokemon/Products/Singles/Hidden-Shadow?idRarity=0&sortBy=name_asc",
+  "slugSet": "Hidden-Shadow",
+  "attendu": null,
+  "forme": "1|idRarity,sortBy"
+ },
+ {
+  "url": "/en/Pokemon/Products/Singles/Hidden-Shadow?idRarity=0&sortBy=name_asc&site=2",
+  "slugSet": "Hidden-Shadow",
+  "attendu": null,
+  "forme": "1|idRarity,site,sortBy"
+ },
+ {
+  "url": "/en/Pokemon/Products/Singles/Hidden-Shadow?idRarity=0&sortBy=name_asc&site=3&__cf_chl_rt_tk=ANONYME",
+  "slugSet": "Hidden-Shadow",
+  "attendu": null,
+  "forme": "1|__cf_chl_rt_tk,idRarity,site,sortBy"
+ },
+ {
+  "url": "/en/Pokemon/Products/Singles?searchMode=v2&idCategory=51&idExpansion=6703&idRarity=0&sortBy=name_asc&site=2&__cf_chl_rt_tk=ANONYME",
+  "slugSet": null,
+  "attendu": null,
+  "forme": "0|__cf_chl_rt_tk,idCategory,idExpansion,idRarity,searchMode,site,sortBy"
+ },
+ {
+  "url": "/en/Pokemon/Products/Singles?searchMode=v2&idCategory=51&idExpansion=6703&idRarity=0&sortBy=name_asc&site=3",
+  "slugSet": null,
+  "attendu": 6703,
+  "forme": "0|idCategory,idExpansion,idRarity,searchMode,site,sortBy"
+ },
+ {
+  "url": "/en/Pokemon/Products/Singles?searchMode=v2&idCategory=51&idExpansion=6925&idRarity=0&sortBy=name_asc",
+  "slugSet": null,
+  "attendu": 6925,
+  "forme": "0|idCategory,idExpansion,idRarity,searchMode,sortBy"
+ },
+ {
+  "url": "/en/Pokemon/Products/Singles/Shining-Legends?searchString=Raikou",
+  "slugSet": "Shining-Legends",
+  "attendu": null,
+  "forme": "1|searchString"
+ }
+]

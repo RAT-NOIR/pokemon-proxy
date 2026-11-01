@@ -73,5 +73,19 @@ verifier('B. --catalogue=base --ecrire : refusé (sortie 2)', B.code, 2);
 verifier('B1. …aucune connexion ouverte, aucun chemin d\'écriture chargé', [B.log?.connexionsOuvertes, B.log?.requis, B.log?.ecritures], [0, [], []]);
 verifier('B2. …le message dit pourquoi', /--catalogue=base.*--ecrire|--ecrire.*--catalogue=base/.test(B.err), true);
 
+// C. TOUR 2 — la mesure sur le VRAI journal : le dénominateur « vignettes dont les pages portent un idExpansion unique » doit lire la même
+// chose que la production (le tour 1 le rendait 0 sur 1 500 pages : il avait été écrit sur une adresse inventée). Il est IMPRIMÉ.
+const REEL = process.env.JOURNAL_REEL || 'C:\\Users\\Yung\\Downloads\\rat-market-journal-2026-11-01-16-36.json';
+if (!fs.existsSync(REEL)) { console.log(`⚪ C. journal réel absent (${REEL}) : mesure non faite — elle n'est pas comptée comme réussie`); }
+else {
+    const { vignettesDuJournal, expansionParLaPage } = require('./collecte-cartes/deduire-produit');
+    const reel = JSON.parse(fs.readFileSync(REEL, 'utf8'));
+    const R = vignettesDuJournal(reel);
+    const prouvees = R.vignettes.filter(v => expansionParLaPage([v]) != null);
+    console.log(`   dénominateur : ${reel.journal.length} pages, ${R.vignettes.length} vignettes (sans image / écartées), dont ${prouvees.length} dont les pages portent un idExpansion unique`);
+    verifier('C. journal réel : pages lues', R.pages, reel.journal.length);
+    verifier('C1. …le dénominateur « idExpansion unique » est NON NUL (il lit la même chose que la production)', prouvees.length > 0, true);
+}
+
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);

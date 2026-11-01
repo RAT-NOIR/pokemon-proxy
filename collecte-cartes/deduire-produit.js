@@ -78,18 +78,19 @@ const apprisDeLExpansion = (n, e, s) => (e != null && n.idExpansion === e) || (s
 function vignettesDuJournal(journal) {
     const pages = Array.isArray(journal?.journal) ? journal.journal : [];
     const vues = new Map(), comptes = { detailEcartees: 0, detailSansImage: 0, autresImages: 0, doublons: 0, sansLien: 0 };
-    const prendre = (e, origine, expPage) => {
+    const prendre = (e, origine, urlPage) => {
         if (!e?.href) { comptes.sansLien++; return; }   // une vignette sans lien ne se déduit pas — mais elle se COMPTE
         if (origine === 'detailEcartees' && !(e.image || []).some(a => /cardImageNotAvailable/i.test(String(a)))) { comptes.autresImages++; return; }
+        // l'expansion de la page se juge POUR CETTE vignette : le slugSet du chemin doit être le sien (tour 2)
+        const expPage = expansionDeLAdresse(urlPage, lireVignette(e).slugSet);
         // la même vignette vue sur plusieurs pages : les expansions de TOUTES ses pages sont gardées (null = une page sans preuve)
         if (vues.has(e.href)) { comptes.doublons++; const ex = vues.get(e.href).expansionsDePage; if (!ex.includes(expPage)) ex.push(expPage); return; }
         comptes[origine]++;
         vues.set(e.href, { ...lireVignette(e), sansImage: true, origine, expansionsDePage: [expPage] });
     };
     for (const p of pages) {
-        const expPage = expansionDeLAdresse(p.url);
-        for (const e of p.detailEcartees || []) prendre(e, 'detailEcartees', expPage);
-        for (const e of p.detailSansImage || []) prendre(e, 'detailSansImage', expPage);
+        for (const e of p.detailEcartees || []) prendre(e, 'detailEcartees', p.url);
+        for (const e of p.detailSansImage || []) prendre(e, 'detailSansImage', p.url);
     }
     return { pages: pages.length, vignettes: [...vues.values()], comptes };
 }
@@ -97,12 +98,19 @@ function vignettesDuJournal(journal) {
 /** L'`idExpansion` que porte l'ADRESSE d'une page du journal — la clé `url` de l'userscript (`location.pathname + location.search`,
  *  ex. « /en/Pokemon/Products/Singles?idCategory=51&idExpansion=6704&site=2 »). Un SEUL `idExpansion`, entier positif : tout le reste
  *  (absent, doublé, non numérique, adresse illisible) rend null — la preuve s'écrit par ce qu'elle autorise. */
-function expansionDeLAdresse(url) {
+function expansionDeLAdresse(url, slugSet) {
     if (typeof url !== 'string') return null;
     const [chemin, q] = url.split('#')[0].split('?');
     // TOUR 1 : l'adresse est bornée par ce qu'elle AUTORISE — la galerie des singles Pokémon, chemin RELATIF (aucun hôte, aucun « // »),
     // et, si idCategory est là, la catégorie des singles (51) UNE seule fois. Magic, Search, Sealed, une URL absolue : null.
-    if (q == null || !/^\/[a-z]{2}\/Pokemon\/Products\/Singles$/.test(chemin)) return null;
+    // TOUR 2 (lu sur les 1 500 pages du vrai journal : 1 081 ont la forme « /<xx>/Pokemon/Products/Singles/<slugSet>?…&idExpansion=N ») :
+    // le chemin est « Singles » OU « Singles/<slugSet> » (UN segment) ; avec un slugSet il doit être ÉGAL à celui de la vignette (2e
+    // argument, obligatoire dans ce cas : sans lui, null). Deux segments = page de PRODUIT, qui ne prouve rien.
+    const m = q == null ? null : /^\/[a-z]{2}\/Pokemon\/Products\/Singles(?:\/([A-Za-z0-9][A-Za-z0-9._-]*))?$/.exec(chemin);
+    if (!m) return null;
+    if (m[1] !== undefined && m[1] !== slugSet) return null;
+    // un défi Cloudflare (__cf_chl_*) : la page n'a pas été servie, aucune preuve — quelle que soit la forme du paramètre
+    if (/__cf_chl_/i.test(q)) return null;
     const p = new URLSearchParams(q);
     const cats = p.getAll('idCategory');
     if (cats.length > 1 || (cats.length === 1 && cats[0] !== '51')) return null;

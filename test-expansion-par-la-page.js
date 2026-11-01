@@ -1,6 +1,7 @@
 // node test-expansion-par-la-page.js — banc : une expansion NEUVE (aucune ligne apprise) est prouvée par l'ADRESSE de la page du journal
 // (`idExpansion=<n>` dans `url`, l'adresse que l'userscript écrit : location.pathname + location.search). Sans base, sans réseau.
 // Cas du testeur, 2026-11-01 : l'expansion 6704 (DLR, 141 produits, aucune image chez Cardmarket) → 0 appris, « porté par 0 expansions ».
+const fs = require('fs'), path = require('path');
 const { vignettesDuJournal, deduireLot } = require('./collecte-cartes/deduire-produit');
 let ok = 0, ko = 0;
 const verifier = (nom, obtenu, attendu) => { const a = JSON.stringify(obtenu), b = JSON.stringify(attendu); if (a === b) { ok++; console.log(`✅ ${nom}`); } else { ko++; console.log(`❌ ${nom}\n   obtenu  ${a}\n   attendu ${b}`); } };
@@ -115,7 +116,7 @@ const SS = 'Dragon-Light-Rising';
         ['/en/Pokemon/Products/Singles?idCategory=52&idExpansion=6704', null],
         ['/en/Pokemon/Products/Singles?idCategory=51&idCategory=51&idExpansion=6704', null],
         ['/en/Pokemon/Products/Singles?idCategory=&idExpansion=6704', null],
-        ['/en/Pokemon/Products/Singles/Dragon-Light-Rising?idExpansion=6704', null],
+        ['/en/Pokemon/Products/Singles/Dragon-Light-Rising?idExpansion=6704', null],   // TOUR 2 : le slugSet du chemin doit être confirmé par l'appelant (2e argument) ; sans lui, null
         ['/english/Pokemon/Products/Singles?idExpansion=6704', null],
         ['/en/pokemon/products/singles?idExpansion=6704', null]
     ];
@@ -129,6 +130,34 @@ const SS = 'Dragon-Light-Rising';
     verifier('11c. idExpansion=9007199254740991 (MAX_SAFE_INTEGER) → accepté', expansionDeLAdresse('/en/Pokemon/Products/Singles?idExpansion=9007199254740991'), 9007199254740991);
     const { expansionParLaPage } = require('./collecte-cartes/deduire-produit');
     verifier('11d. expansionParLaPage refuse un entier non sûr', expansionParLaPage([{ expansionsDePage: [1e21] }]), null);
+
+    // 12. TOUR 2 : les VRAIES adresses du journal (rat-market-journal-2026-11-01-16-36.json, 1 500 pages) — 34 formes distinctes, extraites
+    //     par fixtures-adresses-journal.json (jetons de défi et msockid anonymisés). `attendu` a été écrit à la main depuis la règle
+    //     (liste à 0 ou 1 segment, idExpansion présent, aucun défi), jamais en appelant la fonction.
+    const FIX = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures-adresses-journal.json'), 'utf8'));
+    verifier('12. le fichier de fixtures porte au moins 15 formes réelles', FIX.length >= 15, true);
+    verifier('12a. …dont des listes À slugSet qui doivent donner un idExpansion (la forme majoritaire du vrai journal)', FIX.filter(f => f.slugSet && f.attendu).length >= 8, true);
+    for (const f of FIX) verifier(`12. réel ${f.forme || '(sans paramètre)'} ${f.url.split('?')[0].split('/').slice(-2).join('/')} → ${f.attendu}`, expansionDeLAdresse(f.url, f.slugSet), f.attendu);
+    // la garde de slugSet : le chemin porte un slugSet DIFFÉRENT de celui de la vignette → null
+    const U = '/fr/Pokemon/Products/Singles/Primal-Clash?searchMode=v2&idCategory=51&idExpansion=1585&idRarity=0&sortBy=idRarity_asc&perSite=30';
+    verifier('12b. chemin Primal-Clash, vignette Primal-Clash → 1585', expansionDeLAdresse(U, 'Primal-Clash'), 1585);
+    verifier('12c. chemin Primal-Clash, vignette d\'un AUTRE slugSet → null', expansionDeLAdresse(U, 'Plasma-Storm'), null);
+    verifier('12d. chemin à slugSet, aucun slugSet fourni → null (fermé par défaut)', expansionDeLAdresse(U), null);
+    verifier('12e. chemin sans slugSet, slugSet de vignette fourni → accepté (liste filtrée par idExpansion)', expansionDeLAdresse('/en/Pokemon/Products/Singles?idCategory=51&idExpansion=6703', 'Quelconque'), 6703);
+    verifier('12f. casse différente du slugSet → null', expansionDeLAdresse(U, 'primal-clash'), null);
+    verifier('12g. page de PRODUIT (deux segments) portant idExpansion → null', expansionDeLAdresse('/fr/Pokemon/Products/Singles/Primal-Clash/Foo-PCL1?idExpansion=1585', 'Primal-Clash'), null);
+    verifier('12h. défi Cloudflare __cf_chl_ → null', expansionDeLAdresse(U + '&__cf_chl_rt_tk=abc', 'Primal-Clash'), null);
+    verifier('12i. paramètre __cf_chl_f_tk (autre nom) → null', expansionDeLAdresse(U + '&__cf_chl_f_tk=abc', 'Primal-Clash'), null);
+    verifier('12j. idExpansion=0 → null', expansionDeLAdresse('/en/Pokemon/Products/Singles?idExpansion=0'), null);
+    verifier('12k. trois segments → null', expansionDeLAdresse('/en/Pokemon/Products/Singles/A/B/C?idExpansion=5', 'A'), null);
+    verifier('12l. slash final après le slugSet → null', expansionDeLAdresse('/en/Pokemon/Products/Singles/A/?idExpansion=5', 'A'), null);
+    verifier('12m. slugSet encodé / caractères hors liste → null', expansionDeLAdresse('/en/Pokemon/Products/Singles/A%20B?idExpansion=5', 'A%20B'), null);
+    // de bout en bout : une page À slugSet (forme réelle) + un Lot → déduit, l'expansion lue dans la page
+    const U6 = '/en/Pokemon/Products/Singles/' + SS + '?searchMode=v2&idCategory=51&idExpansion=6704&idRarity=0&sortBy=name_asc&site=2';
+    const j12 = { journal: [{ url: U6, slugSet: SS, detailSansImage: [entree(SS, 'Pidgey-DLR1', 'Roucool (DLR 1)'), entree(SS, 'Rattata-DLR2', 'Rattata (DLR 2)')] }] };
+    verifier('12n. page réelle à slugSet → vignettes prouvées 6704 et déduites', (await deduireLot(lotDe(j12), deps())).deduites.map(d => [d.idProduct, d.idExpansion]), [[11, 6704], [12, 6704]]);
+    const j12b = { journal: [{ url: U6, slugSet: SS, detailSansImage: [entree('Autre-Set', 'Pidgey-DLR1', 'Roucool (DLR 1)')] }] };
+    verifier('12o. page de SS qui montre une vignette d\'un autre slugSet → pas de preuve', (await deduireLot(lotDe(j12b), deps())).deduites.length, 0);
 
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
