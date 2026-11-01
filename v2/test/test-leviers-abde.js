@@ -94,15 +94,19 @@ if (L) {
     H.v('d : sans index d\'alias (null), aucun alias', L.aliasDe(null, ['Good Manners']), []);
     // ── tour 1 (ruling C, D) : plafond de l'éventail, nom lu borné, produits sans ligne, échecs comptés et journalisés
     {
-        const gros = new Map([['good manners', Array.from({ length: 35 }, (_, i) => 5000 + i)]]), coupes = [];
+        const gros = new Map([['good manners', Array.from({ length: 250 }, (_, i) => 5000 + i)]]), coupes = [];
         const ids = L.aliasDe(gros, ['Good Manners', 'good manners'], coupes);
-        H.v('d : un nom porté par 35 produits n\'en envoie que 20, et la coupe est ÉCRITE', [ids.length, coupes.length, coupes[0] && coupes[0].total, coupes[0] && coupes[0].gardes], [20, 1, 35, 20]);
+        H.v('d : un nom porté par 250 produits n\'en envoie que 200, et la coupe est ÉCRITE', [ids.length, coupes.length, coupes[0] && coupes[0].total, coupes[0] && coupes[0].gardes], [200, 1, 250, 200]);
+        // tour 3 (ruling) : le plafond est une constante NOMMÉE de 200 ; la FRONTIÈRE : 200 produits ne coupent pas, 201 coupent
+        H.v('d : ALIAS_MAX est la constante nommée du plafond total : 200', L.ALIAS_MAX, 200);
+        const lim = n => { const c = []; const ids2 = L.aliasDe(new Map([['good manners', Array.from({ length: n }, (_, i) => 9000 + i)]]), ['Good Manners'], c); return [ids2.length, c.length]; };
+        H.v('d : frontière : 200 produits ne coupent pas ; 201 coupent (200 gardés, coupe écrite)', [lim(199), lim(200), lim(201)], [[199, 0], [200, 0], [200, 1]]);
         // tour 2 (re-relecture, 1) : le plafond de 20 vaut pour l'ENSEMBLE des formes lues (nom et nom brut), pas 20 par forme
-        const deux = new Map([['good manners', Array.from({ length: 15 }, (_, i) => 6000 + i)], ['mewtwo', Array.from({ length: 15 }, (_, i) => 7000 + i)]]), coupes2 = [];
+        const deux = new Map([['good manners', Array.from({ length: 120 }, (_, i) => 6000 + i)], ['mewtwo', Array.from({ length: 120 }, (_, i) => 7000 + i)]]), coupes2 = [];
         const ids2 = L.aliasDe(deux, ['Good Manners', 'Mewtwo'], coupes2);
-        H.v('d : deux formes de 15 produits : 20 au TOTAL (pas 30), la coupe est ÉCRITE avec le total de l\'union', [ids2.length, coupes2.length, coupes2[0] && coupes2[0].total, coupes2[0] && coupes2[0].gardes], [20, 1, 30, 20]);
+        H.v('d : deux formes de 120 produits : 200 au TOTAL (pas 240), la coupe est ÉCRITE avec le total de l\'union', [ids2.length, coupes2.length, coupes2[0] && coupes2[0].total, coupes2[0] && coupes2[0].gardes], [200, 1, 240, 200]);
         const coupes3 = [];
-        H.v('d : 20 produits au total, répartis sur deux formes : rien n\'est coupé', [L.aliasDe(new Map([['good manners', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]], ['mewtwo', [11, 12, 13, 14, 15, 16, 17, 18, 19, 20]]]), ['Good Manners', 'Mewtwo'], coupes3).length, coupes3.length], [20, 0]);
+        H.v('d : 200 produits au total, répartis sur deux formes : rien n\'est coupé', [L.aliasDe(new Map([['good manners', Array.from({ length: 100 }, (_, i) => i + 1)], ['mewtwo', Array.from({ length: 100 }, (_, i) => i + 101)]]), ['Good Manners', 'Mewtwo'], coupes3).length, coupes3.length], [200, 0]);
         const long = 'a'.repeat(5000) + ' fin';
         H.v('d : le nom lu est borné AVANT la normalisation (120 caractères)', [L.normaliserAlias(long).length, L.NOM_LU_MAX], [120, 120]);
         const ex = L.composerPool({ baseIds: [5], vivier: [900, 901, 1000, 1001], ko: () => 0, produitsDesVoisins: [[900, 9000]], alias: [901, 7777], existe: id => id >= 1000 || id === 5 || id === 9000 || id === 7777 });

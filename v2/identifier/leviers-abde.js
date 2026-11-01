@@ -23,7 +23,7 @@ const { questionParLaRoute } = require('./adaptateur');
 const POIDS_OK = 0.05, POIDS_KO = 0.25;            // les poids de c3 (a priori, §8.1)
 const TAILLE_POOL = 10, VIVIER_LU = 80, VIVIER_RETENU = 10, VOISINS = 10, ALIAS_LONGUEUR_MIN = 4;
 const TOLERANCE = 1e-12;                           // « écart >= s » à l'arrondi flottant près (0,5 - 0,4 vaut 0,09999999999999998)
-const ALIAS_MAX = 20;                              // au plus 20 produits par nom lu : un nom porté par des centaines de produits (Pikachu, Dracaufeu, énergies) n'envoie pas des centaines de lignes à lire ; ce qui est coupé est ÉCRIT (journal, diag.aliasCoupes)
+const ALIAS_MAX = 200;                             // PLAFOND TOTAL de l'éventail d'alias (nom et nom brut confondus), décision du coordinateur (tour 3, MESURE ALIAS_MAX : 336 directes, 0 sûr faux, 2,0 % de probables faux hors tamponnées, p95 ~420 ms de CPU à 0,15 vCPU). Un éventail de 200 ne coupe pas ; de 201, il COUPE et l'étape ÉCHOUE FERMÉE (alias-coupe). Fini à dessein : un éventail sans borne est un risque de coût. Ce qui est coupé est ÉCRIT (journal, diag.aliasCoupes)
 const NOM_LU_MAX = 120;                            // le nom lu est borné AVANT d'être normalisé (NFKD sur une chaîne sans borne = CPU offert à l'entrée)
 // Le signal journalisé d'un probable reste celui de la lecture + image, `A` (les outils qui trient par A / G le voient) ; le levier qui l'a désigné est dit à part (`levier: 'abde'`, routes.js l'écrit dans analyses).
 const SIGNAL = 'A', LEVIER = 'abde';
@@ -92,7 +92,7 @@ function aliasDe(index, formes, coupes = null) {
         cles.push(k);
         for (const id of index.get(k)) if (!sortie.includes(id)) sortie.push(id);
     }
-    // TOUR 2 : le plafond vaut pour l'ENSEMBLE des formes lues (20 au total, pas 20 par forme) ; ce qui est coupé est ÉCRIT, et l'appelant n'en tire AUCUN probable (un éventail coupé fabrique une marge)
+    // TOUR 2 : le plafond vaut pour l'ENSEMBLE des formes lues (ALIAS_MAX = 200 au total, pas par forme) ; ce qui est coupé est ÉCRIT, et l'appelant n'en tire AUCUN probable (un éventail coupé fabrique une marge)
     if (sortie.length > ALIAS_MAX && Array.isArray(coupes)) coupes.push({ cle: cles.join(' | '), total: sortie.length, gardes: ALIAS_MAX });
     return sortie.slice(0, ALIAS_MAX);
 }

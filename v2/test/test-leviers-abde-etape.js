@@ -124,17 +124,20 @@ const COS = { 1: 0.40, 2: 0.60, 3: 0.35, 4: 0.30 };
         const absent = await lancer(ma2);
         H.v('d : un catalogue SANS index d\'alias : aucun probable (jamais un repli vide qui fabrique une marge)', [absent.r, absent.diag.raison], [null, 'alias-absent']);
         // le plafond de l'éventail : 30 produits portent ce nom français, 20 seulement entrent au pool, et la coupe est écrite
-        const gros = L.construireIndexAlias(Array.from({ length: 30 }, (_, i) => ({ idProduct: 3000 + i, nomFr: 'Etiquette d Erika' })));
-        const lg2 = { ...lignes }; for (let i = 3000; i < 3030; i++) lg2[i] = ligne(i, { numero: '12', total: '99' });
+        const gros = L.construireIndexAlias(Array.from({ length: 250 }, (_, i) => ({ idProduct: 3000 + i, nomFr: 'Etiquette d Erika' })));
+        const lg2 = { ...lignes }; for (let i = 3000; i < 3250; i++) lg2[i] = ligne(i, { numero: '12', total: '99' });
         const mg = monde({ cos: loin, lignes: lg2, base: [2, 3], vivier: [] }); mg.corps.carte.nom = 'Etiquette d Erika'; mg.corps.carte.nomBrut = null; mg.catalogue.indexAliasFrSansAttente = () => gros;
         const cg = await lancer(mg);
-        H.v('d : l\'éventail d\'alias est plafonné à 20 par nom lu, et ce qui est coupé est ÉCRIT', [cg.diag.aliasIds.length, cg.diag.aliasCoupes && cg.diag.aliasCoupes[0].total, cg.diag.aliasCoupes && cg.diag.aliasCoupes[0].gardes], [20, 30, 20]);
+        H.v('d : l\'éventail d\'alias est plafonné à 200 au total, et ce qui est coupé est ÉCRIT', [cg.diag.aliasIds.length, cg.diag.aliasCoupes && cg.diag.aliasCoupes[0].total, cg.diag.aliasCoupes && cg.diag.aliasCoupes[0].gardes], [200, 250, 200]);
         // tour 2 (re-relecture, 1) : un éventail COUPÉ ne peut pas fabriquer une marge : aucun probable (échec fermé, compté), la question d'avant reste
         H.v('d : un éventail coupé par le plafond => AUCUN probable (échec fermé), la question d\'avant reste, la cause est dite', [cg.r, cg.diag.raison], [null, 'alias-coupe']);
         const av3 = L.echecs();
-        const mg2 = monde({ cos: loin, lignes: lg2, base: [2, 3], vivier: [] }); mg2.corps.carte.nom = 'Etiquette d Erika'; mg2.corps.carte.nomBrut = 'Etiquette d Erika bis'; mg2.catalogue.indexAliasFrSansAttente = () => L.construireIndexAlias([...Array.from({ length: 12 }, (_, i) => ({ idProduct: 3000 + i, nomFr: 'Etiquette d Erika' })), ...Array.from({ length: 12 }, (_, i) => ({ idProduct: 3012 + i, nomFr: 'Etiquette d Erika bis' }))]);
+        const mg2 = monde({ cos: loin, lignes: lg2, base: [2, 3], vivier: [] }); mg2.corps.carte.nom = 'Etiquette d Erika'; mg2.corps.carte.nomBrut = 'Etiquette d Erika bis'; mg2.catalogue.indexAliasFrSansAttente = () => L.construireIndexAlias([...Array.from({ length: 110 }, (_, i) => ({ idProduct: 3000 + i, nomFr: 'Etiquette d Erika' })), ...Array.from({ length: 110 }, (_, i) => ({ idProduct: 3110 + i, nomFr: 'Etiquette d Erika bis' }))]);
         const cg2 = await lancer(mg2);
-        H.v('d : le plafond vaut pour l\'ENSEMBLE des formes lues : 12 + 12 produits = 24 > 20 => coupé => aucun probable, 20 alias au total', [cg2.r, cg2.diag.raison, cg2.diag.aliasIds.length, (L.echecs()['alias-coupe'] || 0) - (av3['alias-coupe'] || 0)], [null, 'alias-coupe', 20, 1]);
+        H.v('d : le plafond vaut pour l\'ENSEMBLE des formes lues : 110 + 110 produits = 220 > 200 => coupé => aucun probable, 200 alias au total', [cg2.r, cg2.diag.raison, cg2.diag.aliasIds.length, (L.echecs()['alias-coupe'] || 0) - (av3['alias-coupe'] || 0)], [null, 'alias-coupe', 200, 1]);
+        // tour 3 : la FRONTIÈRE de bout en bout : 200 alias ne ferment pas l\'étape (la cause n\'est pas alias-coupe), 201 la ferment
+        const front = async n => { const lg = { ...lignes }; for (let i = 3000; i < 3000 + n; i++) lg[i] = ligne(i, { numero: '12', total: '99' }); const mf = monde({ cos: loin, lignes: lg, base: [2, 3], vivier: [] }); mf.corps.carte.nom = 'Etiquette d Erika'; mf.corps.carte.nomBrut = null; mf.catalogue.indexAliasFrSansAttente = () => L.construireIndexAlias(Array.from({ length: n }, (_, i) => ({ idProduct: 3000 + i, nomFr: 'Etiquette d Erika' }))); return (await lancer(mf)).diag.raison; };
+        H.v('d : frontière du plafond de bout en bout : 200 alias => l\'étape continue ; 201 => alias-coupe (échec fermé)', [await front(200) !== 'alias-coupe', await front(201)], [true, 'alias-coupe']);
     }
     // ── les portes : tout le reste rend null et le DIT
     {
