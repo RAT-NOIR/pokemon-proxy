@@ -84,7 +84,7 @@ let RESULTAT_COUT = null;
         else if (k.statut !== 'identifiee' && stockes.length >= 2 && j.resultat === 'succes') corps = { success: true, carte: { idProduct: stockes[0], ambigu: true, numero: j.numero, total: j.total, setCode: j.setCode, tcgdexId: j.carteTcgdexId, langue: j.langue, nom: j.nom, nomBrut: j.nomBrut, nomConfiance: j.nomConfiance }, ...enTete, candidats: stockes.map(idProduct => ({ idProduct })), lectureGarde: { ...luBloc, vivierIds: j.vivierIds } };
         else continue;
         const ids0 = W !== null ? [W] : stockes;
-        const jum0 = await J.fournisseurParDefaut(cat, V, J.idsAffirmes(corps));
+        const jum0 = await J.fournisseurParDefaut(cat, V, J.idsAPreparer(corps));
         const produits0 = await cat.lire([...ids0, ...J.idsACharger(corps, jum0), ...GC.idsDeLaGarde(corps)]);
         const pr = await preparer({ corpsListe: [corps], produits: produits0, jumeaux: jum0, catalogue: cat, version: V, designation: TOUTES });
         const run = async (cfg, avecLeviers) => {

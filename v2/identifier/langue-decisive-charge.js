@@ -5,7 +5,7 @@
 // M-C (tour de correction 2) : ce module ne prépare QUE le SURVIVANT UNIQUE de la réduction (`survivantUnique`, les règles livrées) — jamais tous les candidats désignés — sous un PLAFOND de produits lus
 // (PLAFOND_CHARGE) et un TEMPS borné (DELAI_PREPARATION_MS). Pas de survivant unique, jumeaux au-delà du plafond, lecture en panne ou trop lente : il ne prépare rien (l'état d'avant, la résolution se refuse, la
 // question reste réduite par la langue). Une panne de lecture ne lève jamais.
-const { fournisseurParDefaut, idsAffirmes } = require('./jumeaux');
+const { fournisseurParDefaut, idsAPreparer } = require('./jumeaux');
 const LD = require('./langue-decisive');
 const DES = require('./designation');
 
@@ -39,7 +39,7 @@ async function preparer({ corpsListe, produits, jumeaux, catalogue, version, dep
         // l'EXTENSION de la désignation : ses candidats possibles en plus (I3 : au plafond, seule elle est abandonnée, jamais la préparation propre de LANGUE-DECISIVE)
         const survivantsDes = desActives && codeNumeroExiste && codeNumeroExiste.famille ? [...new Set((corpsListe || []).flatMap(c => DES.candidatsAPreparer({ corps: c, produits, regles: reglesDes })))].filter(i => !survivantsLD.includes(i)) : [];
         if (!survivantsLD.length && !survivantsDes.length) return avant;
-        const affirmes = (corpsListe || []).flatMap(c => idsAffirmes(c));
+        const affirmes = (corpsListe || []).flatMap(c => idsAPreparer(c));            // JUMEAUX-VERDICTS : le fournisseur refait ici REMPLACE celui de la route — il garde les verdicts des candidats
         const r = await apresDelai((async () => {
             const preparer1 = async survivants => {
                 const j2 = await fournisseurParDefaut(catalogue, version, [...new Set([...affirmes, ...survivants])]);

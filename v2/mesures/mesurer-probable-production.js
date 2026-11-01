@@ -112,7 +112,7 @@ const pct = (a, b) => (b ? (100 * a / b).toFixed(1) + ' %' : 'n/a');
         if (W === null && Array.isArray(j.vivierIds) && !surStocke && L.choixStockes.length >= 2 && j.resultat === 'succes') {
             const ids = L.choixStockes;
             const corpsQ = { success: true, carte: { idProduct: ids[0], ambigu: true, numero: j.numero, total: j.total, setCode: j.setCode, tcgdexId: j.carteTcgdexId, langue: j.langue, nom: j.nom, nomBrut: j.nomBrut, nomConfiance: j.nomConfiance }, ...enTete, candidats: ids.map(idProduct => ({ idProduct })), lectureGarde: { ...luBloc, vivierIds: j.vivierIds } };
-            const jum0q = await J.fournisseurParDefaut(cat, V, J.idsAffirmes(corpsQ));
+            const jum0q = await J.fournisseurParDefaut(cat, V, J.idsAPreparer(corpsQ));
             const produits0q = await cat.lire([...ids, ...J.idsACharger(corpsQ, jum0q), ...GC.idsDeLaGarde(corpsQ)]);
             const prq = await preparer({ corpsListe: [corpsQ], produits: produits0q, jumeaux: jum0q, catalogue: cat, version: V, designation: TOUTES });
             L.q = { corps: corpsQ, produits: prq.produits, jum: prq.jumeaux, codeNumeroExiste: prq.codeNumeroExiste };
@@ -120,7 +120,7 @@ const pct = (a, b) => (b ? (100 * a / b).toFixed(1) + ' %' : 'n/a');
         }
         if (W === null || !Array.isArray(j.vivierIds)) continue;
         const corps = { success: true, carte: { idProduct: W, ambigu: !chainAffirmee, numero: j.numero, total: j.total, setCode: j.setCode, tcgdexId: j.carteTcgdexId, langue: j.langue, nom: j.nom, nomBrut: j.nomBrut, nomConfiance: j.nomConfiance }, ...enTete, candidats: [{ idProduct: W }], lectureGarde: { ...luBloc, vivierIds: j.vivierIds } };
-        const jum0 = await J.fournisseurParDefaut(cat, V, J.idsAffirmes(corps));
+        const jum0 = await J.fournisseurParDefaut(cat, V, J.idsAPreparer(corps));
         const produits0 = await cat.lire([W, ...J.idsACharger(corps, jum0), ...GC.idsDeLaGarde(corps)]);
         const pr2 = await preparer({ corpsListe: [corps], produits: produits0, jumeaux: jum0, catalogue: cat, version: V, designation: TOUTES });
         Object.assign(L, { evaluable: true, W, corps, jum2: pr2.jumeaux, produits2: pr2.produits, codeNumeroExiste2: pr2.codeNumeroExiste });

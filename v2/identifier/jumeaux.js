@@ -92,6 +92,22 @@ function idsAffirmes(corps) {
 }
 
 /**
+ * JUMEAUX-VERDICTS : les produits dont un VERDICT doit être préparé avant l'adaptation. L'adaptateur retire d'abord les candidats que le nom lu contredit, puis passe par `garde()` le candidat resté seul
+ * (candidatUnique) — un candidat que `idsAffirmes` (calculé sur le corps BRUT : 2 candidats = aucun id) n'avait pas préparé, donc « la colonne ne conclut pas » : une panne INDISPONIBLE à tort (3 scans sur 50, essai e833578c).
+ * Écrit par ce qu'il AUTORISE : le produit affirmé / candidat unique d'abord (jamais coupé par la borne), puis les candidats d'une réponse que l'adaptateur sait lire (une réussite, ou une égalité délibérée :
+ * `extra` = ctx.candidatsDeRefus), et rien d'autre — un refus technique ou une réponse inconnue ne prépare que ce que `idsAffirmes` prépare. Borne : MAX_PREPARES produits (le pool de la chaîne), donc au plus
+ * MAX_PREPARES requêtes indexées (limit 1) ; au-delà, les derniers ne sont pas préparés et restent « ne conclut pas » (la panne d'avant, jamais une affirmation).
+ */
+const MAX_PREPARES = 10;
+function idsAPreparer(corps, extra = []) {
+    const base = idsAffirmes(corps);
+    if (!corps || typeof corps !== 'object') return base;
+    const lisible = corps.success === true || (corps.success === false && corps.natureRefus === 'refus-delibere' && MOTIFS_EGALITE_EN_QUESTION.includes(corps.motifRefus));
+    if (!lisible) return base;
+    return [...new Set([...base, ...idsDe(corps.candidats), ...(corps.success === false ? idsDe(extra) : [])])].slice(0, MAX_PREPARES);
+}
+
+/**
  * Le fournisseur de PRODUCTION : la version EN PLACE, et, pour chacun des produits que la chaîne AFFIRME, UNE requête indexée dans le catalogue de la route — « existe-t-il un produit PLUS RÉCENT que
  * l'archive (idProduct > maxArchive) de la même métacarte ? ». Oui → ce produit-là seul ne conclut pas (`jumeaux-perimes`) ; non → la colonne s'applique ; la requête échoue, la méthode manque, la
  * métacarte du produit est inconnue → il ne conclut pas non plus (on échoue fermé). Sans colonne, le catalogue n'est même pas interrogé.
@@ -104,7 +120,10 @@ async function fournisseurParDefaut(catalogue, version, idsAffirmes) {
         const meta = version.metacarteJumeaux(id);
         if (!empreinteValide(e) || meta === null || !catalogue || typeof catalogue.plusRecentDansMetacarte !== 'function') { verdicts.set(id, 'indisponible'); continue; }
         try { const r = await catalogue.plusRecentDansMetacarte(e.max, meta); verdicts.set(id, r === false ? 'ok' : r === true ? 'perime' : 'indisponible'); }   // « ok » seulement sur un FAUX franc
-        catch { verdicts.set(id, 'indisponible'); }
+        catch (e) {                                                       // une vraie panne reste une panne (« indisponible »), mais elle se VOIT : le code ou le nom de l'erreur seulement, jamais son message
+            verdicts.set(id, 'indisponible');
+            console.warn(`⚠️ [jumeaux-v2] verdict impossible produit=${id} : la requête du catalogue a levé (${(e && (e.code || e.name)) || 'erreur'})`);
+        }
     }
     return fournisseurDe(version, verdicts);
 }
@@ -153,4 +172,4 @@ function garde(ctx, idProduct, sonde = false) {                       // sonde :
     return { action: 'question', ids: [idProduct, ...jumeaux], partages };
 }
 
-module.exports = { garde, fournisseurDe, partagesDeLaVersion, partagesDuFournisseur, fournisseurParDefaut, idsAffirmes, idsACharger, candidatUniqueDe, compteurs, noter, MOTIFS, MOTIFS_PANNE, MAX_PRODUITS, MAX_CHARGE };
+module.exports = { garde, fournisseurDe, partagesDeLaVersion, partagesDuFournisseur, fournisseurParDefaut, idsAffirmes, idsAPreparer, idsACharger, candidatUniqueDe, compteurs, noter, MOTIFS, MOTIFS_PANNE, MAX_PRODUITS, MAX_CHARGE, MAX_PREPARES };
