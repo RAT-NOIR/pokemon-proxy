@@ -95,6 +95,11 @@ function creerServeur({ apiBase = process.env.RM_API_BASE || ESSAI, jeton = proc
                 if (typeof lanceur.arreter === 'function') setTimeout(() => { try { lanceur.arreter(); } catch { /* l'arrêt ne doit jamais lever */ } }, 50);
                 return;
             }
+            if (req.method === 'POST' && chemin === '/_lier' && lanceur && typeof lanceur.demanderCode === 'function') {      // « Lier mon extension » : un code de liaison neuf, rendu à la page SEULE (Host, Origin, Sec-Fetch-Site, jeton anti-falsification), jamais journalisé
+                if (req.headers['x-rm-csrf'] !== csrf) return json(res, 403, { success: false, erreur: { code: 'ORIGINE' } });
+                try { const r = await lanceur.demanderCode(); return json(res, 200, { success: true, code: r.code, expire: r.expire }); }
+                catch (e) { return json(res, e && Number.isInteger(e.statut) ? e.statut : 500, { success: false, erreur: { code: 'LIAISON', message: e && typeof e.phrase === 'string' ? e.phrase : 'Le code de liaison n\'a pas pu être demandé.' } }); }
+            }
             if (req.method === 'GET' && (chemin === '/' || chemin === '/index.html')) {
                 const html = fichier('page.html').toString('utf8').replace('__CSRF__', csrf);
                 return repondre(res, 200, lanceur ? html.replace(SESSION_RE, '') : html.replace(/<!--SESSION-(DEBUT|FIN)-->/g, ''), 'text/html; charset=utf-8');

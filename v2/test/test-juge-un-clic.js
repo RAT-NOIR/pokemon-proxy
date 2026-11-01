@@ -12,7 +12,8 @@ const RMControleur = require('../../outils/banc-200/controleur');
 
 const MOT_DE_PASSE = 'mot-de-passe-de-banc-NE-JAMAIS-AFFICHER-0123456789', IDENTIFIANT = 'banc-mesure@rat-market.invalid';
 const JETON_INST = 'jeton-installation-SECRET-aaaa1111', JETON_LIE = 'jeton-lie-SECRET-bbbb2222', COOKIE = 'cookie-session-SECRET-cccc3333', CODE = 'ABC123';
-const SECRETS = [MOT_DE_PASSE, JETON_INST, JETON_LIE, COOKIE, IDENTIFIANT];
+const COOKIE2 = 'cookie-session-SECRET-dddd4444', CODES_LIAISON = ['7KQX2M', '9TWV4B', '3HNP8D'];           // TOUR 2 : la 2e session (reconnexion) et les codes de liaison montrés à la page SEULE
+const SECRETS = [MOT_DE_PASSE, JETON_INST, JETON_LIE, COOKIE, COOKIE2, IDENTIFIANT, ...CODES_LIAISON];
 const ESSAI = 'rat-market-api-essai.onrender.com';
 const racine = fs.mkdtempSync(path.join(os.tmpdir(), 'juge-un-clic-'));
 let n = 0;
@@ -24,7 +25,7 @@ const essayer = async (nom, f) => { try { await f(); } catch (e) { H.v(`${nom} (
 
 /** Le faux ESSAI : un `fetch` qui note tout. comportement : { ping503: n fois, lier503: n fois, pasAdmin, porte: Promise (la connexion attend) }. */
 function fauxEssai(comportement = {}) {
-    const appels = []; let ping503 = comportement.ping503 || 0, lier503 = comportement.lier503 || 0;
+    const appels = []; let ping503 = comportement.ping503 || 0, lier503 = comportement.lier503 || 0, connexions = 0, codes = 0;
     const rep = (statut, corps, entetes = {}) => ({ status: statut, json: async () => corps, arrayBuffer: async () => Buffer.from(JSON.stringify(corps)), headers: { get: k => entetes[String(k).toLowerCase()] ?? (String(k).toLowerCase() === 'content-type' ? 'application/json' : null) } });
     const fetch = async (url, init = {}) => {
         const u = new URL(url), corps = init.body, h = init.headers || {};
@@ -34,13 +35,23 @@ function fauxEssai(comportement = {}) {
             if (comportement.porte) await comportement.porte;
             const b = JSON.parse(corps);
             if (b.email !== IDENTIFIANT || b.motDePasse !== MOT_DE_PASSE) return rep(401, { success: false });
-            return rep(200, { success: true }, { 'set-cookie': `rm_session=${COOKIE}; HttpOnly; Secure; SameSite=Lax; Path=/` });
+            if (comportement.refuserReconnexion && connexions >= 1) return rep(401, { success: false });
+            connexions++;
+            return rep(200, { success: true }, { 'set-cookie': `rm_session=${connexions === 1 ? COOKIE : COOKIE2}; HttpOnly; Secure; SameSite=Lax; Path=/` });
         }
-        if (u.pathname === '/api/installation') return h.Cookie === `rm_session=${COOKIE}` ? rep(201, { success: true, jetonInstallation: JETON_INST }) : rep(401, { success: false });
-        if (u.pathname === '/api/compte/code') return h.Cookie === `rm_session=${COOKIE}` ? rep(200, { success: true, code: CODE }) : rep(401, { success: false });
+        if (u.pathname === '/api/installation') return (h.Cookie === `rm_session=${COOKIE}` || h.Cookie === `rm_session=${COOKIE2}`) ? rep(201, { success: true, jetonInstallation: JETON_INST }) : rep(401, { success: false });
+        if (u.pathname === '/api/compte/code') {
+            // COMME L'API : session exigée (cookie + Origin du site + X-Rat-Market) ; 401 si la session est périmée ; 429 DEBIT au-delà de 3 codes vivants ; le code est neuf à chaque demande, sans être consommé
+            if (h.Origin !== 'https://rat-market.fr' || h['X-Rat-Market'] !== '1') return rep(403, { success: false });
+            if (h.Cookie === `rm_session=${COOKIE}` && comportement.expirerSession && codes >= 1) return rep(401, { success: false, erreur: { code: 'SESSION' } });
+            if (h.Cookie !== `rm_session=${COOKIE}` && h.Cookie !== `rm_session=${COOKIE2}`) return rep(401, { success: false });
+            codes++;
+            if (comportement.tropDeCodes && codes > 1) return rep(429, { success: false, erreur: { code: 'DEBIT', reessayerDans: 300 } }, { 'retry-after': '300' });
+            return rep(200, { success: true, code: codes === 1 ? CODE : CODES_LIAISON[(codes - 2) % 3], expire: new Date(Date.now() + 600e3).toISOString() });
+        }
         if (u.pathname === '/api/compte/lier') {
             if (lier503 > 0) { lier503--; return rep(503, { success: false }); }
-            return h.Authorization === `Bearer ${JETON_INST}` && JSON.parse(corps).code === CODE ? rep(200, { success: true, compte: { verifie: true, administrateur: !comportement.pasAdmin }, jetonInstallation: JETON_LIE }) : rep(401, { success: false });
+            return h.Authorization === `Bearer ${JETON_INST}` && [CODE, ...CODES_LIAISON].includes(JSON.parse(corps).code) ? rep(200, { success: true, compte: { verifie: true, administrateur: !comportement.pasAdmin }, jetonInstallation: JETON_LIE }) : rep(401, { success: false });
         }
         if (u.pathname === '/api/banc/seau/courant') return h.authorization === `Bearer ${JETON_LIE}` ? rep(200, { success: true, seau: { id: 's1', nom: 'juge-200', type: 'juge', n: 37, cible: 200 } }) : rep(401, { success: false });
         return rep(404, { success: false });
@@ -334,6 +345,99 @@ const noter = async (x, r) => { const j = r.journal ? fs.readFileSync(r.journal,
 
         f = fabrique({ liste: OK([]) }); await f.ctrl.demarrer(); await f.ctrl.arreter();
         H.v('13. « Arrêter » : POST /_arreter puis l\'écran d\'arrêt', [f.appels.includes('POST /_arreter'), f.E.arret], [true, 1]);
+    });
+
+    // ── 14. TOUR 2 : « Lier mon extension » — un code de liaison NEUF pour le compte de mesure, demandé par la session du lanceur (gardée en mémoire), montré à la page SEULE
+    await essayer('14. lier mon extension', async () => {
+        const brut = (r, methode, chemin, { host, origin, site, csrf, corps } = {}) => new Promise((resolve, reject) => {
+            const u = new URL(r.url), h = { host: host || `127.0.0.1:${u.port}` }; if (origin) h.origin = origin; if (site) h['sec-fetch-site'] = site; if (csrf) h['x-rm-csrf'] = csrf;
+            if (corps !== undefined) { h['content-type'] = 'application/json'; h['content-length'] = Buffer.byteLength(corps); }
+            const q = http.request({ host: '127.0.0.1', port: u.port, path: chemin, method: methode, headers: h, agent: false }, res => { const m = []; res.on('data', c => m.push(c)); res.on('end', () => { const t = Buffer.concat(m).toString('utf8'); let j = null; try { j = JSON.parse(t); } catch { /* non JSON */ } resolve({ statut: res.statusCode, texte: t, json: j, entetes: res.headers }); }); });
+            q.on('error', reject); q.end(corps);
+        });
+        const csrfDe = async r => (/name="rm-csrf" content="([0-9a-f]+)"/.exec((await H.appel(r.url.replace(/\/$/, ''), '/')).texte) || [])[1];
+
+        const x = await lancerBanc(), r = x.r, csrf = await csrfDe(r), codesAvant = x.faux.de('/api/compte/code').length;
+        const pg = await H.appel(r.url.replace(/\/$/, ''), '/');
+        H.v('14. la page porte le bouton « Lier mon extension » et la zone du code (grand)', [pg.texte.includes('id="lier"'), pg.texte.includes('id="codeLiaison"'), pg.texte.includes('Lier mon extension')], [true, true, true]);
+        const l1 = await brut(r, 'POST', '/_lier', { csrf, corps: '{}' });
+        H.v('14. 🔑 le code est demandé à l\'API par la session du lanceur (cookie, Origin du site) et rendu à la page', [l1.statut, l1.json && l1.json.code, typeof (l1.json && l1.json.expire), x.faux.de('/api/compte/code').length - codesAvant], [200, CODES_LIAISON[0], 'string', 1]);
+        const dernier = x.faux.de('/api/compte/code').slice(-1)[0];
+        H.v('14. la demande porte la session EN MÉMOIRE du lanceur et les en-têtes du site', [dernier.entetes.Cookie === `rm_session=${COOKIE}`, dernier.entetes.Origin, dernier.entetes['X-Rat-Market']], [true, 'https://rat-market.fr', '1']);
+        H.v('14. le code n\'est PAS consommé : aucune liaison de plus (une seule, celle du lanceur), aucune installation de plus', [x.faux.de('/api/compte/lier').length, x.faux.de('/api/installation').length], [1, 1]);
+        H.v('14. la réponse n\'est pas mise en cache', l1.entetes['cache-control'], 'no-store');
+        const l2 = await brut(r, 'POST', '/_lier', { csrf, corps: '{}' });
+        H.v('14. un second clic : un code NEUF', [l2.statut, l2.json.code], [200, CODES_LIAISON[1]]);
+        // la garde de l'appelant, comme les autres écritures
+        const avant = x.faux.de('/api/compte/code').length;
+        const sans = await brut(r, 'POST', '/_lier', { corps: '{}' }), faux = await brut(r, 'POST', '/_lier', { csrf: 'x'.repeat(48), corps: '{}' });
+        const hoteEtranger = await brut(r, 'POST', '/_lier', { csrf, host: 'evil.example:80', corps: '{}' }), origineEtrangere = await brut(r, 'POST', '/_lier', { csrf, origin: 'https://evil.example', corps: '{}' });
+        const croise = await brut(r, 'POST', '/_lier', { csrf, site: 'cross-site', corps: '{}' });
+        H.v('14. 🔑 sans jeton anti-falsification, avec un faux, Host étranger, Origin étrangère, cross-site : 403 et AUCUNE demande de code à l\'API', [sans.statut, faux.statut, hoteEtranger.statut, origineEtrangere.statut, croise.statut, x.faux.de('/api/compte/code').length - avant], [403, 403, 403, 403, 403, 0]);
+        H.v('14. aucune de ces réponses ne contient de code', [sans, faux, hoteEtranger, origineEtrangere, croise].some(q => CODES_LIAISON.some(c => q.texte.includes(c))), false);
+        // le code n'est ni dans /_etat, ni journalisé, ni dans un fichier
+        const e = await H.appel(r.url.replace(/\/$/, ''), '/_etat'), log = fs.readFileSync(r.journal, 'utf8');
+        H.v('14. 🔑 le code est absent de /_etat et du journal, qui dit seulement « code de liaison demandé »', [CODES_LIAISON.some(c => e.texte.includes(c)), CODES_LIAISON.some(c => log.includes(c)), log.includes('code de liaison demandé')], [false, false, true]);
+        corpus.push({ nom: 'journal', texte: log }, { nom: '/_etat', texte: e.texte }, { nom: 'page', texte: (await H.appel(r.url.replace(/\/$/, ''), '/')).texte });
+        await r.fermer();
+
+        // session expirée : reconnexion AUTOMATIQUE (une connexion de plus, jamais une installation de plus), puis le code
+        const ex = await lancerBanc({ comportement: { expirerSession: true } }), cex = await csrfDe(ex.r);
+        const lx = await brut(ex.r, 'POST', '/_lier', { csrf: cex, corps: '{}' });
+        H.v('14. 🔑 session expirée (401 de l\'API) : reconnexion automatique puis code, sans nouvelle installation', [lx.statut, lx.json && lx.json.code, ex.faux.de('/api/compte/connexion').length, ex.faux.de('/api/installation').length], [200, CODES_LIAISON[0], 2, 1]);
+        H.v('14. la nouvelle session sert aux demandes suivantes (pas de reconnexion à chaque clic)', [(await brut(ex.r, 'POST', '/_lier', { csrf: cex, corps: '{}' })).statut, ex.faux.de('/api/compte/connexion').length], [200, 2]);
+        corpus.push({ nom: 'journal', texte: fs.readFileSync(ex.r.journal, 'utf8') }); await ex.r.fermer();
+        const imp = await lancerBanc({ comportement: { expirerSession: true, refuserReconnexion: true } }), cim = await csrfDe(imp.r);
+        const li = await brut(imp.r, 'POST', '/_lier', { csrf: cim, corps: '{}' });
+        H.v('14. session expirée ET reconnexion refusée : une phrase claire en français, pas de code', [li.statut >= 400, /^Session de l'essai expirée/.test((li.json && li.json.erreur && li.json.erreur.message) || ''), /double-cliquez de nouveau sur « Juge Rat-Market »/.test((li.json && li.json.erreur && li.json.erreur.message) || ''), CODES_LIAISON.some(c => li.texte.includes(c))], [true, true, true, false]);
+        corpus.push({ nom: 'journal', texte: fs.readFileSync(imp.r.journal, 'utf8') }); await imp.r.fermer();
+
+        // trop de codes vivants (3 au plus par compte, 10 min) : l'API répond 429 DEBIT, la page le dit
+        const tr = await lancerBanc({ comportement: { tropDeCodes: true } }), ctr = await csrfDe(tr.r);
+        const lt = await brut(tr.r, 'POST', '/_lier', { csrf: ctr, corps: '{}' }), mt = (lt.json && lt.json.erreur && lt.json.erreur.message) || '';
+        H.v('14. 429 de l\'API (trop de codes en cours) : phrase française avec l\'attente (5 minutes)', [lt.statut, /^Trop de codes en cours/.test(mt), /5 minutes/.test(mt), /DEBIT/.test(lt.texte)], [429, true, true, false]);
+        await tr.r.fermer();
+
+        // pas connecté (identifiants absents) : une phrase, ZÉRO requête
+        const pc = await lancerBanc({ envFile: ecrireEnv('AUTRE=1\n') }), cpc = await csrfDe(pc.r);
+        const lp = await brut(pc.r, 'POST', '/_lier', { csrf: cpc, corps: '{}' });
+        H.v('14. pas de connexion à l\'essai : la liaison est refusée en français, aucune requête vers l\'API', [lp.statut >= 400, /connexion à l'essai/i.test((lp.json && lp.json.erreur && lp.json.erreur.message) || ''), pc.faux.appels.length], [true, true, 0]);
+        await pc.r.fermer();
+
+        // sans lanceur : la route n'existe pas
+        const sl = creerServeur({ apiBase: 'http://127.0.0.1:1', jeton: null }), sa = await sl.ecouter(0), csl = await csrfDe(sa);
+        H.v('14. sans lanceur, /_lier n\'existe pas (404)', (await brut(sa, 'POST', '/_lier', { csrf: csl, corps: '{}' })).statut, 404);
+        await sl.fermer();
+    });
+
+    // ── 15. TOUR 2 : le contrôleur du bouton
+    await essayer('15. contrôleur du bouton', async () => {
+        const file = [];
+        const fabrique = ({ lier, scans = [], autres = 0 } = {}) => {
+            const appels = [], textes = [], E = { codes: [], caches: 0 };
+            const api = async (m, c) => {
+                appels.push(`${m} ${c}`);
+                if (c === '/_etat') return { statut: 200, json: { lanceur: true, jeton: true, connexion: { etat: 'ok' } } };
+                if (c === '/_lier') return lier;
+                if (c === '/api/banc/seau/courant') return { statut: 200, json: { seau: { id: 's1', nom: 'juge-200', type: 'juge', n: scans.length, cible: 200 } } };
+                if (c.startsWith('/api/banc/seau/a-etiqueter')) return { statut: 200, json: { success: true, scans: scans.slice(), prochain: scans.length ? scans[0].scanId : null, autresComptes: autres, seau: { id: 's1', nom: 'juge-200', type: 'juge', etat: 'ouvert', n: scans.length, cible: 200 } } };
+                return { statut: 404, json: null };
+            };
+            const ui = { montrerSession: () => { }, montrerConnexion: () => { }, montrerProgres: () => { }, montrerVide: t => textes.push(t || ''), montrerScan: () => { }, montrerAttente: () => { }, montrerCandidats: () => { }, dire: t => textes.push(t || ''), montrerAvis: t => textes.push(t || ''),
+                montrerCode: c => { E.codes.push(c); }, cacherCode: () => { E.caches++; } };
+            return { appels, textes, E, ui, ctrl: RMControleur.creer({ api, ui, attendre: f => file.push(f) }), scans };
+        };
+        const LIEE = { statut: 200, json: { success: true, code: '7KQX2M', expire: new Date(Date.now() + 600e3).toISOString() } };
+        let f = fabrique({ lier: LIEE }); await f.ctrl.demarrer(); await f.ctrl.lier();
+        H.v('15. « Lier mon extension » : POST /_lier, le code est montré en grand avec sa validité en minutes', [f.appels.includes('POST /_lier'), f.E.codes[0] && f.E.codes[0].code, f.E.codes[0] && f.E.codes[0].minutes >= 9 && f.E.codes[0].minutes <= 10, /Dans l'extension \(build de test\), ouvrez Mon compte → Lier, tapez ce code\. À faire une seule fois\./.test(f.E.codes[0] && f.E.codes[0].phrase)], [true, '7KQX2M', true, true]);
+        f.scans.push({ scanId: 'a'.repeat(24), rang: 1, photos: 1, cartes: 1, etiquetees: 0 });
+        while (file.length) file.shift()();
+        await new Promise(res => setTimeout(res, 20));
+        H.v('15. 🔑 quand des scans du porteur arrivent, la page détecte « liée » : le code disparaît', f.E.caches, 1);
+        f = fabrique({ lier: { statut: 503, json: { success: false, erreur: { code: 'LIAISON', message: 'Trop de codes en cours (3 au plus) : attendez 5 minutes.' } } } }); await f.ctrl.demarrer(); await f.ctrl.lier();
+        H.v('15. refus de l\'API : la phrase du lanceur est dite telle quelle, aucun code montré', [f.E.codes.length, f.textes.includes('Trop de codes en cours (3 au plus) : attendez 5 minutes.')], [0, true]);
+        f = fabrique({ lier: LIEE, autres: 2 }); await f.ctrl.demarrer();
+        H.v('15. des scans d\'un autre compte, aucun du porteur : la phrase renvoie au bouton ci-dessus', f.textes.some(t => /2 scans faits avec un autre compte que celui de la page/.test(t) && /liez votre extension avec le bouton « Lier mon extension » ci-dessus/.test(t)), true);
     });
 
     // ── BALAYAGE DE SECRET : ni le mot de passe, ni le jeton, ni le cookie, ni l'identifiant, dans rien de ce que le lanceur a écrit, dit ou servi

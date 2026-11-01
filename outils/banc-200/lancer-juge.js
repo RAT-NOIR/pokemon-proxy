@@ -48,7 +48,7 @@ function raisonCourte(e) {
 const transitoire = e => !(e instanceof CN.Arret) || /\(5\d\d\)/.test(e.raison);
 
 /** La connexion au compte de mesure sur l'essai. Rend le jeton d'installation lié (texte) ou lève. `base` est jugée par connexion-essai.js::baseAutorisee AVANT toute requête. */
-async function connecter({ base, ids, fetchF, pause, journal, delaiMs = DELAI_REQUETE_MS }) {
+async function connecter({ base, ids, fetchF, pause, journal, delaiMs = DELAI_REQUETE_MS, contexte = null }) {       // `contexte` (objet du lanceur) reçoit la session, l'appelant et les identifiants : EN MÉMOIRE seulement, pour redemander un code de liaison
     const baseOk = CN.baseAutorisee(base);
     const { appeler, definirJeton } = CN.creerAppelant({ base: baseOk, fetchF, delaiMs });
     let ping = null;
@@ -67,7 +67,7 @@ async function connecter({ base, ids, fetchF, pause, journal, delaiMs = DELAI_RE
     if (!ping) throw new CN.Arret(`le service d'essai ne répond pas (${PING_ESSAIS} essais)`);
     let lie = null;
     for (let i = 1; i <= CHAINE_ESSAIS; i++) {
-        try { lie = await CN.connexionNormale({ appeler, definirJeton, ids, versionExtension: ping.corps.versionMinExtension, libelle: 'juge-un-clic' }); break; }
+        try { lie = await CN.connexionNormale({ appeler, definirJeton, ids, versionExtension: ping.corps.versionMinExtension, libelle: 'juge-un-clic', surSession: s => { if (contexte) { contexte.session = s; contexte.appeler = appeler; contexte.ids = ids; } } }); break; }
         catch (e) {
             if (!transitoire(e) || i === CHAINE_ESSAIS) throw e;
             journal(`connexion : ${raisonCourte(e)} (essai ${i}/${CHAINE_ESSAIS})`);
@@ -119,7 +119,36 @@ async function lancer(o = {}) {
         journal(motif); if (sortieAuto) clearTimeout(sortieAuto); if (veille) clearInterval(veille);
         try { await S.fermer(); } finally { quitter(0); }
     };
-    const lanceur = { surRefusJeton: () => { if (etatFinal === 'ok') echec('jeton refusé (401)'); }, arreter: () => arreterTout('arrêt demandé par le bouton « Arrêter »') };
+    // « Lier mon extension » : un code de liaison NEUF pour le compte de mesure, demandé par la session du lanceur (gardée en mémoire dans `ctx`) ; le code n'est PAS consommé, jamais journalisé, rendu à la page seule
+    const ctx = {};
+    const erreurLiaison = (statut, phrase) => Object.assign(new Error('liaison'), { statut, phrase });
+    const demanderCode = async () => {
+        if (etatFinal !== 'ok' || !ctx.appeler || !ctx.session) throw erreurLiaison(409, 'La connexion à l\'essai n\'est pas établie : le code de liaison ne peut pas être demandé. Attendez le message « connecté à l\'essai ».');
+        const essayer = () => CN.demanderCode({ appeler: ctx.appeler, session: ctx.session });
+        let r;
+        try {
+            r = await essayer();
+            if (r.statut === 401) {                                                      // session expirée : reconnexion automatique (une connexion, jamais une installation de plus)
+                journal('liaison : session expirée, reconnexion');
+                try { ctx.session = await CN.ouvrirSession({ appeler: ctx.appeler, ids: ctx.ids }); }
+                catch (e) { journal(`liaison : reconnexion impossible (${raisonCourte(e)})`); throw erreurLiaison(503, `Session de l'essai expirée et reconnexion impossible (${raisonCourte(e)}) — attendez une minute puis double-cliquez de nouveau sur « Juge Rat-Market » ; si ça persiste, prévenez l'agent API`); }
+                r = await essayer();
+            }
+        } catch (e) {
+            if (e && e.phrase) throw e;
+            journal(`liaison : ${raisonCourte(e)}`);
+            throw erreurLiaison(502, 'L\'API de l\'essai ne répond pas pour l\'instant — réessayez dans un instant.');
+        }
+        if (r.statut === 429) {
+            const s = Number(r.corps && r.corps.erreur && r.corps.erreur.reessayerDans) || Number(r.corps && r.corps.reessayerDans) || Number(r.retryApres) || 0;
+            journal('liaison : trop de codes en cours');
+            throw erreurLiaison(429, `Trop de codes en cours (3 au plus, valables 10 minutes) : attendez ${s > 0 ? `${Math.max(1, Math.ceil(s / 60))} minutes` : 'quelques minutes'} ou utilisez un code déjà affiché.`);
+        }
+        if (r.statut !== 200 || !r.corps || typeof r.corps.code !== 'string') { journal('liaison : l\'API n\'a pas donné de code'); throw erreurLiaison(502, 'L\'API de l\'essai n\'a pas donné de code — réessayez dans un instant.'); }
+        journal('code de liaison demandé');
+        return { code: r.corps.code, expire: typeof r.corps.expire === 'string' ? r.corps.expire : null };
+    };
+    const lanceur = { surRefusJeton: () => { if (etatFinal === 'ok') echec('jeton refusé (401)'); }, arreter: () => arreterTout('arrêt demandé par le bouton « Arrêter »'), demanderCode };
     const S = creerServeur({ apiBase: ESSAI, fetchFn, lanceur });
     let ecoute;
     try { ecoute = await S.ecouter(port); }
@@ -152,7 +181,7 @@ async function lancer(o = {}) {
             const presents = Boolean(ids);
             journal(`identifiants du compte de mesure : ${presents ? 'présents' : 'absents'} (fichier ${envFile})`);
             if (!ids) return echec('identifiants du compte de mesure absents');
-            const jeton = await connecter({ base: o.base || ESSAI, ids, fetchF: fetchFn, pause, journal });
+            const jeton = await connecter({ base: o.base || ESSAI, ids, fetchF: fetchFn, pause, journal, contexte: ctx });
             S.poserJeton(jeton); etatFinal = 'ok';
             journal('connexion : ok (compte de mesure, administrateur ; jeton gardé en mémoire)');
         } catch (e) { echec(raisonCourte(e)); }

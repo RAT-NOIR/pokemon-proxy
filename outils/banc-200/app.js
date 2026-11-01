@@ -27,7 +27,7 @@
     var ui = {
         montrerSession: function (v) { if (!$('session')) return; $('session').hidden = !v; if (v) $('vue').textContent = 'Posez le jeton pour commencer.'; },     // piloté par le lanceur, le champ n'existe pas dans la page
         montrerConnexion: function (c) {
-            var z = $('connexion'), vue = $('vue'); $('arreter').hidden = false;
+            var z = $('connexion'), vue = $('vue'); $('arreter').hidden = false; $('lier').hidden = c.etat !== 'ok';
             if (c.etat === 'ok') { z.textContent = 'connecté à l\'essai'; z.className = 'bon'; vue.textContent = ''; return; }
             if (c.etat === 'echec') {
                 z.textContent = 'non connecté'; z.className = 'erreur'; vue.textContent = '';
@@ -49,6 +49,12 @@
             scanCourant = null; $('saisie').hidden = true; $('vignettes').textContent = ''; $('vue').textContent = '';
             var v = document.createElement('div'); v.className = 'grave'; v.textContent = texte || 'Plus aucun scan à étiqueter dans ce seau.'; $('vue').appendChild(v);
         },
+        montrerCode: function (c) {
+            $('codeLiaison').textContent = c.code; $('phraseLiaison').textContent = c.phrase;
+            $('validiteLiaison').textContent = c.minutes ? 'Valable environ ' + c.minutes + ' minute' + (c.minutes > 1 ? 's' : '') + ', une seule fois.' : 'Valable quelques minutes, une seule fois.';
+            $('lien').hidden = false;
+        },
+        cacherCode: function () { $('codeLiaison').textContent = ''; $('lien').hidden = true; ui.dire('Extension liée : les scans arrivent.', 'bon'); },
         montrerAvis: function (texte) { $('avis').textContent = texte || ''; $('avis').hidden = !texte; },
         vider: function () { var e = $('entree'); e.value = ''; e.focus(); e.select(); },
         montrerArret: function () {
@@ -79,6 +85,7 @@
     $('voir').addEventListener('click', function () { ctrl.voirCandidats(); });
     $('pasCarte').addEventListener('click', function () { ctrl.aucune('pas-une-carte'); });
     $('horsCatalogue').addEventListener('click', function () { ctrl.aucune('hors-catalogue'); });
+    $('lier').addEventListener('click', function () { ctrl.lier(); });
     $('arreter').addEventListener('click', function () { if (window.confirm('Arrêter le juge ? Il faudra le relancer par le raccourci.')) ctrl.arreter(); });
     if ($('poser'))$('poser').addEventListener('click', function () { var j = $('jeton').value; $('jeton').value = ''; ctrl.poserJeton(j); });
     document.addEventListener('keydown', function (e) {

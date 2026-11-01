@@ -62,16 +62,27 @@ function creerAppelant({ base, fetchF, delaiMs = DELAI_MS }) {
  * Le jeton d'installation sert de Bearer pour la seule liaison ; le jeton LIÉ (celui de `lie.corps.jetonInstallation`) est rendu à l'appelant, qui juge le compte (administrateur ou ordinaire) puis appelle `definirJeton`.
  * @returns {Promise<{statut, corps}>} la réponse de la liaison (statut 200, corps.jetonInstallation texte garantis)
  */
-async function connexionNormale({ appeler, definirJeton, ids, origineSite = ORIGINE_SITE, versionExtension, libelle = 'serie-essai' }) {
-    const refus = (etape, r) => { throw new Arret(`connexion du compte de mesure : ${etape} refusée (${r.statut})${r.statut === 429 ? ` — réessayer dans ${r.retryApres ?? '?'} s` : ''}`); };
-    // INST-BANC : la connexion d'abord, puis l'installation AVEC la session — la limite « 2 installations par IP et par jour » ne s'efface que pour une session du compte de mesure (v2/installations/exemption-banc.js).
-    const entetesSite = { Origin: origineSite, 'X-Rat-Market': '1', 'Content-Type': 'application/json' };
-    const cx = await appeler('/api/compte/connexion', { method: 'POST', headers: entetesSite, body: JSON.stringify({ email: ids.identifiant, motDePasse: ids.motDePasse }) }, null);
+const refusDe = (etape, r) => { throw new Arret(`connexion du compte de mesure : ${etape} refusée (${r.statut})${r.statut === 429 ? ` — réessayer dans ${r.retryApres ?? '?'} s` : ''}`); };
+const entetesDuSite = origineSite => ({ Origin: origineSite, 'X-Rat-Market': '1', 'Content-Type': 'application/json' });
+
+/** La SESSION du compte de mesure : POST /api/compte/connexion → la valeur du cookie `rm_session` (texte). Lève un Arret sur tout refus. L'appelant la garde EN MÉMOIRE, jamais ailleurs. */
+async function ouvrirSession({ appeler, ids, origineSite = ORIGINE_SITE }) {
+    const cx = await appeler('/api/compte/connexion', { method: 'POST', headers: entetesDuSite(origineSite), body: JSON.stringify({ email: ids.identifiant, motDePasse: ids.motDePasse }) }, null);
     const session = cx.cookie ? /(?:^|[\s,;])rm_session=([^;\s,]+)/.exec(String(cx.cookie)) : null;
-    if (cx.statut !== 200 || !session) refus('connexion', cx);
-    const inst = await appeler('/api/installation', { method: 'POST', headers: { ...entetesSite, Cookie: `rm_session=${session[1]}` }, body: JSON.stringify({ versionExtension, libelle }) }, null);
+    if (cx.statut !== 200 || !session) refusDe('connexion', cx);
+    return session[1];
+}
+/** Un code de liaison (6 caractères, 10 min, usage unique, 3 vivants au plus par compte) pour la session donnée : POST /api/compte/code. Rend la réponse brute { statut, corps, retryApres } : l'appelant juge (200 + code, 401 session expirée, 429 trop de codes). */
+const demanderCode = ({ appeler, session, origineSite = ORIGINE_SITE }) => appeler('/api/compte/code', { method: 'POST', headers: { ...entetesDuSite(origineSite), Cookie: `rm_session=${session}` }, body: '{}' }, null);
+
+async function connexionNormale({ appeler, definirJeton, ids, origineSite = ORIGINE_SITE, versionExtension, libelle = 'serie-essai', surSession }) {
+    const refus = refusDe, entetesSite = entetesDuSite(origineSite);
+    // INST-BANC : la connexion d'abord, puis l'installation AVEC la session — la limite « 2 installations par IP et par jour » ne s'efface que pour une session du compte de mesure (v2/installations/exemption-banc.js).
+    const session = await ouvrirSession({ appeler, ids, origineSite });
+    if (typeof surSession === 'function') surSession(session);                 // le lanceur du juge garde la session EN MÉMOIRE pour redemander un code ; serie-essai ne passe rien
+    const inst = await appeler('/api/installation', { method: 'POST', headers: { ...entetesSite, Cookie: `rm_session=${session}` }, body: JSON.stringify({ versionExtension, libelle }) }, null);
     if (inst.statut !== 201 || !inst.corps || typeof inst.corps.jetonInstallation !== 'string') refus('création de l\'installation', inst);
-    const cd = await appeler('/api/compte/code', { method: 'POST', headers: { ...entetesSite, Cookie: `rm_session=${session[1]}` }, body: '{}' }, null);
+    const cd = await demanderCode({ appeler, session, origineSite });
     if (cd.statut !== 200 || !cd.corps || typeof cd.corps.code !== 'string') refus('code de liaison', cd);
     definirJeton(inst.corps.jetonInstallation);
     const lie = await appeler('/api/compte/lier', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': `serie-lier-${crypto.randomBytes(12).toString('hex')}` }, body: JSON.stringify({ code: cd.corps.code }) });
@@ -79,4 +90,4 @@ async function connexionNormale({ appeler, definirJeton, ids, origineSite = ORIG
     return lie;
 }
 
-module.exports = { Arret, HOTE_ESSAI, ORIGINE_SITE, NOM_IDENTIFIANT, NOM_MOT_DE_PASSE, NOM_ORDINAIRE_IDENTIFIANT, NOM_ORDINAIRE_MOT_DE_PASSE, DELAI_MS, baseAutorisee, lireVariable, lireIdentifiants, creerAppelant, connexionNormale };
+module.exports = { Arret, HOTE_ESSAI, ORIGINE_SITE, NOM_IDENTIFIANT, NOM_MOT_DE_PASSE, NOM_ORDINAIRE_IDENTIFIANT, NOM_ORDINAIRE_MOT_DE_PASSE, DELAI_MS, baseAutorisee, lireVariable, lireIdentifiants, creerAppelant, connexionNormale, ouvrirSession, demanderCode };

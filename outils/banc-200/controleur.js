@@ -29,7 +29,8 @@
     };
     var PHRASE_SANS_SEAU = 'Aucun seau ouvert : l\'agent API le déclare, rien à faire de votre côté';
     function pluriel(n, un, plusieurs) { return n > 1 ? plusieurs : un; }
-    function phraseAutres(n) { return 'Ce seau contient ' + n + ' ' + pluriel(n, 'scan fait', 'scans faits') + ' avec un autre compte que celui de la page (' + pluriel(n, 'il n\'est pas listé', 'ils ne sont pas listés') + '). L\'extension qui scanne doit être connectée au compte de mesure, le même que celui du lanceur.'; }
+    function phraseAutres(n) { return 'Ce seau contient ' + n + ' ' + pluriel(n, 'scan fait', 'scans faits') + ' avec un autre compte que celui de la page (' + pluriel(n, 'il n\'est pas listé', 'ils ne sont pas listés') + '). L\'extension qui scanne doit être liée au compte de mesure : liez votre extension avec le bouton « Lier mon extension » ci-dessus (une seule fois).'; }
+    var PHRASE_LIEN = 'Dans l\'extension (build de test), ouvrez Mon compte → Lier, tapez ce code. À faire une seule fois.';
 
     function creer(o) {
         var api = o.api, ui = o.ui;
@@ -142,8 +143,28 @@
         function poserJeton(jeton) {
             return api('POST', '/_session', { jeton: jeton }).then(function (r) { if (r.statut === 200) { ui.montrerSession(false); return charger(); } ui.dire('Jeton refusé.', 'erreur'); });
         }
+        // « Lier mon extension » : le serveur local demande un code NEUF pour le compte de mesure (POST /_lier) ; la page l'affiche en grand puis surveille l'arrivée de scans du porteur (= extension liée) pour le retirer
+        function surveiller(n) {
+            if (!etat.codeAffiche || n >= 120) return;                                  // 120 × 5 s = 10 minutes, la validité du code
+            attendreMs(function () {
+                if (!etat.codeAffiche) return;
+                charger().then(function () {
+                    if (etat.scans.length > 0) { etat.codeAffiche = false; if (ui.cacherCode) ui.cacherCode(); return; }
+                    surveiller(n + 1);
+                });
+            }, 5000);
+        }
+        function lier() {
+            return api('POST', '/_lier', {}).then(function (r) {
+                if (r.statut !== 200 || !r.json || !r.json.code) { ui.dire((r.json && r.json.erreur && r.json.erreur.message) || 'Le code de liaison n\'a pas pu être demandé : ' + detailDe(r), 'erreur'); return; }
+                var t = r.json.expire ? Date.parse(r.json.expire) : NaN, minutes = isNaN(t) ? null : Math.max(1, Math.round((t - Date.now()) / 60000));
+                etat.codeAffiche = true;
+                if (ui.montrerCode) ui.montrerCode({ code: r.json.code, minutes: minutes, phrase: PHRASE_LIEN });
+                surveiller(0);
+            });
+        }
         function arreter() { return api('POST', '/_arreter', {}).then(function () { if (ui.montrerArret) ui.montrerArret(); }, function () { if (ui.montrerArret) ui.montrerArret(); }); }
-        return { arreter: arreter, demarrer: demarrer, charger: charger, entrer: entrer, confirmer: confirmer, annuler: function () { attendre(null); }, voirCandidats: voirCandidats, choisirCandidat: choisirCandidat, aucune: aucune, poserJeton: poserJeton, etat: function () { return etat; } };
+        return { lier: lier, arreter: arreter, demarrer: demarrer, charger: charger, entrer: entrer, confirmer: confirmer, annuler: function () { attendre(null); }, voirCandidats: voirCandidats, choisirCandidat: choisirCandidat, aucune: aucune, poserJeton: poserJeton, etat: function () { return etat; } };
     }
     return { creer: creer, trierParPrix: trierParPrix };
 });
