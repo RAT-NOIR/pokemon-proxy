@@ -12,7 +12,7 @@ const etatVisuels = require('./chargeur/etat');   // la version des visuels EN M
 
 // L'ORDRE est celui du graphe des lots ; chaque emplacement est un fichier que SEUL son lot réécrit.
 const LOTS = [require('./transport/monter'), require('./installations/monter'), require('./comptes/monter'), require('./argent/monter'),
-              require('./identifier/monter'), require('./banc/monter'), require('./scanner/monter'), require('./collection/monter')];
+              require('./identifier/monter'), require('./banc/monter'), require('./scanner/monter'), require('./collection/monter'), require('./galerie/monter')];
 // Les chemins PROPRES à la v2 (aucune route héritée dessous) : fermés en 503 quand la configuration est invalide. test-collection.js la compare aux routes MONTÉES (§21 bis : deux listes, une vérité).
 const CHEMINS_FERMES_503 = Object.freeze(['/api/installation', '/api/compte', '/api/scanner', '/api/banc', '/api/collection']);
 
@@ -141,4 +141,4 @@ function assembler(lots, cfgLots, deps = {}) {
 const depenseModele = { appeler: (post, url, corps, config) => (cfg ? require('./argent/depense-modele').pourConfig(cfg).appeler(post, url, corps, config) : post(url, corps, config)) };
 // /ping additif : la route héritée reste en place et appelle ping() (voir index.js racine). CAPACITES-PING : `capacites` (la liste fermée de capacites.js) s'ajoute à `versionMinExtension` sous la MÊME condition
 // (v2 configurée) ; une fonction pure de la configuration, synchrone, qui ne lève jamais : /ping reste un keep-alive.
-module.exports = { depenseModele, LOTS, CHEMINS_FERMES_503, monterEnTete, monter, assembler, aiguilleur, cleInterdite, requeteRefusee, parametresRefuses, FORME_CLE, ping: () => (cfg ? { versionMinExtension: cfg.versionMinExtension, capacites: capacitesServies(cfg, undefined, etatVisuels.version, etatEmpreintes.courante) } : {}), limiteurHerite, arreter: () => { try { require('./identifier/taux-declencheur').arreterTaux(); } catch { /* rien à arrêter */ } cfg = null; erreurConfig = null; pret.desarmer(); } };
+module.exports = { depenseModele, LOTS, CHEMINS_FERMES_503, monterEnTete, monter, assembler, aiguilleur, cleInterdite, requeteRefusee, parametresRefuses, FORME_CLE, ping: () => (cfg ? { versionMinExtension: cfg.versionMinExtension, capacites: capacitesServies(cfg, undefined, etatVisuels.version, etatEmpreintes.courante) } : {}), limiteurHerite, arreter: () => { try { require('./identifier/taux-declencheur').arreterTaux(); } catch { /* rien à arrêter */ } cfg = null; erreurConfig = null; pret.desarmer(); require('./galerie/monter').arreter().catch(() => { /* rien d'ouvert */ }); } };

@@ -4,6 +4,9 @@ const CODES = Object.freeze({
     JETON: 401, VERIFICATION: 403, QUOTA: 429, DEBIT: 429, INDISPONIBLE: 503, IMAGE: 200, IA: 200, SERVEUR: 500, VERSION: 426, MARCHE: 422,
     SESSION: 401, ORIGINE: 403, IDENTIFIANTS: 401, MOT_DE_PASSE_FAIBLE: 422, CODE_INVALIDE: 404, CODE_EXPIRE: 410, DEJA_LIE: 409,
     CONFLIT: 409, CREDITS_ACHETES: 409, ENTREE: 400,
+    // GALERIE (Communauté) : INTROUVABLE (uniforme : absent, privé, en attente, refusé ou retiré), INTERDIT (detail pseudo-requis | admin | pas-l-auteur), FICHIER (413 trop-lourde, 415 format, 422 trop-de-pixels|illisible|animee ; le statut se passe à repondreErreur),
+    // LIMITE_DEBIT (429 + reessayerDans : une limite de débit qui ne facture RIEN ; DEBIT reste réservé à ce qui débite)
+    INTERDIT: 403, INTROUVABLE: 404, FICHIER: 422, LIMITE_DEBIT: 429,
     EN_RECONCILIATION: 409   // B3 tour 5 : clé rejouée dont la ligne de débit attend la réconciliation — ni rejouée ni redébitée, aucun crédit ni remboursement associé
 });
 // Messages STABLES des codes émis par la couche argent (le texte ne change pas d'un appel à l'autre).

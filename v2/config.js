@@ -323,6 +323,8 @@ function lireConfig(env = process.env) {
         photosMultiplesTous: env.V2_PHOTOS_MULTIPLES === '1' && env.V2_PHOTOS_MULTIPLES_TOUS === '1',
         // STRIPE-V2 : les abonnements Pro et Fondateurs. ÉTEINTS par défaut (V2_ABONNEMENTS=1 les allume) ; ne lève JAMAIS (voir abonnements/config.js).
         abonnements: require('./abonnements/config').lireAbonnements(env),
+        // GALERIE (la Communauté du site, lot du 01/11) : ÉTEINT par défaut (V2_GALERIE=1 exactement) ; éteint, aucune route n'existe. Base DÉDIÉE (MONGO_URI_GALERIE), jamais la grappe de production. Ne lève jamais (voir galerie/config.js).
+        galerie: require('./galerie/config').lireGalerie(env),
         turnstile,
         cookieSecure
     });

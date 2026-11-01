@@ -7,6 +7,8 @@ const EXPOSE = 'Retry-After, Idempotency-Replayed';
 // Les profils existants ne changent pas d'un octet.
 
 
+// GALERIE : les chemins de la Communauté (le site seul, avec cookies) ; le pseudo vit sous /api/compte. Méthodes du préflight : GET, POST, PUT, DELETE.
+const GALERIE_CHEMINS = /^\/api\/(galerie|banque|enregistres|classeurs|signalements|illustrations|admin\/moderation|compte\/pseudo)(\/.*)?$/;
 function profils(cfg) {
     const o = cfg.origines;
     const ext = [o.extension, o.extensionDev].filter(x => typeof x === 'string' && x);
@@ -18,7 +20,9 @@ function profils(cfg) {
           methodes: 'GET, POST', entetes: 'Authorization, Content-Type, Idempotency-Key' },
         { nom: 'site', origines: new Set([o.site]), credentials: true,
           // INST-BANC-CORS : POST /api/installation, ce chemin EXACT seulement (l'exemption du compte de mesure exige l'Origin du site + X-Rat-Market + la session) ; aucun voisin
-          chemins: [/^\/ping$/, /^\/api\/installation$/, /^\/api\/compte(\/.*)?$/, /^\/api\/scanner\/.+$/, /^\/api\/solde$/, /^\/api\/creer-recharge$/, /^\/api\/collection(\/.*)?$/, /^\/api\/abonnement(\/.*)?$/],
+          chemins: [/^\/ping$/, /^\/api\/installation$/, /^\/api\/compte(\/.*)?$/, /^\/api\/scanner\/.+$/, /^\/api\/solde$/, /^\/api\/creer-recharge$/, /^\/api\/collection(\/.*)?$/, /^\/api\/abonnement(\/.*)?$/,
+              // GALERIE : seulement si le lot est allumé (éteint, le profil est celui d'avant, octet pour octet)
+              ...(cfg.galerie && cfg.galerie.actif === true ? [GALERIE_CHEMINS] : [])],
           methodes: 'GET, POST, DELETE', entetes: 'Content-Type, X-Rat-Market, Idempotency-Key' }
     ];
 }
@@ -42,7 +46,8 @@ function middlewareV2(cfg) {
             const delPermis = p.nom === 'extension' && /^\/api\/banc\/contributions$/.test(chemin);
             // « Ma collection » (site) : GET et PUT seulement, jamais POST ni DELETE — le profil du site ailleurs est inchangé.
             const collection = p.nom === 'site' && /^\/api\/collection(\/.*)?$/.test(chemin);
-            res.setHeader('Access-Control-Allow-Methods', collection ? 'GET, PUT' : delPermis ? `${p.methodes}, DELETE` : p.methodes);
+            const galerie = p.nom === 'site' && cfg.galerie && cfg.galerie.actif === true && GALERIE_CHEMINS.test(chemin);
+            res.setHeader('Access-Control-Allow-Methods', galerie ? 'GET, POST, PUT, DELETE' : collection ? 'GET, PUT' : delPermis ? `${p.methodes}, DELETE` : p.methodes);
             res.setHeader('Access-Control-Allow-Headers', p.entetes);
             res.setHeader('Access-Control-Max-Age', '600');
             return res.status(204).end();

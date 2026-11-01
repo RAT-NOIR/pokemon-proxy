@@ -4,13 +4,15 @@ const { col } = require('../db');
 const { repondreErreur } = require('../erreurs');
 const empreinteIp = ip => crypto.createHash('sha256').update(`rm-ip|${ip || '?'}`).digest('hex').slice(0, 24);
 
-async function consommer(cle, { max, fenetreMs, maintenant = new Date() }) {
+// `colonne` (facultatif, GALERIE) : d'où vient la collection des compteurs. Par défaut `limites` de l'API ; la Communauté passe SA collection (base dédiée), pour que ses compteurs n'écrivent jamais sur la grappe de production.
+async function consommer(cle, { max, fenetreMs, maintenant = new Date(), colonne = null }) {
     const debut = Math.floor(maintenant.getTime() / fenetreMs) * fenetreMs;
     const k = `${cle}|${debut}`;
     const filtre = { cle: k }, maj = { $inc: { n: 1 }, $setOnInsert: { expireLe: new Date(debut + fenetreMs * 2) } };
+    const lim = () => (colonne ? colonne() : col('limites'));
     let doc;
-    try { doc = await col('limites').findOneAndUpdate(filtre, maj, { upsert: true, returnDocument: 'after' }); }
-    catch (e) { if (e.code !== 11000) throw e; doc = await col('limites').findOneAndUpdate(filtre, { $inc: { n: 1 } }, { returnDocument: 'after' }); } // deux premiers appels simultanés
+    try { doc = await lim().findOneAndUpdate(filtre, maj, { upsert: true, returnDocument: 'after' }); }
+    catch (e) { if (e.code !== 11000) throw e; doc = await lim().findOneAndUpdate(filtre, { $inc: { n: 1 } }, { returnDocument: 'after' }); } // deux premiers appels simultanés
     const n = doc.n;
     return { permis: n <= max, n, max, reessayerDans: Math.max(1, Math.ceil((debut + fenetreMs - maintenant.getTime()) / 1000)) };
 }
@@ -46,7 +48,8 @@ function fixerHorloge(fn) {
     horloges.push(entree);
     return () => { const i = horloges.indexOf(entree); if (i >= 0) horloges.splice(i, 1); };
 }
-function limiteur({ nom, max, fenetreMs, cle, horloge }) {
+// `code` (facultatif, GALERIE) : le code du refus ; 'DEBIT' par défaut (inchangé), 'LIMITE_DEBIT' pour les routes qui ne facturent rien. `colonne` : voir consommer.
+function limiteur({ nom, max, fenetreMs, cle, horloge, colonne = null, code = 'DEBIT' }) {
     return async function limiteurV2(req, res, next) {
         try {
             const k = cle(req);
@@ -54,8 +57,8 @@ function limiteur({ nom, max, fenetreMs, cle, horloge }) {
             const lire = typeof horloge === 'function' ? horloge : (horloges.length ? horloges[horloges.length - 1].fn : null);
             const maintenant = lire ? lire() : new Date();
             if (!(maintenant instanceof Date) || Number.isNaN(maintenant.getTime())) throw new Error('horloge invalide');   // ne sait pas dater : refus fermé
-            const r = await consommer(`${nom}:${k}`, { max, fenetreMs, maintenant });
-            if (!r.permis) return repondreErreur(res, 'DEBIT', 'Trop de requêtes, réessayez plus tard.', { reessayerDans: r.reessayerDans });
+            const r = await consommer(`${nom}:${k}`, { max, fenetreMs, maintenant, colonne });
+            if (!r.permis) return repondreErreur(res, code, 'Trop de requêtes, réessayez plus tard.', { reessayerDans: r.reessayerDans });
             next();
         } catch (e) {
             console.error(`❌ [v2 limite ${nom}] ${(e && (e.code || e.name)) || 'erreur'}`);

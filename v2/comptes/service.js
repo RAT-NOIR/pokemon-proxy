@@ -273,6 +273,7 @@ async function supprimerCompte({ compte, motDePasse, renonciation, cfg, maintena
     await col('codes_liaison').deleteMany({ compteId: id });
     await col('liens_email').deleteMany({ compteId: id });
     await require('../collection/service').supprimerDuCompte(id, cfg);                      // « Ma collection » part avec le compte
+    await require('../galerie/suppression').supprimerDuCompte(id);                          // la Communauté (base dédiée) aussi — sans effet tant que V2_GALERIE n'est pas monté
     if (stripe.finaliser) await stripe.finaliser();                                      // le client Stripe anonymisé, le code de parrainage et la réservation de place rendus (avant la suppression : une panne se rejoue)
     await col('comptes').deleteOne({ _id: id });                                       // en dernier : une panne en cours de route se rejoue
     return { statut: 200 };

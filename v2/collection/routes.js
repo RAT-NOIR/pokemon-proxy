@@ -30,9 +30,9 @@ const MESSAGES_BORNE = Object.freeze({
     'borne-service': () => 'Limite atteinte pour l\'ensemble du service (budget de stockage partagé), pas pour votre compte'
 });
 // un compte dont l'adresse n'est pas confirmée n'écrit pas : même refus que le scanner pour ses crédits (403 VERIFICATION), sans solde (aucun crédit n'est en jeu)
-function exigerVerifie(req, res, next) {
-    return req.v2.porteur.compte && req.v2.porteur.compte.verifie === true ? next() : repondreErreur(res, 'VERIFICATION', 'Confirmez votre adresse e-mail pour enregistrer votre collection');
-}
+// La garde est UNE seule ; le message est celui du lot qui l'emploie (la Communauté de la galerie réutilise cette garde, pas une copie).
+const exigerVerifieAvec = message => (req, res, next) => (req.v2.porteur.compte && req.v2.porteur.compte.verifie === true ? next() : repondreErreur(res, 'VERIFICATION', message));
+const exigerVerifie = exigerVerifieAvec('Confirmez votre adresse e-mail pour enregistrer votre collection');
 
 function routesCollection(router, cfg) {
     const parCompte = L.limiteur({ nom: 'collection', max: cfg.limites.collectionEcrituresParCompteHeure, fenetreMs: 3600e3, cle: q => (q.v2 && q.v2.porteur ? `${q.v2.porteur.type}:${q.v2.porteur.id}` : null) });
@@ -78,4 +78,4 @@ function routesCollection(router, cfg) {
         } catch (e) { console.error(`❌ [v2 collection] écriture : ${nomErreur(e)}`); return indispo(res); }
     });
 }
-module.exports = { routesCollection, lireCorps };
+module.exports = { routesCollection, lireCorps, exigerVerifieAvec };
