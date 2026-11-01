@@ -46,6 +46,11 @@ const MUTATIONS = [
     { nom: 'M1 : la langue décisive n\'est plus recopiée sur la question refaite', fichier: LV, de: 'if (resultat.langueDecisive !== undefined) nouveau = { ...nouveau, langueDecisive: resultat.langueDecisive };', vers: '' },
     { nom: 'M1 : l\'ordre des voisins du pool est inversé', fichier: LV, de: 'for (const liste of (Array.isArray(produitsDesVoisins) ? produitsDesVoisins : []))', vers: 'for (const liste of [...(Array.isArray(produitsDesVoisins) ? produitsDesVoisins : [])].reverse())' },
     { nom: 'M1 : e accepte une question à un seul candidat', fichier: AD, de: 'ids.slice(0, 3).length >= 2 && ', vers: '' },
+    { nom: 'D : l\'index d\'alias construit n\'est plus gardé prêt', fichier: 'v2/identifier/catalogue.js', de: 'if (aliasEnCours === p) aliasPret = idx;', vers: '' },
+    { nom: 'D : la lecture sans attente ne rend plus l\'index prêt', fichier: 'v2/identifier/catalogue.js', de: '        return aliasPret;', vers: '        return null;' },
+    { nom: 'D : le préchauffage de prechauffer() est retiré', fichier: 'v2/identifier/catalogue.js', de: 'if (cfg.leviersAbde === true) r.alias = await prechaufferAlias();', vers: '' },
+    { nom: 'D : le drapeau seul ne préchauffe plus au démarrage', fichier: 'v2/identifier/catalogue.js', de: 'if (cfg.leviersAbde === true) return (async () =>', vers: 'if (false) return (async () =>' },
+    { nom: 'D : temps et mémoire de la construction ne sont plus gardés', fichier: 'v2/identifier/catalogue.js', de: 'aliasStats = { noms: index.size,', vers: 'aliasStats = null && { noms: index.size,' },
     // ── les portes de l'étape (un sûr ne change jamais, rien d'autre qu'une question)
     { nom: 'porte : une question de GROUPE (marqueurs) est travaillée', fichier: LV, de: "if (estGroupe(traceMarqueurs)) return note('groupe-marqueurs');", vers: '' },
     { nom: 'porte I3 : un désigné de même dessin est servi probable', fichier: LV, de: 'if (dansUnGroupe(version, d.id, d.top3))', vers: 'if (false)' },

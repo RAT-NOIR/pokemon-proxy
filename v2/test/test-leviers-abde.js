@@ -243,6 +243,21 @@ if (L) {
         const cat3 = creerCatalogue({ cfg: lireConfig({}), visuels: { entree: () => null } });
         let e2 = null; try { await cat3.indexAliasFr(); } catch (e) { e2 = String(e.message); }
         H.vrai('alias : sous le plancher de 10 000 lignes, refusé (LÈVE)', Boolean(e2) && /plancher/.test(e2));
+        // tour 1 (D) : le scan ne construit JAMAIS l'index : lecture sans attente (null tant qu'il n'est pas prêt, construction lancée en arrière-plan), préchauffage au démarrage, temps et mémoire gardés
+        dbMod.col = nom => (nom === 'numeros_cartes' ? faux(gros) : (() => { throw new Error('collection inattendue'); })());
+        const w = console.warn; console.warn = () => { };
+        let catS, premier, apres, stats;
+        try {
+            catS = creerCatalogue({ cfg: lireConfig({}), visuels: { entree: () => null } });
+            premier = catS.indexAliasFrSansAttente();
+            await catS.indexAliasFr();
+            apres = catS.indexAliasFrSansAttente(); stats = catS.statsIndexAlias();
+        } finally { console.warn = w; }
+        H.v('alias : sans attente, le PREMIER appel rend null (le scan n\'attend rien) puis l\'index prêt, le même', [premier, apres instanceof Map && apres.size === 10049, apres === (await catS.indexAliasFr())], [null, true, true]);
+        H.v('alias : le temps et la mémoire de la construction sont gardés (noms, lignes, ms mur, ms CPU, tas)', [stats.noms, stats.lignes, typeof stats.msMur, typeof stats.msCpu, typeof stats.tasMo], [10049, 10050, 'number', 'number', 'number']);
+        const cats = fs.readFileSync(path.join(__dirname, '..', 'identifier', 'catalogue.js'), 'utf8');
+        H.vrai('alias : préchauffé au démarrage sous le drapeau (prechauffer ET prechaufferSiDemande), jamais drapeau éteint', cats.includes('if (cfg.leviersAbde === true) r.alias = await prechaufferAlias();') && cats.includes('if (cfg.leviersAbde === true) return (async () =>'));
+        H.vrai('alias : la reconstruction périmée part en arrière-plan sans être attendue par la demande', cats.includes('if (!aliasEnCours || Date.now() - aliasLe >= INDEX_DUREE_MS) indexAliasFr().catch(() => { });\n        return aliasPret;') || cats.includes('if (!aliasEnCours || Date.now() - aliasLe >= INDEX_DUREE_MS) indexAliasFr().catch(() => { });\r\n        return aliasPret;'));
     } finally { dbMod.col = colorig; }
     H.bilan();
 })().catch(e => { console.log('ERREUR', e && e.stack || e); process.exit(1); });

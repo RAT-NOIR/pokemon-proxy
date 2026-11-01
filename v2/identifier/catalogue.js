@@ -92,22 +92,38 @@ function creerCatalogue(opts = {}) {
     // LEVIERS-ABDE (d) : l'index des ALIAS français du catalogue entier (numeros_cartes.nomFr normalisé -> idProduct[]), construit UNE fois puis gardé 6 h, lu par curseur ligne à ligne (jamais un tableau de 73 756 documents).
     // Même discipline que les deux index d'au-dessus : compte AVANT, moins de documents LUS que COMPTÉS = lecture tronquée, refusée ; plancher de taille ; un échec LÈVE et n'est pas gardé. Jamais lu tant que
     // V2_LEVIERS_ABDE est éteint (seule la route sous drapeau l'appelle).
-    let aliasEnCours = null, aliasLe = 0;
+    // TOUR 1 (D) : l'index n'est JAMAIS construit dans le chemin d'un scan. `indexAliasFrSansAttente()` rend l'index PRÊT (même un peu périmé pendant sa reconstruction) ou null, et lance la construction en ARRIÈRE-PLAN ; le levier échoue fermé tant
+    // qu'il est null. Il est PRÉCHAUFFÉ au démarrage (prechaufferSiDemande, dès que V2_LEVIERS_ABDE est allumé) et rafraîchi toutes les 6 h par la première demande qui le trouve périmé, sans que cette demande l'attende.
+    // Le temps (mur et CPU) et la mémoire de chaque construction sont gardés (`statsIndexAlias`) et écrits au journal.
+    let aliasEnCours = null, aliasLe = 0, aliasPret = null, aliasStats = null;
     async function indexAliasFr() {
         if (aliasEnCours && Date.now() - aliasLe < INDEX_DUREE_MS) return aliasEnCours;
         const p = (async () => {
             const LV = require('./leviers-abde');
+            const t0 = Date.now(), c0 = process.cpuUsage(), m0 = process.memoryUsage().heapUsed;
             const col = colLue('numeros_cartes');
             const attendu = await col.countDocuments({});
             const index = new Map(); let lus = 0;
             for await (const d of col.find({}, { projection: { idProduct: 1, nomFr: 1 } })) { lus++; LV.ajouterAlias(index, d); }
             if (lus < attendu) throw new Error(`index des alias tronqué (${lus} lus sur ${attendu})`);
             if (lus < INDEX_CODE_NUMERO_MIN) throw new Error(`index des alias sous le plancher (${INDEX_CODE_NUMERO_MIN})`);
+            const c1 = process.cpuUsage(c0);
+            aliasStats = { noms: index.size, lignes: lus, msMur: Date.now() - t0, msCpu: Math.round((c1.user + c1.system) / 1000), tasMo: Math.round((process.memoryUsage().heapUsed - m0) / 1048576 * 10) / 10 };
+            console.warn(`ℹ️ [catalogue] index des alias construit : ${aliasStats.noms} noms (${lus} lignes) en ${aliasStats.msMur} ms (CPU ${aliasStats.msCpu} ms, tas +${aliasStats.tasMo} Mo)`);
             return index;
         })();
         aliasEnCours = p; aliasLe = Date.now();
-        p.catch(() => { if (aliasEnCours === p) { aliasEnCours = null; aliasLe = 0; } });
+        p.then(idx => { if (aliasEnCours === p) aliasPret = idx; }, () => { if (aliasEnCours === p) { aliasEnCours = null; aliasLe = 0; } });
         return p;
+    }
+    function indexAliasFrSansAttente() {
+        if (!aliasEnCours || Date.now() - aliasLe >= INDEX_DUREE_MS) indexAliasFr().catch(() => { });
+        return aliasPret;
+    }
+    const statsIndexAlias = () => (aliasStats ? { ...aliasStats } : null);
+    /** Construit l'index d'alias MAINTENANT (hors de tout scan). Ne lève jamais. @returns Promise<boolean> */
+    async function prechaufferAlias() {
+        try { await indexAliasFr(); return true; } catch (e) { console.warn(`⚠️ [catalogue] préchauffage : index des alias non construit (${(e && (e.code || e.name)) || 'erreur'})`); return false; }
     }
 
     /**
@@ -122,6 +138,7 @@ function creerCatalogue(opts = {}) {
             await new Promise(r => setTimeout(r, pasMs));
         }
         const r = { codeNumero: false, familles: null };
+        if (cfg.leviersAbde === true) r.alias = await prechaufferAlias();                  // LEVIERS-ABDE (d) : seulement sous le drapeau ; la clé `alias` n'existe pas drapeau éteint
         try { await indexCodeNumero(); r.codeNumero = true; } catch (e) { console.warn(`⚠️ [catalogue] préchauffage : index code × numéro non construit (${(e && (e.code || e.name)) || 'erreur'})`); }
         if (DES.actives(DES.reglesDe(DES.REGLES_DESIGNATION)).length > 0) {
             try { await indexFamilles(); r.familles = true; } catch (e) { r.familles = false; console.warn(`⚠️ [catalogue] préchauffage : index des familles non construit (${(e && (e.code || e.name)) || 'erreur'})`); }
@@ -130,7 +147,12 @@ function creerCatalogue(opts = {}) {
     }
 
     /** Le préchauffage SEULEMENT si V2_INDEX_AU_DEMARRAGE vaut exactement « 1 » (éteint par défaut : la route est celle d'avant). null si éteint. Lecture stricte, une valeur inconnue n'allume rien. */
-    function prechaufferSiDemande() { return process.env.V2_INDEX_AU_DEMARRAGE === '1' ? prechauffer() : Promise.resolve(null); }
+    // LEVIERS-ABDE : le drapeau seul préchauffe l'index d'alias (attend la connexion comme prechauffer) ; sans le drapeau, la route est celle d'avant.
+    function prechaufferSiDemande() {
+        if (process.env.V2_INDEX_AU_DEMARRAGE === '1') return prechauffer();
+        if (cfg.leviersAbde === true) return (async () => { const fin = Date.now() + 120000; while (mongoose.connection.readyState !== 1) { if (Date.now() > fin) return null; await new Promise(r => setTimeout(r, 500)); } return { alias: await prechaufferAlias() }; })();
+        return Promise.resolve(null);
+    }
 
     /** @returns Promise<Map<idProduct, ProduitSource>> — les produits introuvables ou innommables sont ABSENTS de la table. */
     async function lire(idProducts) {
@@ -201,6 +223,6 @@ function creerCatalogue(opts = {}) {
                 return Object.freeze(d ? { ...i, version: versionDe(d.variante), prixMelangeTampon: d.prixMelangeTampon === true || i.prixMelangeTampon === true, nonLu: false } : { ...i, version: null, prixMelangeTampon: i.prixMelangeTampon === true, nonLu: true });
             });
     }
-    return { lire, plusRecentDansMetacarte, indexCodeNumero, indexSansAttente, indexFamilles, indexFamillesSansAttente, indexAliasFr, prechauffer, prechaufferSiDemande };
+    return { lire, plusRecentDansMetacarte, indexCodeNumero, indexSansAttente, indexFamilles, indexFamillesSansAttente, indexAliasFr, indexAliasFrSansAttente, statsIndexAlias, prechauffer, prechaufferSiDemande };
 }
 module.exports = { creerCatalogue, COLLECTIONS_LUES, colLue, IMPRESSIONS_MAX_TIME_MS, IMPRESSIONS_DELAI_MS };
