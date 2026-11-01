@@ -45,7 +45,8 @@ function planMelangesTampons({ lignes }) {
         if (connus.some(c => !TAMPONS[c])) { no('tampon-sans-type'); continue; }
         const temoins = l.prixMelangeTamponPreuve || [];
         const testeur = temoins.some(t => /relevé du testeur/i.test(t));
-        if (!testeur && temoins.length < 2) { no('preuve-unique'); continue; }
+        // 	amponsConnus à 2 lectures prouve que deux tampons EXISTENT pour ce numéro, pas que CE produit les mélange : seule la preuve nommée ici (relevé du testeur) retient un mélange.
+        if (!testeur) { no('deux-tampons-connus-melange-non-prouve'); continue; }
         const types = MQ.ordonner([...new Set(connus.flatMap(c => TAMPONS[c]))].map(type => ({ type, params: {} })));
         if (types.length < 2) { no('un-seul-type-au-contrat'); continue; }
         const libelle = libelleMelange(types.map(t => t.type));
@@ -61,8 +62,8 @@ function planMelangesTampons({ lignes }) {
 // ── 2. WCD indiscernables ─────────────────────────────────────────────────────────────────────────────────────────────
 // Liste FERMÉE (recherches EN du 2026-11-01 : aucune source n'associe un V1/V2 Cardmarket à un joueur ; la fiche Cardmarket est fermée).
 const FINITION_WCD = Object.freeze({ 868202: { slugSet: 'WCD-2011', carteId: 108512 }, 868203: { slugSet: 'WCD-2011', carteId: 108512 }, 869299: { slugSet: 'WCD-2008', carteId: 25184 }, 869300: { slugSet: 'WCD-2008', carteId: 25184 },
-    // V3 et V4 de Celio's Network : mêmes carte, set et substitut ; l'entrée (carte, set) les sert de toute façon, elles reçoivent donc le même marqueur (non listées dans la chasse du 01/11)
-    869301: { slugSet: 'WCD-2008', carteId: 25184 }, 869302: { slugSet: 'WCD-2008', carteId: 25184 } });
+    // Celio's V3/V4 (869301, 869302) : volontairement ABSENTS (décision du coordinateur) — rien ne prouve qu'on ne peut pas les distinguer ; l'entrée d'image (carte, set) les sert quand même.
+});
 function planFinitionWcd({ lignes }) {
     const cibles = [], refus = [];
     const parId = new Map((lignes || []).map(l => [l.idProduct, l]));

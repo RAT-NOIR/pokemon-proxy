@@ -76,7 +76,9 @@ async function executer({ argv, ouvrirLecture, ouvrirEcriture, log = console.log
                 return { ok: !manques.length && !alteres.length, texte: `relu : ${aEcrire.length - manques.length}/${aEcrire.length}${manques.length ? ` · MANQUES ${JSON.stringify(manques)}` : ''}${alteres.length ? ` · AUTRES CHAMPS BOUGÉS ${JSON.stringify(alteres)}` : ''}` }; };
             sortie.ecrire = aEcrire; sortie.refus = refusPreuve;
         } else if (famille === 'emprunts') {
-            const p = MM.planEmprunts({ lignes: d.lignes, cartes: d.cartes, maintenant });
+            const entrees = produits ? MM.LISTE_EMPRUNTS.filter(e => e.produits.some(id => produits.includes(id))) : MM.LISTE_EMPRUNTS;
+            if (!entrees.length) { err('❌ --produits ne désigne aucune entrée de la liste fermée des emprunts'); return 2; }
+            const p = MM.planEmprunts({ lignes: d.lignes, cartes: d.cartes, entrees, maintenant });
             aEcrire = p.ajouts; refusEcriture = p.refus;
             log(`   EMPRUNTS : ${p.ajouts.length} entrée(s) pour ${p.ajouts.reduce((n, a) => n + a.produits.length, 0)} produit(s) ${JSON.stringify(p.ajouts.map(a => [a.set, a.numero, a.produits]))} · ${p.deja.length} déjà couvertes · ${p.refus.length} refus ${JSON.stringify(compter(p.refus, r => r.raison.replace(/\(.*\)/, '')))}`);
             for (const r of p.refus) log(`      REFUS ${r.set} n°${r.numero ?? '—'} (${r.produits.join(', ')}) : ${r.raison}`);

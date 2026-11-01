@@ -28,11 +28,13 @@ verifier('mélange : les marqueurs sont dans l\'ordre du contrat et valides', r.
 
 const xy86 = ligne(281423, 'XY', ['prerelease', 'staff-prerelease'], ['lecture A : prerelease (set+numero+nom)', 'lecture B : staff-prerelease (set+numero+nom)']);
 r = M.planMelangesTampons({ lignes: [xy86] });
-verifier('mélange : prerelease + staff-prerelease (deux lectures) → STAFF + PRERELEASE', r.cibles.map(types), [['STAFF', 'PRERELEASE']]);
+verifier('mélange : prerelease + staff-prerelease sur DEUX lectures sans relevé du testeur → refus (deux tampons existent, pas que CE produit les mélange)', [r.cibles.length, r.refus.map(x => x.raison)], [0, ['deux-tampons-connus-melange-non-prouve']]);
+r = M.planMelangesTampons({ lignes: [{ ...xy86, prixMelangeTamponPreuve: ['relevé du testeur, 2026-10-18 (« Prerelease + Staff »)'] }] });
+verifier('mélange : le même produit avec un relevé du testeur → STAFF + PRERELEASE', r.cibles.map(types), [['STAFF', 'PRERELEASE']]);
 verifier('mélange : un libellé trop long retombe sur la forme courte (≤ 40)', r.cibles.map(c => [c.libelle.fr, c.libelle.fr.length <= 40]), [['Staff ou Avant-première (selon copie)', true]]);
 
 const unSeulTemoin = ligne(817301, 'Journey-Together', ['league', 'staff'], ['une seule lecture : league+staff']);
-verifier('mélange : une SEULE lecture (ni relevé du testeur ni deux lectures) → refus', M.planMelangesTampons({ lignes: [unSeulTemoin] }).refus.map(x => x.raison), ['preuve-unique']);
+verifier('mélange : une SEULE lecture (ni relevé du testeur ni deux lectures) → refus', M.planMelangesTampons({ lignes: [unSeulTemoin] }).refus.map(x => x.raison), ['deux-tampons-connus-melange-non-prouve']);
 const avecAutre = ligne(360556, 'SM-Black-Star-Promos', ['autre', 'staff'], [`relevé du testeur, ${T} (« Staff + Autre »)`]);
 verifier('mélange : un tampon « autre » n\'a pas de type au contrat → refus (jamais deviné)', M.planMelangesTampons({ lignes: [avecAutre] }).refus.map(x => x.raison), ['tampon-sans-type']);
 const unSeul = ligne(608696, 'Brilliant-Stars', ['staff'], ['a', 'b']);
@@ -42,14 +44,14 @@ verifier('mélange : une ligne sans prixMelangeTampon n\'est pas un mélange', M
 // ── 2. WCD indiscernables : année de l'expansion + NON_LEGAL + FINITION_NON_VISIBLE
 const wcd = (id, slugSet, carteId) => ({ _id: `${carteId}|${id}`, carteId, idProduct: id, slugSet });
 r = M.planFinitionWcd({ lignes: [wcd(868202, 'WCD-2011', 108512), wcd(868203, 'WCD-2011', 108512), wcd(869299, 'WCD-2008', 25184), wcd(869300, 'WCD-2008', 25184), wcd(869301, 'WCD-2008', 25184), wcd(869302, 'WCD-2008', 25184)] });
-verifier('WCD : les 4 Celio\'s (V1-V4, une seule entrée les sert) comptent avec les 2 Twins', r.cibles.map(c => c.idProduct), [868202, 868203, 869299, 869300, 869301, 869302]);
+verifier('WCD : liste fermée de 4 produits nommés ; Celio\'s V3/V4 (869301, 869302) ne sont PAS marqués faute de preuve qu\'on ne peut pas les distinguer', r.cibles.map(c => c.idProduct), [868202, 868203, 869299, 869300]);
 verifier('WCD : produits indiscernables → WCD{année} + NON_LEGAL + FINITION_NON_VISIBLE', r.cibles.slice(0, 4).map(c => [c.idProduct, c.marqueurs]), [
     [868202, [{ type: 'WCD', params: { annee: 2011 } }, { type: 'NON_LEGAL', params: {} }, { type: 'FINITION_NON_VISIBLE', params: {} }]],
     [868203, [{ type: 'WCD', params: { annee: 2011 } }, { type: 'NON_LEGAL', params: {} }, { type: 'FINITION_NON_VISIBLE', params: {} }]],
     [869299, [{ type: 'WCD', params: { annee: 2008 } }, { type: 'NON_LEGAL', params: {} }, { type: 'FINITION_NON_VISIBLE', params: {} }]],
     [869300, [{ type: 'WCD', params: { annee: 2008 } }, { type: 'NON_LEGAL', params: {} }, { type: 'FINITION_NON_VISIBLE', params: {} }]]]);
 verifier('WCD : une ligne dont le set n\'est pas celui de la liste → refus', M.planFinitionWcd({ lignes: [wcd(868202, 'WCD-2012', 108512)] }).refus.filter(x => x.idProduct === 868202).map(x => x.raison), ['ligne-differente-de-la-liste']);
-verifier('WCD : une ligne absente → refus nommé', M.planFinitionWcd({ lignes: [] }).refus.length, 6);
+verifier('WCD : une ligne absente → refus nommé', M.planFinitionWcd({ lignes: [] }).refus.length, 4);
 
 // ── 3. l'écriture des marqueurs passe par la garde existante (planifierEcriture) : on n'écrase jamais
 const ecr = M.planFinitionWcd({ lignes: [wcd(868202, 'WCD-2011', 108512)] });

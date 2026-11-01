@@ -105,6 +105,13 @@ async function lancer(d, argv, { sousLot = true } = {}) {
     verifier('emprunts : simulation « après » → 4 entrées (Guzma, Lusamine, 2 WCD) pour 7 produits, rien écrit', [r.code, /4 entrée\(s\) pour 9 produit/.test(r.sortie), d.cartes.map(c => c.images.length)], [0, true, [2, 1, 1, 1]]);
     r = await lancer(d, ['--ecrire', '--famille=emprunts', '--attendu=3']);
     verifier('emprunts : Guzma refusé au plan (numéro non corrigé) → refus non annoncé, rien écrit', [r.code, /refus d'écriture au plan, non annoncés/.test(r.erreurs), d.cartes.map(c => c.images.length)], [1, true, [2, 1, 1, 1]]);
+    r = await lancer(d, ['--ecrire', '--famille=emprunts', '--produits=449878,868202,869299', '--attendu=3']);
+    verifier('emprunts : --produits nomme les entrées ; Guzma (numéro non corrigé) hors lot, 0 refus, 3 écrites', [r.code, /posées 3\/3/.test(r.sortie), d.cartes.map(c => c.images.length)], [0, true, [2, 2, 2, 2]]);
+    r = await lancer(d, ['--simuler', '--famille=emprunts', '--produits=449878']);
+    verifier('emprunts : --produits ne retient QUE l\'entrée du produit nommé (Lusamine, déjà écrite → 1 déjà couverte)', /1 déjà couvertes/.test(r.sortie), true);
+    r = await lancer(d, ['--simuler', '--famille=emprunts', '--produits=999']);
+    verifier('emprunts : --produits sans entrée correspondante → refus (2)', r.code, 2);
+    d = donnees();
     await lancer(d, ['--ecrire', '--famille=numero-fiche', '--attendu=1']);
     r = await lancer(d, ['--ecrire', '--famille=emprunts', '--attendu=4']);
     verifier('emprunts : écrit 4 entrées, relues', [r.code, /posées 4\/4/.test(r.sortie), d.cartes.map(c => c.images.length)], [0, true, [3, 2, 2, 2]]);
@@ -116,12 +123,12 @@ async function lancer(d, argv, { sousLot = true } = {}) {
 
     // ── marqueurs WCD
     r = await lancer(d, ['--simuler', '--famille=marqueurs-wcd']);
-    verifier('marqueurs-wcd : simulation, 4 lignes au plan', [r.code, /PLAN : 6 ligne/.test(r.sortie)], [0, true]);
-    r = await lancer(d, ['--ecrire', '--famille=marqueurs-wcd', '--attendu=6']);
+    verifier('marqueurs-wcd : simulation, 4 lignes au plan', [r.code, /PLAN : 4 ligne/.test(r.sortie)], [0, true]);
+    r = await lancer(d, ['--ecrire', '--famille=marqueurs-wcd', '--attendu=4']);
     const w = d.cartes_produits.find(l => l.idProduct === 868202);
     verifier('marqueurs-wcd : écrit WCD{2011} + NON_LEGAL + FINITION_NON_VISIBLE avec sa preuve, sans nom de source', [r.code, w.marqueurs.map(m => m.type), /^année 2011/.test(w.marqueursPreuve), /cardmarket|tcgdex|tcgplayer/i.test(w.marqueursPreuve)], [0, ['WCD', 'NON_LEGAL', 'FINITION_NON_VISIBLE'], true, false]);
     r = await lancer(d, ['--ecrire', '--famille=marqueurs-wcd', '--attendu=0']);
-    verifier('marqueurs-wcd : rejoué → marqueurs identiques = déjà, rien n\'est réécrit', [r.code, /6 déjà/.test(r.sortie)], [0, true]);
+    verifier('marqueurs-wcd : rejoué → marqueurs identiques = déjà, rien n\'est réécrit', [r.code, /4 déjà/.test(r.sortie)], [0, true]);
 
     // ── marqueurs de tampons : Guzma seul, par --produits
     r = await lancer(d, ['--simuler', '--famille=marqueurs-tampons', '--produits=449623']);
@@ -133,7 +140,7 @@ async function lancer(d, argv, { sousLot = true } = {}) {
     r = await lancer(d, ['--simuler', '--famille=marqueurs-tampons', '--produits=999']);
     verifier('marqueurs-tampons : un produit hors famille est un refus nommé, jamais écrit', [r.code, /produit-hors-de-la-famille/.test(r.sortie)], [0, true]);
     const l878 = d.cartes_produits.find(l => l.idProduct === 449878).marqueurs;
-    r = await lancer(d, ['--ecrire', '--famille=marqueurs-wcd', '--attendu=6']);
+    r = await lancer(d, ['--ecrire', '--famille=marqueurs-wcd', '--attendu=4']);
     verifier('Lusamine : ses marqueurs LEAGUE + PLACE, déjà prouvés, ne sont ni lus ni touchés par cet outil', d.cartes_produits.find(l => l.idProduct === 449878).marqueurs, l878);
 
     console.log(`\n${ok} réussi(s), ${ko} échec(s)`);
