@@ -1,0 +1,216 @@
+{
+ "code": "CBB4C",
+ "annonce": 192,
+ "tuiles": [
+  {
+   "numero": "01 01/07",
+   "nom": "Ponyta",
+   "variante": "energy-reverse",
+   "rarete": "Common",
+   "groupe": "01",
+   "rang": "01",
+   "total": 7,
+   "cachee": false
+  },
+  {
+   "numero": "01 02/07",
+   "nom": "Ponyta",
+   "variante": "pokeball-reverse",
+   "rarete": "Common",
+   "groupe": "01",
+   "rang": "02",
+   "total": 7,
+   "cachee": false
+  },
+  {
+   "numero": "01 03/07",
+   "nom": "Ponyta",
+   "variante": "glitter-foil",
+   "rarete": "Uncommon",
+   "groupe": "01",
+   "rang": "03",
+   "total": 7,
+   "cachee": false
+  },
+  {
+   "numero": "01 04/07",
+   "nom": "Ponyta",
+   "variante": "prismatic-foil",
+   "rarete": "Uncommon",
+   "groupe": "01",
+   "rang": "04",
+   "total": 7,
+   "cachee": false
+  },
+  {
+   "numero": "01 05/07",
+   "nom": "Ponyta",
+   "variante": "masterball-reverse",
+   "rarete": "Rare",
+   "groupe": "01",
+   "rang": "05",
+   "total": 7,
+   "cachee": false
+  },
+  {
+   "numero": "01 06/07",
+   "nom": "Ponyta",
+   "variante": "gem",
+   "rarete": "Double Rare",
+   "groupe": "01",
+   "rang": "06",
+   "total": 7,
+   "cachee": false
+  },
+  {
+   "numero": "01 07/07",
+   "nom": "Ponyta",
+   "variante": "full-art",
+   "rarete": "Triple Rare",
+   "groupe": "01",
+   "rang": "07",
+   "total": 7,
+   "cachee": false
+  },
+  {
+   "numero": "02 01/07",
+   "nom": "Lickitung",
+   "variante": "energy-reverse",
+   "rarete": "Common",
+   "groupe": "02",
+   "rang": "01",
+   "total": 7,
+   "cachee": false
+  },
+  {
+   "numero": "02 02/07",
+   "nom": "Lickitung",
+   "variante": "pokeball-reverse",
+   "rarete": "Common",
+   "groupe": "02",
+   "rang": "02",
+   "total": 7,
+   "cachee": false
+  },
+  {
+   "numero": "02 03/07",
+   "nom": "Lickitung",
+   "variante": "glitter-foil",
+   "rarete": "Uncommon",
+   "groupe": "02",
+   "rang": "03",
+   "total": 7,
+   "cachee": false
+  },
+  {
+   "numero": "02 04/07",
+   "nom": "Lickitung",
+   "variante": "prismatic-foil",
+   "rarete": "Uncommon",
+   "groupe": "02",
+   "rang": "04",
+   "total": 7,
+   "cachee": false
+  },
+  {
+   "numero": "02 05/07",
+   "nom": "Lickitung",
+   "variante": "masterball-reverse",
+   "rarete": "Rare",
+   "groupe": "02",
+   "rang": "05",
+   "total": 7,
+   "cachee": false
+  },
+  {
+   "numero": "02 06/07",
+   "nom": "Lickitung",
+   "variante": "gem",
+   "rarete": "Double Rare",
+   "groupe": "02",
+   "rang": "06",
+   "total": 7,
+   "cachee": false
+  },
+  {
+   "numero": "02 07/07",
+   "nom": "Lickitung",
+   "variante": "full-art",
+   "rarete": "Triple Rare",
+   "groupe": "02",
+   "rang": "07",
+   "total": 7,
+   "cachee": false
+  },
+  {
+   "numero": "10 01/07",
+   "nom": "Chatot",
+   "variante": "energy-reverse",
+   "rarete": "Common",
+   "groupe": "10",
+   "rang": "01",
+   "total": 7,
+   "cachee": false
+  },
+  {
+   "numero": "10 02/07",
+   "nom": "Chatot",
+   "variante": "pokeball-reverse",
+   "rarete": "Common",
+   "groupe": "10",
+   "rang": "02",
+   "total": 7,
+   "cachee": false
+  },
+  {
+   "numero": "10 03/07",
+   "nom": "Chatot",
+   "variante": "glitter-foil",
+   "rarete": "Uncommon",
+   "groupe": "10",
+   "rang": "03",
+   "total": 7,
+   "cachee": false
+  },
+  {
+   "numero": "10 04/07",
+   "nom": "Chatot",
+   "variante": "prismatic-foil",
+   "rarete": "Uncommon",
+   "groupe": "10",
+   "rang": "04",
+   "total": 7,
+   "cachee": false
+  },
+  {
+   "numero": "10 05/07",
+   "nom": "Chatot",
+   "variante": "masterball-reverse",
+   "rarete": "Rare",
+   "groupe": "10",
+   "rang": "05",
+   "total": 7,
+   "cachee": false
+  },
+  {
+   "numero": "10 06/07",
+   "nom": "Chatot",
+   "variante": "gem",
+   "rarete": "Double Rare",
+   "groupe": "10",
+   "rang": "06",
+   "total": 7,
+   "cachee": false
+  },
+  {
+   "numero": "10 07/07",
+   "nom": "Chatot",
+   "variante": "full-art",
+   "rarete": "Triple Rare",
+   "groupe": "10",
+   "rang": "07",
+   "total": 7,
+   "cachee": false
+  }
+ ]
+}
