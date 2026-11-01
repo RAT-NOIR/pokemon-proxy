@@ -266,6 +266,9 @@ function lireConfig(env = process.env) {
         // V2_LEVIERS_UN_CANDIDAT (tour 2) : une question à UN SEUL candidat peut devenir un PROBABLE (« à confirmer », jamais un sûr) sous TOUTES les gardes de b (écart c3, I2 prix, I3 même dessin, motif/contradiction, champ contredit, alias échec fermé).
         // Strict comme V2_CONFIRMATION_NOMBREUX : SEULE la valeur exacte « 1 » l'allume ; toute autre valeur (ou l'absence) l'éteint, sans invalider la configuration. Sans effet si V2_LEVIERS_ABDE et V2_PROBABLE ne sont pas allumés.
         leviersUnCandidat: env.V2_LEVIERS_UN_CANDIDAT === '1',
+        // DECISION-SURS (01/11/2026) : un PROBABLE que S2 ∪ S3 ∪ I(0,2) prouve (identifier/promotion-surs.js) devient un SÛR. ÉTEINT par défaut (0), « 0 » ou « 1 » seulement ; sans effet si V2_LEVIERS_ABDE et V2_PROBABLE ne sont pas allumés.
+        // Réservé à l'ESSAI : s'éteint seul au premier sûr faux d'une série (mesures/serie-essai.js --eteindre-si-sur-faux).
+        promotionSurs: booleen('V2_PROMOTION_SURS', env.V2_PROMOTION_SURS, false),
         // TEMPS-ETAPES (identifier/temps-etapes.js) : quatre coupes de TEMPS qui ne changent aucune décision, chacune ÉTEINTE par défaut (0) : la route est alors celle d'avant, octet pour octet.
         // voisinsUneFois : la recherche des voisins une fois par requête ; empreinteTot : la recherche et la garde des zones partent pendant l'attente du modèle ; finParallele : les lectures/écritures annexes de la fin de requête partent ensemble.
         // orbUtile : la règle G (recherche des voisins + garde des zones, donc l'ORB) n'est pas consultée quand la chaîne a rendu un INTROUVABLE — elle ne peut rien y changer (arbitrage-g.js, promotion-g.js) ; la réponse dit alors `empreinte: { utilisee: false, code: 'muette' }`.

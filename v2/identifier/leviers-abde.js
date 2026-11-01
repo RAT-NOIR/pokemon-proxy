@@ -19,6 +19,7 @@ const PR = require('./prix-repli');
 const { preparerVecteur } = require('./voisins-empreinte');
 const { cosinusDesCandidats, dansUnGroupe, estGroupe } = require('./probable-route');
 const { questionParLaRoute } = require('./adaptateur');
+const PS = require('./promotion-surs');
 
 const POIDS_OK = 0.05, POIDS_KO = 0.25;            // les poids de c3 (a priori, §8.1)
 const TAILLE_POOL = 10, VIVIER_LU = 80, VIVIER_RETENU = 10, VOISINS = 10, ALIAS_LONGUEUR_MIN = 4;
@@ -122,6 +123,26 @@ function produitsParCle(version) {
 
 const meme = (a, b) => a.length === b.length && a.every(x => b.includes(x));
 
+/** DECISION-SURS : les jumeaux RÉELS du désigné (archive), leurs lignes (catalogue, une lecture), puis la règle pure. @returns { regle, raison, critere, lignes } | null (pas de promotion : la cause est dans diag.promotion) */
+async function promotionDe({ tete, second, pool, lignes, corpsChaine, version, catalogue, top1Cle, diag }) {
+    const dit = r => { if (diag) diag.promotion = r; return null; };
+    let jum = null;
+    try { jum = version && typeof version.jumeauxDe === 'function' ? version.jumeauxDe(tete) : null; } catch { jum = null; }
+    if (!Array.isArray(jum) || !jum.every(Number.isInteger)) return dit('jumeaux-inconnus');       // la colonne ne conclut pas : jamais « aucun jumeau »
+    if (jum.length > PS.MAX_JUMEAUX) return dit('trop-de-jumeaux');
+    let prods = lignes;
+    const manquants = jum.filter(id => !lignes.has(id));
+    if (manquants.length) {
+        if (!catalogue || typeof catalogue.lire !== 'function') { signaler('jumeaux-sans-catalogue'); return dit('jumeaux-sans-catalogue'); }
+        let lues; try { lues = await catalogue.lire(manquants); } catch { signaler('jumeaux-en-panne'); return dit('jumeaux-en-panne'); }
+        prods = new Map(lignes); if (lues instanceof Map) for (const [id, l] of lues) prods.set(id, l);
+    }
+    const cleDe = id => { const e = version.entree(id); return e && e.grande && typeof e.grande.cle === 'string' && e.grande.cle ? e.grande.cle : null; };
+    const r = PS.promouvoirEnSur({ corps: corpsChaine, id: tete, produits: prods, jumeaux: jum, pool, second, cleDe, top1Cle, i2i3: true });      // I2 et I3 ont été tenus pour que le probable existe
+    if (diag) diag.promotion = r;
+    return r.promu ? { regle: r.regle, raison: r.raison, critere: r.critere, lignes: prods } : null;
+}
+
 /**
  * L'ÉTAPE de la route, à la place de consulterProbable quand V2_LEVIERS_ABDE est allumé : même point (après les marqueurs), mêmes entrées, plus le catalogue (lignes du pool, index d'alias) et le contexte de l'adaptateur (la question).
  * @param catalogue      { lire(ids) -> Map, indexAliasFr?() -> Promise<Map> } ; un catalogue sans indexAliasFr : le levier d est inerte (dit dans diag.alias)
@@ -195,9 +216,15 @@ async function appliquerLeviers({ cfg, entree, resultat, corpsChaine, produits, 
             else if (!c || PR.depuisGuide(c.prixGuide, 'tendance-seule') === null) note('sans-prix');                                 // I2 : un probable est affiché AVEC un prix de guide
             else probable = { idProduct: d.id, signal: SIGNAL, levier: LEVIER, contredits: d.top3.filter(i => i !== d.id), detail: { ecart: d.gap, second: d.second, pool: T.length } };
         }
+        // DECISION-SURS (V2_PROMOTION_SURS, éteint par défaut) : un PROBABLE — et lui seul — peut devenir un SÛR (S2 ∪ S3 ∪ I). La tête du classement est le désigné du probable (d.top3[0] === d.id) ; ses VRAIS jumeaux sont lus
+        // dans l'archive, leurs lignes au catalogue. La décision de l'affirmer est celle de la route (promotion-surs-route.js) ; ici seulement la preuve. Toute lecture qui échoue : le probable reste.
+        let promotion = null;
+        if (probable && cfg.promotionSurs === true) {
+            promotion = await promotionDe({ tete: d.top3[0], second: d.top3[1], pool, lignes, corpsChaine, version, catalogue, top1Cle: p.trouve.top.length ? p.trouve.top[0][0] : null, diag });
+        }
         if (!nouveau && !probable) { if (!(diag && diag.raison)) note('inchangee'); return null; }
         if (diag && !diag.raison) diag.raison = probable ? 'probable' : 'question';
-        return { resultat: nouveau, probable };
+        return { resultat: nouveau, probable, ...(promotion ? { promotion } : {}) };
     } catch (e) { return echec('erreur', e && e.name ? `(${String(e.name).slice(0, 40)})` : ''); }
 }
 

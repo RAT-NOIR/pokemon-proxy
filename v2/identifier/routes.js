@@ -161,6 +161,7 @@ const { fauxRes } = require('./captureres');
 const { adapter, codeLangueDe, prixLiveDe, affirmerParLaRoute } = require('./adaptateur');
 const { appliquerLeviers } = require('./leviers-abde');       // LEVIERS-ABDE (V2_LEVIERS_ABDE, éteint par défaut : jamais appelée)
 const { consulterProbable, avecNiveau, actif: niveauServi, cosinusDesCandidats, estGroupe } = require('./probable-route');   // PROBABLE : le niveau « probable » (V2_PROBABLE, éteint : jamais appelée), et `niveau` servi aux extensions >= 2.0.1
+const { promouvoirDansLaRoute } = require('./promotion-surs-route');       // DECISION-SURS (V2_PROMOTION_SURS, éteint par défaut : jamais appelée)
 const { appliquerMarqueurs } = require('./garde-marqueurs');       // MARQUEURS : le jumbo par le titre et la garde des groupes, derrière V2_JUMBO_TITRE et V2_GARDE_MARQUEURS (éteints : jamais appelée)
 const { fournisseurParDefaut, idsAffirmes, idsACharger } = require('./jumeaux');
 const { idsDeLaGarde } = require('./garde-contradiction');
@@ -487,7 +488,7 @@ function traiterIdentifier(cfg, deps = {}) {
         // 4. la chaîne héritée, avec le DOUBLE de res ; tout ce qui suit se décide dans le contexte de CE scan (la cause d'un non-remboursement s'y note)
         // 🔑 TOUT ce qui suit le débit est sous UN filet : une exception, d'où qu'elle vienne, rend le crédit (voir le catch).
         const traceScan = {};   // I1 : ce que les recherches du scan notent d'elles-mêmes (index-nom.js : catalogueIndex)
-        let reqH = null, rembourserOrigine = null, sortie, lecture = null, desaccordG = null, traceSeconde = null, traceTampon = null, empreinteInfo = null, traceImage = null, complement = null, traceMarqueurs = null, probableDecide = null;
+        let reqH = null, rembourserOrigine = null, sortie, lecture = null, desaccordG = null, traceSeconde = null, traceTampon = null, empreinteInfo = null, traceImage = null, complement = null, traceMarqueurs = null, probableDecide = null, tracePromotion = null;
         // `parLaGarde` : le refus est celui de la garde des jumeaux (le NÔTRE) → nature `jumeaux`, une unité (une carte), constatée par le serveur et rendue SANS plafond (PLAFOND-DECLARE)
         // FREIN-CONSTATES : la nature vient du MOTIF, par l'unique fonction `natureDuMotif` : une panne de NOTRE côté (`panne-*`, INDISPONIBLE compris) est hors plafond, un introuvable est un constat plafonné
         const rembourserMoi = (motif, parLaGarde = false) => reqH.credit.v2.rembourser(reqH, motif, parLaGarde ? { compteur: 'jumeaux', unites: 1 } : { compteur: natureDuMotif(motif) });
@@ -652,6 +653,18 @@ function traiterIdentifier(cfg, deps = {}) {
                                 // rend qu'une question (les 3 premiers du classement) et au plus un désigné : un sûr ne change jamais. Une exception laisse la question d'avant.
                                 const lv = await appliquerLeviers({ cfg, entree, resultat, corpsChaine: c, produits, version: version0, traceMarqueurs, catalogue, ctxQuestion: { langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux, ...ctxLD }, memo: te.voisinsUneFois === true });
                                 if (lv) { if (lv.resultat) resultat = lv.resultat; probableDecide = lv.probable; }
+                                // DECISION-SURS (V2_PROMOTION_SURS) : un probable PROUVÉ promouvable devient l'affirmation de son produit ; la garde des marqueurs est relue sur ce sûr (le point de sortie unique des sûrs est AVANT cette étape).
+                                // Le crédit réservé se règle plus bas comme pour toute affirmation qui remplace une question (branche du critère A). Elle ne laisse aucun probable derrière elle ; sinon le probable d'avant reste.
+                                if (lv && lv.promotion) {
+                                    noterQuestion(); const pr = promouvoirDansLaRoute({ cfg, lv, journal: journalErreur,
+                                        affirmer: (id, surcharge, critere) => affirmerParLaRoute(c, id, { produits: surcharge || produits, langueInterface: entree.langueInterface, cfg, ficheServie: false }, critere),
+                                        marqueurs: (aff, lignesPromo) => appliquerMarqueurs({ cfg, titre: annonce.titre, resultat: aff, derniereQuestion, c, desaccordG, empreinteInfo, produits: lignesPromo, version: version0, langueInterface: entree.langueInterface, jumeaux, journal: journalErreur }) });
+                                    if (pr) {
+                                        tracePromotion = pr.trace;
+                                        if (pr.traceMarqueurs) traceMarqueurs = pr.traceMarqueurs;
+                                        if (pr.resultat) { resultat = pr.resultat; probableDecide = null; }
+                                    }
+                                }
                             } else probableDecide = consulterProbable({ cfg, entree, resultat, corpsChaine: c, produits, version: version0, traceMarqueurs, memo: te.voisinsUneFois === true });
                         }
                         catch (e) { journalErreur('probable', e); probableDecide = null; }
@@ -730,7 +743,7 @@ function traiterIdentifier(cfg, deps = {}) {
                 const faits = { admin, rendu: Boolean(reqH.scanRendu), question: Boolean(reqH.questionId) && resultat.issue === 'question', probable: Boolean(probableDecide), cause: reqH.scanRendu ? null : raisonNonRemboursement() };
                 // I-2 : la borne du scan est atteinte pendant les étapes qui suivent la chaîne (catalogue, seconde lecture, règle G) : l'analyse finit en ÉCHEC par le chemin d'exception existant (ci-dessous : le crédit pris est rendu)
                 if (entree.arret && entree.arret.signal.aborted && resultat.issue !== 'panne') throw Object.assign(new Error('borne du scan atteinte'), { code: 'BORNE_PHOTOS' });
-                return { resultat, facturation: facturationDe(resultat.issue, faits), lecture, desaccord: desaccordG, motif: resultat.motif ?? null, ...(traceSeconde ? { secondeLecture: traceSeconde } : {}), ...(traceTampon ? { lectureTampon: traceTampon } : {}), ...(empreinteInfo ? { empreinte: empreinteInfo } : {}), ...(traceImage ? { surParImage: traceImage } : {}), ...(traceMarqueurs ? { regleMarqueurs: traceMarqueurs } : {}),
+                return { resultat, facturation: facturationDe(resultat.issue, faits), lecture, desaccord: desaccordG, motif: resultat.motif ?? null, ...(traceSeconde ? { secondeLecture: traceSeconde } : {}), ...(traceTampon ? { lectureTampon: traceTampon } : {}), ...(empreinteInfo ? { empreinte: empreinteInfo } : {}), ...(traceImage ? { surParImage: traceImage } : {}), ...(traceMarqueurs ? { regleMarqueurs: traceMarqueurs } : {}), ...(tracePromotion ? { promotionSurs: tracePromotion } : {}),
                     ...(probableDecide ? { probable: probableDecide } : {}),
                     ...(complement && resultat.issue === 'question' ? { complement } : {}) };     // CALCUL-CLIENT : seulement si la question a TENU jusqu'ici (une question non écrite est devenue une panne : pas de complément)
             }, traceScan);          // I1 : la trace du scan survit à la chaîne (catalogueIndex)
@@ -815,6 +828,7 @@ function traiterIdentifier(cfg, deps = {}) {
                 ...(sortie.secondeLecture ? { secondeLecture: sortie.secondeLecture } : {}),     // SECONDE-LECTURE : ce qu'elle a COÛTÉ (appels) et son issue — interne, jamais servi
                 ...(sortie.lectureTampon ? { lectureTampon: sortie.lectureTampon } : {}),        // F1-TAMPON : idem pour la lecture du tampon
                 ...(sortie.regleMarqueurs ? { regleMarqueurs: sortie.regleMarqueurs } : {}),     // MARQUEURS : le jumbo par le titre / la garde des groupes (issue, produit, rivaux, critère) — interne, jamais servi
+                ...(sortie.promotionSurs ? { promotionSurs: sortie.promotionSurs } : {}),        // DECISION-SURS : la promotion d'un probable en sûr (issue, règle, produit) — interne, jamais servie
                 ...(sortie.surParImage ? { surParImage: sortie.surParImage } : {}),              // SUR-PAR-IMAGE : l'issue de la règle (sûr, se tait + motif) — interne, jamais servie
                 ...(sortie.desaccord ? { desaccordRegleG: sortie.desaccord } : {}),          // B1b.7 : un désaccord règle G / chaîne héritée n'est jamais tranché en silence
                 // MODELE-VISUEL-API : ce que le VECTEUR de l'extension a fait de ce scan (interne, jamais servi tel quel) — de quoi EXCLURE des statistiques et des bancs les résultats qu'il a changés sans lecture concordante
