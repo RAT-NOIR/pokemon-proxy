@@ -556,16 +556,16 @@ try {
 
     // 4c. M3 : une jonction vers un dossier d'APPORTS est signalée en ROUGE (plan et journal), retirée comme les autres, ses comptes imprimés à part
     {
-        const w = monde();
+        const m4 = mondeWt(); const w = { base: m4.base, copie: m4.wt };   // cas (a) : en zone (e) un lien vers des apports est REFUSÉ (voir la section 9)
         const apports = path.join(w.base, 'Logo FR'); fairetemoin(apports, 'apports');
-        jonction(apports, path.join(w.copie, 'logos'));
+        jonction(apports, path.join(w.copie, 'x', 'logos'));
         const avantA = photo(apports);
         let sortie = '';
-        const rp = T.retirer(w.copie, { executer: false, racine: ROOT, journal: JOURNAL, sortie: (s) => { sortie += s + '\n'; } });
+        const rp = T.retirer(w.copie, { executer: false, racine: ROOT, journal: JOURNAL, depots: [m4.depot], sortie: (s) => { sortie += s + '\n'; } });
         v('4c. plan : code 0', rp.code, 0);
         vrai('4c. plan : ROUGE, dossier d\'apports, règle 3', /ROUGE/.test(sortie) && /apports manuels/.test(sortie) && /JAMAIS/.test(sortie));
         sortie = '';
-        const re = T.retirer(w.copie, { executer: true, racine: ROOT, journal: JOURNAL, sortie: (s) => { sortie += s + '\n'; } });
+        const re = T.retirer(w.copie, { executer: true, racine: ROOT, journal: JOURNAL, depots: [m4.depot], sortie: (s) => { sortie += s + '\n'; } });
         v('4c. exécution : code 0 (le lien seul est retiré)', re.code, 0);
         vrai('4c. la cible d\'apports est intacte', JSON.stringify(photo(apports)) === JSON.stringify(avantA));
         vrai('4c. ses comptes AVANT et APRÈS sont imprimés à part', /ROUGE compte AVANT de la cible d'apports/.test(sortie) && /ROUGE compte APRÈS de la cible d'apports/.test(sortie));
@@ -573,16 +573,16 @@ try {
         vrai('4c. le journal marque la jonction d\'apports et porte les comptes avant/après', jl.liens.some(l => l.apports === true) && (jl.apports || []).length === 1 && jl.apports[0].avant && jl.apports[0].apres);
     }
     {   // 4d. N9 : un lien dont la cible CONTIENT un dossier d'apports (un ancêtre de « apport-manuel ») est signalé en ROUGE
-        const w = monde();
+        const m4 = mondeWt(); const w = { base: m4.base, copie: m4.wt };   // cas (a) : en zone (e) un lien vers des apports est REFUSÉ (voir la section 9)
         const parent = path.join(w.base, 'bureau-factice'); fs.mkdirSync(path.join(parent, 'pokemon-proxy', 'apport-manuel'), { recursive: true });
         fs.writeFileSync(path.join(parent, 'pokemon-proxy', 'apport-manuel', 'a.png'), 'a');
-        jonction(parent, path.join(w.copie, 'bureau'));
+        jonction(parent, path.join(w.copie, 'x', 'bureau'));
         const avantP = photo(parent);
         let sortie = '';
-        const rp = T.retirer(w.copie, { executer: false, racine: ROOT, journal: JOURNAL, sortie: (s) => { sortie += s + '\n'; } });
+        const rp = T.retirer(w.copie, { executer: false, racine: ROOT, journal: JOURNAL, depots: [m4.depot], sortie: (s) => { sortie += s + '\n'; } });
         v('4d. plan : code 0', rp.code, 0);
         vrai('4d. la cible qui CONTIENT « apport-manuel » est signalée en ROUGE', /ROUGE/.test(sortie) && /apport-manuel/.test(sortie));
-        const re = T.retirer(w.copie, opts());
+        const re = T.retirer(w.copie, opts({ depots: [m4.depot] }));
         v('4d. exécution : code 0, la cible est intacte', [re.code, photo(parent)], [0, avantP]);
         const jl = lignesJournal().filter(l => l.dossier.toLowerCase().endsWith(path.basename(w.copie).toLowerCase())).pop() || { liens: [] };
         vrai('4d. le journal marque la jonction', jl.liens.some(l => l.apports === true));
@@ -601,10 +601,10 @@ try {
         fs.writeFileSync(path.join(w2.copie, 'a', 'b', '.git'), 'gitdir: ailleurs');
         const r2 = T.retirer(w2.copie, opts());
         vrai('4e. une copie qui contient un .git (profondeur 2) : refus, on le nomme, rien retiré', r2.code !== 0 && /\.git/.test(String(r2.message)) && existe(path.join(w2.copie, 'node_modules')));
-        const w3 = monde();
-        fs.mkdirSync(path.join(w3.copie, 'a', '.git'));
-        const r3 = T.retirer(w3.copie, opts());
-        vrai('4e. …et un dossier .git aussi', r3.code !== 0 && existe(path.join(w3.copie, 'node_modules')));
+        const m3 = mondeWt();   // zone (a) : un .git DOSSIER intérieur reste refusé (en zone (e), c'est un clone jetable : section 9)
+        fs.mkdirSync(path.join(m3.wt, 'a', '.git'), { recursive: true });
+        const r3 = T.retirer(m3.wt, opts({ depots: [m3.depot] }));
+        vrai('4e. …et un dossier .git aussi (worktree, zone a)', r3.code !== 0 && existe(path.join(m3.wt, 'node_modules')));
     }
 
     // 4f. N6 : le plan dit TOUT ce qui sera détruit
@@ -614,14 +614,14 @@ try {
         let sortie = '';
         T.retirer(m.wt, { executer: false, racine: ROOT, journal: JOURNAL, depots: [m.depot], sortie: (s) => { sortie += s + '\n'; } });
         vrai('4f. le plan résume les fichiers IGNORÉS par git (nombre, octets, premiers chemins)', /IGNORÉS/.test(sortie) && /10 octets/.test(sortie) && /x[\\/]/.test(sortie));
-        const w = monde();
-        fs.mkdirSync(path.join(w.copie, 'a', 'Logo FR'), { recursive: true }); fs.writeFileSync(path.join(w.copie, 'a', 'Logo FR', 'precieux.png'), 'p');
+        const m5 = mondeWt(); const w = { copie: m5.wt, temoin: m5.temoin, temoin2: m5.temoin2, avantT: m5.avantT, avantT2: m5.avantT2 };   // cas (a)
+        fs.mkdirSync(path.join(w.copie, 'x', 'Logo FR'), { recursive: true }); fs.writeFileSync(path.join(w.copie, 'x', 'Logo FR', 'precieux.png'), 'p');
         sortie = '';
-        const rp = T.retirer(w.copie, { executer: false, racine: ROOT, journal: JOURNAL, sortie: (s) => { sortie += s + '\n'; } });
+        const rp = T.retirer(w.copie, { executer: false, racine: ROOT, journal: JOURNAL, depots: [m5.depot], sortie: (s) => { sortie += s + '\n'; } });
         vrai('4f. un VRAI dossier « Logo FR » dans la copie : ROUGE au plan, option nommée', rp.code === 0 && /ROUGE/.test(sortie) && /Logo FR/.test(sortie) && /--detruire-copies-apports/.test(sortie));
-        const r = T.retirer(w.copie, opts());
-        vrai('4f. …et REFUS sans l\'option : rien n\'est supprimé, les liens sont encore là', r.code !== 0 && existe(path.join(w.copie, 'a', 'Logo FR', 'precieux.png')) && existe(path.join(w.copie, 'node_modules')));
-        const r2 = T.retirer(w.copie, opts({ detruireCopiesApports: true }));
+        const r = T.retirer(w.copie, opts({ depots: [m5.depot] }));
+        vrai('4f. …et REFUS sans l\'option : rien n\'est supprimé, les liens sont encore là', r.code !== 0 && existe(path.join(w.copie, 'x', 'Logo FR', 'precieux.png')) && existe(path.join(w.copie, 'node_modules')));
+        const r2 = T.retirer(w.copie, opts({ depots: [m5.depot], detruireCopiesApports: true }));
         v('4f. avec --detruire-copies-apports : code 0', r2.code, 0);
         const jl = lignesJournal().filter(l => l.dossier.toLowerCase().endsWith(path.basename(w.copie).toLowerCase()) && l.issue === 'ok').pop() || {};
         vrai('4f. le journal liste les fichiers d\'apports détruits', Array.isArray(jl.apportsDetruits) && jl.apportsDetruits.some(x => /precieux\.png/.test(x)));
@@ -743,10 +743,10 @@ try {
             // sans l'option bureau (donc le vrai bureau, absent du banc) : le même nom est refusé
             const sans = path.join(bureau, 'pokemon-proxy-v2-nb'); ajouter(sans); const o2 = o(); delete o2.bureau; const rs = Tm.retirer(sans, o2); res.sansOptionBureau = rs.code !== 0 && existe(sans);
             // bureau de banc hors du Temp : refusé (aucune zone d), le worktree reste
-            const hb = fs.mkdtempSync(path.join(path.dirname(TMP), 'rm-retrait-hbureau-')); horsTemp.push(hb);
+            const hb = fs.mkdtempSync(path.join(HORSTEMP, 'b-')); horsTemp.push(hb);
             const hw = path.join(hb, 'pokemon-proxy-v2-ht'); ajouter(hw);   // ADMISSIBLE si ce bureau était admis : seule la règle « sous le Temp » le refuse
             const rh = Tm.retirer(hw, o({ bureau: hb })); res.bureauHorsTemp = rh.code !== 0 && existe(hw) && /bureau de banc refusé/.test(String(rh.message));
-            const ha = fs.mkdtempSync(path.join(path.dirname(TMP), 'rm-retrait-hancien-')); horsTemp.push(ha);
+            const ha = fs.mkdtempSync(path.join(HORSTEMP, 'a-')); horsTemp.push(ha);
             const hn = path.join(ha, 'pokemon-proxy-v2-hn'); ajouter(hn); const hnn = path.join(bureau, 'pokemon-proxy-v2-hn'); fs.renameSync(hn, hnn);   // déplacée vers un bureau valable, inscrite sous un ancien bureau hors Temp
             const rha = Tm.retirer(hnn, o({ ancienBureau: ha })); res.ancienHorsTemp = rha.code !== 0 && existe(hnn) && /ancien bureau de banc refusé/.test(String(rha.message));
             // option bureau SANS racine de banc (production) : refusée
@@ -791,9 +791,74 @@ try {
         return res;
     };
     {
-        const res = scenarioD(T);
+        // 9. CAS (e) : les copies orphelines de _mutants. Racine de banc PROPRE à chaque scénario (avec _mutants), originaux fabriqués sous le Temp.
+        const scenarioE = (Tm) => {
+            const res = {};
+            const racine = fs.mkdtempSync(path.join(TMP, 'rm-retrait-e-'));
+            fs.writeFileSync(path.join(racine, '.rm-retrait-banc'), 'rm-retrait-banc-v1');
+            const mut = path.join(racine, '_mutants'); fs.mkdirSync(mut);
+            const base = fs.mkdtempSync(path.join(TMP, 'rm-retrait-ebase-'));
+            const jr = path.join(racine, 'journal.jsonl');
+            try {
+                const temoin = path.join(base, 'temoin'); fairetemoin(temoin, 'un'); const avT = photo(temoin);
+                const fauxApports = path.join(base, 'Logo FR'); fairetemoin(fauxApports, 'apports'); const avFA = photo(fauxApports);
+                const orig1 = path.join(base, 'orig', 'Logo FR'), orig2 = path.join(base, 'orig', 'LOGO'); fairetemoin(orig1, 'o1'); fairetemoin(orig2, 'o2');
+                let avO = [photo(orig1), photo(orig2)];
+                const originauxIntacts = () => JSON.stringify([photo(orig1), photo(orig2)]) === JSON.stringify(avO);
+                const o = (plus = {}) => ({ executer: true, racine, journal: jr, depots: [], sortie: muet, originaux: [orig1, orig2], ...plus });
+                const mk = (nom) => { const d = path.join(mut, nom); fs.mkdirSync(path.join(d, 'a', 'b'), { recursive: true }); fs.writeFileSync(path.join(d, 'f.txt'), 'f'); fs.writeFileSync(path.join(d, 'a', 'b', 'g.txt'), 'g'); return d; };
+                const accepte = (cle, d, plus = {}) => { const r = Tm.retirer(d, o(plus)); res[cle] = r.code === 0 && !existe(d) && quarantaines(d).length === 0; return r; };
+                const refuse = (cle, d, plus = {}) => { const r = Tm.retirer(d, o(plus)); res[cle] = r.code !== 0 && existe(d); return r; };
+                // --- acceptés ---
+                const or1 = mk('orph1'); fs.writeFileSync(path.join(or1, '.git'), `gitdir: ${path.join(base, 'absent', '.git', 'worktrees', 'x')}\n`); jonction(temoin, path.join(or1, 'node_modules'));
+                accepte('orphelinAdminAbsent', or1);
+                const adm = path.join(base, 'adm2'); fs.mkdirSync(adm); fs.writeFileSync(path.join(adm, 'commondir'), '../../depot-disparu/.git\n');
+                const or2 = mk('orph2'); fs.writeFileSync(path.join(or2, '.git'), `gitdir: ${adm}\n`);
+                accepte('orphelinDepotAbsent', or2);
+                const cp = mk('copie'); jonction(temoin, path.join(cp, 'node_modules')); accepte('copieSansGit', cp);
+                const cl = mk('clone'); fs.mkdirSync(path.join(cl, 'sous', '.git', 'objects', 'ab'), { recursive: true });
+                const ro = path.join(cl, 'sous', '.git', 'objects', 'ab', 'cdef'); fs.writeFileSync(ro, 'objet'); fs.chmodSync(ro, 0o444); fs.writeFileSync(path.join(cl, 'sous', '.git', 'HEAD'), 'ref: refs/heads/x');
+                accepte('cloneJetable', cl);
+                const ac = mk('apc'); fs.mkdirSync(path.join(ac, 'Logo FR')); fs.writeFileSync(path.join(ac, 'Logo FR', 'copie.png'), 'faux'); fs.mkdirSync(path.join(ac, 'x', 'LOGO'), { recursive: true }); fs.writeFileSync(path.join(ac, 'x', 'LOGO', 'copie2.png'), 'faux2');
+                accepte('copieDApports', ac); res.originauxIntactsApresCopie = originauxIntacts();
+                // --- refusés ---
+                const pr = mk('princ'); fs.mkdirSync(path.join(pr, '.git')); fs.writeFileSync(path.join(pr, '.git', 'HEAD'), 'x'); refuse('depotPrincipal', pr);
+                const nf = mk('nidf'); fs.mkdirSync(path.join(nf, 'sous')); fs.writeFileSync(path.join(nf, 'sous', '.git'), 'gitdir: ailleurs'); refuse('gitInterieurFichier', nf);
+                const cw = mk('clw'); fs.mkdirSync(path.join(cw, 'sous', '.git', 'worktrees', 'w1'), { recursive: true }); refuse('cloneAvecWorktrees', cw);
+                const lf = mk('lfa'); jonction(fauxApports, path.join(lf, 'vers')); refuse('lienVersApports', lf); res.fauxApportsIntacts = JSON.stringify(photo(fauxApports)) === JSON.stringify(avFA);
+                const ln = mk('lnom'); jonction(temoin, path.join(ln, 'Logo FR')); refuse('lienNommeApports', ln);
+                const as = mk('apso'); fs.mkdirSync(path.join(as, 'Logo FR')); fs.writeFileSync(path.join(as, 'Logo FR', 'c.png'), 'c'); refuse('apportsSansOriginaux', as, { originaux: [] });
+                const ph = path.join(mut, 'g', 'h'); fs.mkdirSync(ph, { recursive: true }); refuse('petitEnfantMutants', ph);
+                const cible = path.join(base, 'cible-enfant'); fs.mkdirSync(cible); fs.writeFileSync(path.join(cible, 'f'), 'f'); jonction(cible, path.join(mut, 'lienenfant'));
+                const rle = Tm.retirer(path.join(mut, 'lienenfant'), o()); res.enfantLien = rle.code !== 0 && existe(path.join(cible, 'f'));
+                const hors = path.join(racine, 'hors'); fs.mkdirSync(hors); res.horsMutants = Tm.retirer(hors, o()).code !== 0 && existe(hors);
+                // originaux modifiés pendant l'opération : refus (code 3) avant la suppression, alerte (code 5) après
+                const m1 = mk('om1'); fs.mkdirSync(path.join(m1, 'Logo FR')); fs.writeFileSync(path.join(m1, 'Logo FR', 'c.png'), 'c');
+                const r1 = Tm.retirer(m1, o({ apresRetraitLiens: () => fs.writeFileSync(path.join(orig1, 'intrus1.txt'), 'x') }));
+                res.originalChangeAvant = r1.code === 3 && existe(m1); fs.unlinkSync(path.join(orig1, 'intrus1.txt'));
+                const m2 = mk('om2'); fs.mkdirSync(path.join(m2, 'Logo FR')); fs.writeFileSync(path.join(m2, 'Logo FR', 'c.png'), 'c');
+                const r2 = Tm.retirer(m2, o({ apresSuppression: () => fs.writeFileSync(path.join(orig2, 'intrus2.txt'), 'x') }));
+                res.originalChangeApres = r2.code === 5 && !existe(m2); fs.unlinkSync(path.join(orig2, 'intrus2.txt'));
+                res.originauxIntactsFin = originauxIntacts();
+                res.temoinFin = JSON.stringify(photo(temoin)) === JSON.stringify(avT);
+                // le mode liste : lecture seule, un verdict par entrée
+                const avant = JSON.stringify(photo(mut)), jt = existe(jr) ? fs.statSync(jr).size : -1;
+                const L = Tm.listerMutants({ racine, journal: jr, depots: [], originaux: [orig1, orig2], sortie: muet });
+                res.listeLectureSeule = JSON.stringify(photo(mut)) === avant && (existe(jr) ? fs.statSync(jr).size : -1) === jt;
+                const noms = fs.readdirSync(mut).sort();
+                res.listeComplete = L.lignes.length === noms.length && L.lignes.every((l, i) => l.nom === noms[i]);
+                const verdict = (nom) => (L.lignes.find(l => l.nom === nom) || {}).issue;
+                res.listeVerdicts = verdict('princ') !== 'admis' && verdict('nidf') !== 'admis' && verdict('lfa') !== 'admis' && verdict('lienenfant') === 'pas-un-dossier' && verdict('om1') === 'admis';
+            } finally {
+                for (const d of [racine, base]) { try { delier(d); fs.rmSync(d, { recursive: true, force: true }); } catch { /* rien */ } }
+            }
+            return res;
+        };
+        const attenduE = ['orphelinAdminAbsent', 'orphelinDepotAbsent', 'copieSansGit', 'cloneJetable', 'copieDApports', 'originauxIntactsApresCopie', 'depotPrincipal', 'gitInterieurFichier', 'cloneAvecWorktrees', 'lienVersApports', 'fauxApportsIntacts', 'lienNommeApports', 'apportsSansOriginaux', 'petitEnfantMutants', 'enfantLien', 'horsMutants', 'originalChangeAvant', 'originalChangeApres', 'originauxIntactsFin', 'temoinFin', 'listeLectureSeule', 'listeComplete', 'listeVerdicts'];
+        const res = Object.assign(scenarioD(T), scenarioE(T));
         const attendu = ['accepte', 'cibles', 'apportsIntacts', 'gitNeListePlus', 'dossierNonEnregistre', 'enregistreIgnoreDesDepots', 'nomPokemonProxy', 'nomApiV2', 'sansSuffixe', 'suffixeVide', 'soulignement', 'point', 'labo', 'prefixeEtendu', 'petitEnfant', 'traversees', 'logoDirect', 'apportsDedans', 'sale', 'plan', 'voisinQuelconque', 'bureauLuiMeme', 'sansOptionBureau', 'bureauHorsTemp', 'bureauSansBanc', 'deplacePlan', 'deplaceAccepte', 'deplaceCibles', 'deplaceAutresInscriptions', 'deplaceNomDifferent', 'deplaceMauvaisParent', 'deplaceAncienExiste', 'deplaceAncienIntact', 'deplaceSansAncienOption', 'deplaceHorsBureau', 'ancienHorsTemp', 'repriseDeplacee1', 'repriseDeplacee2', 'ancienReapparu', 'temoinsFin'];
         for (const k of attendu) vrai(`7. (d) ${k}`, res[k] === true);
+        for (const k of attenduE) vrai(`9. (e) ${k}`, res[k] === true);
         // 7 bis. une constante n'est sûre que si ni elle ni un parent n'est un lien (relecture 1, Important)
         const unitCS = (Tm) => {
             const r = {}; const cs = fs.mkdtempSync(path.join(TMP, 'rm-retrait-cs-'));
@@ -824,6 +889,14 @@ try {
             ['ancien bureau de banc : plus « sous le Temp »', "if (!sousStrict(tmp, a)) throw", "if (false) throw"],
             ['bureau sans racine de banc admis', "if (bureauDonne || ancienDonne) throw", "if (false) throw"],
             ['ancien chemin non relu avant l\'administration', "cle(inscrit) !== cle(origine) && lstatOuNull(inscrit))", "false)"],
+            ['(e) un .git intérieur FICHIER admis', "g.dossierReel && !lstatOuNull", "!lstatOuNull"],
+            ['(e) un clone avec des worktrees rattachés admis', ".length === 0));", ".length >= 0));"],
+            ['(e) un lien vers des apports admis', "if (copieMutants && apports)", "if (false)"],
+            ['(e) un lien nommé comme des apports admis', "if (copieMutants && nomEstApportsLarge(path.basename(l.chemin)))", "if (false)"],
+            ['(e) apports sans original connu admis', "if (!ctx.originaux.length) throw", "if (false) throw"],
+            ['(e) les originaux ne sont plus comptés', "cibles.set(cle(o), { cible: o, avant: instantane(o), apports: 'original' })", "void 0"],
+            ['(e) n\'importe quel dossier admis (plus « enfant direct de _mutants »)', "if (!ctx.mutants || cle(path.dirname(r)) !== cle(ctx.mutants))", "if (false)"],
+
             ['déplacement : admis hors du bureau', "if (zone !== 'bureau' || !ancien ||", "if (!ancien ||"],
             ['élargit le motif (préfixe seul)', "/^pokemon-proxy-v2-[a-z0-9-]+$/i", "/^pokemon-proxy-/i"],
             ['élargit le motif (sans ancre de fin)', "/^pokemon-proxy-v2-[a-z0-9-]+$/i", "/^pokemon-proxy-v2-[a-z0-9-]+/i"],
@@ -836,7 +909,7 @@ try {
             const f = path.join(ROOT, `mutant-${++n}.js`);
             fs.writeFileSync(f, src.replace(de, vers));
             let rouge = false, qui = '';
-            try { const mod = require(f); const rm = scenarioD(mod); const ucs = unitCS(mod); const ko2 = attendu.filter(k => rm[k] !== true).concat(Object.keys(ucs).filter(k => ucs[k] !== true)); rouge = ko2.length > 0; qui = ko2.join(','); } catch (e) { rouge = false; qui = 'EXCEPTION ' + e.message; }
+            try { const mod = require(f); const rm = Object.assign(scenarioD(mod), scenarioE(mod)); const ucs = unitCS(mod); const ko2 = attendu.concat(attenduE).filter(k => rm[k] !== true).concat(Object.keys(ucs).filter(k => ucs[k] !== true)); rouge = ko2.length > 0; qui = ko2.join(','); } catch (e) { rouge = false; qui = 'EXCEPTION ' + e.message; }
             vrai(`8. mutant « ${nom} » : le banc rougit sur une vérification précise (${qui})`, rouge);
         }
     }

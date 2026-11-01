@@ -8,6 +8,7 @@
 //   node outils/retirer-worktree.js <dossier> --executer   la procédure, avec arrêt à la première anomalie (code de sortie non nul).
 //   …  --jeter-modifications                               seule façon de retirer un worktree SALE ; le journal liste ce qui est jeté.
 //   …  --detruire-copies-apports                           seule façon de retirer une copie qui CONTIENT un vrai dossier d'apports ; le journal liste ses fichiers.
+//   node outils/retirer-worktree.js --lister-mutants        le verdict (admis / refusé + raison) de chaque enfant de _mutants, lecture seule.
 //   node outils/retirer-worktree.js <quarantaine> --executer   REPREND une quarantaine laissée par un échec (seulement si le journal l'a posée).
 //
 // SEULE LA LIGNE DE COMMANDE EST UN POINT D'ENTRÉE SÛR. Les options de la fonction `retirer(dossier, opts)` (racine, journal, depots, instrumentReanalyse,
@@ -37,6 +38,12 @@
 // LA GARDE S'ÉCRIT PAR CE QU'ELLE AUTORISE, ET RIEN D'AUTRE :
 //   (a) un worktree ENREGISTRÉ (`git worktree list --porcelain` de l'un des dépôts connus) situé STRICTEMENT sous `…\rat-market-travail\api\` ;
 //   (b) un enfant DIRECT de `…\rat-market-travail\api\_mutants\` ; (c) une quarantaine du journal ;
+//   (e) un enfant DIRECT de `…\rat-market-travail\api\_mutants\` (qui doit être un vrai dossier, comme chacun de ses parents) ayant l'une des formes : un worktree
+//       ORPHELIN (son `.git` est un fichier dont le répertoire d'administration ou le dépôt n'existe plus, et que git n'a pas enregistré) ; une copie sans `.git` ;
+//       une copie dont les `.git` INTÉRIEURS sont tous de vrais dossiers (clone jetable) sans worktree rattaché ni enregistré. Un `.git` DOSSIER à la racine
+//       (dépôt principal) reste refusé. Une copie contenant un dossier d'apports (Logo FR, Logo JP, Logo ZH, apport-manuel, LOGO, logos-composes-rendus,
+//       GABARIT-pokecardex) n'est admise que si c'est une COPIE réelle (jamais un lien, vérifié par lstat à chaque niveau) ET si les ORIGINAUX comptés avant
+//       et après restent identiques (fichiers, octets, dossiers, liens, dernière modification) ; un lien vers un dossier d'apports est refusé.
 //   (d) un worktree ENREGISTRÉ, enfant DIRECT de `C:\Users\Yung\rat-market-travail\archives-bureau`, au nom EXACT ^pokemon-proxy-v2-[a-z0-9-]+$
 //       (copies de travail des lots v2, DÉPLACÉES du bureau). Même procédure que (a). Ces copies sont déplacées : git les a inscrites sous
 //       `C:\Users\Yung\Desktop\<même nom>` (ancien chemin, qui doit ne plus exister). L'outil ne répare PAS l'inscription et n'élague JAMAIS
@@ -63,7 +70,13 @@ const DEPOTS_PAR_DEFAUT = ['C:\\Users\\Yung\\Desktop\\pokemon-proxy-api-v2', 'C:
 const TEMP_EN_DUR = 'C:\\Users\\Yung\\AppData\\Local\\Temp';   // jamais os.tmpdir() : TEMP et TMP sont sous le contrôle de l'environnement
 const MARQUEUR_BANC = '.rm-retrait-banc';          // fichier que SEUL le banc écrit dans sa racine, avec ce contenu exact
 const JETON_BANC = 'rm-retrait-banc-v1';
-const NOMS_APPORTS = ['logo fr', 'apport-manuel', 'logo jp', 'logo zh', 'gabarit-pokecardex'];
+const NOMS_APPORTS = ['logo fr', 'apport-manuel', 'logo jp', 'logo zh', 'gabarit-pokecardex', 'logos-composes-rendus'];
+// Cas (e) : les ORIGINAUX des dossiers d'apports, dont les comptes (fichiers, octets) sont relevés avant et après tout retrait d'une copie qui en contient une.
+const ORIGINAUX_PAR_DEFAUT = [
+    'C:\\Users\\Yung\\Desktop\\LOGO', 'C:\\Users\\Yung\\Desktop\\pokemon-proxy\\Logo FR', 'C:\\Users\\Yung\\Desktop\\pokemon-proxy\\apport-manuel',
+    'C:\\Users\\Yung\\Desktop\\pokemon-proxy\\Logo JP', 'C:\\Users\\Yung\\Desktop\\pokemon-proxy\\Logo ZH', 'C:\\Users\\Yung\\Desktop\\pokemon-proxy\\GABARIT-pokecardex',
+    'C:\\Users\\Yung\\Desktop\\pokemon-proxy\\logos-composes-rendus',
+];
 const FIN_INSTRUMENT = 'RM-FIN';
 const RE_QUARANTAINE = /^(.+)\.retrait-\d{17}-\d+-[0-9a-z]+$/;
 
@@ -88,6 +101,8 @@ function estDossierApports(chemin) {
     }
     return null;
 }
+// Dans une COPIE de _mutants (cas e), `LOGO` seul est aussi un nom d'apports, où qu'il soit.
+const nomEstApportsLarge = (nom) => NOMS_APPORTS.includes(nom.toLowerCase()) || nom.toLowerCase() === 'logo';
 const nomEstApports = (nom, parent) => NOMS_APPORTS.includes(nom.toLowerCase()) || (nom.toLowerCase() === 'logo' && path.basename(parent).toLowerCase() === 'desktop');
 
 function trouverGit() {
@@ -139,7 +154,7 @@ function resoudreRacine(opts) {
         if (!r) throw new Refus(1, 'refus-entree', 'la racine permise est absente de ce poste, ou elle (ou un de ses parents) est un lien : refusé');
         const b = constanteSure(BUREAU_PAR_DEFAUT);   // null (aucun cas d) si le dossier d'archives est absent ou si un lien le détourne
         let a = null; try { a = reel(ANCIEN_BUREAU_PAR_DEFAUT); } catch { /* bureau absent : aucune copie déplacée admise */ }
-        return { racine: r, journal: JOURNAL_PAR_DEFAUT, banc: false, depots: DEPOTS_PAR_DEFAUT, bureau: b, ancienBureau: a };
+        return { racine: r, journal: JOURNAL_PAR_DEFAUT, banc: false, depots: DEPOTS_PAR_DEFAUT, bureau: b, ancienBureau: a, mutants: constanteSure(path.join(r, '_mutants')), originaux: ORIGINAUX_PAR_DEFAUT.filter(o => lstatOuNull(o)) };
     }
     if (!opts.journal) throw new Refus(1, 'refus-entree', 'une racine de banc exige un journal de banc');
     let tmp; try { tmp = reel(TEMP_EN_DUR); } catch { throw new Refus(1, 'refus-entree', 'le dossier Temp écrit en dur est absent de ce poste : aucune racine de banc'); }
@@ -161,11 +176,17 @@ function resoudreRacine(opts) {
         if (!sousStrict(tmp, a)) throw new Refus(1, 'refus-entree', `ancien bureau de banc refusé : il doit être STRICTEMENT sous ${TEMP_EN_DUR}`);
         ancienBureau = a;
     }
-    return { racine: r, journal: j, banc: true, depots: Array.isArray(opts.depots) ? opts.depots : [], bureau, ancienBureau };
+        let originaux = [];
+    if (Array.isArray(opts.originaux)) for (const o of opts.originaux) {
+        let ro; try { ro = reel(o); } catch { throw new Refus(1, 'refus-entree', `original de banc absent : ${o}`); }
+        if (!sousStrict(tmp, ro)) throw new Refus(1, 'refus-entree', `original de banc refusé : il doit être STRICTEMENT sous ${TEMP_EN_DUR}`);
+        originaux.push(ro);
+    }
+    return { racine: r, journal: j, banc: true, depots: Array.isArray(opts.depots) ? opts.depots : [], bureau, ancienBureau, mutants: constanteSure(path.join(r, '_mutants')), originaux };
 }
 
 // Refus d'entrée (le dossier est-il ce qu'il prétend être ?). Retourne { dossier (réel), zone, worktree: null | { repo, admin, commun } }.
-function verifierEntree(brut, racine, bureau = null, ancienBureau = null) {
+function verifierEntree(brut, racine, bureau = null, ancienBureau = null, mutants = null) {
     if (typeof brut !== 'string' || !brut.trim()) throw new Refus(1, 'refus-entree', 'aucun dossier donné');
     const abs = path.resolve(brut);
     const st = lstatOuNull(abs);
@@ -176,7 +197,7 @@ function verifierEntree(brut, racine, bureau = null, ancienBureau = null) {
     if (cle(r) !== cle(abs)) throw new Refus(1, 'refus-entree', `le chemin traverse un lien ou un nom court (réel : ${r}) : donne le chemin réel`);
     const ap = estDossierApports(r);
     if (ap) throw new Refus(1, 'refus-apports', `le chemin contient un dossier d'apports manuels (« ${ap} ») : jamais retiré, quel que soit l'environnement (${r})`);
-    const zone = estEnfantBureau(r, bureau) ? 'bureau' : (sousStrict(racine, r) ? 'racine' : null);
+    const zone = estEnfantBureau(r, bureau) ? 'bureau' : (mutants && cle(path.dirname(r)) === cle(mutants) ? 'mutants' : (sousStrict(racine, r) ? 'racine' : null));
     if (!zone) throw new Refus(1, 'refus-entree', `dossier hors de la racine permise (ou égal à elle), et pas un enfant direct du bureau au nom pokemon-proxy-v2-… : ${r}`);
     const g = lstatOuNull(path.join(r, '.git'));
     if (!g) return { dossier: r, zone, worktree: null };
@@ -185,11 +206,13 @@ function verifierEntree(brut, racine, bureau = null, ancienBureau = null) {
     const m = /^gitdir:\s*(.+?)\s*$/m.exec(fs.readFileSync(path.join(r, '.git'), 'utf8'));
     if (!m) throw new Refus(1, 'refus-entree', `.git illisible : ni dossier ni fichier gitdir (${r})`);
     const gitdir = path.resolve(r, m[1]);
+    // Cas (e) : un worktree ORPHELIN (son répertoire d'administration ou son dépôt n'existe plus) d'un enfant de _mutants est une simple copie à retirer.
+    const orphelin = () => { if (zone === 'mutants') return { dossier: r, zone, worktree: null, orphelin: true }; throw new Refus(1, 'refus-entree', `worktree orphelin : son dépôt est introuvable (${r})`); };
     const cd = lstatOuNull(path.join(gitdir, 'commondir'));
-    if (!lstatOuNull(gitdir) || !cd) throw new Refus(1, 'refus-entree', `worktree orphelin : son dépôt est introuvable (${r})`);
+    if (!lstatOuNull(gitdir) || !cd) return orphelin();
     const commun = path.resolve(gitdir, fs.readFileSync(path.join(gitdir, 'commondir'), 'utf8').trim());
     const repo = path.basename(commun).toLowerCase() === '.git' ? path.dirname(commun) : commun;
-    if (!lstatOuNull(repo)) throw new Refus(1, 'refus-entree', `worktree orphelin : son dépôt est introuvable (${r})`);
+    if (!lstatOuNull(repo)) return orphelin();
     const inscrit = RE_QUARANTAINE.test(path.basename(r)) ? null : resoudreInscrit(gitdir, r, zone, ancienBureau);
     return { dossier: r, zone, worktree: { repo, admin: gitdir, commun, inscrit } };
 }
@@ -246,9 +269,10 @@ function admettre(r, entree, ctx) {
         if (!enregistres.has(cle(entree.worktree.inscrit || r))) throw new Refus(1, 'refus-non-enregistre', `ce worktree n'est enregistré (git worktree list) dans aucun des dépôts connus (${ctx.depots.length}) : refusé (${r})`);
         return;
     }
-    const mutants = path.join(ctx.racine, '_mutants');
-    if (cle(path.dirname(r)) !== cle(mutants))
-        throw new Refus(1, 'refus-non-admis', `ni un worktree enregistré, ni un enfant DIRECT de ${mutants} : refusé (${r})`);
+    if (!ctx.mutants || cle(path.dirname(r)) !== cle(ctx.mutants))
+        throw new Refus(1, 'refus-non-admis', `ni un worktree enregistré, ni un enfant DIRECT de ${path.join(ctx.racine, '_mutants')} (qui doit être un vrai dossier, pas un lien) : refusé (${r})`);
+    if (entree.orphelin && worktreesEnregistres(ctx.depots, trouverGit()).has(cle(r)))
+        throw new Refus(1, 'refus-non-admis', `le .git de cette copie est orphelin mais git l'a ENREGISTRÉE (git worktree list) : refusé (${r})`);
 }
 
 // Journal : lignes JSON lisibles (une ligne illisible est ignorée, jamais fatale).
@@ -257,6 +281,19 @@ function lireJournal(chemin) {
     catch { return []; }
 }
 
+// Tous les `.git` (fichier, dossier ou lien) SOUS la racine du dossier, sans jamais suivre un lien ni descendre dans un `.git`.
+function gitsDedans(dossier) {
+    const res = [], pile = [dossier];
+    while (pile.length) {
+        const d = pile.pop();
+        for (const e of fs.readdirSync(d)) {
+            const p = path.join(d, e), s = fs.lstatSync(p);
+            if (e === '.git') { if (d !== dossier) res.push({ chemin: p, dossierReel: s.isDirectory() && !s.isSymbolicLink() }); continue; }
+            if (!s.isSymbolicLink() && s.isDirectory()) pile.push(p);
+        }
+    }
+    return res;
+}
 // Premier `.git` (fichier ou dossier) trouvé SOUS la racine du dossier, à n'importe quelle profondeur ; les liens ne sont jamais suivis.
 function trouverGitDedans(dossier) {
     const pile = [dossier];
@@ -273,14 +310,14 @@ function trouverGitDedans(dossier) {
 }
 
 // Les VRAIS dossiers (pas des liens) portant un nom d'apport, à n'importe quelle profondeur ; on ne descend pas dans un dossier d'apports trouvé.
-function trouverApportsDedans(dossier) {
+function trouverApportsDedans(dossier, large = false) {
     const trouves = [], pile = [dossier];
     while (pile.length) {
         const d = pile.pop();
         for (const e of fs.readdirSync(d)) {
             const p = path.join(d, e), s = fs.lstatSync(p);
             if (s.isSymbolicLink() || e === '.git' || !s.isDirectory()) continue;
-            if (nomEstApports(e, d)) trouves.push(p); else pile.push(p);
+            if (large ? nomEstApportsLarge(e) : nomEstApports(e, d)) trouves.push(p); else pile.push(p);
         }
     }
     return trouves;
@@ -335,8 +372,14 @@ function controlesAvantAction(dossier, entree, ctx, lanceurGit) {
         for (const p of enr) if (sousStrict(dossier, p)) throw new Refus(1, 'refus-contient-worktree', `le dossier contient un worktree enregistré (${p}) : retire-le d'abord, avec cet outil`);
     }
     const dedans = trouverGitDedans(dossier);
-    if (dedans) throw new Refus(1, 'refus-contient-git', `le dossier contient un .git à l'intérieur (${dedans}) : un dépôt ou un worktree s'y cache, refusé`);
-    const apportsDedans = trouverApportsDedans(dossier);
+    if (dedans) {
+        // Cas (e) : un clone jetable de mutation, c'est-à-dire des `.git` intérieurs qui sont TOUS de vrais DOSSIERS (jamais un fichier ni un lien : un worktree
+        // niché ou un lien s'y cacherait), sans aucun worktree rattaché (`.git\worktrees` vide ou absent). Aucun worktree ENREGISTRÉ dedans : vérifié plus haut.
+        const jetable = entree.zone === 'mutants' && gitsDedans(dossier).every(g => g.dossierReel && !lstatOuNull(path.join(g.chemin, 'worktrees'))?.isSymbolicLink()
+            && (!lstatOuNull(path.join(g.chemin, 'worktrees')) || fs.readdirSync(path.join(g.chemin, 'worktrees')).length === 0));
+        if (!jetable) throw new Refus(1, 'refus-contient-git', `le dossier contient un .git à l'intérieur (${dedans}) : un dépôt ou un worktree s'y cache, refusé`);
+    }
+    const apportsDedans = trouverApportsDedans(dossier, entree.zone === 'mutants');
     if (!entree.worktree) return { sale: [], ignores: [], liste: null, apportsDedans };
     const inscrit = entree.worktree.inscrit || dossier;
     verifierAdmin(entree.worktree.admin, inscrit);
@@ -463,7 +506,7 @@ function supprimerEntree(p, parent, rapport, h = {}) {
         return;
     }
     verifierParent();
-    essayer(() => fs.unlinkSync(p));
+    essayer(() => fs.unlinkSync(p));   // libuv retire aussi un fichier en lecture seule (objets d'un clone git) : testé au cas du clone jetable
 }
 
 function retirer(dossierBrut, opts = {}) {
@@ -483,7 +526,7 @@ function retirer(dossierBrut, opts = {}) {
     let entree, ctx, reprise = null;
     try {
         ctx = resoudreRacine(opts);
-        entree = verifierEntree(dossierBrut, ctx.racine, ctx.bureau, ctx.ancienBureau);
+        entree = verifierEntree(dossierBrut, ctx.racine, ctx.bureau, ctx.ancienBureau, ctx.mutants);
         if (RE_QUARANTAINE.test(path.basename(entree.dossier))) {
             // une quarantaine n'est admise QUE si le journal l'a posée (chemin d'origine, nom, répertoire d'administration)
             reprise = lireJournal(ctx.journal).filter(l => l.evenement === 'quarantaine' && l.quarantaine && cle(path.resolve(l.quarantaine)) === cle(entree.dossier)).pop() || null;
@@ -542,9 +585,11 @@ function retirer(dossierBrut, opts = {}) {
             const c = controlesAvantAction(dossier, entree, ctx, lanceurGit);
             const sale = c.sale;
             avantListe = c.liste;
-            if (sale.length && executer && opts.jeterModifications !== true)
+            const simuler = executer || opts.simulerRefus === true;   // le mode « liste » rend le verdict de --executer sans rien toucher
+            if (sale.length && simuler && opts.jeterModifications !== true)
                 throw new Refus(1, 'refus-sale', `worktree SALE (${sale.length} entrée(s) de git status --porcelain : ${sale.slice(0, 5).join(' | ')}${sale.length > 5 ? ' | …' : ''}) : son travail non commité serait PERDU ; commite-le, ou relance avec --jeter-modifications`);
-            if (c.apportsDedans.length && executer && opts.detruireCopiesApports !== true)
+            const copieMutants = entree.zone === 'mutants';   // cas (e) : une COPIE d'apports est admise (originaux comptés avant/après), jamais détruite par l'option
+            if (c.apportsDedans.length && simuler && !copieMutants && opts.detruireCopiesApports !== true)
                 throw new Refus(1, 'refus-apports-dedans', `la copie CONTIENT un vrai dossier d'apports (${c.apportsDedans.map(p => path.relative(dossier, p)).join(', ')}) : ses fichiers seraient DÉTRUITS ; sauve-les, ou relance avec --detruire-copies-apports`);
             if (sale.length && executer) rec.jetes = sale;
             if (c.apportsDedans.length && executer) { for (const d of c.apportsDedans) rec.apportsDetruits.push(...listerFichiers(d).fichiers); }
@@ -552,6 +597,8 @@ function retirer(dossierBrut, opts = {}) {
             const liens = inventaire(dossier, lire);
             for (const l of liens) {
                 let apports = null;
+                if (copieMutants && nomEstApportsLarge(path.basename(l.chemin)))
+                    throw new Refus(1, 'refus-lien-apports', `cas (e) : « ${l.rel} » est un LIEN portant un nom de dossier d'apports : une copie d'apports est admise, jamais un lien ; refusé`);
                 if (l.cible !== null) {
                     if (cle(l.cible) === cle(dossier) || sousStrict(dossier, l.cible) || sousStrict(l.cible, dossier))
                         throw new Refus(3, 'refus-cible-interne', `lien ${l.rel} : sa cible ${l.cible} est dans le dossier, ou le contient : impossible de vérifier qu'elle reste intacte`);
@@ -561,8 +608,20 @@ function retirer(dossierBrut, opts = {}) {
                         cibles.set(cle(l.cible), { cible: l.cible, avant, apports: nom });
                     }
                     apports = cibles.get(cle(l.cible)).apports;
+                    if (copieMutants && apports)
+                        throw new Refus(1, 'refus-lien-apports', `cas (e) : le lien ${l.rel} vise un dossier d'apports (${apports}) : une copie d'apports est admise, jamais un lien ; refusé`);
                 }
                 rec.liens.push({ chemin: l.rel, cible: l.cible || `(cassé) ${l.litteral}`, ...(apports ? { apports: true } : {}) });
+            }
+            if (copieMutants && c.apportsDedans.length) {
+                // Les ORIGINAUX des dossiers d'apports sont comptés ici (fichiers, octets, dossiers, liens, dernière modification), recomptés après les liens et après la
+                // suppression par les mêmes comparaisons que les autres cibles : un écart est un refus (code 3) ou une ALERTE ROUGE (code 5). Aucun original connu : refus.
+                if (!ctx.originaux.length) throw new Refus(1, 'refus-originaux-inconnus', `cas (e) : la copie contient un dossier d'apports (${c.apportsDedans.map(q => path.relative(dossier, q)).join(', ')}) mais aucun ORIGINAL n'est connu pour être compté avant/après : refusé`);
+                for (const o of ctx.originaux) {
+                    if (cle(o) === cle(dossier) || sousStrict(dossier, o) || sousStrict(o, dossier))
+                        throw new Refus(1, 'refus-originaux-inconnus', `cas (e) : l'original ${o} est dans la copie, ou la contient : impossible de vérifier qu'il reste intact`);
+                    if (!cibles.has(cle(o))) cibles.set(cle(o), { cible: o, avant: instantane(o), apports: 'original' });
+                }
             }
             rec.avant = [...cibles.values()].map(x => ({ cible: x.cible, ...x.avant }));
             sortie(`${executer ? 'RETRAIT' : 'PLAN'} ${dossier}`);
@@ -667,8 +726,36 @@ function retirer(dossierBrut, opts = {}) {
     }
 }
 
+// MODE LISTE (lecture seule) : le verdict que --executer rendrait pour chaque enfant direct de _mutants, avec sa raison. Ne supprime, ne renomme, n'écrit rien
+// (pas même au journal) ; les refus de --executer (worktree sale, copie d'apports) sont simulés. Rend { lignes, parRaison }.
+function listerMutants(opts = {}) {
+    const sortie = typeof opts.sortie === 'function' ? opts.sortie : (s) => console.log(s);
+    const ctx = resoudreRacine(opts);
+    if (!ctx.mutants) { sortie('🔴 REFUS : _mutants est absent, ou lui-même (ou un de ses parents) est un lien'); return { lignes: [], parRaison: {}, code: 1 }; }
+    const lignes = [], parRaison = {};
+    for (const e of fs.readdirSync(ctx.mutants, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+        const chemin = path.join(ctx.mutants, e.name);
+        let l;
+        if (!e.isDirectory() || e.isSymbolicLink()) l = { nom: e.name, admis: false, issue: 'pas-un-dossier', raison: e.isSymbolicLink() ? 'lien' : 'fichier : hors du cas (e)' };
+        else {
+            const r = retirer(chemin, { ...opts, executer: false, simulerRefus: true, sortie: () => {} });
+            const plan = r.code === 0 && r.issue === 'plan';
+            l = { nom: e.name, admis: plan, issue: plan ? 'admis' : r.issue, raison: String(r.message || '').replace(/^🔴 REFUS : /, '').replace(/\s+/g, ' ').slice(0, 240) };
+        }
+        lignes.push(l); parRaison[l.issue] = (parRaison[l.issue] || 0) + 1;
+        sortie(`${l.admis ? 'ADMIS ' : 'REFUSÉ'} | ${l.nom} | ${l.issue}${l.admis ? '' : ' | ' + l.raison}`);
+    }
+    sortie(`\n${lignes.length} entrée(s) : ${Object.entries(parRaison).map(([k, n]) => `${k} ${n}`).join(', ')}`);
+    return { lignes, parRaison, code: 0 };
+}
+
 function main(argv, env) {
     const refuser = (m) => { console.error(`🔴 REFUS : ${m}\nusage : node outils/retirer-worktree.js <dossier> [--executer] [--jeter-modifications] [--detruire-copies-apports]`); return 1; };
+    if (argv.includes('--lister-mutants')) {
+        if (argv.length !== 1) return refuser('--lister-mutants s\'utilise seul');
+        const o = {}; if (env.RM_RETRAIT_RACINE_BANC) o.racine = env.RM_RETRAIT_RACINE_BANC; if (env.RM_RETRAIT_JOURNAL) o.journal = env.RM_RETRAIT_JOURNAL;
+        try { return listerMutants(o).code; } catch (e) { console.error(`🔴 ${e.message}`); return e instanceof Refus ? e.code : 2; }
+    }
     const dossiers = argv.filter(a => !a.startsWith('--')), drap = argv.filter(a => a.startsWith('--'));
     const permis = ['--executer', '--jeter-modifications', '--detruire-copies-apports'];
     const inconnus = drap.filter(d => !permis.includes(d));
@@ -680,5 +767,5 @@ function main(argv, env) {
     return retirer(dossiers[0], opts).code;
 }
 
-module.exports = { constanteSure, retirer, trouverGit, inventaire, instantane, verifierEntree, retirerLien, reanalyse, estDossierApports, RACINE_PAR_DEFAUT, MARQUEUR_BANC, JETON_BANC };
+module.exports = { constanteSure, listerMutants, retirer, trouverGit, inventaire, instantane, verifierEntree, retirerLien, reanalyse, estDossierApports, RACINE_PAR_DEFAUT, MARQUEUR_BANC, JETON_BANC };
 if (require.main === module) process.exitCode = main(process.argv.slice(2), process.env);
