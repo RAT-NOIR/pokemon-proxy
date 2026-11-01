@@ -22,18 +22,20 @@ const lance = (env) => { try { return { cfg: lireConfig(env) }; } catch (e) { re
     H.v('config : V2_LEVIERS_ABDE absent => éteint ; écart par défaut 0,1', [d.leviersAbde, d.leviersEcart], [false, 0.1]);
     H.v('config : V2_LEVIERS_ABDE=1 allume, =0 éteint', [lireConfig({ V2_LEVIERS_ABDE: '1' }).leviersAbde, lireConfig({ V2_LEVIERS_ABDE: '0' }).leviersAbde], [true, false]);
     H.vrai('config : une valeur ni 0 ni 1 est une configuration invalide (jamais un drapeau allumé par accident)', Boolean(lance({ V2_LEVIERS_ABDE: 'oui' }).erreur) && Boolean(lance({ V2_LEVIERS_ABDE: 'true' }).erreur));
-    H.v('config : V2_LEVIERS_ECART règle l\'écart (0 explicite, 0,15, 0,5)', [lireConfig({ V2_LEVIERS_ECART: '0' }).leviersEcart, lireConfig({ V2_LEVIERS_ECART: '0.15' }).leviersEcart, lireConfig({ V2_LEVIERS_ECART: '0.5' }).leviersEcart], [0, 0.15, 0.5]);
-    H.vrai('config : un écart hors de [0, 1] ou illisible est refusé', Boolean(lance({ V2_LEVIERS_ECART: '1.5' }).erreur) && Boolean(lance({ V2_LEVIERS_ECART: 'abc' }).erreur) && Boolean(lance({ V2_LEVIERS_ECART: '-0.1' }).erreur));
+    H.v('config : V2_LEVIERS_ECART règle l\'écart entre 0,05 et 0,5, bornes comprises', [lireConfig({ V2_LEVIERS_ECART: '0.05' }).leviersEcart, lireConfig({ V2_LEVIERS_ECART: '0.15' }).leviersEcart, lireConfig({ V2_LEVIERS_ECART: '0.5' }).leviersEcart], [0.05, 0.15, 0.5]);
+    H.v('config : un écart SOUS 0,05 (0 = chaque ex aequo débité) ou AU-DESSUS de 0,5 (probable éteint sans le dire) est une configuration invalide', ['0', '0.04', '0.0499', '0.51', '1', '1.5', 'abc', '-0.1'].map(v => Boolean(lance({ V2_LEVIERS_ECART: v }).erreur)), [true, true, true, true, true, true, true, true]);
+    H.vrai('config : l\'écart invalide est refusé même drapeau éteint (une faute de frappe se voit tout de suite)', Boolean(lance({ V2_LEVIERS_ABDE: '0', V2_LEVIERS_ECART: '0' }).erreur));
 }
 
 // ── 2. /ping : le jeton n'apparaît que si le drapeau est allumé
 {
-    const off = capacitesServies(lireConfig({})), on = capacitesServies(lireConfig({ V2_LEVIERS_ABDE: '1' }));
+    const off = capacitesServies(lireConfig({})), on = capacitesServies(lireConfig({ V2_LEVIERS_ABDE: '1', V2_PROBABLE: '1' })), seul = capacitesServies(lireConfig({ V2_LEVIERS_ABDE: '1' })), probableSeul = capacitesServies(lireConfig({ V2_PROBABLE: '1' }));
     H.vrai('/ping : `leviers-abde` est dans la liste fermée des jetons', CAPACITES.includes('leviers-abde'));
     H.v('/ping : drapeau éteint => le jeton n\'est pas annoncé', off.includes('leviers-abde'), false);
-    H.v('/ping : drapeau allumé => le jeton est annoncé', on.includes('leviers-abde'), true);
-    H.v('/ping : les autres jetons ne changent pas quand le drapeau s\'allume (hors le nouveau)', on.filter(x => x !== 'leviers-abde'), off);
-    H.vrai('/ping : une condition qui rend autre chose que true laisse tomber le jeton', !capacitesServies(lireConfig({ V2_LEVIERS_ABDE: '1' }), { ...CONDITIONS, 'leviers-abde': () => 'oui' }).includes('leviers-abde'));
+    H.v('/ping : V2_LEVIERS_ABDE ET V2_PROBABLE allumés => le jeton est annoncé, en dernier', [on.includes('leviers-abde'), on[on.length - 1]], [true, 'leviers-abde']);
+    H.v('/ping : V2_LEVIERS_ABDE seul (V2_PROBABLE éteint : a, b, d, e ne font rien) => pas de jeton ; V2_PROBABLE seul non plus', [seul.includes('leviers-abde'), probableSeul.includes('leviers-abde')], [false, false]);
+    H.v('/ping : les autres jetons ne changent pas quand le drapeau s\'allume (hors le nouveau)', on.filter(x => x !== 'leviers-abde'), probableSeul);
+    H.vrai('/ping : une condition qui rend autre chose que true laisse tomber le jeton', !capacitesServies(lireConfig({ V2_LEVIERS_ABDE: '1', V2_PROBABLE: '1' }), { ...CONDITIONS, 'leviers-abde': () => 'oui' }).includes('leviers-abde'));
 }
 
 // ── 3. le noyau (module pur)

@@ -76,8 +76,8 @@ const CONDITIONS = Object.freeze({
     // PROBABLE (31/10, contrat « niveau probable » du 25/10) : `niveau` et `probable` sont servis (aux extensions >= 2.0.1). Les DEUX à la fois : V2_PROBABLE allumé (`cfg.probable === true`) ET la configuration
     // valide — la version minimale est une version lisible « x.y.z ». Le jeton est le DERNIER de la liste.
     probable: (cfg) => cfg.probable === true && /^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(typeof cfg.versionMinProbable === 'string' ? cfg.versionMinProbable : ''),
-    // LEVIERS-ABDE (ordre n°17, 01/11/2026) : les quatre leviers a, b, d, e sont allumés SUR CE SERVEUR (V2_LEVIERS_ABDE=1, réservé à l'essai). Éteint, le jeton n'est jamais annoncé. Le dernier de la liste.
-    'leviers-abde': (cfg) => cfg.leviersAbde === true
+    // LEVIERS-ABDE (ordre n°17, 01/11/2026) : les quatre leviers a, b, d, e sont allumés SUR CE SERVEUR (V2_LEVIERS_ABDE=1, réservé à l'essai) ET le niveau probable l'est aussi (V2_PROBABLE=1) : a, b, d et e ne font rien sans lui (tour 1, F). Éteint, le jeton n'est jamais annoncé. Le dernier de la liste.
+    'leviers-abde': (cfg) => cfg.leviersAbde === true && cfg.probable === true
 });
 
 /**

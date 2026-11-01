@@ -35,6 +35,15 @@ const decimal01 = (nom, v, defaut) => {
     return n;
 };
 
+// LEVIERS-ABDE : l'écart minimal du score c3 se règle entre 0,05 et 0,5, jamais en dehors. Mesuré (serie-P-verifications.md §9.2) : à 0 chaque ex aequo devient un probable DÉBITÉ (44 faux sur 254 servis) ; au-delà de 0,5 le probable s'éteint sans le dire.
+// Un réglage hors de cette plage est une configuration invalide (les routes v2 répondent 503), comme toute variable mal écrite : une faute de frappe sur l'essai ne coûte jamais de crédit.
+const ECART_LEVIERS_MIN = 0.05, ECART_LEVIERS_MAX = 0.5;
+const ecartLeviers = (nom, v, defaut) => {
+    const n = decimal01(nom, v, defaut);
+    if (n < ECART_LEVIERS_MIN || n > ECART_LEVIERS_MAX) throw new Error(`configuration invalide : ${nom}="${v}" (attendu un nombre de ${ECART_LEVIERS_MIN} à ${ECART_LEVIERS_MAX})`);
+    return n;
+};
+
 // PLAFOND-DECLARE : quatre variables n'ont plus d'objet (les pannes et les introuvables ne sont plus plafonnés ; question et sans-prix partagent le compteur des déclarations). Posées, elles ne rendent
 // JAMAIS la configuration invalide (un 503 pour un réglage mort serait pire que le réglage) : UN avertissement par processus, qui NOMME les variables et n'affiche jamais leur valeur.
 const VARIABLES_SANS_OBJET = Object.freeze(['V2_PLAFOND_PANNES', 'V2_PLAFOND_QUESTIONS', 'V2_SANS_PRIX_JOUR', 'V2_JUMEAUX_REMBOURSES_JOUR']);
@@ -253,7 +262,7 @@ function lireConfig(env = process.env) {
         //   e : « jumeaux-trop-nombreux » devient une question aux 3 premiers, au lieu d'un introuvable (identifier/adaptateur.js).
         // N'agit que sur une QUESTION, avec V2_PROBABLE allumé et une extension >= 2.0.1 portant un vecteur ; ne change jamais un sûr (identifier/leviers-abde.js). leviersEcart (V2_LEVIERS_ECART) : l'écart minimal du score c3, 0,1 par défaut.
         leviersAbde: booleen('V2_LEVIERS_ABDE', env.V2_LEVIERS_ABDE, false),
-        leviersEcart: decimal01('V2_LEVIERS_ECART', env.V2_LEVIERS_ECART, 0.1),
+        leviersEcart: ecartLeviers('V2_LEVIERS_ECART', env.V2_LEVIERS_ECART, 0.1),
         // TEMPS-ETAPES (identifier/temps-etapes.js) : quatre coupes de TEMPS qui ne changent aucune décision, chacune ÉTEINTE par défaut (0) : la route est alors celle d'avant, octet pour octet.
         // voisinsUneFois : la recherche des voisins une fois par requête ; empreinteTot : la recherche et la garde des zones partent pendant l'attente du modèle ; finParallele : les lectures/écritures annexes de la fin de requête partent ensemble.
         // orbUtile : la règle G (recherche des voisins + garde des zones, donc l'ORB) n'est pas consultée quand la chaîne a rendu un INTROUVABLE — elle ne peut rien y changer (arbitrage-g.js, promotion-g.js) ; la réponse dit alors `empreinte: { utilisee: false, code: 'muette' }`.
