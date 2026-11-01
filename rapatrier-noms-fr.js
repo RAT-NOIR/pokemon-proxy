@@ -26,28 +26,10 @@ require('dotenv').config();
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { modeles } = require('./collecte-cartes/schemas');
 
-// Les suffixes que Cardmarket colle au nom du PRODUIT. Chacun désigne un tirage parmi plusieurs,
-// aucun ne fait partie du nom de la carte.
-//
-// ⚠️ LA LISTE N'A PAS ÉTÉ DEVINÉE, ELLE A ÉTÉ ÉNUMÉRÉE (--parentheses) : 457 noms sur 68 231 portent une
-// parenthèse finale, 437 libellés DISTINCTS, et pas un seul n'est un nom de carte — ce sont des coffrets
-// (« (Pikachu V Box) », « (EX Power Tins: Keldeo-EX Tin) », « (Theme Deck) »). Une liste de motifs aurait
-// raté 430 d'entre eux en silence ; on retire donc TOUTE parenthèse finale, ce que l'énumération autorise.
-const PARENTHESE = /\s*\([^)]*\)\s*$/;
-// 🔴 « Lv.10 » CHIFFRÉ EST UN SUFFIXE, « LV.X » EST UNE CARTE. Cardmarket écrit « Salamèche Lv.10 » là où
-// la carte s'appelle « Salamèche » — le niveau est imprimé sur la carte, il n'est pas son nom. Mais
-// « Dialga LV.X » est un TYPE de carte, réellement distinct de Dialga : le motif exige des CHIFFRES, et
-// le X y échappe par construction. Sans cette distinction, 68 conflits disparaissaient en fusionnant
-// deux cartes différentes — exactement ce qu'un nettoyage de nom ne doit jamais faire.
-const NIVEAU = /\s*Lv\.?\s?\d+\s*$/i;
-const nomSeul = s => {
-    let t = String(s || '').trim();
-    for (let i = 0; i < 3 && PARENTHESE.test(t); i++) t = t.replace(PARENTHESE, '').trim();   // « X (Holo) (V.2) »
-    return t.replace(NIVEAU, '').replace(/\s*-\s*(?:Holo|Reverse Holo)\s*$/i, '').trim();
-};
-// la clé de comparaison : accents, casse et ponctuation retirés. « Mélo » = « Melo ».
-const cle = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
-const accents = s => (String(s).normalize('NFD').match(/[̀-ͯ]/g) || []).length;
+// La règle (nomSeul, cle, accents, groupement par carte, décision) vit dans collecte-cartes/nom-fr-cardmarket.js : UNE copie (§21 bis),
+// importée aussi par poser-noms-fr-fiches.js. Sa liste de suffixes a été ÉNUMÉRÉE (--parentheses ci-dessous), pas devinée ;
+// « Lv.10 » chiffré est un suffixe, « LV.X » est une carte. Banc : test-nom-fr-cardmarket.js.
+const { cle, accents, frParProduit, grouperParCarte, decider } = require('./collecte-cartes/nom-fr-cardmarket');
 
 (async () => {
     const ecrire = process.argv.includes('--ecrire');
@@ -74,25 +56,18 @@ const accents = s => (String(s).normalize('NFD').match(/[̀-ͯ]/g) || []).length
         await fermer(); return;
     }
 
-    const frDuProduit = new Map(avecFr.map(p => [p.idProduct, nomSeul(p.nomFr)]));
+    const frDuProduit = frParProduit(produits);
     const liens = await cx.db.collection('cartes_produits').find({}, { projection: { idProduct: 1, carteId: 1 } }).toArray();
 
     // par CARTE : toutes les formes vues, comptées
-    const parCarte = new Map();
-    for (const l of liens) {
-        const fr = frDuProduit.get(l.idProduct);
-        if (!fr) continue;
-        const e = parCarte.get(l.carteId) || (parCarte.set(l.carteId, new Map()), parCarte.get(l.carteId));
-        const k = cle(fr);
-        const g = e.get(k) || (e.set(k, { formes: new Map(), n: 0 }), e.get(k));
-        g.formes.set(fr, (g.formes.get(fr) || 0) + 1); g.n++;
-    }
+    const parCarte = grouperParCarte(liens, frDuProduit);
 
     const aEcrire = [];
     let conflits = 0, accentues = 0;
     const exemplesConflit = [], exemplesNom = [];
     for (const [carteId, groupes] of parCarte) {
-        if (groupes.size > 1) {
+        const d = decider(groupes);
+        if (d.conflit) {
             conflits++;
             if (exemplesConflit.length < 10) exemplesConflit.push(`carte ${carteId} : ${[...groupes.values()].map(g => `« ${[...g.formes.keys()][0]} »`).join(' ≠ ')}`);
             aEcrire.push({ carteId, nomFr: null });
@@ -101,8 +76,8 @@ const accents = s => (String(s).normalize('NFD').match(/[̀-ͯ]/g) || []).length
         const g = [...groupes.values()][0];
         // même nom aux accents près : on garde la forme la PLUS ACCENTUÉE, puis la plus fréquente
         const formes = [...g.formes].sort((a, b) => (accents(b[0]) - accents(a[0])) || (b[1] - a[1]));
-        if (formes.length > 1) accentues++;
-        aEcrire.push({ carteId, nomFr: formes[0][0] });
+        if (d.accentue) accentues++;
+        aEcrire.push({ carteId, nomFr: d.nomFr });
         if (exemplesNom.length < 12) exemplesNom.push(`carte ${carteId} : « ${formes[0][0] }»${formes.length > 1 ? `  (${formes.length} graphies : ${formes.map(f => `« ${f[0]} »×${f[1]}`).join(', ')})` : ''}`);
     }
     const nommees = aEcrire.filter(x => x.nomFr).length;
