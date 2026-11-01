@@ -135,7 +135,9 @@ function jugerImpression(d, e) {
 
     // rien ne doit dépendre de l'impression retirée
     const dep = [];
-    if (typeof faux.illustrateur === 'string' && faux.illustrateur.trim()) dep.push(`illustrateur « ${faux.illustrateur} » (${faux.illustrateurPreuve || 'sans preuve écrite'})`);
+    // DÉCISION du 2026-11-01 : un illustrateur lu au numéro faux est lui-même suspect ; il se retire avec l'impression (annoncé), il ne retient plus la carte
+    const illus = typeof faux.illustrateur === 'string' && faux.illustrateur.trim() ? faux.illustrateur : null;
+    if (illus) r.preuve.illustrateurRetire = illus;
     const imgs = [...(c.images || []).filter(m => m.set === d.slugFaux), ...(e.images || [])].filter(m => m.numero != null && cle(m.numero) === cle(d.faux.numero));
     if (imgs.length) dep.push(`${imgs.length} image(s) du set ${d.slugFaux} au n°${d.faux.numero}`);
     const parId = new Map((e.produits || []).map(p => [p.idProduct, p]));
@@ -149,9 +151,9 @@ function jugerImpression(d, e) {
 
     if (couvertes.length) r.dependDe = couvertes.map(l => `ligne:${l._id}`);
     r.statut = 'prete';
-    r.raison = `${couvertes.length ? `[avec la détache de ${couvertes.map(l => l._id).join(', ')} dans le même lot] ` : ''}le n°${d.faux.numero} de ${d.faux.expansion} est celui de « ${autre.nomEn} » (${autre._id}) — Setlist « ${entrees[0].titre} » et produit(s) Cardmarket au même nom ; la bonne impression ${d.vrai.numero} est présente${r.hypothese ? ' (HYPOTHÈSE : le lot f3 n\'est pas encore écrit)' : ''}`;
+    r.raison = `${illus ? `[illustrateur lu au numéro faux, retiré avec l'impression : « ${illus} », ${faux.illustrateurPreuve || 'sans preuve écrite'}] ` : ''}${couvertes.length ? `[avec la détache de ${couvertes.map(l => l._id).join(', ')} dans le même lot] ` : ''}le n°${d.faux.numero} de ${d.faux.expansion} est celui de « ${autre.nomEn} » (${autre._id}) — Setlist « ${entrees[0].titre} » et produit(s) Cardmarket au même nom ; la bonne impression ${d.vrai.numero} est présente${r.hypothese ? ' (HYPOTHÈSE : le lot f3 n\'est pas encore écrit)' : ''}`;
     r.avant = { index: fauxs[0].k, impression: faux };
-    r.perd = { rarete: faux.rarete ?? null, total: faux.total ?? null, illustrateurPreuve: faux.illustrateurPreuve ?? null };
+    r.perd = { rarete: faux.rarete ?? null, total: faux.total ?? null, illustrateur: illus, illustrateurPreuve: faux.illustrateurPreuve ?? null };
     return r;
 }
 

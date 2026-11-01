@@ -104,9 +104,11 @@ const ky = () => ({
         const e = er(); e.cartesFaux.get(29839).impressions = [];
         assert.strictEqual(M.jugerImpression(D_ER, e).statut, 'refus');
     });
-    await t('SORTIE — un ILLUSTRATEUR dépend de l\'impression : la carte sort de la liste', () => {
-        const e = er(); e.carte.impressions[0].illustrateur = '5ban Graphics';
-        const r = M.jugerImpression(D_ER, e); assert.strictEqual(r.statut, 'sortie'); assert.ok(/illustrateur/.test(r.raison));
+    await t('ILLUSTRATEUR lu au numéro faux (décision du 2026-11-01) : la carte reste PRÊTE, l\'illustrateur est retiré avec l\'impression et la preuve le note', () => {
+        const e = er(); e.carte.impressions[0].illustrateur = '5ban Graphics'; e.carte.impressions[0].illustrateurPreuve = 'TCGdex SM10-089';
+        const r = M.jugerImpression(D_ER, e); assert.strictEqual(r.statut, 'prete', JSON.stringify(r));
+        assert.ok(/illustrateur lu au numéro faux, retiré avec l'impression/.test(r.raison));
+        assert.strictEqual(r.perd.illustrateur, '5ban Graphics'); assert.strictEqual(r.preuve.illustrateurRetire, '5ban Graphics');
     });
     await t('SORTIE — une IMAGE du set faux au numéro faux dépend de l\'impression', () => {
         const e = er(); e.carte.images.push({ set: 'Base-Expansion-Pack', numero: '059' });
