@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="rm-csrf" content="__CSRF__">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Banc 200 — saisie à l'aveugle</title>
+<style>
+  :root { color-scheme: dark; --fond: #14161a; --carte: #1e2127; --texte: #e8e8ea; --doux: #9aa0a8; --ok: #4cc38a; --alerte: #ff7a59; --accent: #6aa8ff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.4 system-ui, sans-serif; background: var(--fond); color: var(--texte); }
+  header { display: flex; gap: 16px; align-items: baseline; padding: 10px 16px; background: var(--carte); border-bottom: 1px solid #2c3038; }
+  header strong { font-size: 16px; } .doux { color: var(--doux); }
+  main { display: grid; grid-template-columns: minmax(320px, 1fr) 420px; gap: 16px; padding: 16px; }
+  #vue { background: #000; border-radius: 8px; min-height: 60vh; display: flex; align-items: center; justify-content: center; }
+  #vue img { max-width: 100%; max-height: 82vh; }
+  #vignettes { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  #vignettes button { padding: 2px; background: #000; border: 2px solid transparent; border-radius: 4px; cursor: pointer; }
+  #vignettes button.actif { border-color: var(--accent); } #vignettes img { height: 64px; display: block; }
+  .panneau { background: var(--carte); border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+  input[type=text], input[type=password] { width: 100%; padding: 10px; font: inherit; background: #101216; color: var(--texte); border: 1px solid #3a3f48; border-radius: 6px; }
+  button.act { padding: 8px 12px; font: inherit; background: #2a2f38; color: var(--texte); border: 1px solid #3a3f48; border-radius: 6px; cursor: pointer; margin: 4px 4px 0 0; }
+  button.act:hover { border-color: var(--accent); } button.principal { background: var(--ok); color: #06210f; border-color: var(--ok); font-weight: 600; }
+  #candidats button { display: block; width: 100%; text-align: left; margin: 4px 0; }
+  #message { min-height: 1.4em; } .erreur { color: var(--alerte); } .bon { color: var(--ok); }
+  kbd { background: #2a2f38; border-radius: 4px; padding: 1px 5px; font-size: 12px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <strong>Banc 200 — saisie à l'aveugle</strong>
+  <span id="seau" class="doux">…</span>
+  <span id="progres" class="doux"></span>
+</header>
+<main>
+  <section>
+    <div id="vue"><span class="doux" id="vide">Chargement…</span></div>
+    <div id="vignettes"></div>
+  </section>
+  <aside>
+    <div class="panneau" id="session" hidden>
+      <p>Jeton de l'installation administrateur (gardé en mémoire de ce serveur local, jamais affiché ni écrit) :</p>
+      <input type="password" id="jeton" autocomplete="off" spellcheck="false">
+      <button class="act principal" id="poser">Poser le jeton</button>
+    </div>
+    <div class="panneau" id="saisie" hidden>
+      <div><span class="doux">Scan</span> <strong id="rang"></strong> <span class="doux" id="carteNum"></span></div>
+      <p class="doux">Ce que vous voyez est la photo seule. Collez l'adresse Cardmarket de la carte (ou son idProduct), puis <kbd>Entrée</kbd> deux fois : résoudre, confirmer.</p>
+      <input type="text" id="entree" autocomplete="off" spellcheck="false" placeholder="https://www.cardmarket.com/…  ou  123456">
+      <div id="attente" hidden>
+        <p><span class="doux">Vérité à confirmer :</span> <strong id="libelle"></strong></p>
+        <button class="act principal" id="confirmer">Confirmer (Entrée)</button>
+        <button class="act" id="annuler">Annuler (Échap)</button>
+      </div>
+      <div>
+        <button class="act" id="voir"><kbd>Alt+C</kbd> Voir les candidats</button>
+        <button class="act" id="pasCarte"><kbd>Alt+N</kbd> Pas une carte</button>
+        <button class="act" id="horsCatalogue"><kbd>Alt+H</kbd> Hors catalogue</button>
+      </div>
+      <p id="message" class="doux"></p>
+    </div>
+    <div class="panneau" id="zoneCandidats" hidden>
+      <p class="doux">Candidats montrés (prix croissant). <strong>Les avoir vus est enregistré</strong> et la vérité sera marquée « non aveugle ».</p>
+      <div id="candidats"></div>
+    </div>
+    <div class="panneau doux">Photos : <kbd>Alt+1</kbd> … <kbd>Alt+8</kbd>.</div>
+  </aside>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>

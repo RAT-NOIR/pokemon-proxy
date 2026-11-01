@@ -277,6 +277,9 @@ function lireConfig(env = process.env) {
         // DESIGNATION-REGLES (R5) : dans la voie « plus de 3 produits », le SEUL candidat restant est montre en QUESTION a un choix (jamais un sûr, jamais promu par la règle G). ÉTEINT par défaut ; allumé par « 1 » EXACTEMENT, toute autre valeur l'éteint sans invalider la configuration.
         confirmationNombreux: env.V2_CONFIRMATION_NOMBREUX === '1',
         resolutionCardmarket: env.V2_RESOLUTION_CARDMARKET === '1',
+        // BANC-200 : les routes /api/banc/seau/* (seaux juge et entraînement, photos conservées en octets, vérité à l'aveugle). ÉTEINT par défaut ; allumé par « 1 » EXACTEMENT, toute autre valeur l'éteint
+        // (les routes n'existent pas : 404 natif pour tous) SANS invalider la configuration. Administrateur seulement, quand elles existent.
+        bancSeau: env.V2_BANC_SEAU === '1',
         // INST-BANC : l'exemption de la limite « 2 installations par IP et par jour » (inst-ip) pour le SEUL compte de mesure (banc: true, administrateur, confirmé), reconnu par sa session (installations/exemption-banc.js).
         // ÉTEINTE par défaut ; allumée par « 1 » EXACTEMENT (sur l'essai seulement), toute autre valeur l'éteint sans invalider la configuration. Le plafond du compte de mesure est `limites.installationBancJour`.
         installationBancExempte: env.V2_INSTALLATION_BANC_EXEMPTE === '1',

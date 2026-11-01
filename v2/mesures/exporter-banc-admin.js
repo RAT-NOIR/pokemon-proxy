@@ -224,7 +224,7 @@ async function lancerCLI(argv, { env = process.env, connecter = connecterLecture
     finally { try { if (c && c.fermer) await c.fermer(); } catch { /* rien */ } }
 }
 
-module.exports = { exporterBancAdmin, ecrireDans, refusDeDossier, jugerCheminReel, connecterLecture, analyserArgs, lancerCLI, FORMAT };
+module.exports = { exporterBancAdmin, ecrireDans, refusDeDossier, jugerCheminReel, jugerSortie, creerDossierNeuf, connecterLecture, analyserArgs, lancerCLI, FORMAT };
 
 if (require.main === module) {
     require('dotenv').config();
