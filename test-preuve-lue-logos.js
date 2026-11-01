@@ -51,8 +51,33 @@ verifier('arguments : --preuve-lue=<table> accepté en simulation et avec --ecri
 verifier('arguments : --preuve-lue sans chemin, ou avec --reclasser : refus ; --ecrire sans --attendu : refus', [a(['--preuve-lue=']).erreurs.length > 0, a(['--preuve-lue=x.json', '--reclasser']).erreurs.length > 0, a(['--preuve-lue=x.json', '--ecrire']).erreurs.length > 0], [true, true, true]);
 verifier('plan = attendu : écriture permise ; plan ≠ attendu : refus AVANT écriture', [P.verifierPlan(167, 167), typeof P.verifierPlan(166, 167)], [null, 'string']);
 
-// la table réelle du dépôt est lisible et complète
+// bout en bout sur une FAUSSE collection `sets` (aucune base) : simulation, refus d'attendu, écriture, relecture
+(async () => {
+    const faux = docs => ({ docs, ecritures: 0,
+        find() { return { toArray: async () => JSON.parse(JSON.stringify(docs)) }; },
+        async updateOne(f, u) {
+            const d = docs.find(x => x._id === f._id); if (!d) return { modifiedCount: 0 };
+            const get = p => p.split('.').reduce((o, k) => o?.[k], d);
+            for (const [k, v] of Object.entries(f)) { if (k === '_id') continue; const x = get(k); if (v && v.$exists === false ? x !== undefined : x !== v) return { modifiedCount: 0 }; }
+            for (const [k, v] of Object.entries(u.$set)) { const ks = k.split('.'); const last = ks.pop(); ks.reduce((o, q) => o[q], d)[last] = v; }
+            this.ecritures++; return { modifiedCount: 1 };
+        } });
+    const muet = () => {}, table = R.lignesDePreuves([L]);
+    const lancer = async (S, o) => P.appliquerPreuveLue({ S, sets: await S.find().toArray(), proj: {}, table, journal: muet, erreur: muet, ...o });
+    const base = () => [set(), { _id: 'Autre', logo: entree({ fichier: 'x.png' }) }];
+    let S = faux(base()); let r = await lancer(S, { ecrire: false });
+    verifier('simulation : 1 à écrire, rien écrit', [r.plan.length, S.ecritures, r.code], [1, 0, 0]);
+    S = faux(base()); r = await lancer(S, { ecrire: true, attendu: 2 });
+    verifier('--attendu ≠ plan : refus (code 2), AUCUNE écriture', [r.code, S.ecritures], [2, 0]);
+    S = faux(base()); r = await lancer(S, { ecrire: true, attendu: 1 });
+    const d = S.docs[0].logo;
+    verifier('--attendu = plan : écrit, relu, concordant (code 0)', [r.code, r.ecrits, d.niveau, d.niveauAvant, d.source, /preuve lue/.test(d.niveauPreuve)], [0, 1, 'officiel', 'inconnu', 'manuel', true]);
+    verifier('les autres sets ne bougent pas', S.docs[1].logo.niveau, 'inconnu');
+    S = faux([set({}, entree({ niveau: 'compose' }))]); r = await lancer(S, { ecrire: true, attendu: 0 });
+    verifier('niveau déjà posé : 0 écrit même avec attendu 0, niveau intact', [r.ecrits, S.ecritures, S.docs[0].logo.niveau], [0, 0, 'compose']);
+    // la table réelle du dépôt est lisible et complète
 const reelle = R.lignesDePreuvesDuFichier();
 verifier('table réelle : 167 lignes lues', reelle.size, 167);
 console.log(`\n${ok} passés, ${ko} en échec`);
 if (ko) process.exitCode = 1;
+})().catch(e => { console.error(e); process.exit(1); });

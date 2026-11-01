@@ -72,7 +72,35 @@ const verifierPlan = (plan, attendu) => plan === attendu ? null : `le plan écri
 /** La relecture après écriture, comparée au nombre annoncé. Rend la raison de la discordance, ou null. */
 const verifierRelecture = ({ ecrits, attendu, restants }) => ecrits !== attendu ? `${ecrits} champs écrits, ${attendu} attendus`
     : restants ? `${restants} champs restent sans niveau après l'écriture` : null;
-module.exports = { officielsDesTables, concordancesDesLignes, concordancesDesTables, analyserArguments, verifierPlan, verifierRelecture };
+/**
+ * Le mode « preuve lue » : simulation (ecrire faux) ou écriture. Rend { code, ecrits, plan, refus } ; code 2 = refus AVANT toute écriture (attendu ≠ plan), 1 = relecture discordante.
+ * Reçoit la collection `S` : le banc lui passe une fausse.
+ */
+async function appliquerPreuveLue({ S, sets, proj, table, ecrire, attendu, journal = console.log, erreur = console.error }) {
+    const R = require('./collecte-cartes/preuve-lue-logos');
+    const { plan, refus } = R.aPoserPreuveLue(sets, table);
+    journal(`PREUVE LUE « inconnu » → « officiel » : ${sets.length} sets lus · table : ${table.size} lignes · ${plan.length} champs à reclasser · ${refus.length} refusés`);
+    for (const x of plan) journal(`   ${x._id} ${x.chemin} ${x.fichier} ← « ${x.ligne.texteLu} » = « ${x.ligne.nomFiche} »`);
+    for (const r of refus) journal(`   ⚠️ refusé ${r.set} ${r.fichier} : ${r.raison}`);
+    if (!ecrire) { journal('(simulation seule — --preuve-lue=<table> --ecrire --attendu=<n> sous lot-additif.js ; rien n\'est écrit)'); return { code: 0, ecrits: 0, plan, refus }; }
+    const refusPlan = verifierPlan(plan.length, attendu);
+    if (refusPlan) { erreur(`❌ ${refusPlan}`); return { code: 2, ecrits: 0, plan, refus }; }
+    const le = new Date().toISOString();
+    let ecrits = 0, deja = 0;
+    for (const x of plan) {
+        const u = await S.updateOne({ _id: x._id, [`${x.chemin}.niveau`]: 'inconnu', [`${x.chemin}.fichier`]: x.fichier, [`${x.chemin}.source`]: x.ligne.sourceBase, [`${x.chemin}.niveauAvant`]: { $exists: false } },
+            { $set: R.champsAEcrire(x, le) });
+        if (u.modifiedCount === 1) ecrits++; else deja++;
+    }
+    const relus = await S.find({}, { projection: proj }).toArray();
+    const apres = R.aPoserPreuveLue(relus, table);
+    const poses = plan.filter(x => { const e = relus.find(r => r._id === x._id)?.[x.chemin]; return e?.niveau === 'officiel' && e?.niveauAvant === 'inconnu' && e?.niveauPreuve === R.niveauPreuveDe(x.ligne) && e?.source === x.ligne.sourceBase; }).length;
+    journal(`RECLASSÉ : ${ecrits} champs (${deja} non modifiés) · RELU : ${poses} champs « officiel » avec preuve lue, ${apres.plan.length} encore à reclasser`);
+    const discord = ecrits !== attendu ? `${ecrits} reclassés, ${attendu} attendus` : poses !== attendu ? `${poses} relus, ${attendu} attendus` : apres.plan.length ? `${apres.plan.length} encore à reclasser` : null;
+    journal(discord ? `🔴 NE CONCORDE PAS : ${discord}` : `✅ concordant : ${ecrits} reclassés = ${attendu} attendus`);
+    return { code: discord ? 1 : 0, ecrits, plan, refus };
+}
+module.exports = { officielsDesTables, concordancesDesLignes, concordancesDesTables, analyserArguments, verifierPlan, verifierRelecture, appliquerPreuveLue };
 
 if (require.main === module) (async () => {
     const A = analyserArguments(process.argv.slice(2));
@@ -86,30 +114,9 @@ if (require.main === module) (async () => {
     if (!sets.length) throw new Error('collection sets vide : base fausse');
     if (A.preuveLue) {
         // MODE « source unique + preuve lue » (testeur, 2026-11-01) : voir collecte-cartes/preuve-lue-logos.js. Distinct de --reclasser ; `logo.source` n'est jamais modifiée.
-        const R = require('./collecte-cartes/preuve-lue-logos');
-        const table = R.lignesDePreuvesDuFichier(path.resolve(A.preuveLue));
-        const { plan, refus } = R.aPoserPreuveLue(sets, table);
-        console.log(`PREUVE LUE « inconnu » → « officiel » : ${sets.length} sets lus · table : ${table.size} lignes · ${plan.length} champs à reclasser · ${refus.length} refusés`);
-        for (const x of plan) console.log(`   ${x._id} ${x.chemin} ${x.fichier} ← « ${x.ligne.texteLu} » = « ${x.ligne.nomFiche} »`);
-        for (const r of refus) console.log(`   ⚠️ refusé ${r.set} ${r.fichier} : ${r.raison}`);
-        if (!ECRIRE) { console.log('(simulation seule — --preuve-lue=<table> --ecrire --attendu=<n> sous lot-additif.js ; rien n\'est écrit)'); await cx.fermer(); return; }
-        const refusPlan = verifierPlan(plan.length, A.attendu);
-        if (refusPlan) { console.error(`❌ ${refusPlan}`); await cx.fermer(); process.exit(2); }
-        const le = new Date().toISOString();
-        let ecrits = 0, deja = 0;
-        for (const x of plan) {
-            const u = await S.updateOne({ _id: x._id, [`${x.chemin}.niveau`]: 'inconnu', [`${x.chemin}.fichier`]: x.fichier, [`${x.chemin}.source`]: x.ligne.sourceBase, [`${x.chemin}.niveauAvant`]: { $exists: false } },
-                { $set: R.champsAEcrire(x, le) });
-            if (u.modifiedCount === 1) ecrits++; else deja++;
-        }
-        const relus = await S.find({}, { projection: proj }).toArray();
-        const apres = R.aPoserPreuveLue(relus, table);
-        const poses = plan.filter(x => { const e = relus.find(r => r._id === x._id)?.[x.chemin]; return e?.niveau === 'officiel' && e?.niveauAvant === 'inconnu' && e?.niveauPreuve === R.niveauPreuveDe(x.ligne) && e?.source === x.ligne.sourceBase; }).length;
-        console.log(`RECLASSÉ : ${ecrits} champs (${deja} non modifiés) · RELU : ${poses} champs « officiel » avec preuve lue, ${apres.plan.length} encore à reclasser`);
+        const r = await appliquerPreuveLue({ S, sets, proj, table: require('./collecte-cartes/preuve-lue-logos').lignesDePreuvesDuFichier(path.resolve(A.preuveLue)), ecrire: ECRIRE, attendu: A.attendu });
         await cx.fermer();
-        const discord = ecrits !== A.attendu ? `${ecrits} reclassés, ${A.attendu} attendus` : poses !== A.attendu ? `${poses} relus, ${A.attendu} attendus` : apres.plan.length ? `${apres.plan.length} encore à reclasser` : null;
-        console.log(discord ? `🔴 NE CONCORDE PAS : ${discord}` : `✅ concordant : ${ecrits} reclassés = ${A.attendu} attendus`);
-        if (discord) process.exitCode = 1;
+        if (r.code) process.exitCode = r.code;
         return;
     }
     const { officielsManuels, lignes } = officielsDesTables();
