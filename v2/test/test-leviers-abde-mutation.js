@@ -112,7 +112,7 @@ const MUTATIONS = [
     { nom: '/ping : le jeton est annoncé drapeau éteint', fichier: 'v2/capacites.js', de: "'leviers-abde': (cfg) => cfg.leviersAbde === true && cfg.probable === true", vers: "'leviers-abde': (cfg) => cfg.probable === true" },
     { nom: 'F : /ping annonce le jeton sans V2_PROBABLE', fichier: 'v2/capacites.js', de: "'leviers-abde': (cfg) => cfg.leviersAbde === true && cfg.probable === true", vers: "'leviers-abde': (cfg) => cfg.leviersAbde === true" },
     { nom: '/ping : le jeton est annoncé quel que soit le drapeau', fichier: 'v2/capacites.js', de: "'leviers-abde': (cfg) => cfg.leviersAbde === true && cfg.probable === true", vers: "'leviers-abde': (cfg) => true" },
-    { nom: '/ping : le jeton sort de la liste fermée', fichier: 'v2/capacites.js', de: "'probable', 'leviers-abde']);", vers: "'probable']);" },
+    { nom: '/ping : le jeton sort de la liste fermée', fichier: 'v2/capacites.js', de: "'probable', 'leviers-abde', 'promotion-surs']);", vers: "'probable', 'promotion-surs']);" },
     { nom: 'route : l\'étape n\'est plus derrière le drapeau', fichier: 'v2/identifier/routes.js', de: 'if (cfg.leviersAbde === true) {', vers: 'if (cfg.probable === true) {' },
     { nom: 'route : la question de l\'étape ne remplace plus celle de la chaîne', fichier: 'v2/identifier/routes.js', de: 'if (lv) { if (lv.resultat) resultat = lv.resultat; probableDecide = lv.probable; }', vers: 'if (lv) { probableDecide = lv.probable; }' },
     { nom: 'lot : le contexte d\'un lot ne dit plus `lot: true`', fichier: 'v2/identifier/lot.js', de: '...ctxLD, lot: true }', vers: '...ctxLD }' },
