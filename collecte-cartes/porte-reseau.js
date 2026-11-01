@@ -35,6 +35,14 @@ const BORNE_OCTETS = 12 * 1024 * 1024;
 const DELAI_REQUETE_MS = 30000;
 const VERROU_PERIME_MS = 2 * 60 * 1000;
 const DOSSIER_PORTE_DEFAUT = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\porte-reseau';
+/** B2 : en production, le dossier des arrêts et celui de la porte sont FIXES — ni variable d'environnement, ni option publique ne les change. */
+const DOSSIER_PORTE_FIXE = DOSSIER_PORTE_DEFAUT;
+const DOSSIER_ARRETS_FIXE = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\arrets-hotes';
+const SCEAU = Symbol('porte-reseau.banc');          // posé par pourBanc seulement
+const REEL = Symbol('porte-reseau.transport-reel');  // posé sur le transport réel seulement
+/** B1 : un fichier JSON écrit sous PowerShell commence souvent par un BOM UTF-8 : il se lit. */
+const sansBom = s => String(s).replace(/^\uFEFF/, '');
+const lireJson = f => JSON.parse(sansBom(fs.readFileSync(f, 'utf8')));
 const RACINES_SORTIE_DEFAUT = Object.freeze(['C:\\Users\\Yung\\rat-market-travail\\catalogue']);
 /** D6 : suffixes à deux niveaux (liste fermée) : la racine d'un hôte qui les porte a TROIS labels. */
 const SUFFIXES2 = Object.freeze(new Set(['co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'com.au', 'net.au', 'org.au', 'co.jp', 'ne.jp', 'or.jp', 'com.br', 'com.cn', 'com.tw', 'com.hk', 'co.kr', 'co.nz', 'com.mx', 'com.sg', 'co.id', 'co.th', 'in.th',
@@ -50,6 +58,7 @@ function racineDe(hote) {
 // ── le transport réel : agent du dépôt, aucun cookie, redirect manual, 30 s, 12 Mo bornés PENDANT la lecture ─────────────────────────────────────
 function fabriquerTransportReel({ borne = BORNE_OCTETS, delaiMs = DELAI_REQUETE_MS } = {}) {
     return {
+        [REEL]: true,
         async get(url, { binaire = false } = {}) {
             const ctl = new AbortController();
             const minuteur = setTimeout(() => ctl.abort(), delaiMs);
@@ -84,15 +93,30 @@ function fabriquerTransportReel({ borne = BORNE_OCTETS, delaiMs = DELAI_REQUETE_
 }
 let transportDefaut = null;
 
+/**
+ * B2 : le SEUL chemin qui change un dossier, l'horloge, la pause ou le transport est celui des bancs : `pourBanc` exige des dossiers ET un transport
+ * FACTICE, de sorte qu'un dossier factice ne sert jamais à une vraie requête. Hors banc, ces options sont IGNORÉES (pas de variable d'environnement non plus).
+ */
+function pourBanc(o) {
+    if (!o || typeof o !== 'object') throw new Error('pourBanc : options attendues');
+    if (!o.transport || typeof o.transport.get !== 'function') throw new Error('pourBanc : un transport FACTICE est exigé');
+    if (o.transport[REEL]) throw new Error('pourBanc : le transport réel est refusé (un dossier factice ne sert jamais à une vraie requête)');
+    if (typeof o.dossierArrets !== 'string' || !o.dossierArrets || typeof o.dossierPorte !== 'string' || !o.dossierPorte) throw new Error('pourBanc : dossierArrets et dossierPorte sont exigés');
+    return { ...o, [SCEAU]: true };
+}
 function configurer(o = {}) {
-    return {
+    const banc = o[SCEAU] === true;
+    if (banc && (!o.transport || o.transport[REEL])) throw new Error('configuration de banc avec un transport réel : refusée');
+    const c = {
         mode: o.mode === undefined ? 'page' : o.mode,
-        transport: o.transport || (transportDefaut ||= fabriquerTransportReel()),
-        maintenant: o.maintenant || Date.now,
-        pause: o.pause || (ms => new Promise(r => setTimeout(r, ms))),
-        dossierArrets: o.dossierArrets || RH.DOSSIER_PAUSES,
-        dossierPorte: o.dossierPorte || process.env.PORTE_RESEAU_DOSSIER || DOSSIER_PORTE_DEFAUT,
+        transport: banc ? o.transport : (transportDefaut ||= fabriquerTransportReel()),
+        maintenant: banc && o.maintenant ? o.maintenant : Date.now,
+        pause: banc && o.pause ? o.pause : (ms => new Promise(r => setTimeout(r, ms))),
+        dossierArrets: banc ? o.dossierArrets : DOSSIER_ARRETS_FIXE,
+        dossierPorte: banc ? o.dossierPorte : DOSSIER_PORTE_FIXE,
     };
+    if (banc) c[SCEAU] = true;
+    return c;
 }
 const erreurRefus = (motif, extra = {}) => Object.assign(new Error(motif), { refus: true, ...extra });
 
@@ -139,6 +163,7 @@ function exclusion(hote, mode) {
     return null;
 }
 const normNom = s => String(s || '').trim().toLowerCase().replace(/\.+$/, '');
+const NOM_HOTE = /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/;      // un nom de domaine plausible (au moins deux labels)
 /** D7 : un ARRET-HOTE ferme son nom de fichier et son champ `hote` (chacun avec sa racine), ET l'hôte EXACT de son champ `url`. */
 function hoteFerme(hote, dossier) {
     let noms;
@@ -150,11 +175,17 @@ function hoteFerme(hote, dossier) {
         const m = /^ARRET-HOTE-(.+)\.json$/i.exec(n);
         if (!m) continue;
         let j = null;
-        try { const x = JSON.parse(fs.readFileSync(path.join(dossier, n), 'utf8')); if (x && typeof x === 'object') j = x; } catch { /* illisible : fermé par son nom */ }
+        try { const x = lireJson(path.join(dossier, n)); if (x && typeof x === 'object' && !Array.isArray(x)) j = x; } catch { /* illisible : fermé par son nom, ou tout si le nom n'est pas un hôte */ }
+        if (!j) {
+            // B1 : illisible. Si son NOM désigne un hôte (nom de domaine plausible), il ferme cet hôte et sa racine ; sinon on ne sait pas : tout est refusé, et le message le dit.
+            if (!NOM_HOTE.test(normNom(m[1]))) return `hôte fermé : le fichier d'arrêt ${n} est illisible et son nom n'est pas un nom d'hôte, on ne sait pas lequel il ferme : tout est refusé tant que le coordinateur ne l'a pas réparé`;
+            if (ferme(m[1])) return `hôte fermé (${n}, racine ${racine}) : fichier illisible, on ne sait pas ce qu'il dit, l'arrêt tient — aucune requête tant que le coordinateur ne l'a pas levé`;
+            continue;
+        }
         let urlHote = null;
-        try { urlHote = j && j.url ? normNom(new URL(j.url).hostname) : null; } catch { /* url illisible */ }
-        if (!j || ferme(m[1]) || (typeof j.hote === 'string' && ferme(j.hote)) || (urlHote && urlHote === hote)) {
-            return `hôte fermé (${n}, racine ${racine}) : ${j ? (j.motif ?? 'arrêt définitif') : 'fichier illisible, on ne sait pas, l\'arrêt tient'} — aucune requête tant que le coordinateur ne l'a pas levé`;
+        try { urlHote = j.url ? normNom(new URL(j.url).hostname) : null; } catch { /* url illisible */ }
+        if (ferme(m[1]) || (typeof j.hote === 'string' && ferme(j.hote)) || (urlHote && urlHote === hote)) {
+            return `hôte fermé (${n}, racine ${racine}) : ${j.motif ?? 'arrêt définitif'} — aucune requête tant que le coordinateur ne l'a pas levé`;
         }
     }
     return null;
@@ -188,7 +219,7 @@ const sansGroupeVide = texte => String(texte ?? '').replace(/^(\s*user-agent\s*:
 // ── la requête : cadence par racine (verrou D8), journal, redirections ────────────────────────────────────────────────────────────────────
 function delaiDeCadence(c, hote) {
     try {
-        const j = JSON.parse(fs.readFileSync(path.join(c.dossierPorte, 'robots', `${hote.replace(/[^a-z0-9.-]/gi, '_')}.json`), 'utf8'));
+        const j = lireJson(path.join(c.dossierPorte, 'robots', `${hote.replace(/[^a-z0-9.-]/gi, '_')}.json`));
         if (Number(j.crawlDelay) > 0) return Math.max(CADENCE_MIN_MS, Number(j.crawlDelay) * 1000);
     } catch { /* pas de robots au cache : cadence minimale */ }
     return CADENCE_MIN_MS;
@@ -263,7 +294,7 @@ function arreter(c, racine, motif, status, url) {
 function cacheRobots(c, hote) {
     const f = path.join(c.dossierPorte, 'robots', `${hote.replace(/[^a-z0-9.-]/gi, '_')}.json`);
     try {
-        const j = JSON.parse(fs.readFileSync(f, 'utf8'));
+        const j = lireJson(f);
         const age = c.maintenant() - Date.parse(j.le);
         const forme = (j.statut === 'present' && typeof j.texte === 'string') || (j.statut === 'absent' && j.texte == null);
         if (forme && Number.isFinite(age) && age >= 0 && age <= ROBOTS_MAX_MS) return { f, rec: j };
@@ -416,7 +447,7 @@ async function lever(hote, motif, o = {}) {
     if (!h || /[\\/:*?"<>|]/.test(h)) throw erreurRefus(`lever : nom d'hôte illisible (${String(hote).slice(0, 80)})`);
     const de = path.join(c.dossierArrets, `ARRET-HOTE-${h}.json`);
     if (!fs.existsSync(de)) throw erreurRefus(`lever : l'arrêt de ${h} n'existe pas (${de})`);
-    const brut = fs.readFileSync(de, 'utf8');
+    const brut = sansBom(fs.readFileSync(de, 'utf8'));
     let contenu;
     try { const x = JSON.parse(brut); contenu = x && typeof x === 'object' && !Array.isArray(x) ? x : { contenuOriginal: brut }; } catch { contenu = { illisible: true, contenuOriginal: brut }; }
     const maintenant = new Date(c.maintenant()), iso = maintenant.toISOString();
@@ -441,25 +472,27 @@ async function cli(argv) {
     const permis = { verifier: ['image'], lire: ['image', 'texte', 'sortie'], fermer: ['motif'], lever: ['motif'] }[cmd];
     for (const k of Object.keys(drapeaux)) if (!permis.includes(k)) { console.error(`option --${k} non admise pour « ${cmd} »`); return usage(); }
     const mode = drapeaux.image ? 'image' : 'page';
+    // B2 : seul le banc (variable PORTE_RESEAU_BANC = un module qui exporte dossierArrets, dossierPorte ET un transport FACTICE) change les dossiers ; pourBanc refuse un transport réel
+    const banc = process.env.PORTE_RESEAU_BANC ? pourBanc(require(path.resolve(process.env.PORTE_RESEAU_BANC))) : {};
     if (cmd === 'fermer') {
         if (typeof drapeaux.motif !== 'string' || !drapeaux.motif.trim()) { console.error('--motif="…" est obligatoire'); return usage(); }
-        const f = RH.arretHote(normNom(cible), drapeaux.motif, { dossier: configurer().dossierArrets });
+        const f = RH.arretHote(normNom(cible), drapeaux.motif, { dossier: configurer(banc).dossierArrets });
         console.log(`fermé : ${cible} (${f})`);
         return 0;
     }
     if (cmd === 'lever') {
         if (typeof drapeaux.motif !== 'string' || !drapeaux.motif.trim()) { console.error('--motif="…" est obligatoire'); return usage(); }
-        try { const r = await lever(cible, drapeaux.motif); console.log(`levé : ${cible} (${r.de} -> ${r.vers})`); return 0; }
+        try { const r = await lever(cible, drapeaux.motif, banc); console.log(`levé : ${cible} (${r.de} -> ${r.vers})`); return 0; }
         catch (e) { console.error(`REFUSÉ : ${e.message}`); return 3; }
     }
     if (cmd === 'verifier') {
-        const v = await verdict(cible, { mode });
+        const v = await verdict(cible, { ...banc, mode });
         console.log(`${v.ok ? 'AUTORISÉ' : 'REFUSÉ'} : ${v.motif}`);
         return v.ok ? 0 : 3;
     }
     if (typeof drapeaux.sortie !== 'string' || !drapeaux.sortie) { console.error('--sortie=<fichier> est obligatoire'); return usage(); }
     try {
-        const r = await lire(cible, { mode, sortie: drapeaux.sortie, texte: !!drapeaux.texte });
+        const r = await lire(cible, { ...banc, mode, sortie: drapeaux.sortie, texte: !!drapeaux.texte });
         console.log(r.redirige ? `redirigé (non suivi) : ${r.redirige}` : `fait : ${r.octets} octets -> ${r.sortie} (HTTP ${r.status})`);
         return 0;
     } catch (e) {
@@ -472,4 +505,4 @@ if (require.main === module) {
     cli(process.argv.slice(2)).then(code => process.exit(code), e => { console.error(`porte-reseau en panne, refusé par prudence : ${e && e.message}`); process.exit(3); });
 }
 
-module.exports = { verdict, lire, lever, htmlEnTexte, gardeSimple, exclusion, hoteFerme, racineDe, normaliser, formesDuChemin, sortiePermise, fabriquerTransportReel, AGENTS, SUFFIXES2, ROBOTS_MAX_MS, CADENCE_MIN_MS, CRAWL_MAX_S, SAUTS_MAX, BORNE_OCTETS, UA };
+module.exports = { verdict, lire, lever, pourBanc, configurer, DOSSIER_ARRETS_FIXE, DOSSIER_PORTE_FIXE, htmlEnTexte, gardeSimple, exclusion, hoteFerme, racineDe, normaliser, formesDuChemin, sortiePermise, fabriquerTransportReel, AGENTS, SUFFIXES2, ROBOTS_MAX_MS, CADENCE_MIN_MS, CRAWL_MAX_S, SAUTS_MAX, BORNE_OCTETS, UA };

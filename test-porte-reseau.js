@@ -13,6 +13,13 @@ let ok = 0, ko = 0;
 const verifier = (cond, msg) => { if (cond) ok++; else { ko++; console.log(`🔴 ${msg}`); } };
 const PNG = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.alloc(64, 1)]);
 
+/** Le CLI des bancs : un module qui exporte dossiers factices ET transport factice (pourBanc refuse le transport réel). */
+function moduleBanc(arrets, porte) {
+    const f = path.join(TMP_RACINE, `banc-cli-${path.basename(arrets)}.js`);
+    fs.writeFileSync(f, `module.exports = { dossierArrets: ${JSON.stringify(arrets)}, dossierPorte: ${JSON.stringify(porte)}, transport: { get() { throw new Error('aucune requête dans le banc'); } } };\n`);
+    return f;
+}
+const OPT = o => (typeof P.pourBanc === 'function' ? P.pourBanc(o) : o);      // B2 : le chemin interne des bancs (dossiers factices SEULEMENT avec un transport factice)
 function banc() {
     const arrets = fs.mkdtempSync(path.join(TMP_RACINE, 'arrets-'));
     const porte = fs.mkdtempSync(path.join(TMP_RACINE, 'porte-'));
@@ -21,7 +28,7 @@ function banc() {
     let t = Date.parse('2026-11-01T10:00:00Z');
     const appels = [], reponses = {};
     const transport = { async get(url) { appels.push({ url, t }); const r = reponses[url]; if (r === undefined) throw new Error(`requête inattendue ${url}`); return typeof r === 'function' ? r() : r; } };
-    const o = { transport, maintenant: () => t, pause: ms => { t += ms; }, dossierArrets: arrets, dossierPorte: porte };
+    const o = OPT({ transport, maintenant: () => t, pause: ms => { t += ms; }, dossierArrets: arrets, dossierPorte: porte });
     const journal = () => { const f = path.join(porte, 'journal.jsonl'); return fs.existsSync(f) ? fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)) : []; };
     return { arrets, porte, sorties, appels, reponses, o, journal, urls: () => appels.map(a => a.url), avancer: ms => { t += ms; }, maintenant: () => t };
 }
@@ -268,7 +275,7 @@ async function lever(f) { try { await f(); return null; } catch (e) { return e; 
     }
     {   // le CLI : verifier / fermer / usage, par un vrai processus
         const { spawnSync } = require('child_process');
-        const env = { ...process.env, ARRETS_HOTES_DOSSIER: path.join(TMP_RACINE, 'cli-arrets'), PORTE_RESEAU_DOSSIER: path.join(TMP_RACINE, 'cli-porte') };
+        const env = { ...process.env, PORTE_RESEAU_BANC: moduleBanc(path.join(TMP_RACINE, 'cli-arrets'), path.join(TMP_RACINE, 'cli-porte')) };
         const cli = (...a) => spawnSync(process.execPath, [path.join(__dirname, 'collecte-cartes', 'porte-reseau.js'), ...a], { encoding: 'utf8', env });
         verifier(cli().status === 2, 'CLI : sans argument -> 2');
         verifier(cli('verifier').status === 2, 'CLI : verifier sans adresse -> 2');
@@ -279,6 +286,12 @@ async function lever(f) { try { await f(); return null; } catch (e) { return e; 
         verifier(cli('fermer', 'www.exemple.test').status === 2, 'CLI : fermer sans motif -> 2');
         verifier(cli('verifier', 'https://exemple.test/x').status === 3, 'CLI : hôte fermé (racine) -> 3, sans réseau');
         verifier(cli('lire', 'https://www.vinted.fr/x').status === 2, 'CLI : lire sans --sortie -> 2');
+        {   // B2 : le CLI refuse un module de banc qui porte le transport RÉEL (pas de dossier factice avec une vraie requête)
+            const mod = path.join(TMP_RACINE, 'banc-reel.js');
+            fs.writeFileSync(mod, `module.exports = { dossierArrets: ${JSON.stringify(path.join(TMP_RACINE, 'x-a'))}, dossierPorte: ${JSON.stringify(path.join(TMP_RACINE, 'x-p'))}, transport: require(${JSON.stringify(path.join(__dirname, 'collecte-cartes', 'porte-reseau'))}).fabriquerTransportReel() };\n`);
+            const r = spawnSync(process.execPath, [path.join(__dirname, 'collecte-cartes', 'porte-reseau.js'), 'verifier', 'https://exemple.test/x'], { encoding: 'utf8', env: { ...process.env, PORTE_RESEAU_BANC: mod } });
+            verifier(r.status !== 0 && /transport/i.test(r.stderr) && !fs.existsSync(path.join(TMP_RACINE, 'x-a')), 'B2 : CLI : un module de banc avec le transport réel est refusé avant toute requête');
+        }
     }
 
     // ═══ TOUR 1 DE CORRECTION (relecture 1) : chaque attaque de la relecture est un cas du banc ═══════════════════════════════════════════════
@@ -432,9 +445,9 @@ async function lever(f) { try { await f(); return null; } catch (e) { return e; 
     }
     // ── M2 : un ARRET illisible ferme tout mais NOMME le fichier ; le champ `hote` est normalisé ───────────────────────────────────────────
     {
-        const b = banc(); fs.writeFileSync(path.join(b.arrets, 'ARRET-HOTE-tronque.test.json'), '{tronque');
+        const b = banc(); fs.writeFileSync(path.join(b.arrets, 'ARRET-HOTE-tronque.json'), '{tronque');      // B1 : le nom n'est pas un hôte -> tout est refusé
         const v = await P.verdict('https://autre.test/x', b.o);
-        verifier(v.ok === false && v.motif.includes('ARRET-HOTE-tronque.test.json') && b.appels.length === 0, `M2 : le message nomme le fichier fautif (${v.motif})`);
+        verifier(v.ok === false && v.motif.includes('ARRET-HOTE-tronque.json') && b.appels.length === 0, `M2 : le message nomme le fichier fautif (${v.motif})`);
         const b2 = banc(); fs.writeFileSync(path.join(b2.arrets, 'ARRET-HOTE-nom-logique.json'), JSON.stringify({ hote: '  WWW.Logique.Test. ' }));
         const v2 = await P.verdict('https://logique.test/x', b2.o);
         verifier(v2.ok === false && /ferm/i.test(v2.motif), 'M2 : le champ `hote` est normalisé (espaces, casse, point final)');
@@ -457,7 +470,7 @@ async function lever(f) { try { await f(); return null; } catch (e) { return e; 
         const r2 = await P.lever('tronque.test', 'à la main', b2.o);
         verifier(r2.ok === true && fs.readdirSync(b2.arrets).some(n => /^LEVEE-HOTE-tronque\.test-/.test(n)), 'I2 : un arrêt illisible se lève aussi (contenu original gardé)');
         const { spawnSync } = require('child_process');
-        const env = { ...process.env, ARRETS_HOTES_DOSSIER: path.join(TMP_RACINE, 'cli2-arrets'), PORTE_RESEAU_DOSSIER: path.join(TMP_RACINE, 'cli2-porte') };
+        const env = { ...process.env, PORTE_RESEAU_BANC: moduleBanc(path.join(TMP_RACINE, 'cli2-arrets'), path.join(TMP_RACINE, 'cli2-porte')) };
         const cli = (...a) => spawnSync(process.execPath, [path.join(__dirname, 'collecte-cartes', 'porte-reseau.js'), ...a], { encoding: 'utf8', env });
         verifier(cli('fermer', 'www.cli.test', '--motif=banc').status === 0 && cli('lever', 'www.cli.test', '--motif=levée').status === 0 && cli('verifier', 'https://cli.test/x').status !== 0 && !fs.existsSync(path.join(TMP_RACINE, 'cli2-arrets', 'ARRET-HOTE-www.cli.test.json')), 'I2 : CLI lever');
         verifier(cli('lever', 'www.cli.test', '--motif=x').status === 3 && cli('lever', 'www.cli.test').status === 2, 'I2 : CLI lever : arrêt absent -> 3, sans motif -> 2');
@@ -485,6 +498,66 @@ async function lever(f) { try { await f(); return null; } catch (e) { return e; 
         } finally { ap.nettoyer(); aa.nettoyer(); }
     }
 
+    // ═══ TOUR 3 DE CORRECTION (relecture 3) ══════════════════════════════════════════════════════════════════════════════════════════════════
+    // ── B1 : un ARRET à BOM UTF-8 se lit ; un fichier vraiment illisible ferme l'hôte que son NOM désigne, sinon tout (et le dit) ──────────────
+    {
+        const BOM = Buffer.from([0xEF, 0xBB, 0xBF]);
+        const b = banc();
+        fs.writeFileSync(path.join(b.arrets, 'ARRET-HOTE-bom.test.json'), Buffer.concat([BOM, Buffer.from(JSON.stringify({ hote: 'bom.test', url: 'https://bom.test/x', motif: 'banc BOM' }))]));
+        b.reponses['https://autre.test/robots.txt'] = ROBOTS('');
+        const v1 = await P.verdict('https://autre.test/x', b.o);
+        verifier(v1.ok === true, `B1 : un ARRET à BOM ne ferme PAS les autres hôtes (${v1.motif})`);
+        const v2 = await P.verdict('https://bom.test/x', b.o);
+        verifier(v2.ok === false && /banc BOM/.test(v2.motif), `B1 : l'ARRET à BOM est LU : il ferme son hôte avec son motif (${v2.motif})`);
+        const v3 = await P.verdict('https://cdn.bom.test/x', b.o);
+        verifier(v3.ok === false && /ferm/i.test(v3.motif), 'B1 : l\'ARRET à BOM ferme aussi la racine de son hôte');
+        // illisible, nom = un nom d'hôte : ferme CET hôte seulement
+        const b2 = banc(); fs.writeFileSync(path.join(b2.arrets, 'ARRET-HOTE-tronque.test.json'), '{tronque');
+        b2.reponses['https://autre.test/robots.txt'] = ROBOTS('');
+        const w1 = await P.verdict('https://autre.test/x', b2.o), w2 = await P.verdict('https://tronque.test/x', b2.o);
+        verifier(w1.ok === true && w2.ok === false && /ARRET-HOTE-tronque\.test\.json/.test(w2.motif), `B1 : illisible, nom d'hôte : ferme son hôte seulement (${w1.motif} / ${w2.motif})`);
+        // illisible, nom qui n'est pas un hôte : on ne sait pas, tout est refusé et le message le dit
+        const b3 = banc(); fs.writeFileSync(path.join(b3.arrets, 'ARRET-HOTE-bizarre.json'), '{tronque');
+        const x1 = await P.verdict('https://autre.test/x', b3.o);
+        verifier(x1.ok === false && /bizarre/.test(x1.motif) && /illisible/i.test(x1.motif) && b3.appels.length === 0, `B1 : illisible sans hôte déductible : tout est refusé, fichier nommé (${x1.motif})`);
+        // un JSON qui n'est pas un objet : même traitement qu'illisible
+        const b4 = banc(); fs.writeFileSync(path.join(b4.arrets, 'ARRET-HOTE-liste.test.json'), '[1,2]'); b4.reponses['https://autre.test/robots.txt'] = ROBOTS('');
+        verifier((await P.verdict('https://autre.test/x', b4.o)).ok === true && (await P.verdict('https://liste.test/x', b4.o)).ok === false, 'B1 : un JSON non objet ferme son hôte nommé seulement');
+        // le cache de robots à BOM se lit (pas de nouvelle requête)
+        const b5 = banc(); fs.mkdirSync(path.join(b5.porte, 'robots'), { recursive: true });
+        fs.writeFileSync(path.join(b5.porte, 'robots', 'cache.test.json'), Buffer.concat([BOM, Buffer.from(JSON.stringify({ statut: 'absent', status: 404, texte: null, crawlDelay: null, le: new Date(b5.maintenant()).toISOString() }))]));
+        const y = await P.verdict('https://cache.test/x', b5.o);
+        verifier(y.ok === true && b5.appels.length === 0, `B1 : le cache de robots à BOM est lu sans nouvelle requête (${y.motif})`);
+        // lever sur un arrêt à BOM garde le contenu lu
+        const b6 = banc(); fs.writeFileSync(path.join(b6.arrets, 'ARRET-HOTE-bom.test.json'), Buffer.concat([BOM, Buffer.from(JSON.stringify({ hote: 'bom.test', motif: 'banc BOM' }))]));
+        await P.lever('bom.test', 'à la main', b6.o);
+        const lev = fs.readdirSync(b6.arrets).find(n => /^LEVEE-HOTE-bom\.test-/.test(n)), jl = lev ? JSON.parse(fs.readFileSync(path.join(b6.arrets, lev), 'utf8')) : {};
+        verifier(jl.motif === 'banc BOM' && !jl.illisible, 'B1 : lever un arrêt à BOM garde son contenu (non « illisible »)');
+    }
+    // ── I5 : l'arrêt écrit PENDANT l'attente de cadence (autre processus) retient la requête de page ───────────────────────────────────────────
+    {
+        const b = banc();
+        b.reponses['https://attente.test/robots.txt'] = ROBOTS('');
+        b.reponses['https://attente.test/p'] = PAGE('<p>x</p>');
+        b.o.pause = ms => { b.avancer(ms); fermer(b, 'attente.test'); };       // pendant l'attente, un autre processus ferme l'hôte
+        const e = await lever(() => P.lire('https://attente.test/p', { ...b.o, sortie: path.join(b.sorties, 'p') }));
+        verifier(e && e.refus === true && /ferm/i.test(e.message), `I5 : l'arrêt écrit pendant l'attente refuse la lecture (${e && e.message})`);
+        verifier(!b.urls().includes('https://attente.test/p') && !fs.existsSync(path.join(b.sorties, 'p')), `I5 : la page n'est JAMAIS demandée (${JSON.stringify(b.urls())})`);
+    }
+    // ── B2 : en production, les dossiers de la porte et des arrêts sont FIXES ; le chemin des bancs exige un transport factice ───────────────
+    {
+        const fixe = typeof P.configurer === 'function' ? P.configurer({ dossierArrets: path.join(TMP_RACINE, 'vide-a'), dossierPorte: path.join(TMP_RACINE, 'vide-p'), maintenant: () => 0, pause: () => {}, transport: { get() { throw new Error('faux'); } } }) : null;
+        verifier(fixe && P.DOSSIER_ARRETS_FIXE && fixe.dossierArrets === P.DOSSIER_ARRETS_FIXE && fixe.dossierPorte === P.DOSSIER_PORTE_FIXE, 'B2 : l\'option dossierArrets / dossierPorte (et les variables ARRETS_HOTES_DOSSIER / PORTE_RESEAU_DOSSIER posées par ce banc) ne changent PAS les dossiers');
+        verifier(fixe && fixe.maintenant === Date.now && fixe.transport && fixe.transport.get && !String(fixe.transport.get).includes('faux'), 'B2 : horloge, pause et transport fournis hors banc sont ignorés (la cadence ne se saute pas)');
+        const leve = f => { try { f(); return null; } catch (e) { return e; } };
+        verifier(typeof P.pourBanc === 'function' && leve(() => P.pourBanc({ dossierArrets: 'a', dossierPorte: 'b' })) !== null, 'B2 : pourBanc sans transport factice LÈVE');
+        verifier(typeof P.pourBanc === 'function' && leve(() => P.pourBanc({ dossierArrets: 'a', dossierPorte: 'b', transport: P.fabriquerTransportReel() })) !== null, 'B2 : pourBanc avec le transport RÉEL LÈVE (un dossier factice ne sert jamais à une vraie requête)');
+        verifier(typeof P.pourBanc === 'function' && leve(() => P.pourBanc({ transport: { get() {} } })) !== null, 'B2 : pourBanc sans dossiers LÈVE');
+        const b = banc(), copie = P.configurer ? P.configurer({ ...b.o, mode: 'image' }) : null;
+        verifier(copie && copie.dossierArrets === b.arrets && copie.dossierPorte === b.porte, 'B2 : une configuration de banc survit à la copie par spread (les verdicts internes la reprennent)');
+        const faux = P.configurer ? P.configurer({ banc: true, dossierArrets: b.arrets, dossierPorte: b.porte, transport: b.o.transport }) : null;
+        verifier(faux && faux.dossierArrets === P.DOSSIER_ARRETS_FIXE, 'B2 : un objet d\'options qui imite un banc sans pourBanc n\'ouvre pas de dossier factice');
+    }
     console.log(`\n${ok}/${ok + ko} assertions justes${ko ? ` — ${ko} en échec` : ''}`);
     process.exit(ko ? 1 : 0);
 })().catch(e => { console.log(`🔴 le banc a planté : ${e.stack}`); process.exit(1); });
