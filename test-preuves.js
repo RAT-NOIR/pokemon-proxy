@@ -156,6 +156,8 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.deepStrictEqual(lue(ja, produit({ tirage: 'jp', numero: '018', nomEn: 'Super Rod' })).motifs, ['nom-different'], 'carte sans nom japonais : rien à comparer = refus');
         assert.deepStrictEqual(lue(ja, produit({ tirage: 'jp', numero: '018', nomEn: 'すごいつりざお', nomJa: null })).motifs, ['nom-different'], 'un nom japonais ne se compare JAMAIS au nom anglais');
         assert.deepStrictEqual(lue({ ...ja, lu: { ...ja.lu, nom: '' } }, pj).motifs, ['nom-different'], 'nom lu vide');
+        assert.deepStrictEqual(lue({ ...ja, lu: { ...ja.lu, nom: '' } }, produit({ tirage: 'jp', numero: '018', nomEn: 'Super Rod', nomJa: null })).motifs, ['nom-different'], 'vide contre vide : rien à comparer n\'est jamais une concordance');
+        assert.deepStrictEqual(lue({ ...ja, lu: { ...ja.lu, nom: '・ ' } }, produit({ tirage: 'jp', numero: '018', nomEn: 'Super Rod', nomJa: ' ' })).motifs, ['nom-different'], 'nom réduit à rien après normalisation : refus');
         const surIntl = lue(ja, produit({ tirage: 'intl', numero: '018', nomEn: 'Super Rod', nomJa: 'すごいつりざお' })).motifs.join();
         assert.match(surIntl, /langue-differente/); assert.match(surIntl, /nom-langue-non-anglaise/, 'produit NON japonais : le nom japonais n\'est jamais comparé, même si nomJa existe');
     });
