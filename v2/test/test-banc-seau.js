@@ -24,6 +24,14 @@ const oid = () => new mongoose.Types.ObjectId();
 const sha = b => crypto.createHash('sha256').update(b).digest('hex');
 const bruit = (w = 400, h = 560, q = 80) => sharp(crypto.randomBytes(w * h * 3), { raw: { width: w, height: h, channels: 3 } }).jpeg({ quality: q }).toBuffer();
 const essayer = async (nom, f) => { try { await f(); } catch (e) { H.v(`${nom} (exception)`, String(e && (e.stack || e.message)), 'aucune'); } };
+// une image à 9 × 8 blocs de gris bien séparés : son dHash est stable (une re-photo plus petite, plus compressée, reste à quelques bits ; une autre image est à ~32)
+const blocs = async (w = 400, h = 560) => {
+    const niv = [];
+    for (let i = 0; i < 72; i++) { let v; do { v = crypto.randomInt(0, 256); } while (i % 9 !== 0 && Math.abs(v - niv[i - 1]) < 40); niv.push(v); }
+    const buf = Buffer.alloc(w * h * 3);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const c = niv[Math.min(7, Math.floor(y * 8 / h)) * 9 + Math.min(8, Math.floor(x * 9 / w))]; const o = (y * w + x) * 3; buf[o] = c; buf[o + 1] = c; buf[o + 2] = c; }
+    return sharp(buf, { raw: { width: w, height: h, channels: 3 } }).jpeg({ quality: 85 }).toBuffer();
+};
 
 (async () => {
     { const FEN = 3600e3, reste = FEN - (Date.now() % FEN); if (reste < 60e3) { console.log(`   frontière de fenêtre (1 h) dans ${Math.round(reste / 1000)} s : attente`); await new Promise(r => setTimeout(r, reste + 2000)); } }
@@ -34,6 +42,8 @@ const essayer = async (nom, f) => { try { await f(); } catch (e) { H.v(`${nom} (
     for (const autre of ['0', 'true', 'oui', ' 1', '2', '']) H.v(`config : V2_BANC_SEAU="${autre}" ⇒ éteint`, lireConfig({ MONGODB_BASE: 'test_scratch', V2_BANC_SEAU: autre }).bancSeau, false);
 
     await H.ouvrirBac('test-banc-seau.js'); await M.creerIndex();
+    { let idx = []; try { idx = await db.col('banc_seaux').indexes(); } catch { /* collection absente */ }
+      H.v('0. la migration creerIndex() ne crée AUCUN index des seaux (ils naissent à la première utilisation, derrière le drapeau)', idx.length, 0); }
     const { creerSeaux } = require('../banc/seau');
     const memoire = S.creerStockageMemoire(S.CLE_SEAU);
     let decalageMs = 0;
@@ -52,12 +62,13 @@ const essayer = async (nom, f) => { try { await f(); } catch (e) { H.v(`${nom} (
     await semerProduit(2004, 'Pikachu', 'Sans-Prix', '9', null);
     await semerProduit(2005, 'Raichu', 'Base-Set', '14', 8);
 
-    const seaux = creerSeaux({ cfg: cfgOn, stockage: memoire, horloge, catalogue: reel });
+    const ancres = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-ancres-'));       // le dossier d'ancres du banc est un dossier TEMPORAIRE : le banc n'écrit jamais dans le dépôt
+    const seaux = creerSeaux({ cfg: cfgOn, stockage: memoire, horloge, catalogue: reel, ancresDir: ancres });
     const purgeStub = { purgerBanc: async () => ({}), anonymiserLiens: async () => ({}) };
-    const monter = async cfg => {
+    const monter = async (cfg, plus = {}) => {
         const app = express(); app.use(express.json());
         const router = express.Router();
-        monterBanc.routes(router, cfg, { banc: {}, purge: purgeStub, seaux });
+        monterBanc.routes(router, cfg, { banc: {}, purge: purgeStub, seaux, ...plus });
         app.use(router);
         return H.serveur(app);
     };
@@ -115,15 +126,17 @@ const essayer = async (nom, f) => { try { await f(); } catch (e) { H.v(`${nom} (
     await essayer('déclaration', async () => {
         let r = await get(sv, ADM, '/api/banc/seau/courant');
         H.v('2. aucun seau : courant rend seau null', [r.statut, r.json.seau], [200, null]);
-        r = await post(sv, ADM, '/api/banc/seau/declarer', { nom: 'juge-200', type: 'juge' });
-        H.v('2. déclarer le juge (cible 200 par défaut) : 201', [r.statut, r.json && r.json.seau && r.json.seau.type, r.json.seau.cible, r.json.seau.etat], [201, 'juge', 200, 'ouvert']);
+        const { cibleParDefaut } = require('../banc/seau');
+        H.v('2. cible par défaut : 200 pour le juge', cibleParDefaut('juge'), 200);
+        r = await post(sv, ADM, '/api/banc/seau/declarer', { nom: 'juge-200', type: 'juge', cible: 4 });       // le banc joue un juge de 4 annonces (la cible est déclarée, 200 par défaut)
+        H.v('2. déclarer le juge (cible déclarée : 4) : 201', [r.statut, r.json && r.json.seau && r.json.seau.type, r.json.seau.cible, r.json.seau.etat], [201, 'juge', 4, 'ouvert']);
         juge = r.json.seau;
         H.v('2. empreinte de 64 hexadécimaux, horodatage, identifiant de 16 hexadécimaux', [/^[0-9a-f]{64}$/.test(juge.empreinte), !Number.isNaN(Date.parse(juge.declareLe)), /^[0-9a-f]{16}$/.test(juge.id)], [true, true, true]);
         H.v('2. un second seau pendant que le juge est ouvert : 409', (await post(sv, ADM, '/api/banc/seau/declarer', { nom: 'autre', type: 'entrainement' })).statut, 409);
         H.v('2. un nom invalide : 400', (await post(sv, ADM, '/api/banc/seau/declarer', { nom: 'a b!', type: 'entrainement' })).statut, 400);
         H.v('2. un type inconnu : 400', (await post(sv, ADM, '/api/banc/seau/declarer', { nom: 'zz', type: 'test' })).statut, 400);
         H.v('2. un champ inconnu : 400', (await post(sv, ADM, '/api/banc/seau/declarer', { nom: 'zz', type: 'entrainement', etat: 'scelle' })).statut, 400);
-        H.v('2. un juge de cible 300 : 400 (le juge a 200 annonces)', (await post(sv, ADM, '/api/banc/seau/declarer', { nom: 'juge-300', type: 'juge', cible: 300 })).statut, 400);
+        H.v('2. une cible hors 1..500 : 400', [(await post(sv, ADM, '/api/banc/seau/declarer', { nom: 'zz', type: 'juge', cible: 501 })).statut, (await post(sv, ADM, '/api/banc/seau/declarer', { nom: 'zz', type: 'juge', cible: 0 })).statut], [400, 400]);
         r = await get(sv, ADM, '/api/banc/seau/courant');
         H.v('2. courant rend le juge ouvert', [r.json.seau.id, r.json.seau.n], [juge.id, 0]);
         // la déclaration ne se modifie pas : aucune route de mise à jour n'existe
@@ -134,11 +147,12 @@ const essayer = async (nom, f) => { try { await f(); } catch (e) { H.v(`${nom} (
     });
 
     // ══ 3. les photos : EN OCTETS, au scan, avec leur sha256 ; le seau en cours est posé par l'outil
-    const photos = { a: await bruit(400, 560, 80), b: await bruit(300, 420, 70), c: await bruit(500, 700, 90) };
+    const photos = { a: await blocs(), b: await bruit(300, 420, 70), c: await bruit(500, 700, 90) };
     const scans = [];
     await essayer('photos', async () => {
         const scan1 = await semerScan(ADM); scans.push(scan1);
-        const url = (s, i, extra = '') => `/api/banc/seau/photo?scanId=${s}&photo=${i}&seau=${juge.id}${extra}`;
+        // dans un JUGE, l'empreinte d'annonce est OBLIGATOIRE : le banc en fournit une par scan, sauf quand le cas la précise
+        const url = (s, i, extra = '') => `/api/banc/seau/photo?scanId=${s}&photo=${i}&seau=${juge.id}${extra.includes('annonce=') ? extra : `&annonce=${sha(s)}${extra}`}`;
         let r = await envoyer(sv, ADM, url(scan1, 0), photos.a);
         H.v('3. photo 0 : 200 ecrit, rang 1, seau du juge', [r.statut, r.json && r.json.etat, r.json.rang, r.json.seauId], [200, 'ecrit', 1, juge.id]);
         r = await envoyer(sv, ADM, url(scan1, 0), photos.a);
@@ -157,8 +171,11 @@ const essayer = async (nom, f) => { try { await f(); } catch (e) { H.v(`${nom} (
         // la ligne scannée porte le seau EN COURS, posé à ce moment
         const ligne = await db.col('banc_seau_scans').findOne({ scanId: scan1 });
         H.v('3. la ligne porte seauId, rang, posteLe, scanCreeLe et une empreinte', [ligne.seauId, ligne.rang, ligne.posteLe instanceof Date, ligne.scanCreeLe instanceof Date, /^[0-9a-f]{64}$/.test(ligne.empreinte)], [juge.id, 1, true, true, true]);
+        H.v('3. la photo porte son dHash (16 hexadécimaux) pour repérer une re-photo', /^[0-9a-f]{16}$/.test(docs[0].dhash), true);
         // les refus
         const scan2 = await semerScan(ADM); scans.push(scan2);
+        const sansAnnonce = await envoyer(sv, ADM, `/api/banc/seau/photo?scanId=${scan2}&photo=0&seau=${juge.id}`, photos.a);
+        H.v('3. 🔑 dans un juge, un scan SANS empreinte d\'annonce est refusé (400 annonce-obligatoire) et ne prend aucun rang', [sansAnnonce.statut, detail(sansAnnonce), await db.col('banc_seau_scans').countDocuments({ scanId: scan2 })], [400, 'annonce-obligatoire', 0]);
         H.v('3. un autre seau que celui en cours : 409 seau-change', detail(await envoyer(sv, ADM, `/api/banc/seau/photo?scanId=${scan2}&photo=0&seau=${'f'.repeat(16)}`, photos.a)), 'seau-change');
         H.v('3. sans paramètre seau : 400 (l\'extension DIT quel seau elle croit en cours)', (await envoyer(sv, ADM, `/api/banc/seau/photo?scanId=${scan2}&photo=0`, photos.a)).statut, 400);
         H.v('3. un scan inconnu : 404', (await envoyer(sv, ADM, url(String(oid()), 0), photos.a)).statut, 404);
@@ -175,6 +192,7 @@ const essayer = async (nom, f) => { try { await f(); } catch (e) { H.v(`${nom} (
         H.v('3. mais les photos manquantes d\'un scan DÉJÀ rangé passent encore', (await envoyer(sv, ADM, url(scan1, 3), photos.c)).json.etat, 'ecrit');
         decalageMs = 0;
         H.v('3. le scan 2 reçoit enfin sa photo : rang 2', (await envoyer(sv, ADM, url(scan2, 0), photos.c)).json.rang, 2);
+        H.v('3. 🔑 sceller un juge SOUS sa cible (2 sur 4) : 409 sous-cible', detail(await post(sv, ADM, '/api/banc/seau/sceller', { seauId: juge.id })), 'sous-cible');
         // l'annonce : une empreinte (jamais l'adresse) pour repérer un doublon
         const an = 'e'.repeat(64);
         const d1 = await semerScan(ADM), d2 = await semerScan(ADM);
@@ -238,13 +256,22 @@ const essayer = async (nom, f) => { try { await f(); } catch (e) { H.v(`${nom} (
         // la vérité n'est jamais rattachée à une ligne scannée APRÈS elle (§14) : la saisie vit sur la ligne, sa date est postérieure au scan
         v = await db.col('banc_seau_verites').findOne({ scanId: s1, carte: 0 }); const ln = await db.col('banc_seau_scans').findOne({ scanId: s1 });
         H.v('4. §14 : la saisie est postérieure à la ligne du scan', v.saisieLe >= ln.posteLe, true);
+        // le scellé du juge exige TOUT étiqueté : deux scans n'ont pas encore de vérité
+        H.v('4. 🔑 sceller un juge dont des vérités manquent : 409 verites-incompletes', detail(await post(sv, ADM, '/api/banc/seau/sceller', { seauId: juge.id })), 'verites-incompletes');
+        for (const s of [scans[2], scans[3]]) await post(sv, ADM, '/api/banc/seau/verite', { scanId: s, idProduct: 2001, via: 'idProduct' });
+        H.v('4. tout est étiqueté : plus de prochain', (await get(sv, ADM, `/api/banc/seau/a-etiqueter?seau=${juge.id}`)).json.prochain, null);
+        // une ligne sans photo (l'objet n'a pas pu s'écrire) ne se scelle pas, et sort de l'export
+        const sauve = await db.col('banc_seau_photos').find({ scanId: scans[3] }).toArray();
+        await db.col('banc_seau_photos').deleteMany({ scanId: scans[3] });
+        H.v('4. 🔑 sceller avec une ligne SANS photo : 409 ligne-sans-photo', detail(await post(sv, ADM, '/api/banc/seau/sceller', { seauId: juge.id })), 'ligne-sans-photo');
+        await db.col('banc_seau_photos').insertMany(sauve);
     });
 
     // ══ 5. la chaîne d'empreintes, et le scellé
     let chaine1;
     await essayer('scellé', async () => {
         let r = await get(sv, ADM, `/api/banc/seau/verifier?seau=${juge.id}`);
-        H.v('5. la chaîne du juge ouvert se vérifie : ok, 4 lignes (0 manquante)', [r.statut, r.json.ok, r.json.lignes, r.json.problemes], [200, true, 4, []]);
+        H.v('5. la chaîne du juge ouvert se vérifie : ok, 4 lignes (0 manquante), 0 erratum', [r.statut, r.json.ok, r.json.lignes, r.json.problemes, r.json.errata], [200, true, 4, [], 0]);
         chaine1 = r.json.tete;
         H.v('5. sceller sans seauId : 400', (await post(sv, ADM, '/api/banc/seau/sceller', {})).statut, 400);
         H.v('5. sceller un seau inconnu : 404', (await post(sv, ADM, '/api/banc/seau/sceller', { seauId: 'a'.repeat(16) })).statut, 404);
@@ -252,13 +279,77 @@ const essayer = async (nom, f) => { try { await f(); } catch (e) { H.v(`${nom} (
         H.v('5. sceller le juge : etat scelle, n 4, tête = dernière empreinte, empreinte du scellé', [r.statut, r.json.seau.etat, r.json.seau.n, r.json.seau.tete, /^[0-9a-f]{64}$/.test(r.json.seau.empreinteScellee), !!r.json.seau.photosEmpreinte], [200, 'scelle', 4, chaine1, true, true]);
         H.v('5. sceller deux fois : 409 (une transition, une seule)', detail(await post(sv, ADM, '/api/banc/seau/sceller', { seauId: juge.id })), 'deja-scelle');
         const scelle = await db.col('banc_seaux').findOne({ _id: juge.id });
-        H.v('5. la déclaration est intacte après le scellé', [scelle.nom, scelle.type, scelle.cible, scelle.empreinte], [juge.nom, 'juge', 200, juge.empreinte]);
+        H.v('5. la déclaration est intacte après le scellé', [scelle.nom, scelle.type, scelle.cible, scelle.empreinte], [juge.nom, 'juge', 4, juge.empreinte]);
+        H.v('5. le scellé porte l\'empreinte des vérités', /^[0-9a-f]{64}$/.test(scelle.veritesEmpreinte), true);
+        H.v('5. la réponse du scellé RENDT la tête de chaîne (à ancrer)', [r.json.seau.tete === scelle.tete, r.json.seau.empreinteScellee === scelle.empreinteScellee], [true, true]);
         const p = await envoyer(sv, ADM, `/api/banc/seau/photo?scanId=${await semerScan(ADM)}&photo=0&seau=${juge.id}`, photos.a);
         H.v('5. une photo vers le juge scellé : 409 (aucun seau ouvert)', [p.statut], [409]);
-        H.v('5. la vérité reste saisissable (le scellé fige la liste, pas la réponse du testeur)', (await post(sv, ADM, '/api/banc/seau/verite', { scanId: scans[2], idProduct: 2001, via: 'idProduct' })).statut, 200);
+        // 🔑 les vérités du juge scellé ne se réécrivent plus : une erreur humaine s'ajoute en ERRATUM
+        const refusee = await post(sv, ADM, '/api/banc/seau/verite', { scanId: scans[2], idProduct: 2003, via: 'idProduct' });
+        H.v('5. 🔑 une vérité sur un juge scellé : 409 juge-scelle, rien d\'écrit', [refusee.statut, detail(refusee), (await db.col('banc_seau_verites').findOne({ scanId: scans[2] })).idProduct], [409, 'juge-scelle', 2001]);
+        const errUrl = '/api/banc/seau/erratum';
+        H.v('5. un erratum sans motif : 400', (await post(sv, ADM, errUrl, { scanId: scans[2], idProduct: 2003, via: 'idProduct' })).statut, 400);
+        H.v('5. un erratum à motif trop court : 400', (await post(sv, ADM, errUrl, { scanId: scans[2], idProduct: 2003, via: 'idProduct', motif: 'x' })).statut, 400);
+        H.v('5. un erratum sur un scan inconnu : 404', (await post(sv, ADM, errUrl, { scanId: String(oid()), idProduct: 2003, via: 'idProduct', motif: 'mauvais set choisi' })).statut, 404);
+        const motif = 'mauvais set choisi à la saisie';
+        let er = await post(sv, ADM, errUrl, { scanId: scans[2], idProduct: 2003, via: 'idProduct', motif });
+        H.v('5. un erratum : 200, numéro 1', [er.statut, er.json.erratum], [200, 1]);
+        const docEr = await db.col('banc_seau_errata').findOne({ scanId: scans[2] });
+        H.v('5. l\'erratum garde l\'ancienne valeur, la nouvelle, la date et le motif', [docEr.ancien.idProduct, docEr.nouveau.idProduct, docEr.le instanceof Date, docEr.motif], [2001, 2003, true, motif]);
+        H.v('5. la vérité d\'origine n\'est PAS réécrite', (await db.col('banc_seau_verites').findOne({ scanId: scans[2] })).idProduct, 2001);
+        er = await post(sv, ADM, errUrl, { scanId: scans[2], idProduct: 2005, via: 'idProduct', motif: 'second erratum, corrige le premier' });
+        H.v('5. un second erratum s\'ajoute à la chaîne (numéro 2, l\'ancien est le premier erratum)', [er.json.erratum, (await db.col('banc_seau_errata').findOne({ scanId: scans[2], n: 2 })).ancien.idProduct], [2, 2003]);
+        const v1 = await get(sv, ADM, `/api/banc/seau/verifier?seau=${juge.id}`);
+        H.v('5. 🔑 verifier : ok, et il IMPRIME le nombre d\'errata', [v1.json.ok, v1.json.errata], [true, 2]);
+        const docE2 = await db.col('banc_seau_errata').findOne({ scanId: scans[2], n: 2 });
+        await db.col('banc_seau_errata').updateOne({ _id: docE2._id }, { $set: { 'nouveau.idProduct': 2002 } });
+        const casseE = await get(sv, ADM, `/api/banc/seau/verifier?seau=${juge.id}`);
+        H.v('5. un erratum modifié à la main : verifier n\'est plus ok (cause erratum)', [casseE.json.ok, casseE.json.problemes.some(p => p.cause === 'erratum')], [false, true]);
+        await db.col('banc_seau_errata').updateOne({ _id: docE2._id }, { $set: { 'nouveau.idProduct': 2005 } });
+        const vd = await db.col('banc_seau_verites').findOne({ scanId: scans[3] });
+        await db.col('banc_seau_verites').updateOne({ _id: vd._id }, { $set: { idProduct: 2004 } });
+        const casseV = await get(sv, ADM, `/api/banc/seau/verifier?seau=${juge.id}`);
+        H.v('5. 🔑 une vérité du juge modifiée en base après le scellé : verifier n\'est plus ok (cause verites)', [casseV.json.ok, casseV.json.problemes.some(p => p.cause === 'verites')], [false, true]);
+        await db.col('banc_seau_verites').updateOne({ _id: vd._id }, { $set: { idProduct: vd.idProduct } });
+        // l'ancrage hors base
+        const nonAncre = await get(sv, ADM, `/api/banc/seau/verifier?seau=${juge.id}`);
+        H.v('5. sans fichier d\'ancre : ok mais « non-ancre » est DIT', [nonAncre.json.ok, nonAncre.json.ancre], [true, 'non-ancre']);
+        const { ecrireAncre } = require('../mesures/ancrer-seau');
+        const ancreEcrite = await ecrireAncre({ seauId: juge.id, colFn: n => db.col(n), dossier: ancres });
+        H.v('5. l\'outil écrit l\'ancre (seauId, tête, empreinte du scellé) dans le dossier donné', [fs.existsSync(path.join(ancres, `${juge.id}.json`)), ancreEcrite.tete === scelle.tete], [true, true]);
+        H.v('5. avec l\'ancre : « ok »', (await get(sv, ADM, `/api/banc/seau/verifier?seau=${juge.id}`)).json.ancre, 'ok');
+        const fa = path.join(ancres, `${juge.id}.json`), brutA = fs.readFileSync(fa, 'utf8');
+        fs.writeFileSync(fa, brutA.replace(scelle.tete, 'c'.repeat(64)));
+        const diff = await get(sv, ADM, `/api/banc/seau/verifier?seau=${juge.id}`);
+        H.v('5. 🔑 une tête différente de l\'ancre : verifier n\'est plus ok, ancre « differente »', [diff.json.ok, diff.json.ancre, diff.json.problemes.some(p => p.cause === 'ancre')], [false, 'differente', true]);
+        let ecrase = null; try { await ecrireAncre({ seauId: juge.id, colFn: n => db.col(n), dossier: ancres }); } catch (e) { ecrase = e.code; }
+        H.v('5. l\'outil ne remplace jamais une ancre qui DIFFÈRE de la base (ANCRE_DIFFERENTE)', ecrase, 'ANCRE_DIFFERENTE');
+        fs.writeFileSync(fa, brutA);
+        const refait = await ecrireAncre({ seauId: juge.id, colFn: n => db.col(n), dossier: ancres });
+        H.v('5. réécrire l\'ancre identique : sans effet', refait.tete === scelle.tete, true);
+        // --relire-r2
+        const r2ok = await get(sv, ADM, `/api/banc/seau/verifier?seau=${juge.id}&relireR2=1`);
+        H.v('5. relire R2 : chaque objet relu et re-haché (photos + mesures), ok', [r2ok.json.ok, r2ok.json.objets > 0], [true, true]);
+        const cleR2 = (await db.col('banc_seau_photos').findOne({ scanId: scans[0], index: 1 })).cle;
+        await memoire.ecrire(cleR2, Buffer.from('octets changes'));
+        const r2ko = await get(sv, ADM, `/api/banc/seau/verifier?seau=${juge.id}&relireR2=1`);
+        H.v('5. 🔑 un objet R2 altéré : verifier --relire-r2 n\'est plus ok (cause objet-altere)', [r2ko.json.ok, r2ko.json.problemes.some(p => p.cause === 'objet-altere')], [false, true]);
+        await memoire.ecrire(cleR2, photos.b);
+        H.v('5. sans relire R2, l\'objet altéré n\'est pas vu (c\'est le coût de l\'option)', (await get(sv, ADM, `/api/banc/seau/verifier?seau=${juge.id}`)).json.ok, true);
+        // la même vérification hors de l'API (CLI), avec --relire-r2
+        const CLI = require('../mesures/verifier-seau');
+        const dits = [];
+        const connecter = async () => ({ colFn: n => db.col(n), fermer: async () => { } });
+        const envCli = { MONGODB_ESSAI_LECTURE_URI: 'mongodb://127.0.0.1:1/x', V2_BANC_BUCKET: 'b' };
+        const codeOk = await CLI.lancerCLI([`--base=test_scratch`, `--seau=${juge.id}`, '--relire-r2'], { env: envCli, connecter, stockage: { lire: k => memoire.lire(k) }, journal: l => dits.push(l), dossierAncres: ancres });
+        H.v('5. verifier-seau --relire-r2 : code 0, dit « ancre : ok » et le nombre d\'objets relus', [codeOk, /^ok /.test(dits[0]), /ancre : ok/.test(dits[0]), /objets relus : [1-9]/.test(dits[0])], [0, true, true, true]);
+        const sansAncre = [];
+        await CLI.lancerCLI([`--base=test_scratch`, `--seau=${juge.id}`], { env: envCli, connecter, journal: l => sansAncre.push(l), dossierAncres: path.join(ancres, 'vide') });
+        H.v('5. sans fichier d\'ancre, la CLI écrit « non ancré »', /non ancré/.test(sansAncre[0]), true);
+        H.v('5. la CLI refuse la base `test` et un argument inconnu', [await CLI.lancerCLI(['--base=test', `--seau=${juge.id}`], { env: envCli, connecter }), await CLI.lancerCLI(['--base=x', `--seau=${juge.id}`, '--force'], { env: envCli, connecter })], [1, 1]);
         H.v('5. un second juge : 409 (un seul juge existe)', (await post(sv, ADM, '/api/banc/seau/declarer', { nom: 'juge-bis', type: 'juge' })).statut, 409);
-        r = await post(sv, ADM, '/api/banc/seau/declarer', { nom: 'entrainement-1', type: 'entrainement', cible: 3, note: 'tamponnées' });
-        H.v('5. l\'entraînement se déclare après le scellé du juge : 201', [r.statut, r.json.seau.cible], [201, 3]);
+        r = await post(sv, ADM, '/api/banc/seau/declarer', { nom: 'entrainement-1', type: 'entrainement', cible: 5, note: 'tamponnées' });
+        H.v('5. l\'entraînement se déclare après le scellé du juge : 201', [r.statut, r.json.seau.cible], [201, 5]);
         entr = r.json.seau;
         const s = await db.col('banc_seaux').find({}).sort({ declareLe: 1 }).toArray();
         H.v('5. la chaîne des seaux : le second porte `prec` = l\'empreinte du premier', [s[0].prec, s[1].prec], ['0'.repeat(64), s[0].empreinte]);
@@ -282,11 +373,22 @@ const essayer = async (nom, f) => { try { await f(); } catch (e) { H.v(`${nom} (
     await essayer('entrainement', async () => {
         const u = (s, i) => `/api/banc/seau/photo?scanId=${s}&photo=${i}&seau=${entr.id}`;
         const e = [];
-        for (let i = 0; i < 3; i++) { const s = await semerScan(ADM); e.push(s); const r = await envoyer(sv, ADM, u(s, 0), await bruit(380 + i, 500)); H.v(`6. scan ${i + 1} de l'entraînement : rang ${i + 1}`, [r.statut, r.json.rang], [200, i + 1]); }
+        // rang 1-3 : des photos ordinaires ; rang 4 : une RE-PHOTO du dessin d'une photo du juge (autre taille, autre compression, aucune annonce) ; rang 5 : un tout autre dessin
+        const images = [await bruit(380, 500), await bruit(381, 500), await bruit(382, 500), await sharp(photos.a).resize(300, 420).jpeg({ quality: 50 }).toBuffer(), await blocs()];
+        for (let i = 0; i < 5; i++) { const s = await semerScan(ADM); e.push(s); const r = await envoyer(sv, ADM, u(s, 0), images[i]); H.v(`6. scan ${i + 1} de l'entraînement : rang ${i + 1} (sans annonce : permis hors du juge)`, [r.statut, r.json.rang], [200, i + 1]); }
         const plein = await envoyer(sv, ADM, u(await semerScan(ADM), 0), photos.a);
         H.v('6. au-delà de la cible : 409 seau-plein', [plein.statut, detail(plein)], [409, 'seau-plein']);
-        // la même annonce que dans le juge : repérée (fuite), pas écrite comme neuve silencieusement
+        const { distance } = require('../banc/dhash');
+        const dh = async i => (await db.col('banc_seau_photos').findOne({ scanId: e[i], index: 0 })).dhash;
+        const dj = (await db.col('banc_seau_photos').findOne({ scanId: scans[0], index: 0 })).dhash;
+        H.v('6. dHash : la re-photo est à ≤ 8 bits du juge, un autre dessin à plus de 8', [distance(await dh(3), dj) <= 8, distance(await dh(4), dj) > 8], [true, true]);
         entr.scans = e;
+        // un erratum n'existe que pour un juge SCELLÉ
+        H.v('6. un erratum sur un seau d\'entraînement : 409 pas-un-juge-scelle', detail(await post(sv, ADM, '/api/banc/seau/erratum', { scanId: e[0], idProduct: 2001, via: 'idProduct', motif: 'pas un juge du tout' })), 'pas-un-juge-scelle');
+        // hors juge, la règle d'avant tient : on réécrit, l'historique est gardé
+        await post(sv, ADM, '/api/banc/seau/verite', { scanId: e[1], idProduct: 2001, via: 'idProduct' });
+        const rr = await post(sv, ADM, '/api/banc/seau/verite', { scanId: e[1], idProduct: 2003, via: 'idProduct' });
+        H.v('6. hors juge : une vérité se réécrit (rev 2, historique gardé)', [rr.statut, rr.json.rev], [200, 2]);
     });
 
     // ══ 7. l'export rejouable ; le juge ne sert JAMAIS à l'entraînement
@@ -295,7 +397,9 @@ const essayer = async (nom, f) => { try { await f(); } catch (e) { H.v(`${nom} (
         const base = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-seau-'));
         const colFn = n => db.col(n);
         const stockage = { lire: k => memoire.lire(k) };
-        const refus = async (o) => { try { await exporterSeau({ colFn, stockage, base: 'test_scratch', ...o }); return 'a exporté'; } catch (e) { return e && e.code; } };
+        const envExport = { V2_EXPORT_RACINE: base };          // le dossier temporaire du système n'est plus une racine permise PAR DÉFAUT : la racine est nommée
+        const refus = async (o) => { try { await exporterSeau({ colFn, stockage, base: 'test_scratch', env: envExport, ...o }); return 'a exporté'; } catch (e) { return e && e.code; } };
+        H.v('7. 🔑 sans V2_EXPORT_RACINE, le dossier temporaire n\'est pas une racine permise : DOSSIER-REFUSE', await (async () => { try { await exporterSeau({ seauId: juge.id, usage: 'mesure', dossier: path.join(base, 'sans-racine'), colFn, stockage, base: 'test_scratch', env: {} }); return 'a exporté'; } catch (e) { return e.code; } })(), 'DOSSIER-REFUSE');
         H.v('7. usage absent : refusé', await refus({ seauId: juge.id, dossier: path.join(base, 'a') }), 'USAGE');
         H.v('7. usage inconnu : refusé', await refus({ seauId: juge.id, usage: 'autre', dossier: path.join(base, 'a2') }), 'USAGE');
         H.v('7. 🔑 un export d\'ENTRAÎNEMENT du juge (même scellé) : refusé JUGE_INTERDIT', await refus({ seauId: juge.id, usage: 'entrainement', dossier: path.join(base, 'b') }), 'JUGE_INTERDIT');
@@ -304,7 +408,7 @@ const essayer = async (nom, f) => { try { await f(); } catch (e) { H.v(`${nom} (
         H.v('7. un seau inconnu : refusé', await refus({ seauId: 'b'.repeat(16), usage: 'mesure', dossier: path.join(base, 'c') }), 'SEAU_INCONNU');
         // l'export de MESURE du juge scellé
         const sortieJ = path.join(base, 'juge');
-        const rj = await exporterSeau({ seauId: juge.id, usage: 'mesure', dossier: sortieJ, colFn, stockage, base: 'test_scratch' });
+        const rj = await exporterSeau({ seauId: juge.id, usage: 'mesure', dossier: sortieJ, colFn, stockage, base: 'test_scratch', env: envExport });
         const man = JSON.parse(fs.readFileSync(path.join(sortieJ, 'manifeste.json'), 'utf8')), lignes = JSON.parse(fs.readFileSync(path.join(sortieJ, 'lignes.json'), 'utf8'));
         H.v('7. export de mesure du juge : 4 lignes, chaîne ok, usage mesure', [rj.lignes, man.chaineOk, man.usage, man.format, man.seau.type, man.seau.etat], [4, true, 'mesure', 'banc-seau-v1', 'juge', 'scelle']);
         const l0 = lignes[0];
@@ -312,22 +416,38 @@ const essayer = async (nom, f) => { try { await f(); } catch (e) { H.v(`${nom} (
         H.v('7. les mesures du client sont dans l\'export', [!!l0.mesures, l0.mesures && l0.mesures.fichier && fs.existsSync(path.join(sortieJ, l0.mesures.fichier))], [true, true]);
         H.v('7. les photos exportées sont identiques aux octets reçus', l0.photos.map(p => Buffer.compare(fs.readFileSync(path.join(sortieJ, p.fichier)), p.index === 0 ? photos.a : p.index === 1 ? photos.b : photos.c) === 0), [true, true, true, true]);
         H.v('7. la ligne 4 : doublon d\'annonce noté', lignes[3].doublonDe, scans[2]);
-        H.v('7. une ligne sans vérité : verite null', lignes[3].verite, null);
+        H.v('7. la vérité EFFECTIVE d\'un juge porte ses errata : dernière valeur, valeur d\'origine et nombre', [lignes[2].verite.idProduct, lignes[2].verite.origine.idProduct, lignes[2].verite.errata.length, lignes[2].verite.errata[1].motif], [2005, 2001, 2, 'second erratum, corrige le premier']);
+        H.v('7. le manifeste dit le nombre d\'errata et la tête de chaîne', [man.errata, man.tete === (await db.col('banc_seaux').findOne({ _id: juge.id })).tete], [2, true]);
         H.v('7. le dossier de sortie existant : refusé (un export crée un dossier neuf)', await refus({ seauId: juge.id, usage: 'mesure', dossier: sortieJ }), 'DOSSIER-REFUSE');
-        H.v('7. un dossier sous un dossier d\'apports : refusé', await refus({ seauId: juge.id, usage: 'mesure', dossier: path.join(base, 'Logo FR', 'x') }), 'DOSSIER-REFUSE');
+        // un nom fabriqué que la garde de dossier reconnaît par sa forme (nom court 8.3), jamais le nom d'un vrai dossier du testeur
+        H.v('7. un nom court 8.3 : refusé', await refus({ seauId: juge.id, usage: 'mesure', dossier: path.join(base, 'ABCDEF~1', 'x') }), 'DOSSIER-REFUSE');
         // l'export d'ENTRAÎNEMENT du seau d'entraînement : exclut tout ce qui fuit du juge
-        const fuite = await semerScan(ADM);   // une copie du juge (même photo) rangée dans l'entraînement : impossible (plein), donc on l'écrit à la main comme le ferait une fuite
-        await db.col('banc_seaux').updateOne({ _id: entr.id }, { $set: { cible: 3 } });
         const l1 = await db.col('banc_seau_scans').findOne({ seauId: entr.id, rang: 1 });
         const phs = await db.col('banc_seau_photos').findOne({ scanId: l1.scanId, index: 0 });
-        await db.col('banc_seau_photos').updateOne({ _id: phs._id }, { $set: { sha256: sha(photos.a) } });   // la 1re photo de l'entraînement est celle du juge
-        await db.col('banc_seau_verites').insertOne({ _id: `${l1.scanId}:0`, seauId: entr.id, scanId: l1.scanId, carte: 0, idProduct: 2001, via: 'idProduct', candidatsVus: false, rev: 1, historique: [], saisieLe: new Date() });
+        await db.col('banc_seau_photos').updateOne({ _id: phs._id }, { $set: { sha256: sha(photos.a) } });   // la 1re photo de l'entraînement est celle du juge (même sha256)
         const sortieE = path.join(base, 'entr');
-        const re = await exporterSeau({ seauId: entr.id, usage: 'entrainement', dossier: sortieE, colFn, stockage, base: 'test_scratch' });
+        const re = await exporterSeau({ seauId: entr.id, usage: 'entrainement', dossier: sortieE, colFn, stockage, base: 'test_scratch', env: envExport, journal: () => { } });
         const manE = JSON.parse(fs.readFileSync(path.join(sortieE, 'manifeste.json'), 'utf8')), lignesE = JSON.parse(fs.readFileSync(path.join(sortieE, 'lignes.json'), 'utf8'));
-        H.v('7. export d\'entraînement : le scan qui porte une photo du juge est EXCLU et compté', [re.lignes, manE.exclusFuiteJuge, lignesE.map(l => l.rang)], [2, 1, [2, 3]]);
-        H.v('7. le manifeste dit l\'usage et que le juge n\'y est pas', [manE.usage, manE.seau.type], ['entrainement', 'entrainement']);
-        void fuite;
+        H.v('7. export d\'entraînement : sont EXCLUS le scan à photo du juge (sha256) et la RE-PHOTO (dHash ≤ 8) ; restent les 3 autres', [re.lignes, manE.exclusFuiteJuge, lignesE.map(l => l.rang)], [3, 2, [2, 3, 5]]);
+        H.v('7. le manifeste dit la cause de chaque exclusion', manE.exclusParCause, { sha256: 1, annonce: 0, dhash: 1 });
+        await db.col('banc_seau_photos').updateOne({ _id: phs._id }, { $set: { sha256: phs.sha256 } });          // la photo du rang 1 retrouve son vrai sha256 (la falsification n'était que pour la preuve ci-dessus)
+        H.v('7. le manifeste dit l\'usage et que le seau est d\'entraînement', [manE.usage, manE.seau.type], ['entrainement', 'entrainement']);
+        // 🔑 aucun juge déclaré : l'export d'entraînement REFUSE, sauf phrase de raison explicite (imprimée, gardée au manifeste)
+        const sansJugeCol = n => { const c = db.col(n); return n !== 'banc_seaux' ? c : { findOne: async (q, o) => (q && q.type === 'juge' ? null : c.findOne(q, o)), find: (q, o) => (q && q.type === 'juge' ? { toArray: async () => [] } : c.find(q, o)), countDocuments: (q, o) => c.countDocuments(q, o) }; };
+        H.v('7. 🔑 aucun juge : l\'export d\'entraînement refuse (JUGE_ABSENT)', await refus({ seauId: entr.id, usage: 'entrainement', dossier: path.join(base, 'sansjuge'), colFn: sansJugeCol }), 'JUGE_ABSENT');
+        H.v('7. une « raison » trop courte ne suffit pas', await refus({ seauId: entr.id, usage: 'entrainement', dossier: path.join(base, 'sansjuge'), colFn: sansJugeCol, sansJuge: 'ok' }), 'JUGE_ABSENT');
+        const dits = [];
+        const phrase = 'premier lot avant la déclaration du juge, accepté par l\'éditeur le 1/11';
+        await exporterSeau({ seauId: entr.id, usage: 'entrainement', dossier: path.join(base, 'sansjuge'), colFn: sansJugeCol, sansJuge: phrase, stockage, base: 'test_scratch', env: envExport, journal: l => dits.push(l) });
+        H.v('7. avec la phrase : exporté, la phrase est IMPRIMÉE et gardée au manifeste', [dits.some(l => l.includes(phrase)), JSON.parse(fs.readFileSync(path.join(base, 'sansjuge', 'manifeste.json'), 'utf8')).sansJuge], [true, phrase]);
+        // une ligne sans photo : marquée, absente de l'export
+        const sauvePh = await db.col('banc_seau_photos').find({ scanId: entr.scans[4] }).toArray();
+        await db.col('banc_seau_photos').deleteMany({ scanId: entr.scans[4] });
+        const sortieS = path.join(base, 'entr-sans-photo');
+        await exporterSeau({ seauId: entr.id, usage: 'entrainement', dossier: sortieS, colFn, stockage, base: 'test_scratch', env: envExport, journal: () => { } });
+        const manS = JSON.parse(fs.readFileSync(path.join(sortieS, 'manifeste.json'), 'utf8'));
+        H.v('7. une ligne SANS photo : absente de l\'export, comptée (sansPhoto)', [JSON.parse(fs.readFileSync(path.join(sortieS, 'lignes.json'), 'utf8')).map(l => l.rang), manS.sansPhoto], [[1, 2, 3], 1]);
+        await db.col('banc_seau_photos').insertMany(sauvePh);
         // l'export de mesure d'un juge OUVERT est refusé : on ne mesure pas un juge qui bouge
         await db.col('banc_seaux').updateOne({ _id: entr.id }, { $set: { etat: 'scelle' } });       // l'index n'admet qu'UN seau ouvert : on libère la place pour jouer le cas
         await db.col('banc_seaux').updateOne({ _id: juge.id }, { $set: { etat: 'ouvert' } });
@@ -345,6 +465,57 @@ const essayer = async (nom, f) => { try { await f(); } catch (e) { H.v(`${nom} (
     await essayer('garde dans le code', async () => {
         const src = fs.readFileSync(path.join(__dirname, '..', 'mesures', 'exporter-seau.js'), 'utf8');
         H.v('8. l\'export juge le TYPE lu en base (pas un argument de l\'appelant)', /JUGE_INTERDIT/.test(src) && /seau\.type\s*===\s*'juge'/.test(src), true);
+    });
+
+    // ══ 9. 🔑 L'ANCIEN CHEMIN CONNAÎT LE JUGE (relecture 1, C1) : ni l'étiquette, ni la ligne du banc, ni l'ancien export ne laissent passer un scan du juge
+    await essayer('ancien chemin', async () => {
+        const jugeScan = scans[1];
+        const svPanne = await monter(cfgOn, { scanDuJuge: async () => { throw Object.assign(new Error('illisible'), { code: 'LECTURE_HS' }); } });
+        let r = await post(sv, ADM, '/api/banc/etiquette', { scanId: jugeScan, carte: 0, verdict: 'juste', rev: 1 });
+        const apres = await db.col('analyses').findOne({ _id: new mongoose.Types.ObjectId(jugeScan) });
+        H.v('9. 🔑 /api/banc/etiquette sur un scan du JUGE : 409 scan-du-juge, aucune étiquette écrite', [r.statut, detail(r), apres.cartes[0].etiquetteAdmin], [409, 'scan-du-juge', undefined]);
+        const libre = await semerScan(ADM);
+        H.v('9. témoin : le même geste sur un scan hors du juge passe (200)', (await post(sv, ADM, '/api/banc/etiquette', { scanId: libre, carte: 0, verdict: 'juste', rev: 1 })).statut, 200);
+        const e1 = entr.scans[1];
+        H.v('9. témoin : un scan d\'un seau d\'entraînement s\'étiquette (200)', (await post(sv, ADM, '/api/banc/etiquette', { scanId: e1, carte: 0, verdict: 'juste', rev: 1 })).statut, 200);
+        const libre2 = await semerScan(ADM);
+        r = await post(svPanne, ADM, '/api/banc/etiquette', { scanId: libre2, carte: 0, verdict: 'juste', rev: 1 });
+        H.v('9. 🔑 échec FERMÉ : l\'état du juge ne se lit pas ⇒ refus (503), rien d\'écrit', [r.statut, (await db.col('analyses').findOne({ _id: new mongoose.Types.ObjectId(libre2) })).cartes[0].etiquetteAdmin], [503, undefined]);
+        await svPanne.fermer();
+
+        // le rédacteur de la ligne du banc : un scan du juge n'y entre jamais, même si une étiquette existe déjà
+        const { creerBanc } = require('../banc/routes');
+        const stockBanc = S.creerStockageMemoire();
+        const bancReel = creerBanc({ cfg: cfgOn, env: { V2_BANC_BUCKET: 'bucket-banc-test', V2_BANC_SEL: 'sel-x' }, stockage: stockBanc });
+        const cleBanc = n => `banc-reel/v2/${String(n).repeat(32)}.webp`;
+        await stockBanc.ecrire(cleBanc(1), Buffer.from('webp')); await stockBanc.ecrire(cleBanc(2), Buffer.from('webp'));
+        const etiqueter = async (scanId, cle) => db.col('analyses').updateOne({ _id: new mongoose.Types.ObjectId(scanId) }, { $set: { photoBanc: { cle, sha256: '9'.repeat(64) }, 'cartes.0.etiquetteAdmin': { verdict: 'juste', idProduct: 2001, rev: 1, le: new Date(), banc: 'en-attente' } } });
+        await etiqueter(jugeScan, cleBanc(1)); await etiqueter(libre, cleBanc(2));
+        const avant = await db.col('banc_lignes').countDocuments({});
+        H.v('9. 🔑 le rédacteur de la ligne du banc refuse un scan du juge (exclue-juge)', await bancReel.etiquetteAdmin({ scanId: jugeScan, carte: 0 }), 'exclue-juge');
+        H.v('9. …aucune ligne n\'est née ; témoin : un scan libre s\'écrit', [await db.col('banc_lignes').countDocuments({}) === avant, await bancReel.etiquetteAdmin({ scanId: libre, carte: 0 })], [true, 'ecrit']);
+
+        // l'ANCIEN EXPORT (exporter-banc-admin) exclut le juge par photoBanc (clé, sha256), par sha256 des photos d'origine, et par identifiant de ligne (sel)
+        const { exporterBancAdmin } = require('../mesures/exporter-banc-admin');
+        const base2 = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-ancien-'));
+        await db.col('banc_lignes').deleteMany({});
+        await etiqueter(scans[2], cleBanc(3));
+        const idLigne = (scanId, carte) => crypto.createHash('sha256').update(`${scanId}|${carte}|etiquette-admin|sel-x`).digest('hex');
+        const ligne = (id, cle, shaP) => ({ _id: id, source: 'etiquette-admin', etat: 'confirmee', verite: 2001, cleR2: cle, sha256: shaP, rev: 1, reponse: { statut: 'identifiee', idProduct: 2001, candidats: [], questionCode: null } });
+        await db.col('banc_lignes').insertMany([ligne('l1', cleBanc(3), '8'.repeat(64)), ligne('l2', cleBanc(4), sha(photos.a)), ligne(idLigne(scans[3], 0), cleBanc(5), '6'.repeat(64)), ligne('l4', cleBanc(6), '7'.repeat(64))]);
+        const stockage = { lire: async () => Buffer.from('webp') };
+        const envAncien = { V2_EXPORT_RACINE: base2, V2_BANC_SEL: 'sel-x' };
+        const ex = await exporterBancAdmin({ dossier: path.join(base2, 'ancien'), colFn: n => db.col(n), stockage, base: 'test_scratch', env: envAncien });
+        const manA = JSON.parse(fs.readFileSync(path.join(base2, 'ancien', 'manifeste.json'), 'utf8')), lignesA = JSON.parse(fs.readFileSync(path.join(base2, 'ancien', 'lignes.json'), 'utf8'));
+        H.v('9. 🔑 l\'ancien export : les 3 lignes du juge (clé photoBanc, sha256 d\'origine, identifiant salé) sont EXCLUES, la ligne innocente reste', [ex.lignes, lignesA.map(l => l.id), manA.exclusJuge], [1, ['l4'], 3]);
+        let code9 = null;
+        try { await exporterBancAdmin({ dossier: path.join(base2, 'ancien2'), colFn: n => (n === 'banc_seaux' ? { findOne: async () => { throw new Error('HS'); }, find: () => ({ toArray: async () => { throw new Error('HS'); } }) } : db.col(n)), stockage, base: 'test_scratch', env: envAncien }); } catch (e) { code9 = e.code; }
+        H.v('9. 🔑 échec FERMÉ : l\'état du juge ne se lit pas ⇒ l\'ancien export refuse (JUGE_ILLISIBLE) et n\'écrit rien', [code9, fs.existsSync(path.join(base2, 'ancien2'))], ['JUGE_ILLISIBLE', false]);
+
+        // les outils de mesure qui lisent des photos de banc (analyses.photoBanc) passent par la même garde
+        const outils = ['mesurer-etat-titre.js', 'mesurer-lecture-tampon.js', 'mesurer-marques-tampon.js', 'verifier-tampon-bout-en-bout.js'];
+        H.v('9. les 4 outils de mesure à photoBanc excluent le juge (juge-garde)', outils.map(f => /juge-garde/.test(fs.readFileSync(path.join(__dirname, '..', 'mesures', f), 'utf8'))), [true, true, true, true]);
+        fs.rmSync(base2, { recursive: true, force: true });
     });
 
     await sv.fermer(); await svOff.fermer();

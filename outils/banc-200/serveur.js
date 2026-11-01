@@ -77,9 +77,12 @@ function creerServeur({ apiBase = process.env.RM_API_BASE || ESSAI, jeton = proc
         try {
             if (!hotes().includes(String(req.headers.host || '').toLowerCase())) return json(res, 403, { success: false, erreur: { code: 'ORIGINE' } });
             if (req.headers.origin !== undefined && !origines().includes(req.headers.origin)) return json(res, 403, { success: false, erreur: { code: 'ORIGINE' } });
+            // une requête qu'un navigateur dit venir d'AILLEURS (une page tierce qui chargerait une photo avec notre jeton) : refusée ; l'absence de l'en-tête (curl, bancs, vieux navigateurs) n'est pas un refus
+            const site = req.headers['sec-fetch-site'];
+            if (site !== undefined && site !== 'same-origin' && site !== 'none') return json(res, 403, { success: false, erreur: { code: 'ORIGINE' } });
             const u = new URL(req.url, 'http://x'), chemin = u.pathname;
             if (req.method === 'GET' && (chemin === '/' || chemin === '/index.html')) return repondre(res, 200, fichier('page.html').toString('utf8').replace('__CSRF__', csrf), 'text/html; charset=utf-8');
-            if (req.method === 'GET' && chemin === '/app.js') return repondre(res, 200, fichier('app.js'), 'text/javascript; charset=utf-8');
+            if (req.method === 'GET' && (chemin === '/app.js' || chemin === '/controleur.js')) return repondre(res, 200, fichier(chemin.slice(1)), 'text/javascript; charset=utf-8');
             if (req.method === 'GET' && chemin === '/_etat') return json(res, 200, { success: true, jeton: Boolean(jetonAcces), api: base });
             if (req.method === 'POST' && chemin === '/_session') {
                 if (req.headers['x-rm-csrf'] !== csrf) return json(res, 403, { success: false, erreur: { code: 'ORIGINE' } });

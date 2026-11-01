@@ -19,10 +19,12 @@ const TYPES = Object.freeze(['juge', 'entrainement']);
 const CIBLE_JUGE = 200, CIBLE_MAX = 500, NOTE_MAX = 200, PHOTOS_MAX = 8, MESURES_OCTETS_MAX = 512 * 1024;
 const SCAN_FRAIS_MS = 15 * 60e3;
 const AUCUNE = Object.freeze(['pas-une-carte', 'hors-catalogue']);
-const VIA = Object.freeze(['url', 'idProduct', 'candidat']);
+const VIA = Object.freeze(['url', 'idProduct', 'candidat', 'manuel']);       // `manuel` : « pas une carte » / « hors catalogue » (aucun idProduct n'a été désigné)
 const GENESE = '0'.repeat(64);
 const EXT = Object.freeze({ 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' });
-const COLLECTIONS = Object.freeze({ seaux: 'banc_seaux', scans: 'banc_seau_scans', photos: 'banc_seau_photos', vues: 'banc_seau_vues', verites: 'banc_seau_verites', mesures: 'banc_seau_mesures' });
+const MOTIF_MIN = 5, MOTIF_MAX = 200;
+const cibleParDefaut = type => (type === 'juge' ? CIBLE_JUGE : CIBLE_MAX);
+const COLLECTIONS = Object.freeze({ seaux: 'banc_seaux', scans: 'banc_seau_scans', photos: 'banc_seau_photos', vues: 'banc_seau_vues', verites: 'banc_seau_verites', mesures: 'banc_seau_mesures', errata: 'banc_seau_errata' });
 
 // Les index qui GARANTISSENT les propriétés (un seul ouvert, un seul juge, une chaîne linéaire, un rang une fois) : créés à la première utilisation (createIndex est idempotent) ET listés dans modeles.js (INDEX_SEAU).
 const I = (c, nom, cle, opts = {}) => ({ c, nom, cle, opts: { name: nom, ...opts } });
@@ -36,7 +38,8 @@ const INDEX_SEAU = Object.freeze([
     I(COLLECTIONS.scans, 'banc_seau_scans_annonce', { annonce: 1 }, { partialFilterExpression: { annonce: { $type: 'string' } } }),
     I(COLLECTIONS.photos, 'banc_seau_photos_seau', { seauId: 1, scanId: 1 }), I(COLLECTIONS.photos, 'banc_seau_photos_sha', { sha256: 1 }),
     I(COLLECTIONS.vues, 'banc_seau_vues_scan', { scanId: 1, carte: 1 }),
-    I(COLLECTIONS.verites, 'banc_seau_verites_seau', { seauId: 1, scanId: 1 })
+    I(COLLECTIONS.verites, 'banc_seau_verites_seau', { seauId: 1, scanId: 1 }),
+    I(COLLECTIONS.errata, 'banc_seau_errata_n', { seauId: 1, n: 1 }, { unique: true }), I(COLLECTIONS.errata, 'banc_seau_errata_scan', { scanId: 1 })
 ]);
 
 const erreur = (code, detail, statut) => Object.assign(new Error(detail || code), { code, detail, statut });
@@ -51,13 +54,20 @@ const idOk = n => Number.isSafeInteger(n) && n > 0;
 const empreinteSeau = s => hacher({ prec: s.prec, id: s._id, nom: s.nom, type: s.type, cible: s.cible, note: s.note ?? null, declareLe: iso(s.declareLe), declarePar: s.declarePar });
 const empreinteLigne = l => hacher({ prec: l.prec, seauId: l.seauId, rang: l.rang, scanId: l.scanId, posteLe: iso(l.posteLe), scanCreeLe: iso(l.scanCreeLe), annonce: l.annonce ?? null });
 const empreintePhotos = photos => sha256(photos.map(p => `${p.scanId}:${p.index}:${p.sha256}`).sort().join('\n'));
-const empreinteScellee = s => hacher({ seauEmpreinte: s.empreinte, tete: s.tete, n: s.n, photosEmpreinte: s.photosEmpreinte, scelleLe: iso(s.scelleLe) });
+// le scellé couvre aussi les VÉRITÉS du juge (veritesEmpreinte) : `undefined` pour un seau qui n'en porte pas (l'empreinte ne change pas pour un seau non juge)
+const empreinteScellee = s => hacher({ seauEmpreinte: s.empreinte, tete: s.tete, n: s.n, photosEmpreinte: s.photosEmpreinte, scelleLe: iso(s.scelleLe), ...(s.veritesEmpreinte ? { veritesEmpreinte: s.veritesEmpreinte } : {}) });
+const empreinteVerites = verites => sha256(verites.map(v => `${v.scanId}:${v.carte}:${v.idProduct ?? ''}|${v.aucune ?? ''}:${v.rev}`).sort().join('\n'));
+const valeurDe = v => ({ idProduct: v.idProduct ?? null, aucune: v.aucune ?? null });
+// un erratum est une maille d'une SECONDE chaîne, accrochée à l'empreinte du scellé : il garde l'ancienne valeur, la nouvelle, la date et le motif
+const empreinteErratum = e => hacher({ prec: e.prec, seauId: e.seauId, n: e.n, scanId: e.scanId, carte: e.carte, ancien: canon(valeurDe(e.ancien)), nouveau: canon(valeurDe(e.nouveau)), via: e.via, motif: e.motif, le: iso(e.le) });
 
 /**
- * Relit la chaîne d'un seau SANS rien supposer : empreinte du seau, lien au seau précédent, chaque maille (rang contigu, lien, empreinte), puis — si scellé — tête, effectif, photos, scellé.
- * @returns {Promise<{ok:boolean, lignes:number, tete:string|null, problemes:{rang?:number, cause:string}[]}>}
+ * Relit la chaîne d'un seau SANS rien supposer : empreinte du seau, lien au seau précédent, chaque maille (rang contigu, lien, empreinte), puis — si scellé — tête, effectif, photos, scellé ; pour un juge scellé, aussi les vérités et la
+ * chaîne des errata. `ancre` (fonction seauId → fichier d'ancre | null) compare la tête à l'ancre versionnée HORS de la base ; `stockage` + `relireR2` relit chaque objet du bucket et recalcule son sha256.
+ * 🔑 Cette chaîne prouve sa COHÉRENCE INTERNE ; seule l'ancre (hors base) prouve qu'elle n'a pas été réécrite en entier : « non-ancre » est dit, jamais tu.
+ * @returns {Promise<{ok:boolean, lignes:number, tete:string|null, errata:number, ancre:string, objets:number, problemes:object[]}>}
  */
-async function verifierChaineSeau(colFn, seauId) {
+async function verifierChaineSeau(colFn, seauId, { ancre = null, stockage = null, relireR2 = false } = {}) {
     const seau = await colFn(COLLECTIONS.seaux).findOne({ _id: seauId });
     if (!seau) throw erreur('CODE_INVALIDE', 'seau-inconnu', 404);
     const problemes = [];
@@ -82,11 +92,44 @@ async function verifierChaineSeau(colFn, seauId) {
         const photos = await colFn(COLLECTIONS.photos).find({ seauId }).toArray();
         if (seau.photosEmpreinte !== empreintePhotos(photos)) problemes.push({ cause: 'photos' });
         if (seau.empreinteScellee !== empreinteScellee(seau)) problemes.push({ cause: 'scelle' });
+    } else if (seau.etat === 'scellement') problemes.push({ cause: 'scellement-inacheve' });
+    // les vérités d'un juge scellé et la chaîne de ses errata
+    const errata = await colFn(COLLECTIONS.errata).find({ seauId }).sort({ n: 1 }).toArray();
+    if (seau.etat === 'scelle' && seau.type === 'juge') {
+        const verites = await colFn(COLLECTIONS.verites).find({ seauId }).toArray();
+        if (seau.veritesEmpreinte !== empreinteVerites(verites)) problemes.push({ cause: 'verites' });
+        let precE = seau.empreinteScellee, nE = 1;
+        for (const e of errata) {
+            if (e.n !== nE || e.prec !== precE || e.empreinte !== empreinteErratum(e)) { problemes.push({ cause: 'erratum', n: e.n }); }
+            precE = e.empreinte; nE = e.n + 1;
+        }
+    } else if (errata.length) problemes.push({ cause: 'erratum', n: errata[0].n });       // un erratum hors d'un juge scellé n'a pas lieu d'être
+    // l'ancre, hors de la base
+    let etatAncre = 'sans-objet';
+    if (seau.etat === 'scelle') {
+        const a = ancre ? await ancre(seauId) : null;
+        if (!a) etatAncre = 'non-ancre';
+        else if (a.tete === seau.tete && a.empreinteScellee === seau.empreinteScellee && (a.veritesEmpreinte ?? null) === (seau.veritesEmpreinte ?? null) && a.n === seau.n) etatAncre = 'ok';
+        else { etatAncre = 'differente'; problemes.push({ cause: 'ancre' }); }
     }
-    return { ok: problemes.length === 0, lignes: lignes.length, tete, problemes };
+    // chaque objet du bucket relu et re-haché (coûteux : une lecture par objet)
+    let objets = 0;
+    if (relireR2) {
+        if (!stockage || typeof stockage.lire !== 'function') problemes.push({ cause: 'stockage-absent' });
+        else {
+            const docs = [...await colFn(COLLECTIONS.photos).find({ seauId }).toArray(), ...await colFn(COLLECTIONS.mesures).find({ seauId }).toArray()];
+            for (const d of docs) {
+                objets++;
+                let b = null; try { b = await stockage.lire(d.cle); } catch { /* absent */ }
+                if (!Buffer.isBuffer(b)) problemes.push({ cause: 'objet-absent', scanId: d.scanId, index: d.index ?? null });
+                else if (sha256(b) !== d.sha256) problemes.push({ cause: 'objet-altere', scanId: d.scanId, index: d.index ?? null });
+            }
+        }
+    }
+    return { ok: problemes.length === 0, lignes: lignes.length, tete, errata: errata.length, ancre: etatAncre, objets, problemes };
 }
 
-function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = process.env, horloge = () => new Date(), catalogue = null } = {}) {
+function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = process.env, horloge = () => new Date(), catalogue = null, ancresDir = require('./ancre').DOSSIER } = {}) {
     const col = n => colFn(COLLECTIONS[n]);
     const analyses = () => colFn('analyses');
     let indexes = null, stockagePret = null;
@@ -106,7 +149,7 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
 
     const vue = async s => ({ id: s._id, nom: s.nom, type: s.type, cible: s.cible, note: s.note ?? null, declareLe: s.declareLe, empreinte: s.empreinte, prec: s.prec, etat: s.etat,
         n: s.etat === 'scelle' ? s.n : await col('scans').countDocuments({ seauId: s._id }),
-        ...(s.etat === 'scelle' ? { scelleLe: s.scelleLe, tete: s.tete, photosEmpreinte: s.photosEmpreinte, empreinteScellee: s.empreinteScellee } : {}) });
+        ...(s.etat === 'scelle' ? { scelleLe: s.scelleLe, tete: s.tete, photosEmpreinte: s.photosEmpreinte, empreinteScellee: s.empreinteScellee, ...(s.veritesEmpreinte ? { veritesEmpreinte: s.veritesEmpreinte } : {}) } : {}) });
 
     async function courant() { await preparer(); const s = await col('seaux').findOne({ etat: 'ouvert' }); return s ? vue(s) : null; }
 
@@ -115,11 +158,12 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
         if (typeof nom !== 'string' || !FORME_NOM.test(nom)) throw erreur('ENTREE', 'nom');
         if (!TYPES.includes(type)) throw erreur('ENTREE', 'type');
         let c = cible;
-        if (type === 'juge') { if (c !== undefined && c !== CIBLE_JUGE) throw erreur('ENTREE', 'cible-juge'); c = CIBLE_JUGE; }
-        else { if (c === undefined) c = CIBLE_MAX; if (!Number.isSafeInteger(c) || c < 1 || c > CIBLE_MAX) throw erreur('ENTREE', 'cible'); }
+        // la cible est DÉCLARÉE (200 par défaut pour le juge, 500 pour un entraînement) : on ne scelle pas un juge sous sa cible
+        if (c === undefined) c = cibleParDefaut(type);
+        if (!Number.isSafeInteger(c) || c < 1 || c > CIBLE_MAX) throw erreur('ENTREE', 'cible');
         if (note !== undefined && note !== null && (typeof note !== 'string' || note.length > NOTE_MAX)) throw erreur('ENTREE', 'note');
         if (typeof par !== 'string' || !par) throw erreur('ENTREE', 'declarant');
-        if (await col('seaux').findOne({ etat: 'ouvert' })) throw erreur('CONFLIT', 'seau-ouvert');
+        if (await col('seaux').findOne({ etat: { $in: ['ouvert', 'scellement'] } })) throw erreur('CONFLIT', 'seau-ouvert');
         if (await col('seaux').findOne({ nom })) throw erreur('CONFLIT', 'nom-pris');
         if (type === 'juge' && await col('seaux').findOne({ type: 'juge' })) throw erreur('CONFLIT', 'juge-existe');
         const dernier = await col('seaux').find({}).sort({ declareLe: -1 }).limit(1).toArray();
@@ -136,14 +180,42 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
         const s = await col('seaux').findOne({ _id: seauId });
         if (!s) throw erreur('CODE_INVALIDE', 'seau-inconnu', 404);
         if (s.etat === 'scelle') throw erreur('CONFLIT', 'deja-scelle');
-        const lignes = await col('scans').find({ seauId }).sort({ rang: 1 }).toArray();
-        if (!lignes.length) throw erreur('CONFLIT', 'seau-vide');
-        const photos = await col('photos').find({ seauId }).toArray();
-        const fin = { etat: 'scelle', scelleLe: horloge(), tete: lignes[lignes.length - 1].empreinte, n: lignes.length, photosEmpreinte: empreintePhotos(photos) };
-        fin.empreinteScellee = empreinteScellee({ ...s, ...fin });
-        const r = await col('seaux').updateOne({ _id: seauId, etat: 'ouvert' }, { $set: fin });
-        if (!r || r.matchedCount !== 1) throw erreur('CONFLIT', 'deja-scelle');
-        return vue({ ...s, ...fin });
+        // 🔑 SCELLÉ ATOMIQUE : (1) l'état passe de « ouvert » à « scellement » par une mise à jour conditionnelle — dès lors plus aucune écriture n'entre (cadre() ne sert que l'état « ouvert ») ; (2) on calcule ;
+        // (3) on relit les effectifs après une courte pause (une écriture déjà passée par cadre() peut finir) et on recommence si quelque chose a bougé ; (4) l'état passe de « scellement » à « scelle » par une
+        // mise à jour conditionnelle. Un refus rend l'état « ouvert » : un contrôle manqué ne fige rien.
+        const pris = await col('seaux').updateOne({ _id: seauId, etat: { $in: ['ouvert', 'scellement'] } }, { $set: { etat: 'scellement' } });
+        if (!pris || pris.matchedCount !== 1) throw erreur('CONFLIT', 'deja-scelle');
+        const rendre = async e => { await col('seaux').updateOne({ _id: seauId, etat: 'scellement' }, { $set: { etat: 'ouvert' } }); throw e; };
+        try {
+            for (let essai = 0; essai < 5; essai++) {
+                const lignes = await col('scans').find({ seauId }).sort({ rang: 1 }).toArray();
+                if (!lignes.length) await rendre(erreur('CONFLIT', 'seau-vide'));
+                if (s.type === 'juge' && lignes.length < s.cible) await rendre(erreur('CONFLIT', 'sous-cible'));
+                const photos = await col('photos').find({ seauId }).toArray();
+                const avecPhoto0 = new Set(photos.filter(p => p.index === 0).map(p => p.scanId));
+                if (lignes.some(l => !avecPhoto0.has(l.scanId))) await rendre(erreur('CONFLIT', 'ligne-sans-photo'));
+                const fin = { etat: 'scelle', scelleLe: horloge(), tete: lignes[lignes.length - 1].empreinte, n: lignes.length, photosEmpreinte: empreintePhotos(photos) };
+                if (s.type === 'juge') {
+                    // le juge ne se scelle que complètement étiqueté, et le scellé couvre les vérités
+                    const verites = await col('verites').find({ seauId }).toArray();
+                    const ans = await analyses().find({ _id: { $in: lignes.map(l => oid(l.scanId)) } }, { projection: { cartes: 1 } }).toArray();
+                    const attendues = ans.reduce((n, a) => n + (Array.isArray(a.cartes) ? a.cartes.length : 0), 0);
+                    if (ans.length !== lignes.length || verites.length !== attendues) await rendre(erreur('CONFLIT', 'verites-incompletes'));
+                    fin.veritesEmpreinte = empreinteVerites(verites);
+                }
+                fin.empreinteScellee = empreinteScellee({ ...s, ...fin });
+                await new Promise(r => setTimeout(r, 40));
+                const [n2, p2] = [await col('scans').countDocuments({ seauId }), await col('photos').countDocuments({ seauId })];
+                if (n2 !== lignes.length || p2 !== photos.length) continue;
+                const r = await col('seaux').updateOne({ _id: seauId, etat: 'scellement' }, { $set: fin });
+                if (!r || r.matchedCount !== 1) throw erreur('CONFLIT', 'deja-scelle');
+                return vue({ ...s, ...fin });
+            }
+            return await rendre(erreur('CONFLIT', 'ecritures-en-cours'));
+        } catch (e) {
+            if (!e || !e.detail) { try { await col('seaux').updateOne({ _id: seauId, etat: 'scellement' }, { $set: { etat: 'ouvert' } }); } catch { /* le verifier dira « scellement-inacheve » */ } }
+            throw e;
+        }
     }
 
     // Le seau EN COURS et le scan, pour toute écriture : le client DIT quel seau il croit en cours (jamais déduit d'un état périmé).
@@ -194,15 +266,18 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
             // un scan NEUF : né après la déclaration du seau, et frais — jamais rattaché après coup
             if (!(an.creeLe instanceof Date) || an.creeLe < seau.declareLe) throw erreur('CONFLIT', 'scan-avant-seau');
             if (horloge().getTime() - an.creeLe.getTime() > SCAN_FRAIS_MS) throw erreur('CONFLIT', 'scan-perime');
+            // dans un JUGE, l'empreinte d'annonce est OBLIGATOIRE (sans elle la parade contre la fuite du juge vers l'entraînement serait facultative côté client)
+            if (seau.type === 'juge' && !annonce) throw erreur('ENTREE', 'annonce-obligatoire');
         } else if (ligne.porteur !== porteur) throw erreur('CODE_INVALIDE', 'scan-introuvable', 404);
         const sha = sha256(octets), cle = S.cleSeau(seau._id, sha, ext);
         const id = `${scanId}:${index}`;
         const deja = await col('photos').findOne({ _id: id });
         if (deja) { if (deja.sha256 !== sha) throw erreur('CONFLIT', 'photo-differente'); return { etat: 'deja', rang: ligne ? ligne.rang : null, seauId: seau._id }; }
         const s = await stock();
+        let dh = null; try { dh = await require('./dhash').dhash(octets); } catch { /* sans dHash : l'export le recalcule depuis l'objet, ou refuse */ }
         if (!ligne) ligne = await creerLigne(seau, an, scanId, porteur, annonce);
         await s.ecrire(cle, octets);
-        try { await col('photos').insertOne({ _id: id, seauId: seau._id, scanId, index, sha256: sha, octets: octets.length, type, cle, recuLe: horloge() }); }
+        try { await col('photos').insertOne({ _id: id, seauId: seau._id, scanId, index, sha256: sha, octets: octets.length, type, cle, dhash: dh, recuLe: horloge() }); }
         catch (e) {
             if (e && e.code === 11000) { const x = await col('photos').findOne({ _id: id }); if (x && x.sha256 === sha) return { etat: 'deja', rang: ligne.rang, seauId: seau._id }; throw erreur('CONFLIT', 'photo-differente'); }
             throw e;
@@ -284,6 +359,16 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
 
     /** La vérité d'une carte d'un scan rangé. `candidatsVus` est CALCULÉ ici (une vue enregistrée pour ce scan et cette carte) : le client ne le déclare jamais. */
     async function saisirVerite({ scanId, carte = 0, idProduct, aucune, via, porteur }) {
+        const p = await preparerVerite({ scanId, carte, idProduct, aucune, via, porteur });
+        // 🔑 un JUGE scellé (ou en cours de scellement) ne reçoit plus AUCUNE vérité : une erreur humaine s'ajoute en ERRATUM (ajouterErratum), jamais par réécriture
+        const seau = await col('seaux').findOne({ _id: p.ligne.seauId });
+        if (!seau) throw erreur('CONFLIT', 'seau-illisible');
+        if (seau.type === 'juge' && seau.etat !== 'ouvert') throw erreur('CONFLIT', 'juge-scelle');
+        return ecrireVerite(p);
+    }
+
+    /** Les contrôles COMMUNS à une vérité et à un erratum (une seule définition) : la ligne du scan, la forme, la carte, le candidat montré, le catalogue, la trace des vues. */
+    async function preparerVerite({ scanId, carte = 0, idProduct, aucune, via, porteur }) {
         const ligne = await ligneDe(scanId, porteur);
         if (!Number.isSafeInteger(carte) || carte < 0) throw erreur('ENTREE', 'carte');
         if (!VIA.includes(via)) throw erreur('ENTREE', 'via');
@@ -298,8 +383,12 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
             let table; try { table = await catalogueDe().lire([idProduct]); } catch (e) { console.error(`❌ [v2 banc-seau] catalogue (${(e && (e.code || e.name)) || 'erreur'})`); throw erreur('INDISPONIBLE', 'catalogue', 503); }
             if (!(table instanceof Map) || !table.has(idProduct)) throw erreur('ENTREE', 'id-product-inconnu', 422);
         }
-        const candidatsVus = vues.length > 0, id = `${scanId}:${carte}`, now = horloge();
-        const contenu = { idProduct: idProduct ?? null, aucune: aucune ?? null, via, candidatsVus, vuesN: vues.length, saisieLe: now };
+        return { ligne, scanId, carte, idProduct: idProduct ?? null, aucune: aucune ?? null, via, candidatsVus: vues.length > 0, vuesN: vues.length };
+    }
+
+    async function ecrireVerite({ ligne, scanId, carte, idProduct, aucune, via, candidatsVus, vuesN }) {
+        const id = `${scanId}:${carte}`, now = horloge();
+        const contenu = { idProduct, aucune, via, candidatsVus, vuesN, saisieLe: now };
         for (let essai = 0; essai < 3; essai++) {
             const e = await col('verites').findOne({ _id: id });
             if (!e) {
@@ -313,7 +402,36 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
         throw erreur('CONFLIT', 'concurrence');
     }
 
-    return { preparer, courant, declarer, sceller, enregistrerPhoto, enregistrerMesures, aEtiqueter, lirePhoto, candidats, saisirVerite, verifierChaine: seauId => verifierChaineSeau(colFn, seauId), cadre };
+    /**
+     * L'ERRATUM : la seule façon de corriger la vérité d'un juge SCELLÉ. Une maille de plus dans la chaîne des errata (accrochée à l'empreinte du scellé) : elle garde l'ancienne valeur, la nouvelle, la date et le motif.
+     * La vérité d'origine n'est jamais réécrite ; la valeur EFFECTIVE est celle du dernier erratum (l'export la rend avec la liste des errata).
+     */
+    async function ajouterErratum({ scanId, carte = 0, idProduct, aucune, via, motif, porteur }) {
+        const m = typeof motif === 'string' ? motif.trim() : '';
+        if (m.length < MOTIF_MIN || m.length > MOTIF_MAX) throw erreur('ENTREE', 'motif');
+        const p = await preparerVerite({ scanId, carte, idProduct, aucune, via, porteur });
+        const seau = await col('seaux').findOne({ _id: p.ligne.seauId });
+        if (!seau || seau.type !== 'juge' || seau.etat !== 'scelle') throw erreur('CONFLIT', 'pas-un-juge-scelle');
+        const base = await col('verites').findOne({ _id: `${scanId}:${p.carte}` });
+        if (!base) throw erreur('CONFLIT', 'verite-absente');
+        for (let essai = 0; essai < 4; essai++) {
+            const dernier = (await col('errata').find({ seauId: seau._id }).sort({ n: -1 }).limit(1).toArray())[0] || null;
+            const duScan = (await col('errata').find({ seauId: seau._id, scanId, carte: p.carte }).sort({ n: -1 }).limit(1).toArray())[0] || null;
+            const e = { _id: `${seau._id}:${dernier ? dernier.n + 1 : 1}`, seauId: seau._id, n: dernier ? dernier.n + 1 : 1, scanId, carte: p.carte,
+                ancien: duScan ? valeurDe(duScan.nouveau) : valeurDe(base), nouveau: { idProduct: p.idProduct, aucune: p.aucune }, via, candidatsVus: p.candidatsVus, motif: m, le: horloge(), prec: dernier ? dernier.empreinte : seau.empreinteScellee };
+            e.empreinte = empreinteErratum(e);
+            try { await col('errata').insertOne(e); return { erratum: e.n }; }
+            catch (x) { if (x && x.code === 11000) continue; throw x; }
+        }
+        throw erreur('CONFLIT', 'concurrence');
+    }
+
+    async function verifierChaine(seauId, { relireR2 = false } = {}) {
+        await preparer();
+        return verifierChaineSeau(colFn, seauId, { ancre: id => require('./ancre').lireAncre(id, ancresDir), ...(relireR2 ? { relireR2: true, stockage: await stock() } : {}) });
+    }
+
+    return { preparer, courant, declarer, sceller, enregistrerPhoto, enregistrerMesures, aEtiqueter, lirePhoto, candidats, saisirVerite, ajouterErratum, verifierChaine, cadre };
 }
 
-module.exports = { creerSeaux, verifierChaineSeau, empreintePhotos, INDEX_SEAU, COLLECTIONS, TYPES, AUCUNE, VIA, CIBLE_JUGE, CIBLE_MAX, SCAN_FRAIS_MS, PHOTOS_MAX, MESURES_OCTETS_MAX, FORME_ID, FORME_SEAU, FORME_SHA, erreur };
+module.exports = { creerSeaux, verifierChaineSeau, empreintePhotos, empreinteVerites, empreinteScellee, cibleParDefaut, INDEX_SEAU, COLLECTIONS, TYPES, AUCUNE, VIA, CIBLE_JUGE, CIBLE_MAX, SCAN_FRAIS_MS, PHOTOS_MAX, MESURES_OCTETS_MAX, FORME_ID, FORME_SEAU, FORME_SHA, erreur };

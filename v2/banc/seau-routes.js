@@ -51,8 +51,8 @@ function monter(router, cfg, seaux) {
     });
     router.get('/api/banc/seau/verifier', ...base, async (req, res) => {
         const q = req.query || {};
-        if (!aucunAutre(q, ['seau']) || typeof q.seau !== 'string' || !FORME_SEAU.test(q.seau)) return refuse(res, 'seau-id');
-        try { return res.status(200).json({ success: true, ...await seaux.verifierChaine(q.seau) }); } catch (e) { return repondre(res, e, 'verifier'); }
+        if (!aucunAutre(q, ['seau', 'relireR2']) || typeof q.seau !== 'string' || !FORME_SEAU.test(q.seau) || (q.relireR2 !== undefined && q.relireR2 !== '1')) return refuse(res, 'seau-id');
+        try { return res.status(200).json({ success: true, ...await seaux.verifierChaine(q.seau, { relireR2: q.relireR2 === '1' }) }); } catch (e) { return repondre(res, e, 'verifier'); }
     });
     router.get('/api/banc/seau/a-etiqueter', ...base, async (req, res) => {
         const q = req.query || {};
@@ -77,6 +77,13 @@ function monter(router, cfg, seaux) {
         const b = req.body;
         if (!cleStr(b, ['scanId', 'carte', 'idProduct', 'aucune', 'via']) || typeof b.scanId !== 'string' || !FORME_ID.test(b.scanId)) return refuse(res, 'corps');
         try { return res.status(200).json({ success: true, ...await seaux.saisirVerite({ scanId: b.scanId, carte: b.carte === undefined ? 0 : b.carte, idProduct: b.idProduct, aucune: b.aucune, via: b.via, porteur: porteurDe(req) }) }); } catch (e) { return repondre(res, e, 'verite'); }
+    });
+
+    // L'ERRATUM : la seule correction d'une vérité d'un juge SCELLÉ ; ajouté à la chaîne, jamais une réécriture (seau.js).
+    router.post('/api/banc/seau/erratum', ...base, async (req, res) => {
+        const b = req.body;
+        if (!cleStr(b, ['scanId', 'carte', 'idProduct', 'aucune', 'via', 'motif']) || typeof b.scanId !== 'string' || !FORME_ID.test(b.scanId)) return refuse(res, 'corps');
+        try { return res.status(200).json({ success: true, ...await seaux.ajouterErratum({ scanId: b.scanId, carte: b.carte === undefined ? 0 : b.carte, idProduct: b.idProduct, aucune: b.aucune, via: b.via, motif: b.motif, porteur: porteurDe(req) }) }); } catch (e) { return repondre(res, e, 'erratum'); }
     });
 
     // ── les corps BINAIRES : la même discipline que POST /api/banc/photo — tout est jugé AVANT de lire un octet du corps

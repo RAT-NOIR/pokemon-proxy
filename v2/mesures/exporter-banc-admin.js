@@ -137,6 +137,11 @@ async function exporterBancAdmin({ dossier, colFn, stockage, base, realpath = fs
     // le dossier de sortie est jugé ICI, puis JUSTE AVANT chaque écriture (la course : un dossier vide au premier jugement qui devient un lien pendant l'export)
     const juge = () => jugerSortie(dossier, { realpath, lstat, env, tmpdir });
     if (typeof colFn !== 'function' || !stockage || typeof stockage.lire !== 'function') throw erreur('ENTREE', 'lecture de la base et du bucket requise');
+    // 🔑 BANC-200 (relecture 1, C1) : LE JUGE NE SORT JAMAIS PAR CETTE VOIE. Les lignes `banc_lignes` n'ont pas de scanId : on exclut par ce qu'elles portent — la clé et le sha256 de la photo `photoBanc` des scans du juge, le sha256
+    // des photos d'origine du juge, et l'identifiant de ligne que ses scans auraient (avec V2_BANC_SEL). L'état du juge se lit AVANT toute écriture ; s'il ne se lit pas, l'export REFUSE (JUGE_ILLISIBLE), jamais ne passe.
+    let J;
+    try { J = await require('../banc/juge-garde').etatDuJuge(colFn, { sel: typeof env.V2_BANC_SEL === 'string' && env.V2_BANC_SEL ? env.V2_BANC_SEL : null }); }
+    catch (e) { throw erreur('JUGE_ILLISIBLE', 'l\'état du juge ne se lit pas : l\'export refuse'); }
     juge();
     creerDossierNeuf(dossier, mkdir);
     juge();
@@ -144,8 +149,9 @@ async function exporterBancAdmin({ dossier, colFn, stockage, base, realpath = fs
     const lues = new Map();        // clé -> true (écrite) | false (illisible)
     const lignes = [];
     let sansPhoto = 0;
-    let exclues = 0;
+    let exclues = 0, exclusJuge = 0;
     for (const l of brutes) {
+        if (J.existe && (J.photoBanc.cles.has(l.cleR2) || J.photoBanc.shas.has(l.sha256) || J.shas.has(l.sha256) || J.idsLigne.has(String(l._id)))) { exclusJuge++; continue; }
         // MODELE-VISUEL-API (tour 2, M6) : une ligne qui porte le marqueur du vecteur de l'extension n'est jamais exportée (aucun écrivain actuel n'en pose : la règle est là pour le prochain)
         if (l.empreinteExtension) { exclues++; continue; }
         let photo = null;
@@ -174,7 +180,7 @@ async function exporterBancAdmin({ dossier, colFn, stockage, base, realpath = fs
     fs.mkdirSync(path.join(dossier, 'photos'), { recursive: true });
     const photos = [...lues.values()].filter(Boolean).length;
     ecrireDans(dossier, 'lignes.json', JSON.stringify(lignes, null, 1), juge);
-    ecrireDans(dossier, 'manifeste.json', JSON.stringify({ format: FORMAT, base, lignes: lignes.length, photos, sansPhoto, exclues, etiquettesEnAttente: enAttente, source: 'etiquette-admin', exporteLe: new Date().toISOString().slice(0, 10) }, null, 1), juge);
+    ecrireDans(dossier, 'manifeste.json', JSON.stringify({ format: FORMAT, base, lignes: lignes.length, photos, sansPhoto, exclues, exclusJuge, etiquettesEnAttente: enAttente, source: 'etiquette-admin', exporteLe: new Date().toISOString().slice(0, 10) }, null, 1), juge);
     return { lignes: lignes.length, photos, sansPhoto };
 }
 

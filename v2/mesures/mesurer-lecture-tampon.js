@@ -68,7 +68,8 @@ async function principal() {
     const corr = new Map(CORR.corrections.map(x => [`${x.scanId}:${x.carte}`, x.nouveau]));
     const REGLAGE = new Set(require('C:/Users/Yung/rat-market-travail/api/langue-decisive/resultats-final.json').lignes.map(l => l.cle));
     const SOIR = new Date('2026-10-17T16:00:00Z');
-    const A = await db.collection('analyses').find({ 'photoBanc.cle': { $type: 'string' } }, { projection: { cartes: 1, photoBanc: 1, creeLe: 1 } }).toArray();
+    // BANC-200 : jamais une photo du JUGE (juge-garde ; l'état du juge illisible arrête la mesure)
+    const A = await require('../banc/juge-garde').sansJuge(n => db.collection(n), await db.collection('analyses').find({ 'photoBanc.cle': { $type: 'string' } }, { projection: { cartes: 1, photoBanc: 1, creeLe: 1 } }).toArray());
     const lignes = [];
     for (const a of A) {
         if (a.cartes.length !== 1) continue;                                       // une photo = une carte (les lots partagent la photo)

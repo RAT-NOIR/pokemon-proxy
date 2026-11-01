@@ -67,7 +67,8 @@ async function principal() {
 
     // 1. les scans du banc : un scan = une carte = une photo, avec l'état que la production avait rendu
     const { c, db } = await ouvrir();
-    const A = await db.collection('analyses').find({ 'photoBanc.cle': { $type: 'string' } }, { projection: { cartes: 1, photoBanc: 1, creeLe: 1 } }).toArray();
+    // BANC-200 : jamais une photo du JUGE (juge-garde ; l'état du juge illisible arrête la mesure)
+    const A = await require('../banc/juge-garde').sansJuge(n => db.collection(n), await db.collection('analyses').find({ 'photoBanc.cle': { $type: 'string' } }, { projection: { cartes: 1, photoBanc: 1, creeLe: 1 } }).toArray());
     const lignes = A.filter(a => Array.isArray(a.cartes) && a.cartes.length === 1 && a.cartes[0].etat && typeof a.cartes[0].etat === 'object')
         .map(a => ({ id: String(a._id), cleR2: a.photoBanc.cle, courant: { estime: a.cartes[0].etat.estime ?? null, confiance: a.cartes[0].etat.confiance ?? null, retenu: a.cartes[0].etat.retenu ?? null } }));
     console.log(`analyses du banc avec photo : ${A.length} · un seul résultat et un état journalisé : ${lignes.length} (dont état estimé non nul : ${lignes.filter(l => l.courant.estime).length})`);

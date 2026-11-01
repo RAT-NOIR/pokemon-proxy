@@ -121,7 +121,8 @@ async function principal() {
     const lignes = RELEVE.lignes.filter(l => l.scans && l.scans.length).slice(0, Number(arg('max-releve', '1000')));
     const sansTampon = fs.readFileSync(SANS, 'utf8').split(/\r?\n/).filter(Boolean).map(l => JSON.parse(l)).filter(x => x.nature === 'autre' && !RELEVE.lignes.some(l => l.idProduct === x.verite)).slice(0, Number(arg('max-sans', '1000')));
     const scanIds = [...lignes.map(l => l.scans[0].scanId), ...sansTampon.map(x => x.cle.split(':')[0])];
-    const A = await db.collection('analyses').find({ _id: { $in: scanIds.map(i => new ObjectId(i)) } }, { projection: { cartes: 1, photoBanc: 1 } }).toArray();
+    // BANC-200 : jamais une photo du JUGE (juge-garde ; l'état du juge illisible arrête la mesure)
+    const A = await require('../banc/juge-garde').sansJuge(n => db.collection(n), await db.collection('analyses').find({ _id: { $in: scanIds.map(i => new ObjectId(i)) } }, { projection: { cartes: 1, photoBanc: 1 } }).toArray());
     const parId = new Map(A.map(a => [String(a._id), a]));
     console.log(`cartes du relevé : ${lignes.length} (analyses lues ${lignes.filter(l => parId.has(l.scans[0].scanId)).length}) · cartes sans tampon : ${sansTampon.length} (analyses lues ${sansTampon.filter(x => parId.has(x.cle.split(':')[0])).length}) · plafond ${plafond} $`);
 

@@ -36,8 +36,8 @@ const essayer = async (nom, f) => { try { await f(); } catch (e) { H.v(`${nom} (
     const { port, url } = await S.ecouter(0);
     const hote = `127.0.0.1:${port}`;
     // un client qui peut choisir son Host / Origin (fetch interdit Host) : http brut
-    const brut = (methode, chemin, { host = hote, origin, csrf, corps, type = 'application/json' } = {}) => new Promise((resolve, reject) => {
-        const h = { host }; if (origin) h.origin = origin; if (csrf) h['x-rm-csrf'] = csrf; if (corps !== undefined) { h['content-type'] = type; h['content-length'] = Buffer.byteLength(corps); }
+    const brut = (methode, chemin, { host = hote, origin, site, csrf, corps, type = 'application/json' } = {}) => new Promise((resolve, reject) => {
+        const h = { host }; if (origin) h.origin = origin; if (site) h['sec-fetch-site'] = site; if (csrf) h['x-rm-csrf'] = csrf; if (corps !== undefined) { h['content-type'] = type; h['content-length'] = Buffer.byteLength(corps); }
         const r = http.request({ host: '127.0.0.1', port, path: chemin, method: methode, headers: h, agent: false }, res => { const m = []; res.on('data', c => m.push(c)); res.on('end', () => resolve({ statut: res.statusCode, entetes: res.headers, corps: Buffer.concat(m) })); });
         r.on('error', reject); r.end(corps);
     });
@@ -47,10 +47,10 @@ const essayer = async (nom, f) => { try { await f(); } catch (e) { H.v(`${nom} (
         const html = p.corps.toString('utf8');
         H.v('2. la page est servie, avec le jeton anti-falsification de CE démarrage', [p.statut, html.includes(`content="${S.csrf}"`), html.includes('__CSRF__')], [200, true, false]);
         H.v('2. en-têtes de sûreté : CSP sans script en ligne, no-store, nosniff', [/script-src 'self'/.test(p.entetes['content-security-policy']), !/script-src[^;]*unsafe-inline/.test(p.entetes['content-security-policy']), p.entetes['cache-control'], p.entetes['x-content-type-options']], [true, true, 'no-store', 'nosniff']);
-        H.v('2. le script de la page est servi', (await brut('GET', '/app.js')).statut, 200);
+        H.v('2. les scripts de la page sont servis (branchement et logique)', [(await brut('GET', '/app.js')).statut, (await brut('GET', '/controleur.js')).statut], [200, 200]);
         const etat = JSON.parse((await brut('GET', '/_etat')).corps.toString('utf8'));
         H.v('2. /_etat dit « un jeton est posé » sans le rendre', [etat.jeton, JSON.stringify(etat).includes(JETON)], [true, false]);
-        const src = fs.readFileSync(path.join(__dirname, '..', '..', 'outils', 'banc-200', 'app.js'), 'utf8') + html;
+        const src = fs.readFileSync(path.join(__dirname, '..', '..', 'outils', 'banc-200', 'app.js'), 'utf8') + fs.readFileSync(path.join(__dirname, '..', '..', 'outils', 'banc-200', 'controleur.js'), 'utf8') + html;
         H.v('2. la page n\'utilise jamais innerHTML (tout passe par textContent)', /innerHTML|insertAdjacentHTML|document\.write|eval\(/.test(src), false);
     });
 
@@ -86,8 +86,10 @@ const essayer = async (nom, f) => { try { await f(); } catch (e) { H.v(`${nom} (
         H.v('4. un Host étranger (rebond DNS) : 403, même en lecture', (await brut('GET', '/api/banc/seau/courant', { host: `evil.example:${port}` })).statut, 403);
         H.v('4. un Host sans port : 403', (await brut('GET', '/', { host: '127.0.0.1' })).statut, 403);
         H.v('4. une Origin étrangère : 403', (await brut('POST', '/api/banc/seau/verite', { csrf: S.csrf, origin: 'https://evil.example', corps: '{}' })).statut, 403);
+        H.v('4. 🔑 un navigateur qui dit « cross-site » (page tierce chargeant une photo avec notre jeton) : 403, même en GET', [(await brut('GET', '/api/banc/seau/photo?scanId=0123456789abcdef01234567&photo=0', { site: 'cross-site' })).statut, (await brut('GET', '/api/banc/seau/courant', { site: 'same-site' })).statut], [403, 403]);
+        H.v('4. same-origin (la page elle-même) : accepté', (await brut('GET', '/api/banc/seau/courant', { site: 'same-origin' })).statut, 200);
         H.v('4. l\'Origin de la page : acceptée', (await brut('GET', '/api/banc/seau/courant', { origin: `http://127.0.0.1:${port}` })).statut, 200);
-        H.v('4. rien de tout cela n\'a touché l\'API (une seule requête relayée : la dernière)', recus.length - avant, 1);
+        H.v('4. rien de tout cela n\'a touché l\'API (deux seules requêtes relayées : les deux acceptées)', recus.length - avant, 2);
     });
 
     await essayer('le jeton', async () => {
