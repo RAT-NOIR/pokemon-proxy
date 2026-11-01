@@ -21,13 +21,20 @@
 //     puis POST /api/identifier/mesures avec `accepteProbable: true`. Chaque verdict est JUGÉ contre la vérité du banc (sûr juste/FAUX, probable juste/FAUX, question) ; le client DÉCLARE (confirmation d'un probable juste, la vérité parmi les
 //     candidats, « aucune » sinon ; --sans-declarations les coupe) ; ARRÊT IMMÉDIAT au premier probable FAUX ou sûr FAUX, avant le scan suivant (code de sortie 10 / 11, ligne fautive au carnet et au rapport). Il ne touche à AUCUNE variable
 //     du service. Sans l'option, rien de ce qui précède n'existe : le client est celui d'avant, octet pour octet (banc test-serie-essai.js).
+//   · MODE --compte=ordinaire (01/11, COMPTE-TEST) : la série des 9 lignes du compte de test ORDINAIRE (serie-compte-test.js::TABLEAU, §7 de serie-P-verifications.md) — débits, remboursements « aucune », plafond `probable-aucune`, introuvable. Les
+//     identifiants sont l'AUTRE couple (V2_ESSAI_ORDINAIRE_IDENTIFIANT / _MOT_DE_PASSE) ; le client annonce la version 2.0.1 et ne produit AUCUNE mesure : AUCUN second envoi sur /api/identifier/mesures. Pour chaque ligne il inscrit au carnet la facturation
+//     servie, le solde (offre) avant et après (POST /api/solde, lecture pure) et la déclaration envoyée, les compare à la ligne du TABLEAU et s'ARRÊTE au premier écart (code 14) ; un compte ordinaire ne peut pas déposer de photo (POST /api/photo est réservée à
+//     l'administrateur) : tout refus de dépôt arrête la série AVANT /api/identifier (code 15), jamais de retombée sur l'adresse de l'annonce. Les lignes viennent du tableau (--cles, --n, --graine, --g-probable, --sans-declarations sont refusés).
 // Usage : node v2/mesures/serie-essai.js --resultats=<resultats-*.json> --nav=<nav-bancs.json> --photos=<dossier des photos des bancs, <clé de photo>.jpg|png|webp> --n=<N> --graine=<entier> --plafond-usd=<USD> --carnet=<fichier.jsonl>
+//         [--compte=ordinaire  (les 9 lignes du tableau du compte de test : ni --n, ni --graine, ni --cles, ni --g-probable)]
 //         [--cartes=<dossier des cartes redressées, <clé de photo>.jpg>] [--g-probable [--scans=<dossier>,<dossier>] [--tampons=<json>] [--version-extension=2.0.1] [--sans-declarations]] [--env=<fichier .env>] [--pause-s=6] [--cout-estime-usd=0.0037] [--modele-id=… --modele-sha256=…] [--sortie=<rapport.json>] [--base=https://rat-market-api-essai.onrender.com]
 const fs = require('fs'), path = require('path'), crypto = require('crypto');
 const SP = require('./serie-probable');
+const CT = require('./serie-compte-test');
 
 const HOTE_ESSAI = 'rat-market-api-essai.onrender.com';
 const NOM_IDENTIFIANT = 'V2_ESSAI_BANC_IDENTIFIANT', NOM_MOT_DE_PASSE = 'V2_ESSAI_BANC_MOT_DE_PASSE';
+const NOM_ORDINAIRE_IDENTIFIANT = 'V2_ESSAI_ORDINAIRE_IDENTIFIANT', NOM_ORDINAIRE_MOT_DE_PASSE = 'V2_ESSAI_ORDINAIRE_MOT_DE_PASSE';      // COMPTE-TEST : l'AUTRE couple, jamais mélangé avec celui du compte de mesure
 const ORIGINE_SITE = 'https://rat-market.fr';                              // l'Origin exacte que la connexion du site exige (config.origines.site)
 const MODELE_DEFAUT = Object.freeze({ id: 'p8000-poids8s-1', sha256: '857105e3eb0035c5e0b6eab88f898a134d171321eb00e90452f4d37f7df28ec2' });
 const COUT_ESTIME_DEFAUT_USD = 0.0037;                                   // mesuré : une identification de production, 2 photos, médiane du journal (CLAUDE.md §73)
@@ -80,8 +87,8 @@ function lireVariable(nom, env, fichierEnv, lire = f => fs.readFileSync(f, 'utf8
     return v || null;
 }
 /** Les deux identifiants du compte de mesure, ou null si l'un manque. */
-function lireIdentifiants(env, fichierEnv, lire) {
-    const identifiant = lireVariable(NOM_IDENTIFIANT, env, fichierEnv, lire), motDePasse = lireVariable(NOM_MOT_DE_PASSE, env, fichierEnv, lire);
+function lireIdentifiants(env, fichierEnv, lire, noms = { identifiant: NOM_IDENTIFIANT, motDePasse: NOM_MOT_DE_PASSE }) {
+    const identifiant = lireVariable(noms.identifiant, env, fichierEnv, lire), motDePasse = lireVariable(noms.motDePasse, env, fichierEnv, lire);
     return identifiant && motDePasse ? { identifiant, motDePasse } : null;
 }
 
@@ -161,8 +168,17 @@ async function serie(o, deps = {}) {
     const fetchF = deps.fetch || globalThis.fetch, horloge = deps.horloge || (() => Number(process.hrtime.bigint() / 1000000n)), pause = deps.pause || (ms => new Promise(r => setTimeout(r, ms))), log = deps.log || console.log;
     // ── tout est jugé AVANT la première requête ──
     const base = baseAutorisee(o.base || `https://${HOTE_ESSAI}`);
-    const ids = lireIdentifiants(o.env || process.env, o.fichierEnv, deps.lireFichier);
-    if (!ids) throw new Arret(`${NOM_IDENTIFIANT} ou ${NOM_MOT_DE_PASSE} absent : aucune requête n'est envoyée`);
+    // MODE --compte=ordinaire : tout ce qui ne va pas avec lui est refusé AVANT la première requête (une garde écrite par ce qu'elle AUTORISE : un seul mode compte, et il ne se combine avec rien qui ferait un second envoi ou un autre échantillon)
+    const ct = o.compte === 'ordinaire';
+    if (o.compte !== undefined && o.compte !== null && !ct) throw new Arret('--compte n\'admet que la valeur « ordinaire »');
+    if (ct) {
+        if (o.gProbable === true) throw new Arret('--compte=ordinaire ne se combine pas avec --g-probable (aucun second envoi de mesures)');
+        if (o.deuxiemeApresSignal) throw new Arret('--compte=ordinaire ne se combine pas avec --deuxieme-apres-signal');
+        if (o.declarations === false) throw new Arret('--compte=ordinaire ne se combine pas avec --sans-declarations (les déclarations sont ce qu\'il mesure)');
+        if (o.cles !== undefined && o.cles !== null) throw new Arret('--compte=ordinaire ne se combine pas avec --cles (les 9 lignes sont celles du tableau)');
+    }
+    const ids = lireIdentifiants(o.env || process.env, o.fichierEnv, deps.lireFichier, ct ? { identifiant: NOM_ORDINAIRE_IDENTIFIANT, motDePasse: NOM_ORDINAIRE_MOT_DE_PASSE } : undefined);
+    if (!ids) throw new Arret(`${ct ? NOM_ORDINAIRE_IDENTIFIANT : NOM_IDENTIFIANT} ou ${ct ? NOM_ORDINAIRE_MOT_DE_PASSE : NOM_MOT_DE_PASSE} absent : aucune requête n'est envoyée`);
     const origineSite = o.origineSite || ORIGINE_SITE;
     const coutEstimeUsd = o.coutEstimeUsd === undefined ? COUT_ESTIME_DEFAUT_USD : o.coutEstimeUsd;
     if (!(typeof coutEstimeUsd === 'number' && Number.isFinite(coutEstimeUsd) && coutEstimeUsd > 0)) throw new Arret('--cout-estime-usd doit être un nombre > 0');
@@ -170,7 +186,8 @@ async function serie(o, deps = {}) {
     const modele = o.modele || MODELE_DEFAUT;
     // MODE --g-probable : tout ce qu'il faut pour MESURER est jugé avant la première requête (une série qui ne saurait pas produire ses mesures dépenserait pour rien)
     const gp = o.gProbable === true, declarer = o.declarations !== false;
-    const versionClient = gp ? (o.versionExtension === undefined ? SP.VERSION_PROBABLE : o.versionExtension) : null;
+    const versionClient = gp ? (o.versionExtension === undefined ? SP.VERSION_PROBABLE : o.versionExtension) : ct ? (o.versionExtension === undefined ? CT.VERSION_CLIENT : o.versionExtension) : null;
+    if (ct && (typeof versionClient !== 'string' || !/^\d+\.\d+\.\d+$/.test(versionClient))) throw new Arret('--version-extension doit être de la forme x.y.z');
     let lireReference = null;
     if (gp) {
         if (o.deuxiemeApresSignal) throw new Arret('--g-probable ne se combine pas avec --deuxieme-apres-signal (le code de sortie et l\'arrêt au premier faux ne couvrent que la série 1)');
@@ -185,7 +202,16 @@ async function serie(o, deps = {}) {
     if (!candidates.length) throw new Arret('aucune ligne du banc n\'a à la fois un vecteur (nav-bancs.json) et une photo locale');
     // --cles : EXACTEMENT cette liste de lignes, dans cet ordre (une clé nue vaut sa ligne « <clé>:0 ») ; ni --n ni --graine ; une clé inconnue, sans photo ou sans vecteur, un doublon, une liste vide : refus avant toute requête
     let lignes;
-    if (o.cles !== undefined && o.cles !== null) {
+    if (ct) {                                                                                         // les 9 lignes du TABLEAU, dans son ordre : la clé (ou son préfixe UNIQUE) trouve sa ligne du banc, dont la vérité est celle du tableau
+        lignes = CT.TABLEAU.map(t => {
+            const trouvees = candidates.filter(l => l.cle === t.cle || l.cle === `${t.cle}:0` || clePhoto(l.cle).startsWith(t.cle));
+            if (trouvees.length !== 1) throw new Arret(`tableau, ligne ${t.rang} : ${trouvees.length} ligne(s) du banc pour la clé ${t.cle} (une seule est exigée, avec photo et vecteur locaux) : rien n'est lancé`);
+            if (trouvees[0].verite !== t.verite) throw new Arret(`tableau, ligne ${t.rang} : la vérité du banc (${trouvees[0].verite ?? 'absente'}) n'est pas celle du tableau (${t.verite}) : rien n'est lancé`);
+            return trouvees[0];
+        });
+        if (new Set(lignes.map(l => l.cle)).size !== lignes.length) throw new Arret('tableau : deux lignes désignent la même ligne du banc');
+    }
+    else if (o.cles !== undefined && o.cles !== null) {
         if (!Array.isArray(o.cles) || o.cles.length === 0 || !o.cles.every(c => typeof c === 'string' && c.length > 0)) throw new Arret('--cles doit être une liste non vide de clés');
         lignes = o.cles.map(c => candidates.find(l => l.cle === c) || candidates.find(l => l.cle === `${c}:0`));
         const manque = o.cles.filter((_, i) => !lignes[i]);
@@ -194,7 +220,7 @@ async function serie(o, deps = {}) {
     } else lignes = echantillon(candidates, Math.min(o.n, candidates.length), o.graine);
     log(`série : graine ${o.cles ? 'sans (--cles)' : o.graine}, ${lignes.length} lignes sur ${candidates.length} possibles, plafond ${o.plafondUsd} USD (déjà au carnet : ${carnet.total().toFixed(4)}), coût estimé ${coutEstimeUsd} USD par scan, hôte ${HOTE_ESSAI}`);
     log(`lignes (ordre rejoué) : ${lignes.map(l => l.cle).join(' ')}`);
-    if (gp) {                                                                                       // le COÛT ESTIMÉ est imprimé et jugé avant toute requête (le total déjà au carnet compte)
+    if (gp || ct) {                                                                                 // le COÛT ESTIMÉ est imprimé et jugé avant toute requête (le total déjà au carnet compte)
         const estimation = lignes.length * coutEstimeUsd;
         log(`coût estimé avant toute requête : ${lignes.length} lignes × ${coutEstimeUsd} = ${estimation.toFixed(4)} USD (déjà au carnet : ${carnet.total().toFixed(4)}, plafond ${o.plafondUsd})`);
         if (carnet.total() + estimation > o.plafondUsd + 1e-12) throw new Arret(`estimation ${(carnet.total() + estimation).toFixed(4)} USD (carnet compris) au-dessus du plafond ${o.plafondUsd} : rien n'est lancé`);
@@ -250,9 +276,26 @@ async function serie(o, deps = {}) {
     jeton = inst.corps.jetonInstallation;
     const lie = await appeler('/api/compte/lier', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': `serie-lier-${crypto.randomBytes(12).toString('hex')}` }, body: JSON.stringify({ code: cd.corps.code }) });
     if (lie.statut !== 200 || !lie.corps || typeof lie.corps.jetonInstallation !== 'string') refus('liaison', lie);
-    if (!(lie.corps.compte && lie.corps.compte.administrateur === true)) throw new Arret('le compte lié n\'est pas administrateur : aucune photo ne peut être déposée');
+    if (ct) {                                                                                       // le compte de TEST est un compte gratuit ordinaire : s'il était administrateur, aucun débit ne se mesurerait
+        if (!(lie.corps.compte && lie.corps.compte.administrateur === false && lie.corps.compte.verifie === true)) throw new Arret('le compte lié n\'est pas un compte ordinaire confirmé (administrateur ou non confirmé) : la série ne mesurerait aucun débit');
+    } else if (!(lie.corps.compte && lie.corps.compte.administrateur === true)) throw new Arret('le compte lié n\'est pas administrateur : aucune photo ne peut être déposée');
     jeton = lie.corps.jetonInstallation;
-    log('compte de mesure connecté (installation liée, administrateur)');
+    log(ct ? 'compte de test ordinaire connecté (installation liée, non administrateur)' : 'compte de mesure connecté (installation liée, administrateur)');
+
+    // COMPTE-TEST : le solde et le quota du jour, lus par POST /api/solde (lecture pure, aucun débit) — avant la série, puis après chaque ligne. Illisible : arrêt.
+    const lireSolde = async () => {
+        const s = await appeler('/api/solde', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        if (s.statut !== 200 || !s.corps || typeof s.corps !== 'object' || !s.corps.solde || !s.corps.offre) throw new Arret(`/api/solde inattendu (${s.statut}) : la série s'arrête, le tableau ne se juge pas sans le solde`);
+        return { solde: s.corps.solde, offre: s.corps.offre };
+    };
+    let soldeCourant = null;
+    if (ct) {
+        soldeCourant = await lireSolde();
+        const invalide = CT.departInvalide(soldeCourant);
+        if (invalide) throw new Arret(`départ refusé : ${invalide} : aucun scan n'est lancé`);
+        carnet.noter({ compteTest: 'depart', offre: soldeCourant.offre, soldeTotal: soldeCourant.solde.total, achete: soldeCourant.solde.achete });
+        log(`solde avant la série : offre ${soldeCourant.offre.nom}, restant ${soldeCourant.offre.restant}`);
+    }
 
     const hashSerie = passe => crypto.createHash('sha1').update(`${o.graine}|${lignes.map(l => l.cle).join(',')}${passe > 1 ? `|passe${passe}` : ''}`).digest('hex').slice(0, 10);
     const stamp = (deps.maintenant || Date.now)().toString(36);
@@ -319,28 +362,67 @@ async function serie(o, deps = {}) {
         }
         return { premierNiveau: classe1.niveau, complementRecu: Boolean(cplt && typeof cplt === 'object' && typeof cplt.jeton === 'string' && Array.isArray(cplt.mesures) && cplt.mesures.length > 0), verdictPremier: j1.verdict, verdict: j.verdict, chemin, produit: classe.produit, candidats: classe.candidats.length ? classe.candidats : classe1.candidats, secondEnvoi, declaration, fautif: fautifLigne, arretReseau };
     };
+    /**
+     * MODE --compte=ordinaire : ce qui suit la première réponse de /api/identifier pour UNE ligne du tableau. JAMAIS d'exception (une issue incertaine arrête la série, elle ne la fait pas continuer). Dans l'ordre :
+     * (1) la première réponse (niveau, produit, facturation) face au tableau — au premier écart, RIEN n'est déclaré ; (2) la déclaration du tableau, envoyée à POST /api/identifier/reponse (aucune mesure n'est envoyée, jamais) ;
+     * (3) le solde après (POST /api/solde) ; (4) la ligne entière face au tableau. Tout est inscrit au carnet : facturation servie, solde avant et après, déclaration envoyée, réponse du serveur.
+     */
+    const suiteCompteTest = async ({ l, rang, serieId, etiquette, issue, att }) => {
+        const scanId = typeof issue.scanId === 'string' ? issue.scanId : null;
+        const classe = SP.classerCarte(issue.analyse && Array.isArray(issue.analyse.cartes) ? issue.analyse.cartes[0] : null);
+        const avant = soldeCourant;
+        const obs = { niveau: classe.niveau, produit: classe.produit, facturation: issue.facturation, choixEnvoye: null, statutReponse: null, reponse: null, restantAvant: avant.offre.restant, restantApres: null };
+        const resume = s => ({ offre: { nom: s.offre.nom, restant: s.offre.restant }, total: s.solde.total, achete: s.solde.achete });
+        let arretReseau = null, apres = null, soldeApresIllisible = null;
+        const lireApres = async () => { try { apres = await lireSolde(); soldeCourant = apres; } catch (e) { soldeApresIllisible = e instanceof Arret ? e.raison : `exception ${(e && (e.code || e.name)) || 'erreur'} sur /api/solde`; } };
+        const premier = CT.comparerPremiere(att, obs);
+        let e = premier;
+        if (!e) {
+            const choix = att.declaration === null ? null : att.declaration === 'aucune' ? 'aucune'
+                : (classe.choix.find(c => c.idProduct === (att.declaration === 'verite' ? att.verite : classe.produit)) || {}).id || null;
+            if (att.declaration !== null && choix !== null && scanId && (!att.lettre || choix === att.lettre)) {      // la lettre que le tableau attend (ligne 3 : « a ») se vérifie AVANT d'envoyer : une déclaration que le tableau ne prévoit pas ne part pas
+                obs.choixEnvoye = choix;
+                try {
+                    const rp = await appeler('/api/identifier/reponse', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': `serie-${serieId}-${rang}-${etiquette}-r` }, body: JSON.stringify({ scanId, carte: 0, choix }) });
+                    obs.statutReponse = rp.statut;
+                    obs.reponse = { facturation: rp.corps && rp.corps.facturation, declaration: rp.corps && rp.corps.declaration };
+                    if (rp.statut === 401) arretReseau = 'jeton refusé (401) sur /api/identifier/reponse : le jeton d\'installation n\'est plus accepté ; série arrêtée';
+                    else if (rp.statut === 429) arretReseau = `429 sur /api/identifier/reponse (reessayerDans ${rp.retryApres ?? '?'}) : la série s'arrête, sans boucle`;
+                } catch (x) { arretReseau = x instanceof Arret ? x.raison : `exception ${(x && (x.code || x.name)) || 'erreur'} sur /api/identifier/reponse : issue incertaine après la déclaration, série arrêtée`; obs.statutReponse = null; }
+            }
+            await lireApres();
+            if (apres) obs.restantApres = apres.offre.restant;
+            e = arretReseau || soldeApresIllisible ? null : CT.comparerLigne(att, obs);
+        } else await lireApres();
+        const entree = { rang: att.rang, niveau: classe.niveau, produit: classe.produit, scanId, facturation: issue.facturation ?? null, declarationEnvoyee: obs.choixEnvoye, reponse: obs.reponse ? { statut: obs.statutReponse, ...obs.reponse } : null,
+            soldeAvant: resume(avant), soldeApres: apres ? resume(apres) : null, ecart: e || null };
+        carnet.noter({ serie: serieId, rang, cle: l.cle, compteTest: entree });
+        return { entree, ecart: e, arretReseau: arretReseau || soldeApresIllisible };
+    };
     /** UNE passe sur les lignes (même ordre à chaque passe), avec le jeton gardé en MÉMOIRE ; le carnet est commun. */
     const jouer = async (passe, versionMin) => {
         const resultats = [], durees = [], erreurs = [];
-        let arret = null, deSuite = 0, rang = 0, fautifLigne = null, questionsVues = 0, complementsVus = 0, alerte = false;
+        let arret = null, deSuite = 0, rang = 0, fautifLigne = null, questionsVues = 0, complementsVus = 0, alerte = false, ecartLigne = null;
         const serieId = hashSerie(passe), etiquetteCle = passe > 1 ? `${stamp}p${passe}` : stamp;
         for (const l of lignes) {
             rang++;
             if (!carnet.peutDepenser()) { arret = `plafond atteint (${carnet.total().toFixed(4)} USD déjà inscrits, plafond ${o.plafondUsd}) : arrêt avant le scan ${rang}`; break; }
             const cp = clePhoto(l.cle), ph = trouverFichier(o.photos, cp), debut = horloge();
-            let issue = null, carteB64 = null, premierMs = null, suite = null;
+            let issue = null, carteB64 = null, premierMs = null, suite = null, suiteCT = null;
             try {
                 const octets = fs.readFileSync(ph.fichier);
                 const up = await appeler('/api/photo', { method: 'POST', headers: { 'Content-Type': ph.type, 'Content-Length': String(octets.length) }, body: octets });
                 if (up.statut === 401) throw new Arret('jeton refusé (401) sur /api/photo : le jeton d\'installation n\'est plus accepté ; série arrêtée');
                 if (up.statut === 429) throw new Arret(`429 sur /api/photo (reessayerDans ${up.retryApres ?? '?'}) : la série s'arrête, sans boucle`);
+                // COMPTE-TEST : POST /api/photo est réservée à l'administrateur ; un compte ordinaire reçoit un 404. Ce refus arrête la série ICI, avant /api/identifier : sans photo reçue, le serveur retomberait sur l'adresse factice de l'annonce (Vinted).
+                if (ct && (up.statut !== 200 || !up.corps || typeof up.corps.photoId !== 'string')) throw new Arret(`PHOTO REFUSÉE (${up.statut}) : le compte ordinaire ne peut pas déposer de photo, aucun scan n'est lancé (sans photo reçue le serveur retomberait sur l'adresse de l'annonce)`);
                 if (up.statut !== 200 || !up.corps || typeof up.corps.photoId !== 'string') throw Object.assign(new Error('photo'), { code: `photo-${up.statut}` });
                 const p = nav[cp];
                 const entree = { photo: 0, vecteur: EV.encoderVecteur(Float32Array.from(p.emb)), redressee: p.redressee === true };
                 if (o.cartes) { const cf = trouverFichier(o.cartes, cp); if (cf) entree.carte = fs.readFileSync(cf.fichier).toString('base64'); }
                 // `contrat: 2` : sans lui l'aiguilleur (monter.js) renvoie vers la route HÉRITÉE, qui répond 401. Les autres champs sont ceux que la v2 attend (verifierEntree).
                 carteB64 = entree.carte || null;
-                const corps = { contrat: 2, versionExtension: gp ? versionClient : versionMin, ...(gp ? { capacitesClient: ['mesures-1'] } : {}), marche: 'vinted.fr', title: '', description: '', prixVinted: null, devise: null, langueInterface: 'fr', imageUrls: [IMAGE_ANNONCE], photoIds: [{ index: 0, photoId: up.corps.photoId }], empreintes: [entree], modeleEmpreinte: { id: modele.id, sha256: modele.sha256 } };
+                const corps = { contrat: 2, versionExtension: gp || ct ? versionClient : versionMin, ...(gp ? { capacitesClient: ['mesures-1'] } : {}), marche: 'vinted.fr', title: '', description: '', prixVinted: null, devise: null, langueInterface: 'fr', imageUrls: [IMAGE_ANNONCE], photoIds: [{ index: 0, photoId: up.corps.photoId }], empreintes: [entree], modeleEmpreinte: { id: modele.id, sha256: modele.sha256 } };
                 carnet.inscrire({ serie: serieId, rang, cle: l.cle, graine: o.graine, ...(passe > 1 ? { passe } : {}) });                 // inscrit AVANT l'appel payant : un arrêt brutal ne laisse pas un scan hors carnet
                 // DÈS QUE LA PHOTO EST DÉPOSÉE, la garde s'écrit par ce qu'elle AUTORISE : un SEUL chemin continue la série — « 200 avec `analyse.photoRecue === true` ». Toute autre issue (statut non 200, 429, corps vide, pas d'`analyse`, photoRecue absent ou faux,
                 // exception, délai, redirection) ARRÊTE la série : on ne peut pas savoir si le serveur est retombé sur l'adresse factice de l'annonce, donc chez Vinted. Jamais de nouvel essai.
@@ -358,6 +440,7 @@ async function serie(o, deps = {}) {
                     premierMs = horloge() - debut;                                                                                // le PREMIER VERDICT : le dépôt de la photo + la première réponse de /api/identifier
                     suite = await suiteProbable({ l, rang, serieId, etiquette: etiquetteCle, carteB64, issue, premierMs });      // jamais d'exception : un refus du serveur est rendu dans `suite.arretReseau`
                 }
+                if (ct) suiteCT = await suiteCompteTest({ l, rang, serieId, etiquette: etiquetteCle, issue, att: CT.TABLEAU[rang - 1] });   // jamais d'exception : une issue incertaine est rendue dans `arretReseau`
             } catch (e) {
                 if (e instanceof Arret) { arret = e.raison; break; }
                 erreurs.push({ cle: l.cle, code: (e && (e.code || e.name)) || 'erreur' });
@@ -369,8 +452,14 @@ async function serie(o, deps = {}) {
             const ms = horloge() - debut; durees.push(ms);
             const s = sureDe(issue);
             resultats.push({ cle: l.cle, ms, essaiSur: s.sur, essaiProduit: s.produit, localSur: l.localSur, localProduit: l.localProduit, verite: l.verite,
-                ...(suite ? { famille: SP.familleDe(l, o.releveTampons), avecVerite: l.verite !== null && l.verite !== undefined, premierMs, premierNiveau: suite.premierNiveau, complementRecu: suite.complementRecu, verdictPremier: suite.verdictPremier, verdict: suite.verdict, chemin: suite.chemin, produit: suite.produit, candidats: suite.candidats, secondEnvoi: suite.secondEnvoi, declaration: suite.declaration } : {}) });
+                ...(suite ? { famille: SP.familleDe(l, o.releveTampons), avecVerite: l.verite !== null && l.verite !== undefined, premierMs, premierNiveau: suite.premierNiveau, complementRecu: suite.complementRecu, verdictPremier: suite.verdictPremier, verdict: suite.verdict, chemin: suite.chemin, produit: suite.produit, candidats: suite.candidats, secondEnvoi: suite.secondEnvoi, declaration: suite.declaration } : {}), ...(suiteCT ? { compteTest: suiteCT.entree } : {}) });
             log(`  ${rang}/${lignes.length} ${l.cle} : ${ms} ms, essai ${s.sur ? `sûr ${s.produit}` : 'pas sûr'}, local ${l.localSur ? `sûr ${l.localProduit}` : 'pas sûr'}`);
+            if (suiteCT) {
+                const e = suiteCT.entree;
+                log(`      tableau ligne ${rang} : niveau ${e.niveau}, facturation ${JSON.stringify(e.facturation && { debite: e.facturation.debite, reserve: e.facturation.reserve, rembourse: e.facturation.rembourse, motif: e.facturation.motif, raisonNonRembourse: e.facturation.raisonNonRembourse })}, déclaré ${e.declarationEnvoyee ?? 'rien'}, restant ${e.soldeAvant.offre.restant} -> ${e.soldeApres ? e.soldeApres.offre.restant : '?'} : ${suiteCT.ecart ? 'ÉCART' : suiteCT.arretReseau ? 'ARRÊT' : 'conforme'}`);
+                if (suiteCT.ecart) { ecartLigne = { rang, cle: l.cle, ...suiteCT.ecart, scanId: e.scanId }; arret = `ÉCART AU TABLEAU, ligne ${rang} (${l.cle}) : ${suiteCT.ecart.champ}, attendu ${suiteCT.ecart.attendu}, observé ${suiteCT.ecart.observe} (scan ${e.scanId}) : série arrêtée avant le scan suivant, sans adapter la suite`; break; }
+                if (suiteCT.arretReseau) { arret = suiteCT.arretReseau; break; }
+            }
             if (suite) log(`      premier verdict ${premierMs} ms, total ${ms} ms, chemin ${suite.chemin} : ${suite.verdictPremier} -> ${suite.verdict}${suite.secondEnvoi ? ` (second envoi : ${JSON.stringify(suite.secondEnvoi)})` : ''}${suite.declaration ? ` ; déclaré « ${suite.declaration.choix} »` : ''}`);
             if (suite && suite.fautif) { fautifLigne = suite.fautif; arret = `ARRÊT FAUTE ${suite.fautif.type} sur ${l.cle} (chemin ${suite.fautif.chemin}, produit ${suite.fautif.produit}, candidats [${suite.fautif.candidats.join(',')}], vérité ${suite.fautif.verite}, scan ${suite.fautif.scanId}) : série arrêtée avant le scan suivant`; break; }
             if (suite && suite.arretReseau) { arret = suite.arretReseau; break; }
@@ -395,7 +484,7 @@ async function serie(o, deps = {}) {
             log(`rapport probable : sûrs ${T_.surJuste} justes / ${T_.surFaux} FAUX · probables ${T_.probableJuste} justes / ${T_.probableFaux} FAUX · questions ${T_.questionDansCandidats} (vérité dans les candidats) / ${T_.questionHorsCandidats} (hors) · introuvables ${T_.introuvable} · sans vérité ${T_.sansVerite} · réponse directe juste ${T_.reponseDirecteJuste} %`);
             log(`premier verdict : n ${rapportProbable.premierVerdict.n}, p50 ${rapportProbable.premierVerdict.p50} ms, p95 ${rapportProbable.premierVerdict.p95} ms ; total : p50 ${rapportProbable.dureeTotale.p50} ms, p95 ${rapportProbable.dureeTotale.p95} ms`);
         }
-        return { arret, resultats, durees, stats, comparaison, erreurs, capacites, jetonEmpreinteAnnonce: capacites.includes('empreinte'), depenseUsd: carnet.total(), serie: serieId, lignes: lignes.map(l => l.cle), ...(gp ? { fautif: fautifLigne, alerte, rapportProbable } : {}) };
+        return { arret, resultats, durees, stats, comparaison, erreurs, capacites, jetonEmpreinteAnnonce: capacites.includes('empreinte'), depenseUsd: carnet.total(), serie: serieId, lignes: lignes.map(l => l.cle), ...(gp ? { fautif: fautifLigne, alerte, rapportProbable } : {}), ...(ct ? { compteTest: true, ecart: ecartLigne } : {}) };
     };
 
     const r1 = await jouer(1, ping.corps.versionMinExtension);
@@ -424,7 +513,7 @@ async function serie(o, deps = {}) {
     const r2 = await jouer(2, ping2.corps.versionMinExtension);
     return { ...r1, deuxieme: { ...r2, capacites: capacites2, jetonEmpreinteAnnonce: capacites2.includes('empreinte') } };
 }
-module.exports = { serie, baseAutorisee, echantillon, aleatoire, quantile, statistiques, lireVariable, lireIdentifiants, ouvrirCarnet, lignesLocales, sureDe, comparer, Arret, HOTE_ESSAI, NOM_IDENTIFIANT, NOM_MOT_DE_PASSE, ORIGINE_SITE, MODELE_DEFAUT, COUT_ESTIME_DEFAUT_USD };
+module.exports = { serie, baseAutorisee, echantillon, aleatoire, quantile, statistiques, lireVariable, lireIdentifiants, ouvrirCarnet, lignesLocales, sureDe, comparer, Arret, HOTE_ESSAI, NOM_IDENTIFIANT, NOM_MOT_DE_PASSE, NOM_ORDINAIRE_IDENTIFIANT, NOM_ORDINAIRE_MOT_DE_PASSE, ORIGINE_SITE, MODELE_DEFAUT, COUT_ESTIME_DEFAUT_USD };
 
 if (require.main === module) {
     const arg = n => { const a = process.argv.find(x => x.startsWith(`--${n}=`)); return a ? a.slice(n.length + 3) : null; };
@@ -433,7 +522,7 @@ if (require.main === module) {
         const necessaire = n => { const v = arg(n); if (!v) throw new Arret(`argument --${n}= manquant`); return v; };
         const resultats = JSON.parse(fs.readFileSync(necessaire('resultats'), 'utf8')), nav = JSON.parse(fs.readFileSync(necessaire('nav'), 'utf8'));
         const modele = arg('modele-id') && arg('modele-sha256') ? { id: arg('modele-id'), sha256: arg('modele-sha256') } : MODELE_DEFAUT;
-        const ecrire = (fichier, r) => fs.writeFileSync(fichier, JSON.stringify({ serie: r.serie, lignes: r.lignes, stats: r.stats, comparaison: r.comparaison, erreurs: r.erreurs, arret: r.arret, depenseUsd: r.depenseUsd, jetonEmpreinteAnnonce: r.jetonEmpreinteAnnonce, resultats: r.resultats, ...(r.rapportProbable ? { fautif: r.fautif, rapportProbable: r.rapportProbable } : {}) }, null, 1));
+        const ecrire = (fichier, r) => fs.writeFileSync(fichier, JSON.stringify({ serie: r.serie, lignes: r.lignes, stats: r.stats, comparaison: r.comparaison, erreurs: r.erreurs, arret: r.arret, depenseUsd: r.depenseUsd, jetonEmpreinteAnnonce: r.jetonEmpreinteAnnonce, resultats: r.resultats, ...(r.rapportProbable ? { fautif: r.fautif, rapportProbable: r.rapportProbable } : {}), ...(r.compteTest ? { compteTest: true, ecart: r.ecart } : {}) }, null, 1));
         const signal = arg('deuxieme-apres-signal');
         if (signal && !arg('sortie2')) throw new Arret('--deuxieme-apres-signal exige --sortie2= (la sortie de la série 2)');
         // MODE --g-probable : les dossiers des visuels de référence (lecture seule), le relevé des tampons (famille « tamponnee »), les déclarations ; les valeurs par défaut sont celles de extraire-mesures-groupe.js
@@ -445,11 +534,12 @@ if (require.main === module) {
         // --cles=<fichier> : une liste de clés (tableau JSON de chaînes ou d'objets { cle }, ou une clé par ligne, « # » = commentaire), rejouée EXACTEMENT, dans cet ordre ; remplace --n et --graine
         const fCles = arg('cles');
         const cles = fCles ? (() => { const t = fs.readFileSync(fCles, 'utf8').trim(); const l = t.startsWith('[') ? JSON.parse(t) : t.split(/\r?\n/).map(x => x.trim()).filter(x => x && !x.startsWith('#')); return l.map(x => (x && typeof x === 'object' ? x.cle : x)); })() : undefined;
-        const r = await serie({ base: arg('base') || undefined, resultats, nav, photos: necessaire('photos'), cartes: arg('cartes'), cles, gProbable: gProbable || undefined, scans, releveTampons, declarations: process.argv.includes('--sans-declarations') ? false : undefined, versionExtension: arg('version-extension') || undefined, n: fCles ? undefined : num('n', NaN), graine: fCles ? undefined : num('graine', NaN), plafondUsd: num('plafond-usd', NaN), carnet: arg('carnet'),
+        const compte = arg('compte') === null ? undefined : arg('compte');                           // COMPTE-TEST : seule la valeur « ordinaire » existe (serie() refuse toute autre)
+        const r = await serie({ compte, base: arg('base') || undefined, resultats, nav, photos: necessaire('photos'), cartes: arg('cartes'), cles, gProbable: gProbable || undefined, scans, releveTampons, declarations: process.argv.includes('--sans-declarations') ? false : undefined, versionExtension: arg('version-extension') || undefined, n: fCles ? undefined : num('n', NaN), graine: fCles ? undefined : num('graine', NaN), plafondUsd: num('plafond-usd', NaN), carnet: arg('carnet'),
             fichierEnv: arg('env') || process.env.V2_ESSAI_ENV || null, pauseS: num('pause-s', 6), coutEstimeUsd: arg('cout-estime-usd') === null ? undefined : num('cout-estime-usd', NaN), modele, env: process.env,
             deuxiemeApresSignal: signal || undefined, attenteMaxMin: num('attente-max-min', 120), apresSerie1: async r1 => { if (arg('sortie')) ecrire(arg('sortie'), r1); } });
         if (arg('sortie') && !signal) ecrire(arg('sortie'), r);
         if (signal && r.deuxieme) ecrire(arg('sortie2'), r.deuxieme);
-        process.exit(gProbable ? SP.codeSortie(r) : (r.arret || (r.deuxieme && r.deuxieme.arret) ? 1 : 0));          // 10 = probable FAUX, 11 = sûr FAUX (voir serie-probable.js), 1 = autre arrêt
+        process.exit(compte === 'ordinaire' ? CT.codeSortie(r) : gProbable ? SP.codeSortie(r) : (r.arret || (r.deuxieme && r.deuxieme.arret) ? 1 : 0));          // 10 = probable FAUX, 11 = sûr FAUX (voir serie-probable.js), 1 = autre arrêt
     })().catch(e => { console.error(e instanceof Arret ? `ARRÊT : ${e.raison}` : `ERREUR ${e && (e.code || e.name)}`); process.exit(e instanceof Arret ? 2 : 1); });
 }
