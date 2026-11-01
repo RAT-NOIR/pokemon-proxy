@@ -195,7 +195,7 @@ async function executer({ argv, ouvrirLecture, ouvrirEcriture, log = console.log
     const inconnus = argv.filter(a => !AUTORISES.some(r => r.test(a)));
     const arg = n => argv.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3);
     if (inconnus.length || !arg('decision')) { err(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}--decision=<date> obligatoire (décisions : ${Object.keys(DECISIONS).join(', ')})`); return 2; }
-    const entrees = DECISIONS[arg('decision')];
+    const entrees = Object.hasOwn(DECISIONS, arg('decision')) ? DECISIONS[arg('decision')] : undefined;
     if (!entrees) { err(`❌ décision « ${arg('decision')} » inconnue (${Object.keys(DECISIONS).join(', ')})`); return 2; }
     const ecrire = argv.includes('--ecrire');
     const cx = ecrire ? await ouvrirEcriture() : await ouvrirLecture();

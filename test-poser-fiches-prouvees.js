@@ -179,6 +179,12 @@ verifier('décision 2026-11-01-a-ebauches : chaque entrée porte sa preuve écri
     const sorties = [];
     const code = await executer({ argv: ['--decision=2026-11-01-zzz-inconnue'], ouvrirLecture: async () => { throw new Error('ne doit pas ouvrir'); }, ouvrirEcriture: async () => { throw new Error('ne doit pas ouvrir'); }, log: () => { }, err: m => sorties.push(m) });
     verifier('--decision à lettres : acceptée par la ligne de commande (refusée ensuite comme DÉCISION inconnue, jamais comme argument inconnu)', [code, /argument inconnu/.test(sorties.join()), /décision « 2026-11-01-zzz-inconnue » inconnue/.test(sorties.join())], [2, false, true]);
+    // clés héritées d'Object.prototype : DECISIONS[nom] y rend un objet truthy ; seule une clé PROPRE est une décision
+    for (const nom of ['__proto__', 'constructor', 'toString', 'hasOwnProperty']) {
+        const s = [];
+        const c = await executer({ argv: [`--decision=${nom}`], ouvrirLecture: async () => { throw new Error('ne doit pas ouvrir'); }, ouvrirEcriture: async () => { throw new Error('ne doit pas ouvrir'); }, log: () => { }, err: m => s.push(m) });
+        verifier(`--decision=${nom} : refusée comme décision inconnue, code 2, sans connexion`, [c, /inconnue/.test(s.join())], [2, true]);
+    }
 })();
 
 (async () => {
