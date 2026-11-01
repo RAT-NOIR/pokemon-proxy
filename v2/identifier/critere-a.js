@@ -33,8 +33,13 @@ const compteurs = () => ({ ...compte, parCode: { ...compte.parCode } });
  *   · le nom lu (confiance haute) ne contredit pas P.
  * @returns { ok: boolean, raison: string, codeParR4: boolean }
  */
-function conditions({ corps, gagnant, autres, produits, r4 = LD.REGLES.R4, catalogueExiste } = {}) {
+// DECISION-SURS : les DEUX paramètres de la promotion d'un probable en sûr (promotion-surs.js). Leur défaut est le critère d'avant, octet pour octet.
+//   · `champsIgnores` : champs lus dont la contradiction ne bloque plus. Écrit par ce qu'il AUTORISE : seule l'ATTAQUE se laisse ignorer (la garde contradiction, elle, parle toujours) ;
+//   · `jumeauxInconnusPermis` : seul `true` permet qu'un jumeau ait un numéro INCONNU (ni égal ni contredit) ; un jumeau dont le numéro CONCORDE avec le numéro lu bloque toujours.
+const IGNORABLES = Object.freeze(['attaque']);
+function conditions({ corps, gagnant, autres, produits, r4 = LD.REGLES.R4, catalogueExiste, champsIgnores = [], jumeauxInconnusPermis = false } = {}) {
     const non = raison => ({ ok: false, raison, codeParR4: false });
+    if (!Array.isArray(champsIgnores) || !champsIgnores.every(k => IGNORABLES.includes(k))) return non('champ ignoré non autorisé');
     if (!Number.isInteger(gagnant) || !(produits instanceof Map) || !produits.has(gagnant)) return non('produit absent du catalogue');
     if (!Array.isArray(autres) || !autres.every(Number.isInteger)) return non('groupe illisible');
     if (autres.some(i => !produits.has(i))) return non('une ligne de jumeau manque');
@@ -46,7 +51,7 @@ function conditions({ corps, gagnant, autres, produits, r4 = LD.REGLES.R4, catal
     const sp = statuts(lu, P);
     // LANGUE-DECISIVE R4 : un code lu qui ne désigne AUCUN produit (vivier ET catalogue entier, code × numéro) — « s8a-P » lu pour un logo — ne bloque pas ; un code qui désigne un AUTRE produit bloque toujours.
     const sansDesignation = r4 === true && codeSansDesignation({ corps, produits, catalogueExiste, pour: gagnant });
-    const ko = Object.keys(sp).filter(k => sp[k] === 'ko' && !(sansDesignation && k === 'code'));
+    const ko = Object.keys(sp).filter(k => sp[k] === 'ko' && !(sansDesignation && k === 'code') && !champsIgnores.includes(k));
     if (ko.length) return non(`un champ lu contredit P (${ko.join(', ')})`);
     const luNC = { numero: lu.numero, setCode: lu.setCode };
     const cp = comparer(luNC, P);
@@ -55,7 +60,7 @@ function conditions({ corps, gagnant, autres, produits, r4 = LD.REGLES.R4, catal
     for (const id of autres) {
         const cj = comparer(luNC, produits.get(id));
         if (cj.concorde.includes('numero')) return non(`le numéro lu est aussi celui du produit ${id}`);
-        if (!cj.contredit.includes('numero')) return non(`le numéro du produit ${id} est inconnu ou ambigu face au numéro lu`);
+        if (!cj.contredit.includes('numero') && jumeauxInconnusPermis !== true) return non(`le numéro du produit ${id} est inconnu ou ambigu face au numéro lu`);
     }
     const formes = formesLuesDe(corps);
     if (formes.length && !nomCompatible(formes, P)) return non('le nom lu contredit P');

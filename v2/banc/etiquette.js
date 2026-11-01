@@ -74,6 +74,10 @@ function traiterEtiquette(cfg, deps = {}) {
         const lu = lireCorps(req.body);
         if (lu.detail) return repondreErreur(res, 'ENTREE', undefined, { detail: lu.detail });
         const e = lu.entree;
+        // 🔑 BANC-200 (relecture 1, C1) : un scan rangé dans le JUGE ne s'étiquette jamais par cette voie (elle montre la réponse de la chaîne et ferait entrer photo et vérité du juge dans l'ancien export).
+        // Écrite FERMÉE : si l'état du juge ne se lit pas, la requête est refusée (503), jamais laissée passer.
+        try { if (await (deps.scanDuJuge || (id => require('./juge-garde').scanEstDuJuge(n => db.col(n), id)))(e.scanId)) return repondreErreur(res, 'CONFLIT', 'Ce scan appartient au juge : il ne s\'étiquette que par la saisie à l\'aveugle', { detail: 'scan-du-juge' }); }
+        catch (x) { journal('juge', x); return repondreErreur(res, 'INDISPONIBLE'); }
         const scanId = new mongoose.Types.ObjectId(e.scanId);                       // une chaîne ne filtre rien : analyses porte un ObjectId
         const chemin = `cartes.${e.carte}.etiquetteAdmin`;
         let catalogueVerifie = false;

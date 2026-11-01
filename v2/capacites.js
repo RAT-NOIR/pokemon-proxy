@@ -26,7 +26,7 @@
 // Un jeton dont le code ne pourrait pas être prouvé servi n'entre pas dans CONDITIONS : il n'est jamais annoncé.
 
 /** La liste fermée (DEMANDE-SERVEUR-EXTENSION.md, « EXTENSION — 24/10 (soir) »), dans l'ordre de la réponse. UN seul endroit : les bancs, le schéma et le contrat la lisent d'ici. */
-const CAPACITES = Object.freeze(['langue-impression', 'marques', 'prix-incertains', 'prix-repli', 'achete-avant-jour', 'empreinte', 'mesures-client', 'probable']);
+const CAPACITES = Object.freeze(['langue-impression', 'marques', 'prix-incertains', 'prix-repli', 'achete-avant-jour', 'empreinte', 'mesures-client', 'probable', 'leviers-abde', 'promotion-surs']);
 
 /**
  * L'archive des visuels EN MÉMOIRE est-elle en place, avec au moins un produit ? `version` est ce que rend le lecteur (chargeur/etat.js::version) : un objet gelé, ou null. Écrit par ce qu'il AUTORISE :
@@ -75,7 +75,11 @@ const CONDITIONS = Object.freeze({
     'mesures-client': (cfg, lireVersion, lireEmpreintes) => CONDITIONS.empreinte(cfg, lireVersion, lireEmpreintes) === true && cfg.mesuresClient === true && cfg.orbServeur === false,
     // PROBABLE (31/10, contrat « niveau probable » du 25/10) : `niveau` et `probable` sont servis (aux extensions >= 2.0.1). Les DEUX à la fois : V2_PROBABLE allumé (`cfg.probable === true`) ET la configuration
     // valide — la version minimale est une version lisible « x.y.z ». Le jeton est le DERNIER de la liste.
-    probable: (cfg) => cfg.probable === true && /^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(typeof cfg.versionMinProbable === 'string' ? cfg.versionMinProbable : '')
+    probable: (cfg) => cfg.probable === true && /^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(typeof cfg.versionMinProbable === 'string' ? cfg.versionMinProbable : ''),
+    // LEVIERS-ABDE (ordre n°17, 01/11/2026) : les quatre leviers a, b, d, e sont allumés SUR CE SERVEUR (V2_LEVIERS_ABDE=1, réservé à l'essai) ET le niveau probable l'est aussi (V2_PROBABLE=1) : a, b, d et e ne font rien sans lui (tour 1, F). Éteint, le jeton n'est jamais annoncé. Le dernier de la liste.
+    'leviers-abde': (cfg) => cfg.leviersAbde === true && cfg.probable === true,
+    // DECISION-SURS (01/11/2026) : un probable prouvé (S2 ∪ S3 ∪ I) est servi comme SÛR sur ce serveur. Les QUATRE drapeaux : V2_PROMOTION_SURS (essai seulement), V2_LEVIERS_ABDE, V2_PROBABLE, et V2_GARDE_MARQUEURS (sans elle un rival de même dessin ne serait pas vu sur le sûr : relecture M3). Le dernier de la liste.
+    'promotion-surs': (cfg) => cfg.promotionSurs === true && cfg.leviersAbde === true && cfg.probable === true && cfg.gardeMarqueurs === true
 });
 
 /**

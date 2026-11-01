@@ -283,11 +283,11 @@ function appliquerMarqueurs({ cfg, titre, resultat, derniereQuestion = null, c, 
     if (!cfg || (cfg.jumboTitre !== true && cfg.gardeMarqueurs !== true)) return null;
     const { affirmerParLaRoute, questionDeGroupe } = require('./adaptateur'), { construireProduit } = require('./produit');
     const pctx = { langueInterface, cfg, ficheServie: false };
-    return consulterMarqueurs({ cfg: lot ? { ...cfg, jumboTitre: false } : cfg, titre, resultat, derniereQuestion, corpsChaine: c, desaccordG, empreinteInfo, produits, version,
+    return consulterMarqueurs({ cfg: lot || resultat.jumeauxEnQuestion === true ? { ...cfg, jumboTitre: false } : cfg, titre, resultat, derniereQuestion, corpsChaine: c, desaccordG, empreinteInfo, produits, version,
         affirmer: (id, surcharge, critere) => affirmerParLaRoute(c, id, { ...pctx, produits: surcharge || produits }, critere),
         marqueursDe: id => (produits instanceof Map && produits.has(id) ? construireProduit(produits.get(id), pctx).marqueurs : undefined),
         motsDeProduit: id => (produits instanceof Map && produits.has(id) ? motsDuProduit(produits.get(id)) : undefined),
-        questionDeGroupe: ids => questionDeGroupe(c, ids, { ...pctx, produits, jumeaux }), journal });
+        questionDeGroupe: ids => questionDeGroupe(c, ids, { ...pctx, produits, jumeaux, lot }), journal });
 }
 
 module.exports = { DOUTE_ACCESSOIRE, consulterMarqueurs, appliquerMarqueurs, lireTitreJumbo, motsDuProduit, memeDessin, ecartMarqueurs, signalReel, critereJumbo, CRITERE_JUMBO, TERMES_JUMBO, TERMES_PAR_LANGUE, MOTS_NEUTRES, NEGATIONS, CONTRACTIONS, LIAISONS, VERSION_NORMALE, CONTREFACON, TITRE_MAX, MOTS_MAX };

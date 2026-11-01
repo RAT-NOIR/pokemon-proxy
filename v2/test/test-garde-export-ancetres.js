@@ -10,7 +10,7 @@ const X = require('../mesures/exporter-banc-admin');
 const enoent = () => Object.assign(new Error('absent'), { code: 'ENOENT' });
 /** Un monde fabriqué : seuls les chemins listés EXISTENT (valeur = leur chemin réel : une jonction y pointe ailleurs) ; tout autre chemin lève ENOENT, comme le vrai realpath. */
 const monde = existants => p => { const k = Object.keys(existants).find(x => x.toLowerCase() === String(p).toLowerCase()); if (k === undefined) throw enoent(); return existants[k]; };
-const stop = () => { throw Object.assign(new Error('arrêt'), { code: 'STOP' }); };
+const stop = n => { if (n === 'banc_seaux') return { find: () => ({ toArray: async () => [] }) }; throw Object.assign(new Error('arrêt'), { code: 'STOP' }); };
 /** @returns {Promise<[string, number, string]>} [issue, créations tentées, message] — issue ADMIS : la garde a laissé passer jusqu'à la lecture de la base. */
 async function essai({ dossier, existants, env = {}, tmp = 'Z:\\tmp', lstat = () => { throw enoent(); }, realpath = null }) {
     let n = 0;

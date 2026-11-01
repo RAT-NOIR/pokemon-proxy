@@ -19,7 +19,7 @@ const FILTRES = require('./filtres');
 const CLES_DOC_ADMIN = Object.freeze(['_id', 'aucune', 'cleR2', 'etat', 'expireLe', 'le', 'rev', 'reponse', 'sha256', 'source', 'verite', 'versionChaine', 'versionModele']);
 const SOURCE = 'etiquette-admin';
 const PHOTO_DELAI_MS = 15000, REPRISE_MAX = 200, ATTENTE_PHOTO_MS = JOUR_MS;
-const ETATS_FINIS = Object.freeze(['ecrit', 'sans-photo', 'role-retire', 'exclue-empreinte']);          // les états qui sortent une carte de l'attente
+const ETATS_FINIS = Object.freeze(['ecrit', 'sans-photo', 'role-retire', 'exclue-empreinte', 'exclue-juge']);          // les états qui sortent une carte de l'attente
 const FORME_ID = /^[0-9a-f]{24}$/i;
 const idOk = n => Number.isSafeInteger(n) && n > 0;
 const modeleOk = m => (typeof m === 'string' && /^[A-Za-z0-9._:+\/-]{1,80}$/.test(m) ? m : null);   // une version, jamais du texte libre
@@ -90,6 +90,8 @@ function creerEtiquetteLigne({ cfg, colFn, pret, sel, horloge, borner, cleOk = c
             const fin = async etat => { await marquer(scanId, carte, et.rev, etat); return etat; };
             // MODELE-VISUEL-API (tour 2, I1/M6) : un scan dont le résultat a été CHANGÉ par le vecteur de l'extension n'entre JAMAIS dans la ligne du banc partagé (la réponse d'origine qu'elle garderait est celle du client)
             if (an.empreinteExtension && an.empreinteExtension.influence === true) return fin('exclue-empreinte');
+            // BANC-200 (relecture 1, C1) : un scan du JUGE n'entre jamais dans une ligne du banc partagé ; si l'état du juge ne se lit pas, la lecture lève et la carte reste « en-attente » (échec fermé)
+            if (await require('./juge-garde').scanEstDuJuge(colFn, scanId)) return fin('exclue-juge');
             const cle = an.photoBanc && an.photoBanc.cle;
             if (!cleOk(cle) || !sel()) return fin('en-attente');
             const s = await pret(); if (!s) return fin('en-attente');

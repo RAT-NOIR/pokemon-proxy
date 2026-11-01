@@ -1,6 +1,6 @@
 {
-  "commentaire": "sha256 des fichiers SOURCE du site (rat-market-site/lib, lus au commit c205d3e par git show) et des fichiers produits ici ; refait par v2/comptes/copier-courriels-site.js",
-  "commit": "c205d3ee7c3cc3dc75ecc53792340b54dce3bd33",
+  "commentaire": "sha256 des fichiers SOURCE du site (rat-market-site/lib, lus au commit f17614c par git show) et des fichiers produits ici ; refait par v2/comptes/copier-courriels-site.js",
+  "commit": "f17614ce9ac799e000c76fef11ba562b6a1a383c",
   "sources": {
     "courriels.ts": "28bd1eeb2484d17c9015d4abd5c5614200fe0553b44291dec5760929321c4965",
     "courrielsGabarit.ts": "09aa14a8f014e4411bde6585755d02751830a73a8e57eaa8b4ab1648a40f8e76",

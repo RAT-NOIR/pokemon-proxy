@@ -35,7 +35,7 @@ function montrerInstallation(router, cfg, deps) {
     const limiteIp = L.limiteur({ nom: 'inst-ip', max: cfg.limites.installationParIpJour, fenetreMs: 86400e3, cle: cleIp });
     // INST-BANC : le compte de mesure (session valide, banc, administrateur, confirmé — exemption-banc.js) n'est pas compté dans `inst-ip` mais dans SON plafond (par compte, 50 par jour par défaut : une session
     // volée ou un banc emballé ne peut pas créer d'installations sans fin). Tout autre cas, exception comprise, passe par `inst-ip` comme avant. `inst-req-ip` et l'idempotence précèdent : ils valent pour le banc aussi.
-    const compteExempte = exemption.exemptionBanc(cfg), exempte = new WeakMap();
+    const compteExempte = exemption.exemptionBanc(cfg, deps), exempte = new WeakMap();
     const limiteBanc = L.limiteur({ nom: 'inst-banc', max: cfg.limites.installationBancJour, fenetreMs: 86400e3, cle: q => exempte.get(q) || null });
     const limite = async (req, res, next) => {
         const id = await compteExempte(req);

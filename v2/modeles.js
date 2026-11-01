@@ -53,6 +53,8 @@ const INDEX = Object.freeze([
 const { INDEX_ABO, INDEX_ABO_CONFORT } = require('./abonnements/index-db');
 const TOUS = Object.freeze([...INDEX, ...INDEX_ABO]);
 // STRIPE-DECISIONS : les index de confort de l'essai sans carte sont CRÉÉS (creerIndex) mais jamais EXIGÉS (verifierIndex) : aucun ne garantit une propriété du droit, déployer avant de les créer ne ferme aucune route
+// BANC-200 (tour 1, mineur) : les index des SEAUX ne sont PAS ici — la migration `creerIndex()` reste exactement ce qu'elle était, drapeau éteint. Le module seau.js crée les siens (idempotent) à la première utilisation,
+// donc seulement derrière V2_BANC_SEAU=1.
 const CREES = Object.freeze([...TOUS, ...INDEX_ABO_CONFORT]);
 
 // `collections` : liste de noms (seuls leurs index sont créés) ; absente = tout le socle (et les index des abonnements). `colFn` est injectable pour les bancs.
