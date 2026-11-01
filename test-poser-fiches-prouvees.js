@@ -173,6 +173,14 @@ verifier('décision 2026-11-01-a-ebauches : chaque entrée porte sa preuve écri
     verifier('décision 2026-11-01-a-ebauches : le numéro S19 contre la carte 007 (ou l\'autre total) est refusé — la voie ne se laisse pas tromper', planifier({ entrees: [{ ...D11[0], carteId: 30518 }], lecture: lec }).lignes.length, 0);
 }
 
+// l'argument --decision accepte le nom d'une décision à lettres (« 2026-11-01-a-ebauches ») : l'ancien motif ([\d-]+) la refusait comme « argument inconnu » AVANT de la chercher
+(async () => {
+    const { executer } = require('./poser-fiches-prouvees');
+    const sorties = [];
+    const code = await executer({ argv: ['--decision=2026-11-01-zzz-inconnue'], ouvrirLecture: async () => { throw new Error('ne doit pas ouvrir'); }, ouvrirEcriture: async () => { throw new Error('ne doit pas ouvrir'); }, log: () => { }, err: m => sorties.push(m) });
+    verifier('--decision à lettres : acceptée par la ligne de commande (refusée ensuite comme DÉCISION inconnue, jamais comme argument inconnu)', [code, /argument inconnu/.test(sorties.join()), /décision « 2026-11-01-zzz-inconnue » inconnue/.test(sorties.join())], [2, false, true]);
+})();
+
 (async () => {
     const banc = await ouvrirBanc();
     const { MongoClient } = require('mongodb');
