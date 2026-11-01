@@ -4516,13 +4516,17 @@
                 "type": [
                   "string",
                   "null"
-                ]
+                ],
+                "minLength": 1,
+                "maxLength": 40
               },
               "en": {
                 "type": [
                   "string",
                   "null"
-                ]
+                ],
+                "minLength": 1,
+                "maxLength": 40
               }
             },
             "required": [

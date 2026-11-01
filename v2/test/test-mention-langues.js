@@ -24,7 +24,9 @@ const P = (o, ctx = decl) => construireProduit(base(o), ctx);
 const sans = P({ visuel: vis, visuelMention: MENTION_EDITION_1 }, { langueInterface: 'fr' });
 v('M1. non déclaré : aucune clé `visuelMentionLangues`', 'visuelMentionLangues' in sans, false);
 v('M1b. déclaré faux, absent, « true » chaîne, 1 : aucune clé de plus (seul le booléen true déclare)', [false, undefined, 'true', 1].map(x => 'visuelMentionLangues' in P({ visuel: vis, visuelMention: MENTION_EDITION_1 }, { langueInterface: 'fr', mentionLangues: x })), [false, false, false, false]);
-v('M1c. non déclaré : le Produit est identique à celui d\'une construction SANS le champ de contexte (octet pour octet)', JSON.stringify(sans), JSON.stringify(construireProduit(base({ visuel: vis, visuelMention: MENTION_EDITION_1 }), { langueInterface: 'fr', mentionLangues: false })));
+// M1c (tour 1, relecture) : l'ancienne assertion comparait deux constructions SANS clé entre elles (tautologique). Celle-ci peut ÉCHOUER : le jeu de clés du Produit non déclaré est EXACTEMENT celui d'avant (les 17 clés de test-identifier-produit.js), dans l'ordre.
+const CLES_AVANT = ['idProduct', 'nom', 'nomCardmarket', 'set', 'numero', 'total', 'langue', 'variante', 'marques', 'marqueurs', 'version', 'rarete', 'visuel', 'visuelMention', 'prixGuide', 'liens', 'impressions'];
+v('M1c. non déclaré : les clés du Produit sont EXACTEMENT les 17 d\'avant, dans l\'ordre (aucune clé de plus, aucune de moins), avec ou sans mention', [Object.keys(sans), Object.keys(P({ visuel: vis }, { langueInterface: 'en' })), Object.keys(P({ visuelMention: MENTION_EDITION_1 }, { langueInterface: 'fr' }))], [CLES_AVANT, CLES_AVANT, CLES_AVANT]);
 
 // ── déclaré ─────────────────────────────────────────────────────────────────────────────────
 const d1 = P({ visuel: vis, visuelMention: MENTION_EDITION_1 });
@@ -39,4 +41,13 @@ v('M6. pas de visuel servi : null (une mention n\'accompagne qu\'un visuel)', [P
 v('M7. pas de mention : null', [P({ visuel: vis }).visuelMentionLangues, P({ visuel: vis, visuelMention: '  ' }).visuelMentionLangues, P({ visuel: vis, visuelMention: 42 }).visuelMentionLangues], [null, null, null]);
 v('M8. une valeur qui n\'est pas un texte dans l\'objet est ignorée (null), jamais convertie', P({ visuel: vis, visuelMention: { fr: 7, en: ['x'] } }).visuelMentionLangues, null);
 v('M9. déclaré : seule la clé `visuelMentionLangues` s\'ajoute (les autres clés du Produit sont celles d\'avant)', Object.keys(d1).filter(k => !Object.keys(sans).includes(k)), ['visuelMentionLangues']);
+// ── tour 1 (relecture) : la borne « 1 à 40 caractères » est APPLIQUÉE à chaque côté, sur une entrée d'archive aussi ──────────────
+const n = k => 'x'.repeat(k);
+v('M10. une chaîne d\'archive de 41 caractères : hors borne, rien de servi (null) — ni le français tronqué, ni une langue pour une autre', P({ visuel: vis, visuelMention: n(41) }).visuelMentionLangues, null);
+v('M10b. 40 caractères passent, 1 caractère passe, 0 (vide) et blancs : null', [P({ visuel: vis, visuelMention: n(40) }).visuelMentionLangues, P({ visuel: vis, visuelMention: 'x' }).visuelMentionLangues, P({ visuel: vis, visuelMention: '' }).visuelMentionLangues, P({ visuel: vis, visuelMention: '   ' }).visuelMentionLangues], [{ fr: n(40), en: null }, { fr: 'x', en: null }, null, null]);
+v('M10c. la borne compte les caractères, pas les octets : 40 « é » passent, 41 non', [P({ visuel: vis, visuelMention: 'é'.repeat(40) }).visuelMentionLangues, P({ visuel: vis, visuelMention: 'é'.repeat(41) }).visuelMentionLangues], [{ fr: 'é'.repeat(40), en: null }, null]);
+v('M10d. un côté d\'objet hors borne est écarté SEUL : l\'anglais trop long -> { fr, en: null } (retombée sur le français) ; le français trop long -> { fr: null, en }', [P({ visuel: vis, visuelMention: { fr: 'Autre tirage', en: n(41) } }).visuelMentionLangues, P({ visuel: vis, visuelMention: { fr: n(41), en: 'Other print' } }).visuelMentionLangues], [{ fr: 'Autre tirage', en: null }, { fr: null, en: 'Other print' }]);
+v('M10e. les deux côtés hors borne : null', P({ visuel: vis, visuelMention: { fr: n(41), en: n(99) } }).visuelMentionLangues, null);
+v('M10f. un texte avec des blancs autour est servi nettoyé (comme le lecteur de l\'extension)', P({ visuel: vis, visuelMention: '  Autre tirage  ' }).visuelMentionLangues, { fr: 'Autre tirage', en: null });
+v('M10g. `visuelMention` (la chaîne de l\'interface) n\'est PAS touchée par la borne : une chaîne de 41 caractères reste servie là, comme avant', P({ visuel: vis, visuelMention: n(41) }).visuelMention, n(41));
 bilan();

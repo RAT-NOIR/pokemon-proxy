@@ -79,9 +79,14 @@ function mention(m, langue) {
 // L'archive ne porte aujourd'hui qu'UNE chaîne (française) : la mention des emprunts a son équivalent anglais ici (UNE table, texte PROPOSÉ à l'éditeur, 1 à 40 caractères) ; toute autre chaîne seule reste le
 // FRANÇAIS et l'anglais vaut null (jamais une langue pour une autre) ; un objet { fr, en } est repris côté par côté. null quand aucun texte n'est lisible.
 const MENTIONS_EN = Object.freeze({ [MENTION_EDITION_1]: 'Image from another printing' });
+// La BORNE (tour 1 de la relecture) : chaque côté fait 1 à 40 CARACTÈRES (points de code, après nettoyage des blancs) — le lecteur fermé de l'extension rejette le reste. Un côté hors borne est écarté SEUL : l'anglais trop
+// long retombe sur le français ({ fr, en: null }) ; le français trop long n'a pas de repli (null de ce côté) ; les deux hors borne : null. Jamais tronqué (un texte coupé serait un autre texte).
+const MENTION_MAX = 40;
+const borne = x => { const s = texte(x); if (s === null) return null; const t = s.trim(); return t.length >= 1 && [...t].length <= MENTION_MAX ? t : null; };
 function mentionLangues(m) {
-    const fr = m && typeof m === 'object' ? texte(m.fr) : texte(m);
-    const en = m && typeof m === 'object' ? texte(m.en) : (fr !== null && MENTIONS_EN[fr] !== undefined ? MENTIONS_EN[fr] : null);
+    const objet = m && typeof m === 'object';
+    const fr = objet ? borne(m.fr) : borne(m);
+    const en = objet ? borne(m.en) : (fr !== null && MENTIONS_EN[fr] !== undefined ? MENTIONS_EN[fr] : null);
     return fr === null && en === null ? null : Object.freeze({ fr, en });
 }
 
