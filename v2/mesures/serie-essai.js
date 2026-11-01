@@ -32,26 +32,15 @@ const fs = require('fs'), path = require('path'), crypto = require('crypto');
 const SP = require('./serie-probable');
 const CT = require('./serie-compte-test');
 
+// JUGE EN UN CLIC (ordre n°30) : l'hôte, la lecture des identifiants, l'appel HTTP et le chemin de connexion vivent dans connexion-essai.js, importé aussi par le lanceur du juge (aucune recopie).
+const { Arret, HOTE_ESSAI, ORIGINE_SITE, NOM_IDENTIFIANT, NOM_MOT_DE_PASSE, NOM_ORDINAIRE_IDENTIFIANT, NOM_ORDINAIRE_MOT_DE_PASSE, DELAI_MS, baseAutorisee, lireVariable, lireIdentifiants, creerAppelant, connexionNormale } = require('./connexion-essai');
+
 const CODE_EXTINCTION = 12;                                               // la série s'est arrêtée sur un sûr FAUX et a éteint la variable (voir decisionExtinction)
-const HOTE_ESSAI = 'rat-market-api-essai.onrender.com';
-const NOM_IDENTIFIANT = 'V2_ESSAI_BANC_IDENTIFIANT', NOM_MOT_DE_PASSE = 'V2_ESSAI_BANC_MOT_DE_PASSE';
-const NOM_ORDINAIRE_IDENTIFIANT = 'V2_ESSAI_ORDINAIRE_IDENTIFIANT', NOM_ORDINAIRE_MOT_DE_PASSE = 'V2_ESSAI_ORDINAIRE_MOT_DE_PASSE';      // COMPTE-TEST : l'AUTRE couple, jamais mélangé avec celui du compte de mesure
-const ORIGINE_SITE = 'https://rat-market.fr';                              // l'Origin exacte que la connexion du site exige (config.origines.site)
 const MODELE_DEFAUT = Object.freeze({ id: 'p8000-poids8s-1', sha256: '857105e3eb0035c5e0b6eab88f898a134d171321eb00e90452f4d37f7df28ec2' });
 const COUT_ESTIME_DEFAUT_USD = 0.0037;                                   // mesuré : une identification de production, 2 photos, médiane du journal (CLAUDE.md §73)
 const IMAGE_ANNONCE = 'https://images1.vinted.net/t/serie-essai/f800/serie-essai.jpeg';   // exigée par la forme de la requête ; jamais téléchargée par le serveur quand un photoId est reçu
 const TYPES = Object.freeze({ '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' });
-const DELAI_MS = 120000, ERREURS_DE_SUITE_MAX = 3;
-
-class Arret extends Error { constructor(raison) { super(raison); this.name = 'Arret'; this.raison = raison; } }
-
-/** L'adresse de base, ou un Arret. UN SEUL chemin mène à une adresse : https, l'hôte d'essai exact, ni identifiant, ni port, ni chemin, ni requête. */
-function baseAutorisee(brut) {
-    let u;
-    try { u = new URL(String(brut)); } catch { throw new Arret('adresse illisible'); }
-    if (u.protocol !== 'https:' || u.hostname !== HOTE_ESSAI || u.port !== '' || u.username !== '' || u.password !== '' || (u.pathname !== '/' && u.pathname !== '') || u.search !== '' || u.hash !== '') throw new Arret(`hôte refusé : seul https://${HOTE_ESSAI} est visé`);
-    return `https://${HOTE_ESSAI}`;
-}
+const ERREURS_DE_SUITE_MAX = 3;
 
 // ── EXTINCTION AUTOMATIQUE (DECISION-SURS, 01/11) : `--eteindre-si-sur-faux=<VARIABLE> --commit-essai=<commit>`. Dès qu'une ligne rend un SÛR dont le produit n'est pas la vérité, la série s'arrête, la variable est posée à 0 sur
 // l'ESSAI par l'outil existant (render/poser-variables-essai.js : sauvegarde chiffrée, essai à blanc, relecture, déploiement de --attendu=, restauration si échec), et l'heure et la ligne sont journalisées. Jamais la production.
@@ -104,22 +93,6 @@ function quantile(valeurs, q) {
     return s[Math.min(s.length - 1, Math.max(0, Math.ceil(q * s.length) - 1))];
 }
 const statistiques = durees => ({ n: durees.length, p50: quantile(durees, 0.5), p95: quantile(durees, 0.95) });
-
-/** Une variable : process.env d'abord, puis le fichier d'environnement NOMMÉ. Ne lit que ce nom, ne l'imprime jamais. null si absente ou vide. */
-function lireVariable(nom, env, fichierEnv, lire = f => fs.readFileSync(f, 'utf8')) {
-    const direct = env && typeof env[nom] === 'string' ? env[nom].trim() : '';
-    if (direct) return direct;
-    if (!fichierEnv) return null;
-    let texte; try { texte = lire(fichierEnv); } catch { return null; }
-    const m = new RegExp(`^\\s*${nom}\\s*=\\s*(.*)$`, 'm').exec(texte);
-    const v = m ? m[1].trim().replace(/^["']|["']$/g, '').trim() : '';
-    return v || null;
-}
-/** Les deux identifiants du compte de mesure, ou null si l'un manque. */
-function lireIdentifiants(env, fichierEnv, lire, noms = { identifiant: NOM_IDENTIFIANT, motDePasse: NOM_MOT_DE_PASSE }) {
-    const identifiant = lireVariable(noms.identifiant, env, fichierEnv, lire), motDePasse = lireVariable(noms.motDePasse, env, fichierEnv, lire);
-    return identifiant && motDePasse ? { identifiant, motDePasse } : null;
-}
 
 /** Le carnet de dépense : une ligne JSON par scan, ajoutée AVANT le scan suivant. Le total déjà inscrit compte. */
 function ouvrirCarnet(fichier, { plafondUsd, coutEstimeUsd }) {
@@ -266,15 +239,7 @@ async function serie(o, deps = {}) {
     }
     const cacheHote = new Map();                                                                       // les références téléchargées de l'hôte public, pour la série
 
-    let jeton = null;                                                  // le jeton d'installation LIÉ au compte de mesure (Bearer) ; il ne sort jamais de ce fichier
-    const appeler = async (chemin, init, auth = 'bearer') => {
-        const entetes = { ...(init.headers || {}), ...(auth === 'bearer' && jeton ? { Authorization: `Bearer ${jeton}` } : {}) };
-        const rep = await fetchF(base + chemin, { redirect: 'manual', signal: AbortSignal.timeout(DELAI_MS), ...init, headers: entetes });
-        if (rep.status >= 300 && rep.status < 400) throw new Arret(`redirection ${rep.status} refusée (le client ne suit rien)`);
-        let corps = null; try { corps = await rep.json(); } catch { /* corps vide ou non JSON */ }
-        const lire = n => (rep.headers && typeof rep.headers.get === 'function' ? rep.headers.get(n) : null);
-        return { statut: rep.status, corps, retryApres: lire('retry-after'), cookie: lire('set-cookie') };
-    };
+    const { appeler, definirJeton } = creerAppelant({ base, fetchF, delaiMs: DELAI_MS });       // le jeton d'installation LIÉ au compte de mesure (Bearer) reste dans cette fermeture : il ne sort jamais
 
     // le ping dit la version minimale de l'extension et si le jeton `empreinte` est annoncé
     // MODE --g-probable : avant le premier scan, DEUX /ping complets (toutes les capacités attendues, dont langue-impression et marques) espacés d'au moins 10 s ; un réveil à froid de l'essai (erreur, /ping partiel) s'attend, sans payer
@@ -302,23 +267,12 @@ async function serie(o, deps = {}) {
     log(`/ping : versionMinExtension ${ping.corps.versionMinExtension} ; capacités ${capacites.join(', ') || '(aucune)'} ; jeton empreinte ${capacites.includes('empreinte') ? 'PRÉSENT' : 'ABSENT (le serveur ne se sert pas encore des vecteurs)'}`);
 
     // ── la CONNEXION NORMALE : installation → connexion (cookie) → code → liaison. Tout refus arrête la série AVANT le moindre scan payé ; aucun détail de réponse n'est recopié (ils pourraient porter un secret).
-    const refus = (etape, r) => { throw new Arret(`connexion du compte de mesure : ${etape} refusée (${r.statut})${r.statut === 429 ? ` — réessayer dans ${r.retryApres ?? '?'} s` : ''}`); };
-    // INST-BANC : la connexion d'abord, puis l'installation AVEC la session — la limite « 2 installations par IP et par jour » ne s'efface que pour une session du compte de mesure (v2/installations/exemption-banc.js).
-    const entetesSite = { Origin: origineSite, 'X-Rat-Market': '1', 'Content-Type': 'application/json' };
-    const cx = await appeler('/api/compte/connexion', { method: 'POST', headers: entetesSite, body: JSON.stringify({ email: ids.identifiant, motDePasse: ids.motDePasse }) }, null);
-    const session = cx.cookie ? /(?:^|[\s,;])rm_session=([^;\s,]+)/.exec(String(cx.cookie)) : null;
-    if (cx.statut !== 200 || !session) refus('connexion', cx);
-    const inst = await appeler('/api/installation', { method: 'POST', headers: { ...entetesSite, Cookie: `rm_session=${session[1]}` }, body: JSON.stringify({ versionExtension: ping.corps.versionMinExtension, libelle: 'serie-essai' }) }, null);
-    if (inst.statut !== 201 || !inst.corps || typeof inst.corps.jetonInstallation !== 'string') refus('création de l\'installation', inst);
-    const cd = await appeler('/api/compte/code', { method: 'POST', headers: { ...entetesSite, Cookie: `rm_session=${session[1]}` }, body: '{}' }, null);
-    if (cd.statut !== 200 || !cd.corps || typeof cd.corps.code !== 'string') refus('code de liaison', cd);
-    jeton = inst.corps.jetonInstallation;
-    const lie = await appeler('/api/compte/lier', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': `serie-lier-${crypto.randomBytes(12).toString('hex')}` }, body: JSON.stringify({ code: cd.corps.code }) });
-    if (lie.statut !== 200 || !lie.corps || typeof lie.corps.jetonInstallation !== 'string') refus('liaison', lie);
+    // (le chemin lui-même — connexion, installation avec la session, code, liaison — est dans connexion-essai.js, le même que celui du lanceur du juge)
+    const lie = await connexionNormale({ appeler, definirJeton, ids, origineSite, versionExtension: ping.corps.versionMinExtension });
     if (ct) {                                                                                       // le compte de TEST est un compte gratuit ordinaire : s'il était administrateur, aucun débit ne se mesurerait
         if (!(lie.corps.compte && lie.corps.compte.administrateur === false && lie.corps.compte.verifie === true)) throw new Arret('le compte lié n\'est pas un compte ordinaire confirmé (administrateur ou non confirmé) : la série ne mesurerait aucun débit');
     } else if (!(lie.corps.compte && lie.corps.compte.administrateur === true)) throw new Arret('le compte lié n\'est pas administrateur : aucune photo ne peut être déposée');
-    jeton = lie.corps.jetonInstallation;
+    definirJeton(lie.corps.jetonInstallation);
     log(ct ? 'compte de test ordinaire connecté (installation liée, non administrateur)' : 'compte de mesure connecté (installation liée, administrateur)');
 
     // COMPTE-TEST : le solde et le quota du jour, lus par POST /api/solde (lecture pure, aucun débit) — avant la série, puis après chaque ligne. Illisible : arrêt.
