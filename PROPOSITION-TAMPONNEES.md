@@ -17,5 +17,19 @@ La règle des emprunts déjà classés (e14-classes-orb.js), appliquée à l'ima
 ## 4. Le remplacement par le vrai scan
 Automatique par construction : `choisirVisuel` donne un scan du set (non empreinté) avant le repli ; (D) ne se déclenche que s'il n'y en a pas. Test D5.
 
+## 6. DÉTECTION DU TAMPON chez le client (ordre n°17 de l'éditeur, 01/11) — PROPOSITION, aucun code, rien de servi
+Principe : un tampon a un emplacement et une forme connus. Le client le cherche DANS cette zone, sur le recadrage redressé de la carte, par correspondance de gabarit ou ORB (OpenCV, quelques ms). Tampon trouvé : la version tamponnée passe devant. Tampon absent sur une image NETTE : la version sans tampon passe devant. Incertain : la question actuelle reste. Les gabarits sont tirés de NOS visuels (l'archive), jamais d'une image Cardmarket.
+
+**6.1 Ce que le serveur fournit** : un fichier de gabarits, au même titre que les références du calcul client (petits fichiers sur le R2 public, manifeste scellé, sha256 de chaque pièce, version). Une ligne par type de marqueur à tampon (`PLAY_POKEMON`, `TRICK_OR_TRADE`, et les types de la table des tampons qui s'y prêtent, un à un après mesure) :
+`{ type, zone: { x, y, l, h } (normalisée 0 à 1 sur la carte redressée), gabarit (image + taille, format), source: { idProduct, cleR2 du visuel de NOTRE archive }, sha256 du gabarit, version }`. La zone et le gabarit sont lus sur nos visuels de référence du type (jamais une vignette Cardmarket). Un type sans gabarit prouvé n'a pas de ligne : le client ne le cherche pas.
+
+**6.2 Ce que le client renvoie** (champ FACULTATIF de la requête d'identification, absent = l'actuel, octet pour octet) : pour chaque type cherché, `{ type, etat: "present" | "absent" | "incertain", score (0 à 1), nettete (0 à 1, mesurée DANS la zone), gabaritSha256, version }`. Règle écrite par ce qu'elle autorise : `absent` n'est permis que si `nettete` atteint le seuil de netteté ; une zone floue ou hors cadre se dit `incertain`, jamais `absent`.
+
+**6.3 Ce que le serveur en fait** : le client n'est jamais cru sur parole. Le renvoi n'est lu que pour ORDONNER, parmi les candidats d'un même groupe de jumeaux qui ne diffèrent que par le tampon (même dessin, le tampon est la seule différence) : `present` met la version tamponnée devant, `absent` (net) met la version sans tampon devant, `incertain` ou champ absent laisse la question actuelle. Il ne crée aucune désignation hors du groupe, ne rend pas un produit « sûr » à lui seul, et un `gabaritSha256` ou une `version` qui ne sont pas ceux servis est ignoré (compté). Si ce renvoi doit aussi faire passer une question au niveau « probable » ou « sûr », c'est une décision de contrat et de « sûr » : à l'arbitrage du coordinateur, pas tranchée ici.
+
+**6.4 Avant tout code** : demande écrite à l'extension (journal, entrée API du 01/11) : OpenCV est-il déjà chargé chez elle, et à quel coût en ms et en Mo ? Sans réponse, rien n'est écrit.
+
+**6.5 La mesure, fixée d'avance** : elle se fera sur une MOITIÉ des 44 tamponnées jamais regardée. C'est l'éditeur (via le coordinateur) qui tire cette moitié au sort et la SCELLE avant tout réglage ; les seuils (score, netteté) se règlent sur l'autre moitié seulement ; la moitié scellée ne sert qu'une fois, à la fin. Critère : 0 faux (un faux est une version tamponnée mise devant une carte non tamponnée, ou l'inverse), les « incertain » étant comptés à part et jamais en échec.
+
 ## 5. Ce que ça donne (archive candidate `candidate-2026-11-01c.rmv`, jamais publiée)
 382 produits dans la portée (Prize Pack 268, image empruntée 93, 30th 14, Trick or Trade 7) : 21 prouvés « meme » et admis (Prize Pack 17, image empruntée 4) ; 361 indécidables. Entrées 68 220 -> 68 241 (+21), fiches liées 65 987 -> 65 987, 0 perdue, 0 produit changé. Mesure de l'archive (réglage 141, tamponnées 35, ordinaires 44) : FAUX 0, mêmes comptes qu'avant.
