@@ -15,7 +15,10 @@ const HOTES_PUBLICS = Object.freeze(['pub-7d992e666c3d4a2b870b680a920045b6.r2.de
 const OCTETS_MAX = 8 * 1024 * 1024;
 
 const fini = x => typeof x === 'number' && Number.isFinite(x);
-const concorde = m => (fini(m.fen) && m.fen >= SEUILS.inliersConcorde) || (fini(m.cos) && m.cos >= SEUILS.cosConcorde);
+// I3 (relecture p8, tour 2) : la preuve se DURCIT — la jambe « fenêtre ORB » ne suffit plus seule : le cosinus p8000 ne doit pas être CONTRAIRE (< cosContredit) contre ce scan. Un cosinus inconnu (scan absent de
+// l'index) n'est pas contraire ; la jambe « cosinus >= 0,9 » le satisfait d'elle-même. La 3e concordance ne rattrape JAMAIS un scan au cosinus contraire.
+const cosinusContraire = m => fini(m.cos) && m.cos < SEUILS.cosContredit;
+const concorde = m => ((fini(m.fen) && m.fen >= SEUILS.inliersConcorde) || (fini(m.cos) && m.cos >= SEUILS.cosConcorde)) && !cosinusContraire(m);
 const contredit = m => fini(m.fen) && m.fen <= SEUILS.inliersContredit && (!fini(m.cos) || m.cos < SEUILS.cosContredit);
 const mesurable = m => fini(m.fen) || fini(m.cos);
 
@@ -39,7 +42,7 @@ function classerAvecTroisieme(mesures) {
     const base = classer(mesures);
     if (base.detail !== 'hesitante') return base;
     const aVerifier = mesures.filter(m => !concorde(m));
-    if (aVerifier.every(m => troisiemeConcordance(m.tierce)))
+    if (aVerifier.every(m => !cosinusContraire(m) && troisiemeConcordance(m.tierce)))
         return { classe: 'meme', detail: 'hesitante-3e', sous: `hésitant admis par la 3e concordance (zone souple du catalogue : pHash <= ${SEUIL_SOUPLE.phashMax} ET ORB >= ${SEUIL_SOUPLE.inliersMin}) contre ${aVerifier.length} référence(s), les autres (${mesures.length - aVerifier.length}) concordent` };
     return { ...base, sous: base.sous + ' ; la 3e concordance échoue ou manque' };
 }
@@ -57,10 +60,12 @@ async function lireImage(cle, { fetch: f = globalThis.fetch, cache = null, atten
         if (!cleValide(cle) || !HOTES_PUBLICS.includes(hote) || typeof f !== 'function') return null;
         if (cache) { const c = await cache.lire(cle); if (Buffer.isBuffer(c) && c.length) return c; }
         if (attenteMs > 0) await pause(attenteMs);
-        const r = await f(`https://${hote}/${cle.split('/').map(encodeURIComponent).join('/')}`);
+        const r = await f(`https://${hote}/${cle.split('/').map(encodeURIComponent).join('/')}`, { redirect: 'error' });      // M5 : une redirection échoue (l'hôte n'est vérifié que sur l'adresse de départ)
         if (!r || !r.ok || r.status !== 200) return null;
         const type = String(r.headers && r.headers.get ? r.headers.get('content-type') || '' : '');
         if (!/^image\//i.test(type)) return null;
+        const annonce = Number(r.headers && r.headers.get ? r.headers.get('content-length') : NaN);
+        if (Number.isFinite(annonce) && annonce > OCTETS_MAX) return null;          // M5 : la taille annoncée est bornée AVANT la lecture complète
         const b = Buffer.from(await r.arrayBuffer());
         if (!b.length || b.length > OCTETS_MAX) return null;
         if (cache) await cache.ecrire(cle, b);
@@ -68,4 +73,4 @@ async function lireImage(cle, { fetch: f = globalThis.fetch, cache = null, atten
     } catch { return null; }
 }
 
-module.exports = { SEUILS, SEUIL_SOUPLE, HOTES_PUBLICS, classer, troisiemeConcordance, classerAvecTroisieme, lireImage, cleValide };
+module.exports = { SEUILS, SEUIL_SOUPLE, HOTES_PUBLICS, OCTETS_MAX, classer, troisiemeConcordance, classerAvecTroisieme, lireImage, cleValide };
