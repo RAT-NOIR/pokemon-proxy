@@ -12,7 +12,7 @@ const GALERIE_CHEMINS = /^\/api\/(galerie|banque|enregistres|classeurs|signaleme
 function profils(cfg) {
     const o = cfg.origines;
     const ext = [o.extension, o.extensionDev].filter(x => typeof x === 'string' && x);
-    return [
+    const liste = [
         ...(cfg.empreinteExtension === true ? [{ nom: 'extension-modele', origines: new Set(ext), credentials: false, chemins: [/^\/api\/modele-empreinte\/[0-9a-f]{64}$/], methodes: 'GET, HEAD', entetes: 'Range, If-None-Match', expose: 'Retry-After' }] : []),
         { nom: 'extension', origines: new Set(ext), credentials: false,
           // PHOTOS-MULTIPLES (7d) : /api/photo n'a de profil CORS que si la route existe (drapeau allumé) ; éteint, aucun en-tête propre à v2 pour ce chemin
@@ -20,11 +20,12 @@ function profils(cfg) {
           methodes: 'GET, POST', entetes: 'Authorization, Content-Type, Idempotency-Key' },
         { nom: 'site', origines: new Set([o.site]), credentials: true,
           // INST-BANC-CORS : POST /api/installation, ce chemin EXACT seulement (l'exemption du compte de mesure exige l'Origin du site + X-Rat-Market + la session) ; aucun voisin
-          chemins: [/^\/ping$/, /^\/api\/installation$/, /^\/api\/compte(\/.*)?$/, /^\/api\/scanner\/.+$/, /^\/api\/solde$/, /^\/api\/creer-recharge$/, /^\/api\/collection(\/.*)?$/, /^\/api\/abonnement(\/.*)?$/,
-              // GALERIE : seulement si le lot est allumé (éteint, le profil est celui d'avant, octet pour octet)
-              ...(cfg.galerie && cfg.galerie.actif === true ? [GALERIE_CHEMINS] : [])],
+          chemins: [/^\/ping$/, /^\/api\/installation$/, /^\/api\/compte(\/.*)?$/, /^\/api\/scanner\/.+$/, /^\/api\/solde$/, /^\/api\/creer-recharge$/, /^\/api\/collection(\/.*)?$/, /^\/api\/abonnement(\/.*)?$/],
           methodes: 'GET, POST, DELETE', entetes: 'Content-Type, X-Rat-Market, Idempotency-Key' }
     ];
+    // GALERIE : les chemins de la Communauté s'ajoutent au profil du site SEULEMENT lot allumé (éteint, le profil est celui d'avant, octet pour octet)
+    if (cfg.galerie && cfg.galerie.actif === true) liste.find(x => x.nom === 'site').chemins.push(GALERIE_CHEMINS);
+    return liste;
 }
 
 function middlewareV2(cfg) {

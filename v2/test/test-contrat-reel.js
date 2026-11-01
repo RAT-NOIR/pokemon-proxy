@@ -324,7 +324,7 @@ const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empr
     await semer('triple');
     const express = require('express'); const pret = require('../pret'); const registre = require('../registre');
     const { dansUnScan } = require('../../sources'); const { assembler, LOTS } = require('../index');          // LOTS : la liste de v2/index.js, UNE seule définition (tour 1, I7)
-    H.vrai(`LOTS lu de v2/index.js : ${LOTS.length} lots`, Array.isArray(LOTS) && LOTS.length === 8);   // 7 → 8 : le lot COLLECTION entre dans LOTS (ruling 1 du lot) ; le dénominateur suit la liste, aucune garde n'est desserrée
+    H.vrai(`LOTS lu de v2/index.js : ${LOTS.length} lots`, Array.isArray(LOTS) && LOTS.length === 9);   // 8 → 9 : le lot GALERIE entre dans LOTS (derrière V2_GALERIE=1, éteint dans ce banc) ; 7 → 8 : le lot COLLECTION entre dans LOTS (ruling 1 du lot) ; le dénominateur suit la liste, aucune garde n'est desserrée
     const { creerCourrierMemoire } = require('../comptes/courrier');
     const courrier = creerCourrierMemoire();
     registre.fournir('courrier', courrier); registre.fournir('turnstile', { verifier: async () => true });
@@ -1012,7 +1012,7 @@ const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empr
     H.v('un code produit par le serveur et absent de la liste fermée / du schéma', horsListe, []);
     const JAMAIS = Object.keys(CODES).filter(c => !produits.has(c));
     console.log(`   codes de la liste fermée produits : ${Object.keys(CODES).length - JAMAIS.length} / ${Object.keys(CODES).length} ; non produits par le banc : ${JAMAIS.join(', ') || 'aucun'}`);
-    const CODES_NON_PRODUITS = { VERIFICATION: 'O3 : un compte non confirmé n\'est plus un porteur, donc aucune requête n\'atteint plus les gardes « compte vérifié » (identifier, scanner, collection) — elles restent en profondeur ; test-comptes-o3.js prouve le refus à la source', EN_RECONCILIATION: 'ne naît que d\'une clé de débit rejouée dont la ligne attend la réconciliation (test-argent-tour4.js) — état fabriqué par ce banc-là, pas par une route sur un état courant' };
+    const CODES_NON_PRODUITS = { VERIFICATION: 'O3 : un compte non confirmé n\'est plus un porteur, donc aucune requête n\'atteint plus les gardes « compte vérifié » (identifier, scanner, collection) — elles restent en profondeur ; test-comptes-o3.js prouve le refus à la source', INTERDIT: 'GALERIE : produit seulement par les routes de la Communauté (derrière V2_GALERIE=1, éteint dans ce banc) ; joué par test-galerie-routes.js et test-galerie-conformite.js', FICHIER: 'GALERIE : refus de fichier du dépôt d\'un art, joués par test-galerie-routes.js §5 (cinq causes) et test-galerie-images.js', LIMITE_DEBIT: 'GALERIE : limite de débit des routes de la Communauté, jouée par test-galerie-routes.js et test-galerie-conformite.js', EN_RECONCILIATION: 'ne naît que d\'une clé de débit rejouée dont la ligne attend la réconciliation (test-argent-tour4.js) — état fabriqué par ce banc-là, pas par une route sur un état courant' };
     H.v('codes de la liste fermée jamais produits et non déclarés', JAMAIS.filter(c => !(c in CODES_NON_PRODUITS)), []);
     H.v('déclarations « code non produit » périmées (le code a été produit : retirer la déclaration)', Object.keys(CODES_NON_PRODUITS).filter(c => produits.has(c)), []);
     // les causes de non-remboursement servies (RAISONS_NON_REMBOURSE, une source) : celles que le banc a vues, et celles qu'il ne sait pas fabriquer (dites)

@@ -124,6 +124,13 @@ const OPENAPI = require('../openapi/openapi.v2.json'); const { valider } = requi
         valider({ ...s1.json, extra: 1 }, OPENAPI.components.schemas.ReponseSignalement, OPENAPI).ok,
         valider({ success: true, jaime: 'oui', compteur: null, petitCompteur: true }, OPENAPI.components.schemas.ReponseJaime, OPENAPI).ok,
         valider({ success: true, octetsMax: 5 }, OPENAPI.components.schemas.ReponseBornesIllustrations, OPENAPI).ok], [false, false, false]);
+    // ═══ base dédiée pas branchée : chaque route répond 503 INDISPONIBLE (jamais un repli sur la base de l'API), conforme au schéma publié ═══
+    await G.debrancher();
+    const sansBase = [['GET', '/api/galerie'], ['GET', '/api/banque/formats'], ['GET', '/api/illustrations/bornes'], ['PUT', `/api/classeurs/${idPub}/jaime`], ['POST', `/api/galerie/${idPub}/remix`], ['PUT', '/api/compte/pseudo'], ['POST', '/api/illustrations/depot'], ['POST', '/api/signalements'], ['GET', '/api/admin/moderation?file=publications'], ['GET', '/api/enregistres']];
+    const modeles = { [`/api/classeurs/${idPub}/jaime`]: '/api/classeurs/{id}/jaime', [`/api/galerie/${idPub}/remix`]: '/api/galerie/{id}/remix', '/api/admin/moderation?file=publications': '/api/admin/moderation' };
+    const r503 = [];
+    for (const [m, ch] of sansBase) { const r = await appel(m, ch, { c: modo, corps: m === 'GET' ? undefined : { pseudo: 'x-y-z', type: 'image/png', octets: 5, cible: `galerie:${idPub}`, motif: 'autre', turnstile: 'jeton-valide' } }); r503.push([m, r.statut, r.json && r.json.erreur && r.json.erreur.code]); verifier(`503 sans base — ${m} ${ch.split('?')[0].slice(0, 28)}`, modeles[ch] || ch, m, r); }
+    H.v('   sans base dédiée branchée : 503 INDISPONIBLE pour chacune des 10 routes essayées (un seul code, aucune route ne se rabat sur la base de l\'API)', [...new Set(r503.map(x => `${x[1]} ${x[2]}`))], ['503 INDISPONIBLE']);
     await sv.fermer(); await sv2.fermer(); await dbG.dropDatabase();
     await H.fermerBac();
     H.bilan();

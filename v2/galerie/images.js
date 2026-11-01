@@ -78,8 +78,7 @@ async function traiter(octets, { pixelsMax, octetsMax, declare = null }) {
         return { image: principale.data, vignette, largeur: principale.info.width, hauteur: principale.info.height, couleur: `#${hex(dominant.r)}${hex(dominant.g)}${hex(dominant.b)}`, format };
     } catch (e) {
         if (e instanceof RefusFichier) throw e;
-        if (/pixel limit/i.test(String(e))) throw refus('trop-de-pixels');
-        throw refus('illisible');
+        throw refus('illisible');                                           // la borne de pixels est jugée plus haut, dans l'en-tête ; le décodeur la porte aussi (limitInputPixels) et toute autre erreur est un fichier illisible
     }
 }
 module.exports = { RefusFichier, TYPES, COTE_MAX, VIGNETTE, formatParSignature, estAnime, traiter, sousVerrou };
