@@ -46,7 +46,7 @@ const octets = () => crypto.randomBytes(64);
         ecritures.push({ genre: 'mesures', scanId: s1, id: s1, p: tenter(alea(70), () => seaux.enregistrerMesures({ scanId: s1, porteur: PORTEUR, seauId: seau.id, octets: Buffer.from(JSON.stringify({ v: m })) })) });
         for (let k = 0; k < 2; k++) { const scanId = await semer(); ecritures.push({ genre: 'ligne', scanId, id: `${scanId}:0`, p: tenter(alea(70), () => seaux.enregistrerPhoto({ scanId, porteur: PORTEUR, seauId: seau.id, index: 0, octets: octets(), type: 'image/jpeg' })) }); }
         // le scelleur : il recommence quand une écriture s'est glissée (c'est son contrat), pas plus de 40 fois
-        const scelleur = tenter(alea(30), async () => { for (let t = 0; t < 40; t++) { try { return await seaux.sceller(seau.id); } catch (e) { if (!e || !['ecritures-en-cours'].includes(e.detail)) throw e; await dormir(10); } } throw new Error('scellé jamais obtenu'); });
+        const scelleur = tenter(alea(30), async () => { for (let t = 0; t < 40; t++) { try { return await seaux.sceller(seau.id); } catch (e) { if (!e || !['ecritures-en-cours', 'ECRITURES_EN_VOL'].includes(e.detail)) throw e; await dormir(10); } } throw new Error('scellé jamais obtenu'); });
         const resultats = await Promise.all(ecritures.map(e => e.p));
         const sc = await scelleur;
         if (!sc.ok) { violations.push(`manche ${m} : scellé refusé (${sc.code})`); continue; }
@@ -93,7 +93,7 @@ const octets = () => crypto.randomBytes(64);
     const sj = [];
     for (let i = 0; i < 3; i++) { const s = await semer(); sj.push(s); await seaux.enregistrerPhoto({ scanId: s, porteur: PORTEUR, seauId: juge.id, index: 0, octets: octets(), type: 'image/jpeg', annonce: crypto.createHash('sha256').update(s).digest('hex') }); await seaux.saisirVerite({ scanId: s, idProduct: 2001, via: 'idProduct', porteur: PORTEUR }); }
     const reecrit = []; for (let k = 0; k < 6; k++) reecrit.push(tenter(alea(25), () => seaux.saisirVerite({ scanId: sj[k % 3], idProduct: 2002 + k, via: 'idProduct', porteur: PORTEUR })));
-    const scj = tenter(alea(25), async () => { for (let t = 0; t < 40; t++) { try { return await seaux.sceller(juge.id); } catch (e) { if (!e || e.detail !== 'ecritures-en-cours') throw e; await dormir(10); } } throw new Error('jamais'); });
+    const scj = tenter(alea(25), async () => { for (let t = 0; t < 40; t++) { try { return await seaux.sceller(juge.id); } catch (e) { if (!e || !['ecritures-en-cours', 'ECRITURES_EN_VOL'].includes(e.detail)) throw e; await dormir(10); } } throw new Error('jamais'); });
     const rr = await Promise.all(reecrit); const sjr = await scj;
     await dormir(50);
     if (sjr.ok) await require('../mesures/ancrer-seau').ecrireAncre({ seauId: juge.id, colFn: n => db.col(n), dossier: ancres });

@@ -150,7 +150,9 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
     let catalogueDefaut = null;
     const catalogueDe = () => catalogue || (catalogueDefaut = catalogueDefaut || require('../identifier/catalogue').creerCatalogue({ cfg }));
 
+    // les compteurs de la barrière d'écriture sont VISIBLES : `enVol` = ecritures - termine (0 au repos ; > 0 et qui dure = une requête tuée, voir reparer-seau.js) ; un champ absent vaut 0 (seau d'avant le tour 2)
     const vue = async s => ({ id: s._id, nom: s.nom, type: s.type, cible: s.cible, note: s.note ?? null, declareLe: s.declareLe, empreinte: s.empreinte, prec: s.prec, etat: s.etat,
+        ecritures: s.ecritures ?? 0, termine: s.termine ?? 0, enVol: (s.ecritures ?? 0) - (s.termine ?? 0), derniereReservation: s.derniereReservation ?? null,
         n: s.etat === 'scelle' ? s.n : await col('scans').countDocuments({ seauId: s._id }),
         ...(s.etat === 'scelle' ? { scelleLe: s.scelleLe, tete: s.tete, photosEmpreinte: s.photosEmpreinte, empreinteScellee: s.empreinteScellee, ...(s.veritesEmpreinte ? { veritesEmpreinte: s.veritesEmpreinte } : {}) } : {}) });
 
@@ -182,7 +184,8 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
     // elle écrit ensuite (objet du bucket, puis documents) et, quoi qu'il arrive, TERMINE (`$inc:{termine:1}`, sans condition d'état : l'écriture est faite ou défaite). Aucune insertion n'a lieu sans une réservation prise sur un seau ouvert.
     // Le scellé ne passe que si `ecritures === termine` (aucune écriture en vol) ET si les deux compteurs n'ont pas bougé depuis la lecture de l'instantané : voir sceller().
     async function reserver(seauId) {
-        const r = await col('seaux').updateOne({ _id: seauId, etat: 'ouvert' }, { $inc: { ecritures: 1 } });
+        // chaque réservation garde son HORODATAGE : c'est lui qui dit, plus tard, depuis quand une écriture « en vol » l'est (reparer-seau.js ne répare que passé un délai)
+        const r = await col('seaux').updateOne({ _id: seauId, etat: 'ouvert' }, { $inc: { ecritures: 1 }, $set: { derniereReservation: horloge() } });
         if (!r || r.modifiedCount !== 1) throw erreur('CONFLIT', 'seau-scelle');
     }
     const terminer = async seauId => { try { await col('seaux').updateOne({ _id: seauId }, { $inc: { termine: 1 } }); } catch (e) { console.error(`🔴 [v2 banc-seau] écriture non terminée sur ${seauId} (${(e && (e.code || e.name)) || 'erreur'}) : le seau ne se scellera pas avant réparation`); throw e; } };
@@ -200,12 +203,15 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
     async function sceller(seauId) {
         await preparer();
         if (typeof seauId !== 'string' || !FORME_SEAU.test(seauId)) throw erreur('ENTREE', 'seau-id');
-        for (let essai = 0; essai < 12; essai++) {
+        let enVol = null;                                  // le dernier constat d'écritures en vol (écart, dernière réservation)
+        const egal = v => (v === 0 ? { $in: [0, null] } : v);            // un champ ABSENT vaut 0 (seau déclaré avant le tour 2) : le filtre du scellé le traite comme tel
+        for (let essai = 0; essai < 40; essai++) {
             const s = await col('seaux').findOne({ _id: seauId });
             if (!s) throw erreur('CODE_INVALIDE', 'seau-inconnu', 404);
             if (s.etat !== 'ouvert') throw erreur('CONFLIT', 'deja-scelle');
             const [ec, te] = [s.ecritures ?? 0, s.termine ?? 0];
-            if (ec !== te) { await new Promise(r => setTimeout(r, 15)); continue; }           // des écritures sont en vol : on attend qu'elles aient fini
+            if (ec !== te) { enVol = { ecart: ec - te, derniere: s.derniereReservation instanceof Date ? s.derniereReservation : null }; await new Promise(r => setTimeout(r, 25)); continue; }           // des écritures sont en vol : on attend qu'elles aient fini
+            enVol = null;
             const lignes = await col('scans').find({ seauId }).sort({ rang: 1 }).toArray();
             if (!lignes.length) throw erreur('CONFLIT', 'seau-vide');
             if (s.type === 'juge' && lignes.length < s.cible) throw erreur('CONFLIT', 'sous-cible');
@@ -222,9 +228,14 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
                 fin.veritesEmpreinte = empreinteVerites(verites);
             }
             fin.empreinteScellee = empreinteScellee({ ...s, ...fin });
-            const r = await col('seaux').updateOne({ _id: seauId, etat: 'ouvert', ecritures: ec, termine: te }, { $set: fin });
+            const r = await col('seaux').updateOne({ _id: seauId, etat: 'ouvert', ecritures: egal(ec), termine: egal(te) }, { $set: fin });
             if (r && r.matchedCount === 1) return vue({ ...s, ...fin });
             // une écriture s'est glissée (ou un autre scellé a gagné) : on relit, tête recalculée
+        }
+        if (enVol) {
+            // 🔑 un écart qui DURE n'est plus une collision passagère : code DISTINCT, l'écart et l'âge de la dernière réservation (une requête tuée gèle le banc tant que personne ne répare)
+            const ageMs = enVol.derniere ? Math.max(0, horloge().getTime() - enVol.derniere.getTime()) : null;
+            throw Object.assign(erreur('CONFLIT', 'ECRITURES_EN_VOL'), { message: `${enVol.ecart} écriture(s) en vol, dernière réservation ${ageMs === null ? 'à une date inconnue' : `il y a ${Math.round(ageMs / 1000)} s`} : si elle date, la requête est morte (node v2/banc/reparer-seau.js)`, enVol: enVol.ecart, ageMs });
         }
         throw erreur('CONFLIT', 'ecritures-en-cours');
     }
