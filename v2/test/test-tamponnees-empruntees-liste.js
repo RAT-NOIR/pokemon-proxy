@@ -64,7 +64,13 @@ const { principal } = require('../migrations/construire-fichier-visuels');
     // la liste arrive jusqu'à la décision
     let recu = null;
     const decider = async (args) => { recu = args.tamponneesEmpruntees; throw Object.assign(new Error('arrêt du banc'), { motif: 'arrêt du banc après la décision' }); };
-    const source = async () => ({ ok: true, sets: [], docs: [], lignes: [], fermer: async () => { } });
+    // la source de banc rejoue ce que fait la vraie (sourceCartes) : elle lit le nom de la base SUR sa connexion et le passe à `controleBase` AVANT de lire quoi que ce soit
+    let baseDuBanc = 'rm_essai', controleAppele = 0;
+    const source = async ({ controleBase } = {}) => {
+        if (controleBase) { controleAppele++; const r = controleBase(baseDuBanc); if (r && r.ok === false) return r; }
+        return { ok: true, sets: [], docs: [], lignes: [], fermer: async () => { } };
+    };
+    const sourceSansControle = async () => ({ ok: true, sets: [], docs: [], lignes: [], fermer: async () => { } });
     const passe = await lancer([`--vers=${vers}`, ...epingle], essai, { source, catalogue: new Map([[1, 1]]), decider });
     H.v('O6. cible essai + empreinte exacte : la construction démarre et la décision REÇOIT un Set de la liste (101, 202)', [recu instanceof Set, recu && [...recu].sort()], [true, [101, 202]]);
     recu = 'inchangé';
@@ -79,7 +85,14 @@ const { principal } = require('../migrations/construire-fichier-visuels');
     H.v('C3. essai == le bucket des visuels de la production : refus', CE({ ...dep, V2_VISUELS_R2_BUCKET: 'visuels-prod', V2_VISUELS_ESSAI_BUCKET: 'visuels-prod' }, { deposer: true }).ok, false);
     H.v('C3b. l\'égalité est jugée après trim (« visuels-prod  » == « visuels-prod »)', CE({ ...dep, V2_VISUELS_R2_BUCKET: ' visuels-prod ', V2_VISUELS_ESSAI_BUCKET: 'visuels-prod' }, { deposer: true }).ok, false);
     H.v('C4. aucune référence de la production connue : « je ne sais pas » = refus (une garde qui ne peut pas conclure refuse)', CE({ V2_CIBLE: 'essai', V2_VISUELS_R2_BUCKET: 'x', V2_VISUELS_ESSAI_BUCKET: 'x' }, { deposer: true }).ok, false);
-    H.v('C4b. une seule référence de production connue suffit à conclure quand elle diffère', CE({ V2_CIBLE: 'essai', V2_VISUELS_R2_BUCKET: 'x', V2_VISUELS_ESSAI_BUCKET: 'x', R2_BUCKET_IMAGES: 'images-prod' }, { deposer: true }).ok, true);
+    // tour 4 (relecture p8 re-relecture, I2) : CHAQUE bucket de production connu doit être NOMMÉ et posé ; une seule variable ne suffit plus ; la cause du refus est NOMMÉE
+    const sansImages = CE({ ...dep, R2_BUCKET_IMAGES: undefined }, { deposer: true }), sansVisuels = CE({ ...dep, V2_VISUELS_PROD_BUCKET: undefined }, { deposer: true });
+    H.v('C4b. (tour 4) R2_BUCKET_IMAGES seul posé : refus, la cause nomme V2_VISUELS_PROD_BUCKET ; V2_VISUELS_PROD_BUCKET seul : refus, la cause nomme R2_BUCKET_IMAGES', [sansVisuels.ok, /V2_VISUELS_PROD_BUCKET/.test(sansVisuels.raison || ''), sansImages.ok, /R2_BUCKET_IMAGES/.test(sansImages.raison || '')], [false, true, false, true]);
+    H.v('C4c. une variable posée mais VIDE (ou d\'espaces) vaut non posée : refus', [CE({ ...dep, R2_BUCKET_IMAGES: '  ' }, { deposer: true }).ok, CE({ ...dep, V2_VISUELS_PROD_BUCKET: '' }, { deposer: true }).ok], [false, false]);
+    const banc = e => CE({ ...dep, ...e }, { deposer: true });
+    H.v('C4d. R2_BUCKET_BANC, s\'il est posé, est un bucket de production de plus : essai == banc refuse (cause nommée), essai != banc passe, absent passe', [banc({ R2_BUCKET_BANC: 'visuels-essai' }).ok, /R2_BUCKET_BANC/.test(banc({ R2_BUCKET_BANC: 'visuels-essai' }).raison || ''), banc({ R2_BUCKET_BANC: 'banc-prod' }).ok, banc({}).ok], [false, true, true, true]);
+    H.v('C4f. le bucket VISÉ doit être celui de l\'essai : visé != essai (tous deux posés, ni l\'un ni l\'autre en production) refuse', [CE({ ...dep, V2_VISUELS_R2_BUCKET: 'autre-bucket' }, { deposer: true }).ok, /V2_VISUELS_R2_BUCKET/.test(CE({ ...dep, V2_VISUELS_R2_BUCKET: 'autre-bucket' }, { deposer: true }).raison || '')], [false, true]);
+    H.v('C4e. sans dépôt, les buckets de production ne sont pas exigés (rien n\'est écrit sur R2)', CE({ V2_CIBLE: 'essai' }, { deposer: false }).ok, true);
     H.v('C5. la base connectée, lue sur la connexion réelle : seule « rm_essai » passe (« test » = la production, « cartes », vide, absente de la lecture = refus)', ['rm_essai', 'test', 'cartes', '', 'rm_essai2'].map(b => CE(dep, { deposer: true, baseConnectee: b }).ok), [true, false, false, false, false]);
     H.v('C5b. sans connexion (aucune base ouverte) : rien à refuser sur ce point', CE(dep, { deposer: true, baseConnectee: null }).ok, true);
     H.v('C6. sans dépôt, seul V2_CIBLE compte ; sans rien : refus', [CE({ V2_CIBLE: 'essai' }).ok, CE({}).ok], [true, false]);
@@ -93,7 +106,26 @@ const { principal } = require('../migrations/construire-fichier-visuels');
     H.v('O8b. (M7) --deposer avec essai == production : refus, la décision n\'est PAS atteinte, rien n\'est déposé', [recu, dEgal.code, /production|essai/i.test(dEgal.texte)], [null, 1, true]);
     // le catalogue vient d'un FICHIER : jamais une connexion à la base de production
     const sansCatalogue = await lancer([`--vers=${vers}`, ...epingle], essai, { source });
-    H.v('O9. avec la liste, le catalogue vient de --catalogue=<fichier> : sans lui (donc par la connexion à la base `test`), refus', [sansCatalogue.code, /catalogue/i.test(sansCatalogue.texte)], [1, true]);
+    H.v('O9. avec la liste, le catalogue vient de --catalogue=<fichier> : sans lui (donc par la connexion à la base `test`), refus', [sansCatalogue.code, /doit venir de --catalogue.*la production/.test(sansCatalogue.texte)], [1, true]);
+    // ── tour 4 : « base connectée = rm_essai » est RÉELLEMENT câblé, par le chemin de la commande ──────────────
+    const refusBase = async nom => { baseDuBanc = nom; recu = null; const x = await lancer([`--vers=${vers}`, ...epingle], essai, { source, catalogue: new Map([[1, 1]]), decider }); return { recu, code: x.code, texte: x.texte }; };
+    const bCartes = await refusBase('cartes'), bTest = await refusBase('test'), bVide = await refusBase(''), bAbsent = await refusBase(undefined), bRm2 = await refusBase('rm_essai2'), bRm = await refusBase('rm_essai');
+    H.v('O10. la base lue sur la connexion réelle passe par la commande : « cartes », « test », « rm_essai2 » refusées (la décision n\'est PAS atteinte, la raison nomme rm_essai)', [bCartes, bTest, bRm2].map(x => [x.recu, x.code, /rm_essai/.test(x.texte)]), [[null, 1, true], [null, 1, true], [null, 1, true]]);
+    H.v('O11. une base VIDE ou ILLISIBLE (undefined) refuse aussi : une base réelle n\'est jamais vide', [bVide, bAbsent].map(x => [x.recu, x.code]), [[null, 1], [null, 1]]);
+    H.v('O12. « rm_essai » exactement : la décision reçoit la liste', [bRm.recu instanceof Set, bRm.code], [true, 1]);
+    baseDuBanc = 'rm_essai'; recu = null; controleAppele = 0;
+    const sansCtl = await lancer([`--vers=${vers}`, ...epingle], essai, { source: sourceSansControle, catalogue: new Map([[1, 1]]), decider });
+    H.v('O13. une source qui n\'exécute JAMAIS le contrôle de la base : la garde ne peut pas conclure, REFUS (jamais un passage par défaut)', [recu, sansCtl.code, /base/i.test(sansCtl.texte)], [null, 1, true]);
+    recu = 'inchangé'; controleAppele = 0;
+    await lancer([`--vers=${vers}`], essai, { source, catalogue: new Map([[1, 1]]), decider });
+    H.v('O14. SANS l\'option : le contrôle de la base n\'est pas demandé (la construction d\'avant est inchangée)', [controleAppele, recu], [0, undefined]);
+    // la vraie source (sourceCartes) : le nom de la base est lu sur la connexion ouverte et jugé AVANT toute lecture
+    const { sourceCartes } = require('../chargeur/source');
+    const lectures = []; const colonne = nom => ({ find: () => ({ [Symbol.asyncIterator]: async function* () { lectures.push(nom); } }) });
+    const fausseOuverture = nomBase => async () => ({ ok: true, nomBase, cartes: { collection: n => ({ ...colonne(n), find: () => { lectures.push(n); return (async function* () { })(); } }), fermer: async () => { } } });
+    const refusReel = [];
+    for (const nom of ['cartes', '', undefined, 'rm_essai']) { lectures.length = 0; const r = await sourceCartes({ env: {}, ouvrir: fausseOuverture(nom), controleBase: n => T.cibleEstEssai({ V2_CIBLE: 'essai' }, { baseConnectee: n }) }); refusReel.push([r.ok === true, lectures.length > 0]); }
+    H.v('O15. sourceCartes : le nom de la base lu sur la connexion est jugé AVANT la première lecture ; « cartes », vide, illisible : refus sans lecture ; « rm_essai » : lue', refusReel, [[false, false], [false, false], [false, false], [true, true]]);
     fs.rmSync(dossier, { recursive: true, force: true });
     H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

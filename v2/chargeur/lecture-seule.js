@@ -98,7 +98,7 @@ async function ouvrir({ env = process.env, connecter = connecterParDefaut } = {}
         catch { await fermer(); return { ok: false, raison: 'connectionStatus a échoué : je ne peux pas prouver que la connexion est en lecture seule' }; }
         const p = jugerPrivileges(statut);
         if (!p.ok) { await fermer(); return p; }
-        return { ok: true, cartes: restreindre(facadeLecture(cx.db, fermer)) };
+        return { ok: true, cartes: restreindre(facadeLecture(cx.db, fermer)), nomBase: cx.db && typeof cx.db.databaseName === 'string' ? cx.db.databaseName : '' };      // nomBase : lu SUR la connexion ouverte (jamais sur une variable) ; '' quand la connexion ne le dit pas
     } catch (e) {
         await fermer();
         return { ok: false, raison: `connexion à cartes impossible (${(e && (e.codeName || e.code || e.name)) || 'erreur'})` };   // jamais e.message : un pilote peut y mettre une adresse

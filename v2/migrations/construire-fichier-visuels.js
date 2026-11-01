@@ -99,8 +99,18 @@ async function principal(argv = process.argv, env = process.env, deps = {}) {
             for await (const c of f.collection('catalogue_produits').find({}, { projection: { idProduct: 1, idMetacard: 1 } })) catalogue.set(c.idProduct, c.idMetacard);
         } finally { await cx.close(); }
     }
+    // TAMPONNÉES-EMPRUNTÉES (tour 4) : « base connectée = rm_essai » est LU sur la connexion réelle de la source et jugé AVANT la première lecture (sourceCartes, `controleBase`) ; une source qui ne l'exécute pas
+    // laisse la garde sans conclusion : REFUS (jamais un passage par défaut). Sans l'option, la source est appelée comme avant.
+    let controleFait = false;
+    const controleBase = nom => { controleFait = true; return require('../chargeur/tamponnees-empruntees').cibleEstEssai(env, { deposer, baseConnectee: typeof nom === 'string' ? nom : '' }); };
+    const sourceBrute = deps.source ? () => deps.source({ env, controleBase }) : () => sourceCartes({ env, controleBase });
+    const sourceUtilisee = !tamponnees ? (deps.source || (() => sourceCartes({ env }))) : async () => {
+        const s = await sourceBrute();
+        if (s && s.ok && !controleFait) { try { await s.fermer(); } catch { /* déjà fermée */ } return { ok: false, raison: 'la base de la connexion n\'a pas été contrôlée (rm_essai) : la garde ne peut pas conclure, refus' }; }
+        return s;
+    };
     let f;
-    try { f = await fabriquerFichier({ source: deps.source || (() => sourceCartes({ env })), catalogue, secret: env.V2_VISUELS_HMAC, exclusions: exclure ? exclure.exclusions : null, verdictsEmprunts: verdicts ? verdicts.verdicts : null, jumbosVisuel: jumbos ? jumbos.classes : null, ...(tamponnees ? { tamponneesEmpruntees: tamponnees.produits } : {}), ...(deps.decider ? { decider: deps.decider } : {}) }); }       // deps.decider : un moyen de banc (jamais fourni par la ligne de commande)
+    try { f = await fabriquerFichier({ source: sourceUtilisee, catalogue, secret: env.V2_VISUELS_HMAC, exclusions: exclure ? exclure.exclusions : null, verdictsEmprunts: verdicts ? verdicts.verdicts : null, jumbosVisuel: jumbos ? jumbos.classes : null, ...(tamponnees ? { tamponneesEmpruntees: tamponnees.produits } : {}), ...(deps.decider ? { decider: deps.decider } : {}) }); }       // deps.decider : un moyen de banc (jamais fourni par la ligne de commande)
     catch (e) { return stop(e && e.motif ? e.motif : `calcul impossible (${(e && (e.name || e.code)) || 'erreur'})`); }
     const c = f.comptes;
     console.log(`   calculé en ${(f.dureeMs / 1000).toFixed(0)} s : sets ${c.sets} · cartes ${c.cartes} · cartes_produits ${c.produits} · catalogue ${c.catalogue} · entrées ${c.visuels} · refusées ${c.refusees} · doublons d'idProduct identiques ${c.doublons || 0} (une seule entrée gardée) · contradictoires ${c.doublonsContradictoires || 0} (visuels différents : AUCUN visuel pour ces produits) · fiches liées ${c.fichesLiees} (produits ${c.produitsLies}, sets ${c.setsAvecLiens})`);

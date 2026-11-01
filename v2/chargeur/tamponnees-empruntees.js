@@ -55,13 +55,19 @@ function lireFichierTamponnees(chemin, { sha256Attendu } = {}) {
 const texteEnv = v => (typeof v === 'string' ? v.trim() : '');
 function cibleEstEssai(env, { deposer = false, baseConnectee = null } = {}) {
     if (!env || env.V2_CIBLE !== 'essai') return refus('la liste des tamponnées empruntées ne sert qu\'à l\'ESSAI : V2_CIBLE doit valoir exactement « essai »');
-    if (baseConnectee !== null && baseConnectee !== 'rm_essai') return refus(`la base de la connexion réelle est « ${String(baseConnectee).slice(0, 40)} », pas « rm_essai » : la cible n'est pas l'essai`);
+    // la base lue sur la connexion RÉELLE : exactement « rm_essai » ; vide ou illisible refuse (une base réelle n'est jamais vide) ; null = aucune connexion ouverte à juger
+    if (baseConnectee !== null && baseConnectee !== 'rm_essai') return refus(`la base de la connexion réelle est « ${String(baseConnectee).slice(0, 40)} » (attendu exactement « rm_essai »${baseConnectee === '' ? ' ; une base vide ou illisible refuse : une base réelle n\'est jamais vide' : ''}) : la cible n'est pas l'essai`);
     if (deposer) {
         const vise = texteEnv(env.V2_VISUELS_R2_BUCKET), essai = texteEnv(env.V2_VISUELS_ESSAI_BUCKET);
         if (!vise || !essai || vise !== essai) return refus('avec --deposer, le bucket visé (V2_VISUELS_R2_BUCKET) doit être celui de l\'essai nommé par V2_VISUELS_ESSAI_BUCKET : l\'un manque ou ils diffèrent, je ne peux pas conclure que la cible est l\'essai');
-        const production = [env.R2_BUCKET_IMAGES, env.V2_VISUELS_PROD_BUCKET].map(texteEnv).filter(Boolean);
-        if (!production.length) return refus('avec --deposer, aucun bucket de la production n\'est nommé (R2_BUCKET_IMAGES, V2_VISUELS_PROD_BUCKET) : je ne peux pas prouver que le bucket d\'essai en diffère, la cible n\'est pas démontrée essai');
-        if (production.includes(essai)) return refus('le bucket d\'essai est le bucket de la PRODUCTION (essai == production) : la cible n\'est pas l\'essai');
+        // TOUR 4 : CHAQUE bucket de production connu doit être NOMMÉ et posé (R2_BUCKET_IMAGES, V2_VISUELS_PROD_BUCKET) ; R2_BUCKET_BANC en plus, s'il existe (posé). Une seule variable ne suffit pas : le bucket réellement visé
+        // ne se compare à la production que si TOUTE la production est connue. Le bucket d'essai doit différer de chacun. Le refus NOMME la variable manquante ou le bucket égal.
+        const obligatoires = [['R2_BUCKET_IMAGES', texteEnv(env.R2_BUCKET_IMAGES)], ['V2_VISUELS_PROD_BUCKET', texteEnv(env.V2_VISUELS_PROD_BUCKET)]];
+        const manquants = obligatoires.filter(([, v]) => !v).map(([n]) => n);
+        if (manquants.length) return refus(`avec --deposer, ${manquants.join(' et ')} ${manquants.length > 1 ? 'ne sont pas posées' : 'n\'est pas posée'} : je ne peux pas prouver que le bucket d'essai diffère de TOUTE la production (chaque bucket de production doit être nommé), la cible n'est pas démontrée essai`);
+        const production = [...obligatoires, ['R2_BUCKET_BANC', texteEnv(env.R2_BUCKET_BANC)]].filter(([, v]) => v);
+        const egal = production.find(([, v]) => v === essai);
+        if (egal) return refus(`le bucket d'essai est le bucket de la PRODUCTION (essai == ${egal[0]}) : la cible n'est pas l'essai`);
     }
     return { ok: true };
 }
