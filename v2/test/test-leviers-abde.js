@@ -178,6 +178,16 @@ if (L) {
     H.vrai('catalogue : `indexAliasFr` est exposé, lu par curseur, sous les gardes des autres index (compte, tronqué, plancher)', cat.includes('indexAliasFr,') && cat.includes('for await (const d of col.find({}, { projection: { idProduct: 1, nomFr: 1 } }))') && cat.includes('if (lus < attendu) throw') && cat.includes('INDEX_CODE_NUMERO_MIN'));
 }
 
+// ── 5 bis. réserve 5 : une question à UN candidat réservée par la chaîne qui devient une question à plusieurs. Le remboursement d'une carte seule ne lit PAS le nombre de choix : « aucune » / « ne-sait-pas » / abandon sont des
+// déclarations (questions.js::regler, plafond des déclarations) ; le seul endroit qui compte les choix (`choix.length !== 1`) est le JUGEMENT D'UN LOT (jugerLot). Banc statique (la base de test manque ici) : si un autre lecteur du nombre de choix apparaît, il échoue.
+{
+    const q = fs.readFileSync(path.join(__dirname, '..', 'argent', 'questions.js'), 'utf8');
+    const lecteurs = q.split('\n').filter(l => /choix\.length/.test(l) && !/^\s*\/\//.test(l));
+    const iRegler = q.indexOf('async function regler'), iLot = q.indexOf('async function jugerLot');
+    H.v('questions.js : une seule ligne de code lit `choix.length` (le jugement d\'un lot), jamais le règlement d\'une carte seule', [lecteurs.length, lecteurs.every(l => l.includes('q.choix.length !== 1'))], [1, true]);
+    H.vrai('questions.js : cette lecture est dans jugerLot, après `regler` (le règlement « aucune » d\'une question simple)', iRegler > 0 && iLot > iRegler && q.indexOf('q.choix.length !== 1') > iLot);
+}
+
 // ── 6. l'index d'alias du catalogue, sur une collection factice (lecture par curseur, gardes de troncature et de plancher)
 (async () => {
     const dbMod = require('../db');

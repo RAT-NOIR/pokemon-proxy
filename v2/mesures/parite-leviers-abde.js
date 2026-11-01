@@ -112,6 +112,13 @@ const DRAPEAUX_MARQUEURS = { jumboTitre: true, gardeMarqueurs: true };
         console.log(`(00) ${s.cle} : issue route « ${s.on.probable ? 'probable ' + s.on.probable.idProduct : s.on.apres.issue} » · décision de l'étape ${JSON.stringify(d.decision)} · raison ${d.raison} · trace marqueurs ${JSON.stringify(s.on.trace)} · estGroupe(trace) ${PRT.estGroupe(s.on.trace)} · memeDessin par paire du top3 (avecEmprunt) ${paires.join(' ')} · dansUnGroupe(désigné) ${id ? PRT.dansUnGroupe(V, id, top3) : 'n/a'}`);
         for (const x of top3.concat(s.sim && s.sim.verite ? [s.sim.verite] : [])) console.log(`     ${x} ${JSON.stringify(ent(x))}${x === (s.sim && s.sim.verite) ? ' <- vérité' : ''}`);
     }
+    // ═════ (000) ORDRE N°22 : les probables RETIRÉS par la règle du rival de la même carte (diag.raison 'metacarte-rival'), ligne à ligne, par banc : justes perdus / faux évités
+    {
+        const retires = sorties.filter(s => s.on.diag.raison === 'metacarte-rival' && s.on.diag.decision && s.on.diag.decision.kind === 'prob');
+        const par = {};
+        for (const s of retires) { const sim = s.sim, id = s.on.diag.decision.id; const pop = sim ? sim.pop : 'hors-banc'; const juste = sim && id === sim.verite; for (const p of (sim && sim.enSerie ? [pop, 'serie'] : [pop])) { par[p] = par[p] || { justesPerdus: 0, fauxEvites: 0, sansVerite: 0 }; if (!sim || !Number.isInteger(sim.verite)) par[p].sansVerite++; else if (juste) par[p].justesPerdus++; else par[p].fauxEvites++; } console.log(`(000) retiré ${s.cle} ${sim ? sim.pop + (sim.enSerie ? '+série' : '') : 'hors banc'} : désigné ${id} ${sim ? (id === sim.verite ? 'JUSTE perdu' : 'FAUX évité (vérité ' + sim.verite + ')') : '?'}`); }
+        console.log(`(000) ORDRE 22 : probables retirés ${retires.length} · par banc ${JSON.stringify(par)}`);
+    }
     // ═════ (0) INFORMATION : le nom lu (confiance haute) contredit-il le probable désigné par la route ? (le filtre de nom de CONFIRMATION-SURE n'est pas dans l'étape : mesuré ici, jamais corrigé)
     {
         const NC = rq('v2/identifier/nom-compatible');
