@@ -16,7 +16,8 @@ const PNG = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.alloc(
 function banc() {
     const arrets = fs.mkdtempSync(path.join(TMP_RACINE, 'arrets-'));
     const porte = fs.mkdtempSync(path.join(TMP_RACINE, 'porte-'));
-    const sorties = fs.mkdtempSync(path.join(TMP_RACINE, 'sorties-'));
+    const sorties = path.join(porte, 'sorties');       // D5 : la seule racine de sortie permise hors catalogue\ et scratchpad
+    fs.mkdirSync(sorties, { recursive: true });
     let t = Date.parse('2026-11-01T10:00:00Z');
     const appels = [], reponses = {};
     const transport = { async get(url) { appels.push({ url, t }); const r = reponses[url]; if (r === undefined) throw new Error(`requête inattendue ${url}`); return typeof r === 'function' ? r() : r; } };
@@ -278,6 +279,141 @@ async function lever(f) { try { await f(); return null; } catch (e) { return e; 
         verifier(cli('fermer', 'www.exemple.test').status === 2, 'CLI : fermer sans motif -> 2');
         verifier(cli('verifier', 'https://exemple.test/x').status === 3, 'CLI : hôte fermé (racine) -> 3, sans réseau');
         verifier(cli('lire', 'https://www.vinted.fr/x').status === 2, 'CLI : lire sans --sortie -> 2');
+    }
+
+    // ═══ TOUR 1 DE CORRECTION (relecture 1) : chaque attaque de la relecture est un cas du banc ═══════════════════════════════════════════════
+    // ── D1 : le point final / la casse / %2e ne rouvrent pas un hôte fermé ──────────────────────────────────────────────────────────────────
+    {
+        const b = banc(); fermer(b, 'www.misprint.com');
+        for (const u of ['https://www.misprint.com./x', 'https://misprint.com./x', 'https://cdn.misprint.com./y', 'https://www.misprint.com%2e/x', 'https://WWW.MISPRINT.COM/x', 'https://a.b.misprint.com./x', 'https://www.misprint。com/x']) {
+            const v = await P.verdict(u, b.o);
+            verifier(v.ok === false && /ferm/i.test(v.motif), `D1 : ${u} doit être refusé comme hôte fermé (${v.motif})`);
+        }
+        verifier(b.appels.length === 0, `D1 : aucune requête vers un hôte fermé (reçu ${b.appels.length})`);
+        for (const u of ['https://www.vinted.fr./x', 'https://www.cardmarket.com./x', 'https://pokecardex.com./img/a.jpg']) {
+            const v = await P.verdict(u, { ...b.o, mode: u.includes('img') ? 'image' : 'page' });
+            verifier(v.ok === false, `D1 : exclu avec point final ${u}`);
+        }
+    }
+    // ── noms non publics ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    {
+        const b = banc();
+        for (const u of ['https://localhost./x', 'https://foo.local/x', 'https://foo.localhost/x', 'https://metadata.google.internal/x', 'https://0x7f.1/x', 'https://[::1]/x', 'https://127.1/x', 'https://2130706433/x', 'https://intranet/x', 'https://10.0.0.1/x', 'https://co.uk/x']) {
+            const v = await P.verdict(u, b.o);
+            verifier(v.ok === false, `nom non public refusé : ${u}`);
+        }
+        verifier(b.appels.length === 0, 'noms non publics : aucune requête');
+    }
+    // ── D6 : racine à deux niveaux ───────────────────────────────────────────────────────────────────────────────────────────────────────
+    {
+        const b = banc();
+        b.reponses['https://example.co.uk/robots.txt'] = ROBOTS(''); b.reponses['https://example.co.uk/d'] = { status: 403, type: 'text/html', texte: 'non' };
+        const e = await lever(() => P.lire('https://example.co.uk/d', { ...b.o, sortie: path.join(b.sorties, 'd') }));
+        verifier(e && e.arret === true && fs.existsSync(path.join(b.arrets, 'ARRET-HOTE-example.co.uk.json')) && !fs.existsSync(path.join(b.arrets, 'ARRET-HOTE-co.uk.json')), 'D6 : un 403 sur example.co.uk écrit l\'arrêt de example.co.uk, jamais de co.uk');
+        b.reponses['https://autresite.co.uk/robots.txt'] = ROBOTS('');
+        const v = await P.verdict('https://autresite.co.uk/x', b.o);
+        verifier(v.ok === true, `D6 : autresite.co.uk n'est pas fermé (${v.motif})`);
+        const v2 = await P.verdict('https://www.example.co.uk/x', b.o);
+        verifier(v2.ok === false && /ferm/i.test(v2.motif), 'D6 : www.example.co.uk reste fermé (même racine)');
+    }
+    // ── D7 : la vraie forme d'un ARRET-HOTE (nom logique, hôte réel dans `url`) ─────────────────────────────────────────────────────────
+    {
+        const b = banc();
+        fs.writeFileSync(path.join(b.arrets, 'ARRET-HOTE-sources-r6-billsarchive.com.json'), JSON.stringify({ hote: 'sources-r6-billsarchive.com', nature: 'arret-definitif', motif: 'banc', url: 'https://bills-archive.nyc3.cdn.digitaloceanspaces.com/robots.txt' }));
+        const v = await P.verdict('https://bills-archive.nyc3.cdn.digitaloceanspaces.com/a.png', b.o);
+        verifier(v.ok === false && /ferm/i.test(v.motif) && b.appels.length === 0, 'D7 : l\'hôte du champ url est fermé');
+        b.reponses['https://autre.nyc3.cdn.digitaloceanspaces.com/robots.txt'] = ROBOTS('');
+        const v2 = await P.verdict('https://autre.nyc3.cdn.digitaloceanspaces.com/a.png', b.o);
+        verifier(v2.ok === true, `D7 : un autre hôte du CDN partagé n'est PAS fermé (${v2.motif})`);
+        fs.writeFileSync(path.join(b.arrets, 'ARRET-HOTE-nom-logique.json'), JSON.stringify({ hote: 'www.logique.test', motif: 'banc' }));
+        const v3 = await P.verdict('https://logique.test/x', b.o);
+        verifier(v3.ok === false && /ferm/i.test(v3.motif), 'D7 : le champ `hote` ferme avec sa racine');
+    }
+    // ── D3 : le chemin est normalisé avant robots ───────────────────────────────────────────────────────────────────────────────────────
+    {
+        const b = banc();
+        b.reponses['https://h.test/robots.txt'] = ROBOTS('User-agent: *\nDisallow: /cartes/\nDisallow: /prive\n');
+        for (const u of ['https://h.test/%63artes/1', 'https://h.test/%70rive', 'https://h.test//cartes/1', 'https://h.test/cartes%2F1', 'https://h.test/x/../cartes/1', 'https://h.test/./cartes/1', 'https://h.test/cartes/%31']) {
+            const v = await P.verdict(u, b.o);
+            verifier(v.ok === false, `D3 : ${u} doit être refusé`);
+        }
+        const ok1 = await P.verdict('https://h.test/CARTES/1', b.o);
+        verifier(ok1.ok === true, 'D3 : la casse reste significative (RFC 9309)');
+        const ok2 = await P.verdict('https://h.test/ok%2Fx', b.o);
+        verifier(ok2.ok === true, 'D3 : un chemin autorisé encodé reste autorisé');
+    }
+    {   // M1 : groupe User-agent vide ignoré
+        const b = banc();
+        b.reponses['https://h.test/robots.txt'] = ROBOTS('User-agent: *\nDisallow: /\n\nUser-agent:\nAllow: /\n');
+        const v = await P.verdict('https://h.test/cartes/1', b.o);
+        verifier(v.ok === false, 'M1 : un groupe User-agent vide n\'ouvre pas ce que * ferme');
+    }
+    // ── D8 : cadence atomique (deux lectures concurrentes) ──────────────────────────────────────────────────────────────────────────────
+    {
+        const b = banc();
+        b.reponses['https://h.test/robots.txt'] = ROBOTS(''); b.reponses['https://h.test/a'] = PAGE('a'); b.reponses['https://h.test/b'] = PAGE('b'); b.reponses['https://h.test/c'] = PAGE('c');
+        await P.lire('https://h.test/a', { ...b.o, sortie: path.join(b.sorties, 'a') });
+        let t = b.maintenant();
+        const o = { ...b.o, maintenant: () => t, pause: async ms => { const cible = t + ms; await new Promise(r => setImmediate(r)); if (t < cible) t = cible; },
+            transport: { async get(url) { b.appels.push({ url, t }); const r = b.reponses[url]; if (!r) throw new Error('inattendue ' + url); return r; } } };
+        const avant = b.appels.length;
+        await Promise.all([P.lire('https://h.test/b', { ...o, sortie: path.join(b.sorties, 'b') }), P.lire('https://h.test/c', { ...o, sortie: path.join(b.sorties, 'c') })]);
+        const ts = b.appels.slice(avant - 1).map(x => x.t).sort((x, y) => x - y);
+        let min = Infinity; for (let i = 1; i < ts.length; i++) min = Math.min(min, ts[i] - ts[i - 1]);
+        verifier(ts.length === 3 && min >= 5000, `D8 : deux lectures concurrentes de la même racine : écart ≥ 5 s (min ${min} ms sur ${ts.length})`);
+        verifier(fs.readdirSync(path.join(b.porte, 'cadence')).every(f => !f.endsWith('.lock')), 'D8 : aucun verrou ne reste');
+    }
+    {   // un verrou périmé (> 2 min) est repris
+        const b = banc();
+        b.reponses['https://h.test/robots.txt'] = ROBOTS(''); b.reponses['https://h.test/a'] = PAGE('a');
+        fs.mkdirSync(path.join(b.porte, 'cadence'), { recursive: true });
+        fs.writeFileSync(path.join(b.porte, 'cadence', 'h.test.lock'), JSON.stringify({ le: b.maintenant() - 3 * 60 * 1000, pid: 1 }));
+        const r = await P.lire('https://h.test/a', { ...b.o, sortie: path.join(b.sorties, 'a') });
+        verifier(r.ok === true, 'D8 : un verrou périmé est repris');
+    }
+    // ── D5 : --sortie ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    {
+        const b = banc();
+        b.reponses['https://h.test/robots.txt'] = ROBOTS(''); b.reponses['https://h.test/a'] = PAGE('nouveau');
+        const existant = path.join(b.sorties, 'existant.txt'); fs.mkdirSync(b.sorties, { recursive: true }); fs.writeFileSync(existant, 'précieux');
+        const mauvaises = [existant, path.join(TMP_RACINE, 'hors', 'a.txt'), path.join(b.sorties, 'Logo FR', 'a.txt'), path.join(b.sorties, 'apport-manuel', 'a.txt'), path.join(b.sorties, '.claude', 'hooks', 'x.js'),
+            path.join(b.sorties, 'worktrees', 'x'), path.join(b.sorties, 'pokemon-proxy-api-v2', 'x'), path.join(b.arrets, 'ARRET-HOTE-x.json'), path.join(b.porte, 'robots', 'h.test.json'), path.join(b.porte, 'journal.jsonl')];
+        for (const s of mauvaises) {
+            const e = await lever(() => P.lire('https://h.test/a', { ...b.o, sortie: s }));
+            verifier(e && e.refus === true, `D5 : --sortie=${path.relative(TMP_RACINE, s)} doit être refusée`);
+        }
+        verifier(b.appels.length === 0 && fs.readFileSync(existant, 'utf8') === 'précieux', 'D5 : refus AVANT le réseau, fichier existant intact');
+        const r = await P.lire('https://h.test/a', { ...b.o, sortie: path.join(b.sorties, 'neuf.txt') });
+        verifier(r.ok === true && fs.readFileSync(path.join(b.sorties, 'neuf.txt'), 'utf8') === 'nouveau', 'D5 : sortie neuve sous sorties\\ permise');
+        const racine = path.join(TMP_RACINE, 'catalogue-fictif');
+        const c = { dossierArrets: path.join(racine, 'arrets-hotes'), dossierPorte: path.join(racine, 'porte-reseau') };
+        verifier(P.sortiePermise(path.join(racine, 'notes', 'a.txt'), c, [racine]) === null, 'D5 : sous la racine déclarée : permis');
+        verifier(P.sortiePermise(path.join(racine, 'arrets-hotes', 'x.txt'), c, [racine]) !== null, 'D5 : arrets-hotes exclu de la racine');
+        verifier(P.sortiePermise(path.join(racine, 'porte-reseau', 'robots', 'x'), c, [racine]) !== null && P.sortiePermise(path.join(racine, 'porte-reseau', 'cadence', 'x'), c, [racine]) !== null, 'D5 : robots\\ et cadence\\ de la porte exclus');
+        verifier(P.sortiePermise(path.join(racine, 'worktrees', 'c-x', 'a.js'), c, [racine]) !== null, 'D5 : worktrees exclu');
+        verifier(P.sortiePermise(path.join(TMP_RACINE, 'ailleurs', 'a.txt'), c, [racine]) !== null, 'D5 : hors racines : refusé');
+    }
+    // ── le transport réel borné (serveur de BOUCLE LOCALE : aucun réseau) ───────────────────────────────────────────────────────────────
+    {
+        const http = require('http');
+        const srv = http.createServer((req, res) => {
+            if (req.url === '/gros') { res.writeHead(200, { 'content-type': 'text/plain' }); const bloc = Buffer.alloc(1024 * 1024, 97); let n = 0; const ecrire = () => { while (n < 14) { n++; if (!res.write(bloc)) { res.once('drain', ecrire); return; } } res.end(); }; ecrire(); }
+            else if (req.url === '/lent') { res.writeHead(200, { 'content-type': 'text/plain' }); res.write('debut'); }
+            else if (req.url === '/redir') { res.writeHead(302, { location: 'https://ailleurs.test/' }); res.end(); }
+            else { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('petit'); }
+        });
+        await new Promise(r => srv.listen(0, '127.0.0.1', r));
+        const base = `http://127.0.0.1:${srv.address().port}`;
+        const tr = P.fabriquerTransportReel({ borne: 12 * 1024 * 1024, delaiMs: 400 });
+        const petit = await tr.get(`${base}/petit`);
+        verifier(petit.status === 200 && petit.texte === 'petit', 'transport réel : réponse normale');
+        const eGros = await lever(() => P.fabriquerTransportReel({ borne: 12 * 1024 * 1024, delaiMs: 20000 }).get(`${base}/gros`));
+        verifier(eGros && eGros.tropGrande === true, 'transport réel : 12 Mo dépassés -> coupé PENDANT la lecture');
+        const t0 = Date.now(); const eLent = await lever(() => tr.get(`${base}/lent`));
+        verifier(eLent && eLent.reseau === true && /ETIMEDOUT/.test(eLent.message) && Date.now() - t0 < 5000, 'transport réel : délai dépassé -> ETIMEDOUT');
+        const redir = await tr.get(`${base}/redir`);
+        verifier(redir.status === 302 && redir.location === 'https://ailleurs.test/', 'transport réel : redirection rendue sans être suivie');
+        srv.closeAllConnections(); srv.close();
     }
 
     console.log(`\n${ok}/${ok + ko} assertions justes${ko ? ` — ${ko} en échec` : ''}`);
