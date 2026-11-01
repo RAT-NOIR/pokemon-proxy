@@ -73,8 +73,10 @@ function planifierB({ cartes, liens, frDuProduit, clone }) {
         const groupes = parCarte.get(c._id);
         const d = groupes ? decider(groupes) : null;
         if (!d) { rester('sans-produit-fr'); continue; }                                  // plus aucun produit à nomFr : rien à arbitrer
-        if (!d.conflit) { rester('plus-de-conflit', { conflits: d.groupes.map(g => g.forme) }); continue; }   // les produits concordent désormais : on ne touche pas, on le dit
+        // « null périmé » : les produits concordent désormais (un seul nom Cardmarket). Même règle que pour un conflit : ce nom unique doit
+        // CONCORDER avec le fr du clone par un lien prouvé, sinon la carte reste à null (ruling du coordinateur, 2026-11-01).
         base.conflits = d.groupes.map(g => g.forme);
+        base.perime = !d.conflit;
         const preuves = (lignesDe.get(c._id) || []).map(l => ({ idProduct: l.idProduct, ...prouverLien(c, l, ix) }));
         base.liens = preuves.map(({ tcgdex, ...p }) => p);
         const valides = preuves.filter(p => p.ok);
@@ -86,7 +88,7 @@ function planifierB({ cartes, liens, frDuProduit, clone }) {
         if (!frs.size) { rester('tcgdex-sans-fr', { liens: base.liens, conflits: base.conflits, temoin }); continue; }
         if (frs.size > 1) { rester('tcgdex-contradictoire', { liens: base.liens, conflits: base.conflits, temoin, nomTcgdex: [...frs.values()].join(' / ') }); continue; }
         const [[kT, nomT]] = [...frs];
-        const plus = { liens: base.liens, conflits: base.conflits, temoin, nomTcgdex: nomT };
+        const plus = { liens: base.liens, conflits: base.conflits, temoin, nomTcgdex: nomT, refsTcgdex: [...uniques.keys()] };
         if (nonVide(c.nomEn) && kT === cle(c.nomEn)) { rester('tcgdex-non-traduit', plus); continue; }   // le « fr » du clone est l'anglais : pas du français
         const g = d.groupes.find(x => x.cle === kT);
         if (!g) { rester('aucune-concordance', plus); continue; }

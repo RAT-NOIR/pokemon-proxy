@@ -85,6 +85,16 @@ const masquer = e => String(e && e.stack || e).replace(/mongodb(\+srv)?:\/\/\S+/
     const plan = { le: new Date().toISOString(), comptes: { A: A.ecrire.length, A_nom: aNom.length, A_null: aNull.length, B: remplir.length }, A: A.ecrire, B: B.decisions };
     fs.writeFileSync(path.join(SORTIE, ecrire ? 'PLAN-ECRIT.json' : 'PLAN-SIMULATION.json'), JSON.stringify(plan, null, 1), 'utf8');
 
+    // les cas validés par le SEUL nom anglais (pas de recoupement set + numéro) : liste pour relecture à l'œil
+    const seul = remplir.filter(d => d.temoin === 'nom-en');
+    const tsv = ['_id\tnomEn\tnoms Cardmarket\tnom TCGdex\tset\tnuméro\tnull périmé'].concat(seul.map(d => {
+        const [, set, num] = String(d.refsTcgdex[0]).split('|');
+        return [d.carteId, d.nomEn, d.conflits.join(' | '), d.nomTcgdex, set, num, d.perime ? 'oui' : 'non'].join('\t');
+    }));
+    fs.writeFileSync(path.join(SORTIE, 'B-nom-anglais-seul.tsv'), tsv.join('\n') + '\n', 'utf8');
+    console.log(`   ${seul.length} remplissages validés par le SEUL nom anglais (dont ${seul.filter(d => d.perime).length} nulls périmés) → B-nom-anglais-seul.tsv`);
+    console.log(`   remplissages : ${remplir.filter(d => d.perime).length} nulls périmés (nom unique) · ${remplir.filter(d => !d.perime).length} conflits`);
+
     if (!ecrire) {
         console.log(`\n   (mesure seule, rien n'est écrit) — pour écrire : lot-additif.js … -- node poser-noms-fr-fiches.js --ecrire --attendu=A:${A.ecrire.length},B:${remplir.length}`);
         return;

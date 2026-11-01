@@ -123,8 +123,16 @@ const produitsB = [prod(3, 'Double Énergie Incolore'), prod(4, 'Double Colorles
 }
 {
     // B11 : plus de conflit (les produits concordent désormais) : on ne touche à rien, on le dit
+    // null PÉRIMÉ (les produits concordent désormais) : même règle, la seconde source tranche
     const d = B(base, [{ idProduct: 3 }], produitsB, clone([cc('data', 'base1', '96', 'Double Énergie Incolore', 'Double Colorless Energy', { cardmarket: [3] })]));
-    egal('B11 pas de conflit : reste null (rien à arbitrer)', [d.decision, d.raison], ['reste-null', 'plus-de-conflit']);
+    egal('B11 null périmé + TCGdex concordant (lien prouvé) = nommé', [d.decision, d.nomFr, d.perime], ['remplir', 'Double Énergie Incolore', true]);
+    const dn = B(base, [{ idProduct: 3 }], produitsB, clone([]));
+    egal('B11a null périmé sans TCGdex = reste null', [dn.decision, dn.raison], ['reste-null', 'lien-non-prouve']);
+    const dd = B(base, [{ idProduct: 3 }], produitsB, clone([cc('data', 'base1', '96', 'Autre nom', 'Double Colorless Energy', { cardmarket: [3] })]));
+    egal('B11c null périmé, TCGdex discordant = reste null', [dd.decision, dd.raison], ['reste-null', 'aucune-concordance']);
+    const dl = B(base, [{ idProduct: 3 }], produitsB, clone([cc('data', 'x', '1', 'Double Énergie Incolore', 'Autre carte', { cardmarket: [3] })]));
+    egal('B11d null périmé, lien non prouvé = reste null', [dl.decision, dl.raison], ['reste-null', 'lien-non-prouve']);
+    egal('B11e le témoin garde sa référence TCGdex (set, numéro)', d.refsTcgdex, ['data|base1|96']);
     const d0 = B(base, [], produitsB, clone([]));
     egal('B11b aucun produit à nomFr : reste null, raison dédiée', [d0.decision, d0.raison], ['reste-null', 'sans-produit-fr']);
 }
