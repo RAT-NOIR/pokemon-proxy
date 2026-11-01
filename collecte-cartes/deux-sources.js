@@ -12,7 +12,9 @@ const { clesNom, cleNumero } = require('./jointure');
 /** Les sources indépendantes de Cardmarket ET de Bulbapedia, admises. Une source absente d'ici ne compte pas. */
 // (2026-10-24, décision du testeur) la liste LOCALE : dépôts et JSON clonés (type-null, TCGdex, pokemontcg.io), relevés pokedata (pdt), CardTrader (ctr), Pokéllector, pkmncards (pkc), pokemon.com,
 // pokemon-card.com, TPC Asie, Pokumon, PikaQian ; plus artofpkm (en cache) et l'API TCGdex (≤ 50 requêtes). Bulbapedia reste exclue par son nom.
-const SOURCES_ADMISES = Object.freeze(['tcgdex', 'tpc-asie', 'pokemon-card-com', 'artofpkm', 'pikaqian', 'pokumon', 'pokemontcg.io', 'tcgdex-api', 'type-null', 'pdt', 'ctr', 'pokellector', 'pkc', 'pokemon-com', 'preuve-par-set']);
+const SOURCES_ADMISES = Object.freeze(['tcgdex', 'tpc-asie', 'pokemon-card-com', 'artofpkm', 'pikaqian', 'pokumon', 'pokemontcg.io', 'tcgdex-api', 'type-null', 'pdt', 'ctr', 'pokellector', 'pkc', 'pokemon-com', 'preuve-par-set', 'ppd', 'btq-ok2']);
+// ➕ 2026-11-01 'ppd' et 'btq-ok2' : deux sources de FAITS (type, numéro, nom) sous un code NEUTRE — aucun nom de site dans un champ posé ; aucune image n'en est tirée. Décision de l'éditeur ; robots.txt permis, conditions sans interdiction.
+//    (packmagik.com est ÉCARTÉE : ses conditions exigent un accord — jamais admise, ses relevés moissonnés ne servent pas.)
 // ➕ 2026-10-31 'preuve-par-set' : la liste d'un set (kado.hk) dont TOUS les noms se traduisent par des tables indépendantes de Cardmarket et concordent avec les produits du MÊME set, sous un jugement qui sait dire non
 // (collecte-cartes/fiches-preuve-set.js::juger). Sa concordante porte le numéro Cardmarket (le témoin) et `par: 'set'` ; elle ne vaut que pour un nom NON latin (comme `par: 'pokedex'`).
 /** Les sources EXCLUES, énumérées pour que le refus se nomme : Bulbapedia sous toutes ses formes. */
