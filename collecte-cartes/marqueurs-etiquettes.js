@@ -13,7 +13,8 @@ const { cleNumero } = require('./jointure');
 
 // L'ordre de la table du §3 du contrat (CONTRAT-MARQUEURS.md v1) et les paramètres de chaque type : la liste est FERMÉE, un type absent n'existe pas.
 const ORDRE = Object.freeze(['JUMBO', 'WCD', 'NON_LEGAL', 'EDITION_1', 'SHADOWLESS', 'STAFF', 'PRERELEASE', 'LEAGUE', 'CHAMPIONSHIP', 'PLACE', 'PROFESSOR', 'PLAY_POKEMON', 'TRICK_OR_TRADE', 'BATTLE_ACADEMY',
-    'ANNIVERSAIRE_25', 'POKEMON_CENTER', 'GAMESTOP', 'TOYS_R_US', 'KFC', 'INDOMILK', 'ORIGINS', 'SNOWFLAKE', 'COSMO', 'MCDONALDS']);
+    'ANNIVERSAIRE_25', 'POKEMON_CENTER', 'GAMESTOP', 'TOYS_R_US', 'KFC', 'INDOMILK', 'ORIGINS', 'SNOWFLAKE', 'COSMO', 'MCDONALDS',
+    'FINITION_NON_VISIBLE']);   // 25e et dernier type du contrat (livré par l'API le 31/10, « catalogue seulement » : écrit avec sa preuve)
 const PARAMS = Object.freeze({ WCD: { requis: ['annee'], permis: ['annee', 'joueur'] }, PLACE: { requis: ['rang'], permis: ['rang'] } });
 const FORME = Object.freeze({
     annee: v => Number.isInteger(v) && v >= 1996 && v <= 2099,
