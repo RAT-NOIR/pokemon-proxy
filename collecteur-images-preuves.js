@@ -170,7 +170,7 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
     for (const u of decidees) { const k = `${u.groupe}:${u.decision.action}`; decisions[k] = (decisions[k] || 0) + 1; }
     const refusParMotif = {};
     // (le motif d'une règle garde son détail — « preuve-lue:numero-different » ; les autres perdent le leur — « entree-mal-formee »)
-    for (const r of refus) { const k = /^(preuve-lue|deux-sources):/.test(r.motif) ? r.motif : r.motif.replace(/:.*$/, ''); refusParMotif[k] = (refusParMotif[k] || 0) + 1; }
+    for (const r of refus) { const k = /^(preuve-lue|deux-sources|remplacement-meme-dessin):/.test(r.motif) ? r.motif : r.motif.replace(/:.*$/, ''); refusParMotif[k] = (refusParMotif[k] || 0) + 1; }
     const aAjouter = decidees.filter(u => u.decision.action === 'ajouter');
     const resume = { le: new Date().toISOString(), source: SRC.SOURCE, lot: SRC.LOT, familles: noms, entrees: entreesParFamille, parRegle, unitesProuvees: unitesBrutes.length, decisions, aAjouter: aAjouter.length,
         dontRemplacentUneBasseDefinition: aAjouter.filter(u => u.decision.remplace.length).length, refus, refusParMotif, avertissements };

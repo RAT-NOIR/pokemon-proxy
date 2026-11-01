@@ -40,8 +40,15 @@ function langueDuProduit({ idExpansion, tirage } = {}) {
 // Écrite par ce qu'elle AUTORISE (evaluerRemplacementMemeDessin) : elle REMPLACE une entrée déjà servie, jamais ne comble un trou.
 const REGLE_MEME_DESSIN = 'remplacement-meme-dessin';
 const REGLES = Object.freeze(['preuve-lue', 'deux-sources', REGLE_MEME_DESSIN]);
-/** Liste FERMÉE des langues non latines admises par la règle sans nom. Aucune autre langue, jamais. */
-const LANGUES_NON_LATINES = Object.freeze(['zh-hans', 'zh-hant', 'ja', 'ko', 'th']);
+/** Liste FERMÉE des langues admises par la règle sans nom. Aucune autre, jamais. `ja` en est sorti (la décision de remplacement de cardtrader.js laisse passer une seconde entrée `ja` : il rouvrira avec son durcissement) ; `ko` n'a aucun tirage. */
+const LANGUES_NON_LATINES = Object.freeze(['zh-hans', 'zh-hant', 'th']);
+/**
+ * La langue d'une candidate n'est PAS lue sur l'image par cette règle : elle vient d'une page source qui est une LISTE de ce tirage, confirmée par la planche du coordinateur. Le moyen le DIT (`lu.langueMoyen`)
+ * et ne vaut que pour la langue qu'il nomme ; `lu.pageListe` (https) est l'adresse de la liste. Table fermée : un autre tirage n'a pas de moyen admis tant qu'on n'en a pas écrit un.
+ */
+const MOYENS_DE_LANGUE = Object.freeze({ 'liste-source-zh-hans+planche': 'zh-hans' });
+/** Les PLANCHERS de la preuve de même dessin (décision de l'éditeur, mesurés sur les trois sets du lot) : un seuil, un score ou un vide calibrés plus bas ne prouvent rien. */
+const SEUIL_PLANCHER = 0.70, SCORE_PLANCHER = 0.80, VIDE_PLANCHER = 0.05;
 /** Le moyen par lequel le numéro imprimé a été lu sur la candidate : OCR ou œil du coordinateur. Il s'écrit. */
 const MOYENS_DE_LECTURE = Object.freeze(['ocr', 'oeil']);
 const HEX64 = /^[0-9a-f]{64}$/;
@@ -126,6 +133,7 @@ function memeDessinManquants(m) {
     if (!objet(m)) return ['memeDessin'];
     const manque = [];
     if (!texte(m.cleR2)) manque.push('cleR2');
+    if (!HEX64.test(m.sha256 ?? '')) manque.push('sha256');
     if (!nombre(m.score)) manque.push('score');
     if (!(nombre(m.seuil) && m.seuil > 0 && m.seuil <= 1)) manque.push('seuil');
     if (!(nombre(m.vide) && m.vide > 0)) manque.push('vide');
@@ -296,6 +304,20 @@ async function evaluerDeuxSources({ entree, produit, langueProduit, octets, deci
 
 // ── 5 bis. La règle « remplacement-meme-dessin » (HD-ZH, 2026-11-01) ───────────────────────────────────────────────────────────
 const LARGEUR_HYPOTHETIQUE = 1e6;
+const HEX40 = /^[0-9a-f]{40}$/;
+/**
+ * I2 — la preuve de même dessin est reliée à l'entrée SERVIE (celle que la base porte), jamais à une déclaration seule. Trois liens, du plus fort au plus faible, le premier qui tient est NOMMÉ :
+ *   · `sha256` : les octets comparés ont le sha256 de l'entrée servie ou de son document `images` ;
+ *   · `sha1Original` : leur sha1 est celui de l'ORIGINAL que le document a gardé (l'entrée servie est ré-encodée : son sha256 n'est jamais celui de la source) ;
+ *   · `urlOriginal` : l'adresse d'origine de l'entrée servie (ou de son document) est celle d'où viennent les octets comparés — le plus faible, écrit tel quel dans la preuve.
+ * @returns {'sha256'|'sha1Original'|'urlOriginal'|null}
+ */
+function lienAvecLEntree(m, entree, doc) {
+    if (HEX64.test(m?.sha256 ?? '') && [entree?.sha256, doc?.sha256].includes(m.sha256)) return 'sha256';
+    if (HEX40.test(m?.sha1 ?? '') && doc?.sha1Original === m.sha1) return 'sha1Original';
+    if (texte(m?.urlOriginal) && [entree?.urlOriginal, doc?.urlOriginal].includes(m.urlOriginal)) return 'urlOriginal';
+    return null;
+}
 /**
  * Un REMPLACEMENT d'une entrée déjà servie, SANS NOM, pour un tirage à écriture non latine. Admise SEULEMENT si TOUT tient :
  *   (a) la langue du tirage du produit est dans LANGUES_NON_LATINES (liste fermée) ;
@@ -313,12 +335,21 @@ function evaluerRemplacementMemeDessin({ entree, produit, langueProduit, largeur
     const motifs = [], lu = entree.lu ?? {}, m = entree.memeDessin;
     // (a)
     if (langueProduit == null) motifs.push('langue-du-tirage-inconnue');   // (a) tirage
-    else if (!LANGUES_NON_LATINES.includes(langueProduit)) motifs.push('langue-latine');
-    // (c)
+    else if (!LANGUES_NON_LATINES.includes(langueProduit)) motifs.push('langue-hors-liste');
+    // (c) la preuve, ses planchers (B1), puis score ≥ seuil
     if (memeDessinManquants(m).length) motifs.push('preuve-absente');
-    else if (!(m.score >= m.seuil)) motifs.push('score-sous-le-seuil');
-    // (e)
+    else {
+        if (m.seuil < SEUIL_PLANCHER) motifs.push('seuil-sous-le-plancher');   // (c1)
+        if (m.score < SCORE_PLANCHER) motifs.push('score-sous-le-plancher');   // (c2)
+        if (m.vide < VIDE_PLANCHER) motifs.push('vide-sous-le-plancher');   // (c3)
+        if (!(m.score >= m.seuil)) motifs.push('score-sous-le-seuil');
+    }
+    // (e) la langue lue = celle du tirage, ET son moyen est dit : la langue n'est pas lue sur l'image, elle vient d'une liste source de ce tirage + la planche
     if (langueProduit != null && lu.langue !== langueProduit) motifs.push('langue-differente');
+    else if (langueProduit != null) {
+        if (!(typeof lu.langueMoyen === 'string' && Object.hasOwn(MOYENS_DE_LANGUE, lu.langueMoyen) && MOYENS_DE_LANGUE[lu.langueMoyen] === langueProduit)) motifs.push('moyen-de-langue-hors-tirage');   // (e1)
+        else if (!(typeof lu.pageListe === 'string' && urlHttps(lu.pageListe))) motifs.push('page-liste-absente');   // (e2)
+    }
     // (d)
     const np = numeroDuProduit(produit), n = lu.numero == null ? '' : String(lu.numero).trim();
     if (n === '') motifs.push('numero-lu-absent');
@@ -328,10 +359,15 @@ function evaluerRemplacementMemeDessin({ entree, produit, langueProduit, largeur
     const images = Array.isArray(produit?.imagesServies) ? produit.imagesServies.filter(Boolean) : [];
     const nommees = texte(m?.cleR2) && langueProduit != null && np != null
         ? images.filter(i => i.cleR2 === m.cleR2 && i.set === produit.slugSet && J.cleNumero(i.numero) === J.cleNumero(np) && i.langue === langueProduit) : [];
+    let lien = null;
     if (nommees.length !== 1) motifs.push('aucune-entree-servie');
-    else if (!nombre(largeur) || largeur <= 0) motifs.push('largeur-illisible');
     else {
         const documents = produit.documentsServis instanceof Map ? produit.documentsServis : new Map();
+        // I2 : la preuve est reliée à l'entrée servie en base
+        lien = lienAvecLEntree(m, nommees[0], documents.get(`${nommees[0].source}|${nommees[0].set}|${nommees[0].cleR2}`));
+        if (!lien) motifs.push('preuve-non-reliee');   // (i2)
+        if (!nombre(largeur) || largeur <= 0) motifs.push('largeur-illisible');
+        else {
         const candidate = w => RC.candidatDe(SRC, { slugSet: produit.slugSet, numero: np, langue: langueProduit, tampon: tamponAttendu(produit.tamponnee).valeur ?? undefined },
             { cleR2: SRC.cleR2(produit.slugSet, np, produit.carteId, langueProduit), wOriginal: w, ...BD.marqueDe({ wOriginal: w }) });
         const designees = BD.entreesARemplacer(images, candidate(largeur), { documents });
@@ -339,6 +375,7 @@ function evaluerRemplacementMemeDessin({ entree, produit, langueProduit, largeur
             // la largeur est-elle la seule cause ? Rejouée avec une largeur hypothétique immense, la MÊME décision désigne-t-elle l'entrée ?
             motifs.push(BD.entreesARemplacer(images, candidate(LARGEUR_HYPOTHETIQUE), { documents }).includes(nommees[0]) ? 'resolution-insuffisante' : 'remplacement-non-autorise');
         } else if (designees.length !== 1) motifs.push('remplacement-ambigu');
+        }
     }
     // les gardes communes à toute preuve lue : marques, tampon, contradictions
     const marques = Array.isArray(lu.marques) && lu.marques.length > 0 && lu.marques.every(texte);
@@ -348,7 +385,7 @@ function evaluerRemplacementMemeDessin({ entree, produit, langueProduit, largeur
     if (!ta.ok) motifs.push('tampon-inconnu');
     else if (norm(lu.tampon) !== norm(ta.valeur)) motifs.push('tampon-different');   // (g) tampon
     if (!Array.isArray(entree.contradictions) || entree.contradictions.length > 0) motifs.push('contradictions');   // (h) contradictions
-    return { ok: motifs.length === 0, motifs };
+    return { ok: motifs.length === 0, motifs, lien };
 }
 /** La largeur RÉELLE de l'original (octets du cache), par le même jugement que la récolte. null si illisible. */
 async function largeurDesOctets(buf) {
@@ -362,7 +399,7 @@ async function evaluerEntree({ entree, produit, octets, decider }) {
     const langueProduit = langueDuProduit(produit);
     if (entree.regle === REGLE_MEME_DESSIN) {
         const r = evaluerRemplacementMemeDessin({ entree, produit, langueProduit, largeur: await largeurDesOctets(octets?.a) });
-        return r.ok ? { ok: true, regle: REGLE_MEME_DESSIN } : { ok: false, motif: `${REGLE_MEME_DESSIN}:${r.motifs[0]}`, motifs: r.motifs };
+        return r.ok ? { ok: true, regle: REGLE_MEME_DESSIN, lien: r.lien } : { ok: false, motif: `${REGLE_MEME_DESSIN}:${r.motifs[0]}`, motifs: r.motifs };
     }
     if (entree.regle === 'preuve-lue') {
         const r = evaluerPreuveLue({ entree, produit, langueProduit });
@@ -424,13 +461,13 @@ function preuvesDe(a) {
     const champs = [lu.numero != null ? `n° ${lu.numero}${lu.total != null ? `/${lu.total}` : ''}` : null, lu.position != null ? `position ${lu.position}` : null, lu.tampon != null ? `tampon ${lu.tampon}` : null, lu.finition != null ? `finition ${lu.finition}` : null].filter(Boolean);
     return { marques, languePreuve: champs.length ? `lue sur le scan : ${champs.join(' ; ')}` : 'lue sur le scan',
         preuveNeutre: e.regle === 'preuve-lue' ? `preuve lue sur le scan : n° ${lu.numero ?? '—'}/${lu.total ?? '—'}, langue ${lu.langue}`
-            : e.regle === REGLE_MEME_DESSIN ? `même dessin que l'image servie (prouvé à l'image), n° ${lu.numero ?? '—'} lu sur le scan (${e.lu.moyen ?? '—'}), langue ${lu.langue}`
+            : e.regle === REGLE_MEME_DESSIN ? `même dessin que l'image servie (prouvé à l'image), n° ${lu.numero ?? '—'} lu sur le scan (${e.lu.moyen ?? '—'}), langue ${lu.langue} (${e.lu.langueMoyen ?? '—'})`
             : `deux sources indépendantes concordantes à l'image, n° ${lu.numero ?? '—'}, langue ${lu.langue}`,
         // les dates s'écrivent en ISO (texte) : le plan passe par un fichier JSON entre sa construction et l'écriture, une Date n'y survit pas
         // (la preuve de même dessin n'écrit que score, seuil et vide : la clé de l'entrée comparée reste dans le manifeste — elle porte le code d'une autre source)
         preuveLue: { regle: e.regle, lu, marques, luLe: dateDe(e.luLe).toISOString(), valideLe: dateDe(a.validation.valideLe).toISOString(),
             // (le moyen de lecture du numéro s'écrit pour cette règle seule : l'énumération des champs lus des autres règles ne bouge pas)
-            ...(e.regle === REGLE_MEME_DESSIN ? { lu: { ...lu, moyen: e.lu.moyen }, memeDessin: { score: e.memeDessin.score, seuil: e.memeDessin.seuil, vide: e.memeDessin.vide } } : {}) } };
+            ...(e.regle === REGLE_MEME_DESSIN ? { lu: { ...lu, moyen: e.lu.moyen, langueMoyen: e.lu.langueMoyen }, memeDessin: { lien: a.evaluation?.lien ?? null, score: e.memeDessin.score, seuil: e.memeDessin.seuil, vide: e.memeDessin.vide } } : {}) } };
 }
 /**
  * Les entrées acceptées (validées ET décidées `ok`) -> les unités d'écriture, ou des refus nommés.
@@ -506,5 +543,5 @@ function trousDuManifeste({ trous, recus, famille }) {
     return { trous: gardes, ecartes };
 }
 
-module.exports = { SOURCE, LOT, SRC, LANGUE_PREUVE, EDITIONS_LOCALES, REGLES, REGLE_MEME_DESSIN, LANGUES_NON_LATINES, MOYENS_DE_LECTURE, evaluerRemplacementMemeDessin, langueDuProduit, formeEntree, lireManifeste, lireValidations, rapprocher, evaluerPreuveLue, evaluerDeuxSources, evaluerEntree,
+module.exports = { SOURCE, LOT, SRC, LANGUE_PREUVE, EDITIONS_LOCALES, REGLES, REGLE_MEME_DESSIN, LANGUES_NON_LATINES, MOYENS_DE_LECTURE, MOYENS_DE_LANGUE, SEUIL_PLANCHER, SCORE_PLANCHER, VIDE_PLANCHER, lienAvecLEntree, evaluerRemplacementMemeDessin, langueDuProduit, formeEntree, lireManifeste, lireValidations, rapprocher, evaluerPreuveLue, evaluerDeuxSources, evaluerEntree,
     verifierCache, setAdmisPourPosition, TAMPONS_ATTENDUS, tamponAttendu, cleFiche, grouperUnites, MOTIFS_DE_TROU, motifDeTrou, trousDuManifeste, sha256De, racineDe };
