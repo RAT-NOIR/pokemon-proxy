@@ -175,6 +175,8 @@ if (L) {
         const sans = sortie(corpsDe(petit), ctx(m, cfgOn));
         H.v('e : sans leviersE (V2_PROBABLE éteint ou extension trop ancienne) le drapeau seul ne change rien : l\'introuvable d\'avant', [sans.issue, sans.motif], ['introuvable', 'jumeaux-trop-nombreux']);
         const on = sortie(corpsDe(petit), ctx(m, cfgOn, E));
+        const sansDrapeau = sortie(corpsDe(petit), ctx(m, cfgOff, E));
+        H.v('e : `leviersE` posé mais le DRAPEAU éteint : l\'introuvable d\'avant (le drapeau commande)', [sansDrapeau.issue, sansDrapeau.motif], ['introuvable', 'jumeaux-trop-nombreux']);
         H.v('e : la question née de e porte la marque jumeauxEnQuestion (G, SUR-PAR-IMAGE, seconde lecture, tampon, jumbo la lisent)', on.jumeauxEnQuestion, true);
         // la désignation (règle numero) affirmerait 700 seul : une question de e n'est JAMAIS promue en sûr, même par l'adaptateur
         H.v('e : la question née de e reste une question à confirmer (a-trancher), jamais un sûr à ce stade', [on.issue, on.analyse.cartes[0].statut], ['question', 'a-trancher']);

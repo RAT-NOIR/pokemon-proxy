@@ -20,7 +20,7 @@ const MUTATIONS = [
     { nom: 'b : un premier CONTREDIT peut être désigné', fichier: LV, de: 'if (premier.ko === 0 && gap >= ecart - TOLERANCE)', vers: 'if (gap >= ecart - TOLERANCE)' },
     { nom: 'b : l\'écart est strict (> au lieu de >=)', fichier: LV, de: 'gap >= ecart - TOLERANCE', vers: 'gap > ecart' },
     { nom: 'b : l\'écart de la configuration est ignoré (0,1 en dur)', fichier: LV, de: 'decider(pool, cfg.leviersEcart)', vers: 'decider(pool, 0.1)' },
-    { nom: 'd : les alias ne sont plus lus', fichier: LV, de: 'aliasDe(await catalogue.indexAliasFr(), [carte.name ?? carte.nom, carte.nomBrut])', vers: '[]' },
+    { nom: 'd : les alias ne sont plus lus', fichier: LV, de: 'aliasDe(indexAlias, [carte.name ?? carte.nom, carte.nomBrut], coupes)', vers: '[]' },
     { nom: 'd : un alias de 1 caractère suffit', fichier: LV, de: 'ALIAS_LONGUEUR_MIN = 4', vers: 'ALIAS_LONGUEUR_MIN = 1' },
     // ── tour 1 (B, C, D, H) : les exclusions de consulterProbable, échouer fermé et dire, coût borné, signal
     { nom: 'B : une question avec motif ou contradiction est travaillée', fichier: LV, de: "if (resultat.motif || resultat.contradiction) return note('motif-ou-contradiction');", vers: '' },
@@ -45,7 +45,6 @@ const MUTATIONS = [
     { nom: 'M1 : la normalisation des alias ne retire plus les marques', fichier: LV, de: ".normalize('NFKD').replace(/[̀-ͯ]/g, '')", vers: ".normalize('NFKD')" },
     { nom: 'M1 : la langue décisive n\'est plus recopiée sur la question refaite', fichier: LV, de: 'if (resultat.langueDecisive !== undefined) nouveau = { ...nouveau, langueDecisive: resultat.langueDecisive };', vers: '' },
     { nom: 'M1 : l\'ordre des voisins du pool est inversé', fichier: LV, de: 'for (const liste of (Array.isArray(produitsDesVoisins) ? produitsDesVoisins : []))', vers: 'for (const liste of [...(Array.isArray(produitsDesVoisins) ? produitsDesVoisins : [])].reverse())' },
-    { nom: 'M1 : e accepte une question à un seul candidat', fichier: AD, de: 'ids.slice(0, 3).length >= 2 && ', vers: '' },
     { nom: 'D : l\'index d\'alias construit n\'est plus gardé prêt', fichier: 'v2/identifier/catalogue.js', de: 'if (aliasEnCours === p) aliasPret = idx;', vers: '' },
     { nom: 'D : la lecture sans attente ne rend plus l\'index prêt', fichier: 'v2/identifier/catalogue.js', de: '        return aliasPret;', vers: '        return null;' },
     { nom: 'D : le préchauffage de prechauffer() est retiré', fichier: 'v2/identifier/catalogue.js', de: 'if (cfg.leviersAbde === true) r.alias = await prechaufferAlias();', vers: '' },
@@ -55,7 +54,6 @@ const MUTATIONS = [
     { nom: 'porte : une question de GROUPE (marqueurs) est travaillée', fichier: LV, de: "if (estGroupe(traceMarqueurs)) return note('groupe-marqueurs');", vers: '' },
     { nom: 'porte I3 : un désigné de même dessin est servi probable', fichier: LV, de: 'if (dansUnGroupe(version, d.id, d.top3))', vers: 'if (false)' },
     { nom: 'porte I2 : un désigné sans prix de guide est servi probable', fichier: LV, de: "PR.depuisGuide(c.prixGuide, 'tendance-seule') === null", vers: 'false' },
-    { nom: 'porte : un candidat sans ligne de catalogue entre dans la question', fichier: LV, de: 'if (!d.top3.every(id => lignes.has(id)))', vers: 'if (false)' },
     { nom: 'porte : l\'issue n\'est plus exigée « question » (un SÛR serait travaillé)', fichier: LV, de: "if (!resultat || resultat.issue !== 'question') return note('pas-une-question');", vers: "if (!resultat) return note('pas-une-question');" },
     { nom: 'porte : le statut a-trancher n\'est plus exigé', fichier: LV, de: "cartes[0].statut !== 'a-trancher' || ", vers: '' },
     { nom: 'porte : le drapeau V2_LEVIERS_ABDE n\'est plus exigé', fichier: LV, de: 'cfg && cfg.leviersAbde === true && cfg.probable === true) || !entree', vers: 'cfg && cfg.probable === true) || !entree' },
@@ -68,7 +66,7 @@ const MUTATIONS = [
     // ── e : l'adaptateur
     { nom: 'e : le drapeau n\'est plus exigé (les introuvables deviennent des questions drapeau éteint)', fichier: AD, de: 'ctx.cfg.leviersAbde === true && ', vers: '' },
     { nom: 'e : un LOT reçoit la question', fichier: AD, de: 'ctx.lot !== true && ', vers: '' },
-    { nom: 'e : les lignes des 3 premiers ne sont plus exigées (la panne SERVEUR)', fichier: AD, de: ' && ctx.produits instanceof Map && ids.slice(0, 3).length >= 2 && ids.slice(0, 3).every(id => ctx.produits.has(id))', vers: '' },
+    { nom: 'e : les lignes des 3 premiers ne sont plus exigées (la panne SERVEUR)', fichier: AD, de: ' && ctx.produits instanceof Map && ids.slice(0, 3).every(id => ctx.produits.has(id))', vers: '' },
     { nom: 'e site 1 : coupé', fichier: AD, de: 'if (jumeauxEnQuestion(ctx, tous)) return { ...question(tous, etat, ctx), jumeauxEnQuestion: true };', vers: '' },
     { nom: 'e site 2 : coupé', fichier: AD, de: 'if (jumeauxEnQuestion(ctx, g.ids)) return { ...question(g.ids.slice(0, 3), etat, ctx), jumeauxEnQuestion: true };', vers: '' },
     { nom: 'e site 3 : coupé', fichier: AD, de: 'if (jumeauxEnQuestion(ctx, avecPart)) return {', vers: 'if (false) return {' },

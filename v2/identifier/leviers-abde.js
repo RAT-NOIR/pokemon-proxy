@@ -179,7 +179,6 @@ async function appliquerLeviers({ cfg, entree, resultat, corpsChaine, produits, 
         if (diag) { diag.decision = { kind: d.kind, id: d.id ?? null, top3: d.top3 || [] }; diag.base = baseIds; diag.pool = pool.map(c => c.id); diag.candidats = pool; diag.T = T; diag.aliasIds = alias; diag.lignes = lignes; }       // la décision AVANT les gardes de la route (I2, I3) : le banc de parité l'attribue
         if (d.kind === 'rien') return note('pool-trop-petit');
         if (d.top3.length < 2) return note('moins-de-deux-classes');                 // un seul candidat classable : rien à poser
-        if (!d.top3.every(id => lignes.has(id))) return echec('sans-ligne');         // (garde de repli : le pool ne retient que des produits à ligne)
         let nouveau = null;
         if (!meme(d.top3, baseIds)) {
             try { nouveau = questionParLaRoute(corpsChaine, d.top3, { ...ctxQuestion, produits: lignes }); } catch { return echec('question-impossible'); }
