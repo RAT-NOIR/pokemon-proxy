@@ -88,6 +88,21 @@ if (L) {
     const A = new Map([['good manners', [902313, 902314]], ['mewtwo', [11]]]);
     H.v('d : les alias viennent du nom lu ET du nom brut, sans doublon', L.aliasDe(A, ['Good  Manners', 'MEWTWO', 'good manners']), [902313, 902314, 11]);
     H.v('d : sans index d\'alias (null), aucun alias', L.aliasDe(null, ['Good Manners']), []);
+    // ── tour 1 (ruling C, D) : plafond de l'éventail, nom lu borné, produits sans ligne, échecs comptés et journalisés
+    {
+        const gros = new Map([['good manners', Array.from({ length: 35 }, (_, i) => 5000 + i)]]), coupes = [];
+        const ids = L.aliasDe(gros, ['Good Manners', 'good manners'], coupes);
+        H.v('d : un nom porté par 35 produits n\'en envoie que 20, et la coupe est ÉCRITE', [ids.length, coupes.length, coupes[0] && coupes[0].total, coupes[0] && coupes[0].gardes], [20, 2, 35, 20]);
+        const long = 'a'.repeat(5000) + ' fin';
+        H.v('d : le nom lu est borné AVANT la normalisation (120 caractères)', [L.normaliserAlias(long).length, L.NOM_LU_MAX], [120, 120]);
+        const ex = L.composerPool({ baseIds: [5], vivier: [900, 901, 1000, 1001], ko: () => 0, produitsDesVoisins: [[900, 9000]], alias: [901, 7777], existe: id => id >= 1000 || id === 5 || id === 9000 || id === 7777 });
+        H.v('a : un produit SANS ligne n\'entre jamais au pool (vivier, voisins, alias) et ne prend aucun créneau', ex, [5, 1000, 1001, 9000, 7777]);
+        const w = console.warn, lignes = []; console.warn = (...a) => lignes.push(a.join(' '));
+        const avant = L.echecs()['cause-de-banc'] || 0;
+        try { L.signaler('cause-de-banc'); L.signaler('cause-de-banc'); L.signaler('cause-de-banc', 'detail'); } finally { console.warn = w; }
+        H.v('échec : compté à chaque fois, journalisé UNE fois par minute et par cause, sans message d\'exception', [(L.echecs()['cause-de-banc'] || 0) - avant, lignes.length, /leviers-abde\] cause-de-banc/.test(lignes[0] || '')], [3, 1, true]);
+        H.v('le signal journalisé reste `A` et le levier est dit à part', [L.SIGNAL, L.LEVIER], ['A', 'abde']);
+    }
 }
 
 // ── 4. e : « jumeaux-trop-nombreux » devient une question aux 3 premiers (jamais un sûr) — les TROIS sites de l'adaptateur, sur des mondes fabriqués + la fixture réelle de la colonne des jumeaux
@@ -187,6 +202,7 @@ if (L) {
     H.vrai('route : drapeau éteint, la branche `else` appelle consulterProbable avec EXACTEMENT les arguments d\'avant', k > 0);
     H.vrai('route : le résultat de l\'étape ne remplace la question que s\'il en rend une, le probable vient de l\'étape (jamais de consulterProbable en même temps)', routes.includes('if (lv) { if (lv.resultat) resultat = lv.resultat; probableDecide = lv.probable; }'));
     H.vrai('route : l\'étape reçoit le catalogue et le contexte de l\'adaptateur (jumeaux, langue décisive) pour fabriquer la question', /appliquerLeviers\(\{[^]*catalogue, ctxQuestion: \{ langueInterface: entree\.langueInterface, cfg, ficheServie: false, jumeaux, \.\.\.ctxLD \}/.test(routes));
+    H.vrai('route : le levier qui a désigné un probable est écrit dans analyses.probable.levier (le signal reste A)', routes.includes('...(sortie.probable.levier ? { levier: sortie.probable.levier } : {})'));
     const marq = src('garde-marqueurs.js'), adap = src('adaptateur.js');
     H.vrai('route : le contexte de l\'adaptateur d\'une carte pose leviersE seulement sous V2_LEVIERS_ABDE ET le niveau probable servi (V2_PROBABLE + extension >= 2.0.1)', routes.includes("...(cfg.leviersAbde === true && niveauServi(cfg, entree) ? { leviersE: true } : {})"));
     H.vrai('route : seconde lecture, tampon, règle G (vecteur et V2_REGLE_G), SUR-PAR-IMAGE ne voient jamais une question née de e', routes.includes("if (resultat.issue === 'question' && !resultat.jumeauxEnQuestion) {") && routes.includes("if ((resultat.issue === 'question' || resultat.issue === 'affirmee') && !resultat.jumeauxEnQuestion) {") && routes.includes("if (resultat.jumeauxEnQuestion === true) { /* e : jamais promue */ } else if (resultat.issue !== 'panne' && fournisseurEmpreinte") && routes.includes("cfg.surParImage === true && entree.empreintes && !desaccordG && !(empreinteInfo && empreinteInfo.influence) && !resultat.jumeauxEnQuestion"));

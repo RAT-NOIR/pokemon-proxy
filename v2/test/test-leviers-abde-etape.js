@@ -32,7 +32,7 @@ function monde({ cos, lignes, vivier = [], base = [], redressee = true, ext = '2
     const resultat = questionParLaRoute(corps, base, { ...ctxQuestion, produits });
     const entree = { versionExtension: ext, empreintes: { modele: MODELE, rejet: null, entrees: [{ photo: 0, vecteur: encoderVecteur(VEC), redressee, carte: null }] } };
     const lues = [];
-    const catalogue = { lire: async ids => { lues.push([...ids]); return new Map(ids.filter(i => lignes[i]).map(i => [i, lignes[i]])); } };
+    const catalogue = { lire: async ids => { lues.push([...ids]); return new Map(ids.filter(i => lignes[i]).map(i => [i, lignes[i]])); }, indexAliasFrSansAttente: () => new Map() };
     return { cfg, corps, ctxQuestion, resultat, entree, version, etat, produits, catalogue, lues };
 }
 const ids = r => r.analyse.cartes[0].candidats.map(x => x.idProduct).sort((a, b) => a - b);
@@ -49,7 +49,8 @@ const COS = { 1: 0.40, 2: 0.60, 3: 0.35, 4: 0.30 };
     {
         const m = monde({ cos: COS, lignes: LIGNES, base: [2, 3], vivier: [1] });
         const { r, diag } = await lancer(m);
-        H.v('a+b : la vérité du VIVIER entre au pool et devient le probable (écart c3 0,5 - 0,35 >= 0,1, aucun champ ne la contredit)', [r && r.probable && r.probable.idProduct, r && r.probable && r.probable.signal, diag.raison], [1, 'ABDE', 'probable']);
+        H.v('a+b : la vérité du VIVIER entre au pool et devient le probable (écart c3 0,5 - 0,35 >= 0,1, aucun champ ne la contredit)', [r && r.probable && r.probable.idProduct, r && r.probable && r.probable.signal, diag.raison], [1, 'A', 'probable']);
+        H.v('le signal journalisé reste `A` (les outils qui trient par A / G le voient), le levier est dit à part', [r.probable.signal, r.probable.levier], ['A', 'abde']);
         H.v('a : la question suit le classement c3 (les 3 premiers), la vérité en fait partie', [ids(r.resultat).includes(1), ids(r.resultat).length], [true, 3]);
         const sans = await consulterProbable({ cfg: { ...m.cfg, probableCosinusMin: 0 , probableVecteurExige: false }, entree: m.entree, resultat: m.resultat, corpsChaine: m.corps, produits: m.produits, version: m.version, etat: m.etat });
         H.vrai('contrôle : la règle d\'AVANT (consulterProbable) ne peut pas désigner 1 (absente de la question de la chaîne)', !sans || sans.idProduct !== 1);
@@ -62,8 +63,16 @@ const COS = { 1: 0.40, 2: 0.60, 3: 0.35, 4: 0.30 };
         await lancer(m);
         H.v('les lignes manquantes du pool sont lues en UNE fois, et seulement elles', [m.lues.length, m.lues[0].includes(1), m.lues[0].includes(2)], [1, true, false]);
         const mp = monde({ cos: COS, lignes: LIGNES, base: [2, 3], vivier: [1] }); mp.produits.delete(1); mp.catalogue.lire = async () => { throw new Error('base en panne'); };
+        const av = L.echecs();
         const { r, diag } = await lancer(mp);
         H.v('une lecture du catalogue qui ÉCHOUE laisse la question d\'avant (null), sans lever', [r, diag.raison], [null, 'catalogue-en-panne']);
+        H.v('   et l\'échec est COMPTÉ et journalisé (production)', (L.echecs()['catalogue-en-panne'] || 0) - (av['catalogue-en-panne'] || 0), 1);
+        // une exception inattendue du levier : jamais avalée sans trace
+        const me = monde({ cos: COS, lignes: LIGNES, base: [2, 3], vivier: [1] });
+        me.catalogue.indexAliasFrSansAttente = () => Object.assign(new Map(), { has() { throw new TypeError('bug de banc'); } });
+        me.corps.carte.nom = 'Etiquette d Erika';
+        const av2 = L.echecs(), ex = await lancer(me);
+        H.v('une EXCEPTION inattendue : null (la question d\'avant), comptée et journalisée, sans le message de l\'exception', [ex.r, ex.diag.raison, (L.echecs().erreur || 0) - (av2.erreur || 0)], [null, 'erreur', 1]);
     }
     // ── b : l'écart minimal ; un champ lu qui contredit le premier interdit le probable
     {
@@ -94,18 +103,32 @@ const COS = { 1: 0.40, 2: 0.60, 3: 0.35, 4: 0.30 };
         const lignes = { ...LIGNES, 1: ligne(1, { nomFr: 'Étiquette d\'Erika' }) };
         const m = monde({ cos: COS, lignes, base: [2, 3], vivier: [] });
         m.corps.carte.nom = 'Etiquette d Erika'; m.corps.carte.nomBrut = null;
-        m.catalogue.indexAliasFr = async () => L.construireIndexAlias([{ idProduct: 1, nomFr: 'Étiquette d\'Erika' }, { idProduct: 2, nomFr: 'Autre nom' }]);
+        m.catalogue.indexAliasFrSansAttente = () => L.construireIndexAlias([{ idProduct: 1, nomFr: 'Étiquette d\'Erika' }, { idProduct: 2, nomFr: 'Autre nom' }]);
         const m0 = monde({ cos: COS, lignes, base: [2, 3], vivier: [] }); m0.corps.carte.nom = 'Etiquette d Erika'; m0.corps.carte.nomBrut = null;
         // le visuel de 1 est dans l'index mais hors du top 10 de l'empreinte : on le retire des voisins en le rendant lointain
         const loin = { ...COS }; for (let i = 100; i < 112; i++) { loin[i] = 0.70 - (i - 100) * 0.001; lignes[i] = ligne(i, { numero: '12', total: '99' }); }
         const ma = monde({ cos: loin, lignes, base: [2, 3], vivier: [] }); ma.corps.carte.nom = 'Etiquette d Erika'; ma.corps.carte.nomBrut = null;
         const mb = monde({ cos: loin, lignes, base: [2, 3], vivier: [] }); mb.corps.carte.nom = 'Etiquette d Erika'; mb.corps.carte.nomBrut = null;
-        ma.catalogue.indexAliasFr = async () => L.construireIndexAlias([{ idProduct: 1, nomFr: 'Étiquette d\'Erika' }]);
+        ma.catalogue.indexAliasFrSansAttente = () => L.construireIndexAlias([{ idProduct: 1, nomFr: 'Étiquette d\'Erika' }]);
         const sans = await lancer(mb), avec = await lancer(ma);
         H.v('d : sans l\'alias, la vérité (hors vivier, hors top 10 de l\'empreinte) n\'est pas candidate ; avec l\'alias nomFr = le nom lu, elle est désignée', [Boolean(sans.r && sans.r.probable && sans.r.probable.idProduct === 1), avec.r && avec.r.probable && avec.r.probable.idProduct], [false, 1]);
-        const mc = monde({ cos: loin, lignes, base: [2, 3], vivier: [] }); mc.corps.carte.nom = 'Etiquette d Erika'; mc.corps.carte.nomBrut = null; mc.catalogue.indexAliasFr = async () => { throw new Error('index en panne'); };
+        const mc = monde({ cos: loin, lignes, base: [2, 3], vivier: [] }); mc.corps.carte.nom = 'Etiquette d Erika'; mc.corps.carte.nomBrut = null; mc.catalogue.indexAliasFrSansAttente = () => { throw new Error('index en panne'); };
+        const avant = L.echecs();
         const z = await lancer(mc);
-        H.v('d : un index d\'alias en panne ne casse rien (le levier d est inerte, diag.alias le dit)', [z.diag.alias, z.r === null || typeof z.r === 'object'], ['indisponible', true]);
+        H.v('d : un index d\'alias EN PANNE échoue FERMÉ : aucun probable, la question d\'avant reste (null), la cause est dite', [z.r, z.diag.raison], [null, 'alias-indisponible']);
+        H.v('   et l\'échec est COMPTÉ (journalisé en production, pas seulement dans diag)', (L.echecs()['alias-indisponible'] || 0) - (avant['alias-indisponible'] || 0), 1);
+        const mn = monde({ cos: loin, lignes, base: [2, 3], vivier: [] }); mn.corps.carte.nom = 'Etiquette d Erika'; mn.corps.carte.nomBrut = null; mn.catalogue.indexAliasFrSansAttente = () => null;
+        const nonPret = await lancer(mn);
+        H.v('d : un index d\'alias PAS ENCORE PRÊT (démarrage, construction en cours) : aucun probable, la question reste, aucune attente dans le scan', [nonPret.r, nonPret.diag.raison], [null, 'alias-non-pret']);
+        const ma2 = monde({ cos: loin, lignes, base: [2, 3], vivier: [] }); delete ma2.catalogue.indexAliasFrSansAttente;
+        const absent = await lancer(ma2);
+        H.v('d : un catalogue SANS index d\'alias : aucun probable (jamais un repli vide qui fabrique une marge)', [absent.r, absent.diag.raison], [null, 'alias-absent']);
+        // le plafond de l'éventail : 30 produits portent ce nom français, 20 seulement entrent au pool, et la coupe est écrite
+        const gros = L.construireIndexAlias(Array.from({ length: 30 }, (_, i) => ({ idProduct: 3000 + i, nomFr: 'Etiquette d Erika' })));
+        const lg2 = { ...lignes }; for (let i = 3000; i < 3030; i++) lg2[i] = ligne(i, { numero: '12', total: '99' });
+        const mg = monde({ cos: loin, lignes: lg2, base: [2, 3], vivier: [] }); mg.corps.carte.nom = 'Etiquette d Erika'; mg.corps.carte.nomBrut = null; mg.catalogue.indexAliasFrSansAttente = () => gros;
+        const cg = await lancer(mg);
+        H.v('d : l\'éventail d\'alias est plafonné à 20 par nom lu, et ce qui est coupé est ÉCRIT', [cg.diag.aliasIds.length, cg.diag.aliasCoupes && cg.diag.aliasCoupes[0].total, cg.diag.aliasCoupes && cg.diag.aliasCoupes[0].gardes], [20, 30, 20]);
     }
     // ── les portes : tout le reste rend null et le DIT
     {
@@ -150,11 +173,19 @@ const COS = { 1: 0.40, 2: 0.60, 3: 0.35, 4: 0.30 };
         const un = await lancer(monde({ cos: { 2: 0.6 }, lignes: LIGNES, base: [2], vivier: [] }));
         H.v('une confirmation à UN candidat et un pool d\'un seul produit => null (pool trop petit)', [un.r, un.diag.raison], [null, 'pool-trop-petit']);
         const conf = await lancer(monde({ cos: { 1: 0.4, 2: 0.6 }, lignes: LIGNES, base: [2], vivier: [] }));
-        H.v('une confirmation à UN candidat (« est-ce cette carte ? ») dont le pool de l\'empreinte porte la vérité => le probable', conf.r && conf.r.probable && conf.r.probable.idProduct, 1);
+        H.v('une confirmation à UN candidat (« est-ce cette carte ? ») n\'est JAMAIS un probable (probable-route.js:95) ; la question, elle, suit le classement (la vérité du pool y entre)', [conf.r && conf.r.probable, conf.r && ids(conf.r.resultat).includes(1), conf.diag.raison], [null, true, 'un-candidat']);
+        const avecMotif = monde({ cos: COS, lignes: LIGNES, base: [2, 3], vivier: [1] }); avecMotif.resultat = { ...avecMotif.resultat, motif: 'jumeaux-trop-nombreux' };
+        H.v('une question qui porte un MOTIF de refus n\'est jamais travaillée (probable-route.js:91) : null', [(await lancer(avecMotif)).r, (await lancer(avecMotif)).diag.raison], [null, 'motif-ou-contradiction']);
+        const avecContradiction = monde({ cos: COS, lignes: LIGNES, base: [2, 3], vivier: [1] }); avecContradiction.resultat = { ...avecContradiction.resultat, contradiction: 'contredit par numero' };
+        H.v('une question qui porte une CONTRADICTION n\'est jamais travaillée (probable-route.js:91) : null', [(await lancer(avecContradiction)).r, (await lancer(avecContradiction)).diag.raison], [null, 'motif-ou-contradiction']);
         const ml = monde({ cos: COS, lignes: LIGNES, base: [2, 3], vivier: [1] }); delete ml.catalogue.lire; ml.produits.delete(1);
         H.v('une ligne à lire et pas de catalogue => null (sans-catalogue), sans lever', (await lancer(ml)).diag.raison, 'sans-catalogue');
         const sl = monde({ cos: COS, lignes: { 2: LIGNES[2], 3: LIGNES[3], 4: LIGNES[4] }, base: [2, 3], vivier: [1] });
-        H.v('le désigné n\'a AUCUNE ligne de catalogue (innommable) : jamais une panne, la question d\'avant', [(await lancer(sl)).r, (await lancer(sl)).diag.raison], [null, 'sans-ligne']);
+        const rsl = await lancer(sl);
+        H.v('un produit SANS ligne de catalogue (innommable) n\'entre jamais au pool : ni candidat, ni probable, ni créneau pris ; jamais une panne', [rsl.diag.T.includes(1), Boolean(rsl.r && rsl.r.probable && rsl.r.probable.idProduct === 1), Boolean(rsl.r && rsl.r.resultat && ids(rsl.r.resultat).includes(1))], [false, false, false]);
+        const vivSansLigne = monde({ cos: COS, lignes: LIGNES, base: [2, 3], vivier: [900, 901, 902, 903, 904, 905, 906, 907, 908, 909, 910, 1] });
+        const rv = await lancer(vivSansLigne);
+        H.v('dix produits SANS ligne en tête du vivier ne prennent pas les 10 créneaux : la vérité (12e du vivier, avec ligne) entre au pool', rv.r && rv.r.probable && rv.r.probable.idProduct, 1);
     }
     // ── la même question, avec ou sans probable : la question n'est refaite que si ses 3 candidats changent
     {

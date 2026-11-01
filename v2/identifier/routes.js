@@ -806,7 +806,7 @@ function traiterIdentifier(cfg, deps = {}) {
                 ...(porteur.compte && porteur.compte.banc === true ? { banc: true } : {}),           // le compte de MESURE : exclu des statistiques d'usage (journal-hors-banc.js)
                 // B1b.5 : de quoi servir /reponse sans relire le catalogue — l'état, la question, la zone (aucune donnée de l'annonce) et la lecture de la langue
                 cartes: cartes.map((c, i) => ({ idProduct: c.carte ? c.carte.idProduct : null, statut: c.statut, raison: c.raison, etat: c.etat ?? null, question: c.question ?? null, zone: c.zone ?? null,
-                    ...(i === 0 && sortie.probable ? { probable: { idProduct: sortie.probable.idProduct, signal: sortie.probable.signal } } : {}),     // PROBABLE : la surveillance, interne, jamais servie telle quelle
+                    ...(i === 0 && sortie.probable ? { probable: { idProduct: sortie.probable.idProduct, signal: sortie.probable.signal, ...(sortie.probable.levier ? { levier: sortie.probable.levier } : {}) } } : {}),     // PROBABLE : la surveillance, interne, jamais servie telle quelle
                     ...(sortie.lectures ? { lecture: sortie.lectures[i] } : i === 0 && sortie.lecture ? { lecture: sortie.lecture } : {}),
                     ...((sortie.motifs ? sortie.motifs[i] : i === 0 ? sortie.motif : null) ? { motifJumeaux: sortie.motifs ? sortie.motifs[i] : sortie.motif } : {}) })),     // JUMEAU-V2 : le motif de la garde, PAR CARTE (interne, jamais servi)
                 produits: cartes.flatMap(c => (c.carte ? [c.carte] : c.candidats)), facturation,
