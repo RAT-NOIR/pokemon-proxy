@@ -147,6 +147,20 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.match(r5000.join(), /nom-langue-non-anglaise/, 'produit NON français : le nom français n\'est jamais comparé, même si nomFr existe');
         assert.match(lue(entree(), produit({ idExpansion: 2361 })).motifs.join(), /langue-differente/, 'le produit EST français : un scan anglais n\'est pas son tirage');
     });
+    await test('a-reste (japonais) : un nom lu en japonais se compare au nom JAPONAIS de la carte (produit.nomJa), SEULEMENT pour un tirage japonais ; jamais au nom anglais', () => {
+        const ja = entree({ lu: { ...entree().lu, langue: 'ja', nom: 'すごいつりざお', numero: '018', total: '032' }, attendu: { ...entree().attendu, numero: '018' } });
+        const pj = produit({ tirage: 'jp', numero: '018', nomEn: 'Super Rod', nomJa: 'すごいつりざお' });
+        assert.deepStrictEqual(lue(ja, pj), { ok: true, motifs: [] });
+        assert.deepStrictEqual(lue({ ...ja, lu: { ...ja.lu, nom: ' すごい つりざお ' } }, pj), { ok: true, motifs: [] }, 'espaces ignorés');
+        assert.deepStrictEqual(lue({ ...ja, lu: { ...ja.lu, nom: 'ハイパーボール' } }, pj).motifs, ['nom-different'], 'autre nom japonais');
+        assert.deepStrictEqual(lue(ja, produit({ tirage: 'jp', numero: '018', nomEn: 'Super Rod' })).motifs, ['nom-different'], 'carte sans nom japonais : rien à comparer = refus');
+        assert.deepStrictEqual(lue(ja, produit({ tirage: 'jp', numero: '018', nomEn: 'すごいつりざお', nomJa: null })).motifs, ['nom-different'], 'un nom japonais ne se compare JAMAIS au nom anglais');
+        assert.deepStrictEqual(lue({ ...ja, lu: { ...ja.lu, nom: '' } }, pj).motifs, ['nom-different'], 'nom lu vide');
+        assert.deepStrictEqual(lue({ ...ja, lu: { ...ja.lu, nom: '' } }, produit({ tirage: 'jp', numero: '018', nomEn: 'Super Rod', nomJa: null })).motifs, ['nom-different'], 'vide contre vide : rien à comparer n\'est jamais une concordance');
+        assert.deepStrictEqual(lue({ ...ja, lu: { ...ja.lu, nom: '・ ' } }, produit({ tirage: 'jp', numero: '018', nomEn: 'Super Rod', nomJa: ' ' })).motifs, ['nom-different'], 'nom réduit à rien après normalisation : refus');
+        const surIntl = lue(ja, produit({ tirage: 'intl', numero: '018', nomEn: 'Super Rod', nomJa: 'すごいつりざお' })).motifs.join();
+        assert.match(surIntl, /langue-differente/); assert.match(surIntl, /nom-langue-non-anglaise/, 'produit NON japonais : le nom japonais n\'est jamais comparé, même si nomJa existe');
+    });
     await test('tour 1 (1) : produit SANS numéro : lu.nom comparé au nom du produit (avant « [ », normalisation de la jointure), sinon nom-different ; avec numéro rien ne change', () => {
         const sans = produit({ numero: null, nomEn: 'Psyduck [Confusion Wave]' }), base = entree({ attendu: { ...entree().attendu, numero: null }, lu: { ...entree().lu, numero: null, total: null, nom: 'Psyduck' } });
         assert.strictEqual(lue(base, sans).ok, true);
@@ -659,6 +673,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
             fiches: async (carteIds, slugs) => lignes.filter(l => carteIds.includes(l.carteId) && slugs.includes(l.slugSet)),
             numeros: async ids => ids.map(i => ({ idProduct: i, numero: produits[i]?.numeroNumeros ?? null, slug: produits[i]?.slugNumeros ?? null, nomFr: produits[i]?.nomFrNumeros ?? null })).filter(x => x.numero != null || x.nomFr != null),
             sets: async slugs => sets.filter(s => slugs.includes(s._id)),
+            nomsJa: async ids => cartes.filter(c => ids.includes(c._id)).map(c => ({ _id: c._id, nomJa: c.nomJa ?? null })),
             positions: async () => positions,
             impressions: async ids => ids.map(i => ({ _id: i, impressions: impressionsDe[i] ?? [] }))
         };
@@ -707,6 +722,22 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         const p2 = await K.construirePlanAvec({ dossier: sans.racine, cache: sans.cache, lire: sans.lire, etat: sans.etat, lecteur: RC.lecteurNatif(sans.db), fichiers: sans.F });
         assert.strictEqual(p2.unites.length, 0);
         assert.match(JSON.stringify(p2.resume.refus), /nom-different/);
+    });
+    await test('plan (a-reste, japonais) : produit japonais, scan japonais : le nom lu se compare au nomJa de la CARTE de la ligne ; autre nom ou carte sans nomJa = refus nom-different', async () => {
+        const jp = (nomJa, luNom) => ({ etat: [{ idProduct: 1001, idExpansion: 5000, langue: 'jp', tamponnee: null, name: 'Bulbasaur' }], sets: [{ _id: SLUG, tirage: 'jp' }], cartes: [{ _id: 77, nomEn: 'Bulbasaur', nomJa, images: [] }], luNom });
+        const monter = async (o) => {
+            const w = await mondeSimple(o);
+            const man = JSON.parse(fs.readFileSync(path.join(w.racine, 'MCD', 'preuves.json'), 'utf8'));
+            man.entrees[0].lu = { ...man.entrees[0].lu, langue: 'ja', nom: o.luNom, total: '40' };
+            fs.writeFileSync(path.join(w.racine, 'MCD', 'preuves.json'), JSON.stringify(man));
+            return K.construirePlanAvec({ dossier: w.racine, cache: w.cache, lire: w.lire, etat: w.etat, lecteur: RC.lecteurNatif(w.db), fichiers: w.F });
+        };
+        const bon = await monter(jp('フシギダネ', 'フシギダネ'));
+        assert.deepStrictEqual(bon.resume.refus, []); assert.deepStrictEqual([bon.unites.length, bon.unites[0].langue], [1, 'ja']);
+        const autre = await monter(jp('フシギダネ', 'ヒトカゲ'));
+        assert.strictEqual(autre.unites.length, 0); assert.match(JSON.stringify(autre.resume.refus), /nom-different/);
+        const sans = await monter(jp(undefined, 'フシギダネ'));
+        assert.strictEqual(sans.unites.length, 0); assert.match(JSON.stringify(sans.resume.refus), /nom-different/);
     });
     await test('plan : sans validation = refus nommé, rien dans l\'index ni dans les unités', async () => {
         const w = await mondeSimple({ validations: [] });
