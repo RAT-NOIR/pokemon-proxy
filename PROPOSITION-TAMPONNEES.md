@@ -5,10 +5,10 @@ Décision de l'utilisateur (01/11) : une réimpression tamponnée (Prize Pack, 3
 ## 1. Le contrat de réponse : AUCUN type nouveau, aucune forme nouvelle
 - Le bandeau qui dit ce qu'est le produit existe déjà et se DÉRIVE du set : Prize Pack → `PLAY_POKEMON` (FR « Tampon Play! Pokémon », EN « Play! Pokémon stamp »), Trick or Trade → `TRICK_OR_TRADE` (« Tampon Trick or Trade » / « Trick or Trade stamp »). La liste fermée reste à 27 types.
 - Ce qui dit « emprunté » est la mention EXISTANTE `Visuel d'un autre tirage` (celle des fiches Base Set), posée sur l'entrée. Elle est déjà dans la forme servie (`mention`) ; aucun texte nouveau (le texte « visuel du tirage d'origine » reste refusé).
-- 30th Celebration : AUCUN produit n'entre aujourd'hui (14 refusés, 14 indécidables à l'image). Un type `ANNIVERSAIRE_30` ne serait proposé que le jour où des produits y entrent. Rien à confirmer pour ce lot, sauf que l'extension affiche la mention d'un produit Prize Pack comme celle d'un Base Set.
+- 30th Celebration : AUCUN produit n'entre (14 refusés, indécidables à l'image) et le code l'impose : un set sans bandeau dérivé ne passe pas. Un type `ANNIVERSAIRE_30` ne serait proposé que le jour où des produits y entrent. Rien à confirmer pour ce lot, sauf que l'extension affiche la mention d'un produit Prize Pack comme celle d'un Base Set.
 
 ## 2. Le chemin dans l'archive (v2/chargeur/decision.js, admission D)
-Mécanisme des WCD ((B)), avec une liste fermée au lieu d'un lot du catalogue : un produit entre SEULEMENT s'il est dans `tamponneesEmpruntees` (Set d'idProduct, preuve nommée sur chaque ligne de la liste), si son refus est de la famille prize-packs / 30th-celebration / image-empruntee / Trick or Trade `<année>`, et si l'image est admise par la règle de langue du site pour la région du set. Entrée : `visuel: 'autre-tirage'`, mention existante, marquée EMPRUNTÉE (les règles d'image — G, départage, zone clé — ne la lisent pas, comme les WCD). WCD et Battle Academy gardent leurs règles. Sans liste : aucun effet, octet pour octet.
+Mécanisme des WCD ((B)), avec une liste fermée au lieu d'un lot du catalogue : un produit entre SEULEMENT s'il est dans `tamponneesEmpruntees` (Set d'idProduct, preuve nommée sur chaque ligne de la liste), si son SET est d'une famille autorisée (lue par `familleDuSet`, jamais sur le seul refus : Prize Pack, 30th Celebration, Trick or Trade quand le set dérive le bandeau `TRICK_OR_TRADE`, ou un set d'aucune famille fermée pour l'image empruntée du catalogue ; WCD et Battle Academy sont EXCLUS par le code) et son refus de la famille du set ou « image-empruntee » (jamais `staff-prerelease`), si l'image est admise par la règle de langue du site pour la région du set, et SI UN BANDEAU dit ce qu'est le produit (dérivé du set, ou écrit sur la ligne) : sans bandeau le produit reste refusé, compté à part (`tamponneeSansBandeau`). Un `tamponneesEmpruntees` qui n'est pas un `Set` refuse la construction. Entrée : `visuel: 'autre-tirage'`, mention existante, marquée EMPRUNTÉE (les règles d'image — G, départage, zone clé — ne la lisent pas, comme les WCD). WCD et Battle Academy gardent leurs règles. Sans liste : aucun effet, octet pour octet.
 Le branchement en ligne de commande (`--tamponnees-empruntees=<fichier>` + empreinte épinglée, comme `--jumbos-visuel`) n'est PAS fait : il attend la relecture de cette proposition.
 
 ## 3. La preuve à l'image
@@ -16,6 +16,9 @@ La règle des emprunts déjà classés (e14-classes-orb.js), appliquée à l'ima
 
 ## 4. Le remplacement par le vrai scan
 Automatique par construction : `choisirVisuel` donne un scan du set (non empreinté) avant le repli ; (D) ne se déclenche que s'il n'y en a pas. Test D5.
+
+## 5. Ce que ça donne (archive candidate `candidate-2026-11-01c.rmv`, jamais publiée)
+382 produits dans la portée (Prize Pack 268, image empruntée 93, 30th 14, Trick or Trade 7) : 21 prouvés « meme » et admis (Prize Pack 17, image empruntée 4) ; 361 indécidables. Entrées 68 220 -> 68 241 (+21), fiches liées 65 987 -> 65 987, 0 perdue, 0 produit changé. Mesure de l'archive (réglage 141, tamponnées 35, ordinaires 44) : FAUX 0, mêmes comptes qu'avant.
 
 ## 6. DÉTECTION DU TAMPON chez le client (ordre n°17 de l'éditeur, 01/11) — PROPOSITION, aucun code, rien de servi
 Principe : un tampon a un emplacement et une forme connus. Le client le cherche DANS cette zone, sur le recadrage redressé de la carte, par correspondance de gabarit ou ORB (OpenCV, quelques ms). Tampon trouvé : la version tamponnée passe devant. Tampon absent sur une image NETTE : la version sans tampon passe devant. Incertain : la question actuelle reste. Les gabarits sont tirés de NOS visuels (l'archive), jamais d'une image Cardmarket.
@@ -30,6 +33,3 @@ Principe : un tampon a un emplacement et une forme connus. Le client le cherche 
 **6.4 Avant tout code** : demande écrite à l'extension (journal, entrée API du 01/11) : OpenCV est-il déjà chargé chez elle, et à quel coût en ms et en Mo ? Sans réponse, rien n'est écrit.
 
 **6.5 La mesure, fixée d'avance** : elle se fera sur une MOITIÉ des 44 tamponnées jamais regardée. C'est l'éditeur (via le coordinateur) qui tire cette moitié au sort et la SCELLE avant tout réglage ; les seuils (score, netteté) se règlent sur l'autre moitié seulement ; la moitié scellée ne sert qu'une fois, à la fin. Critère : 0 faux (un faux est une version tamponnée mise devant une carte non tamponnée, ou l'inverse), les « incertain » étant comptés à part et jamais en échec.
-
-## 5. Ce que ça donne (archive candidate `candidate-2026-11-01c.rmv`, jamais publiée)
-382 produits dans la portée (Prize Pack 268, image empruntée 93, 30th 14, Trick or Trade 7) : 21 prouvés « meme » et admis (Prize Pack 17, image empruntée 4) ; 361 indécidables. Entrées 68 220 -> 68 241 (+21), fiches liées 65 987 -> 65 987, 0 perdue, 0 produit changé. Mesure de l'archive (réglage 141, tamponnées 35, ordinaires 44) : FAUX 0, mêmes comptes qu'avant.
