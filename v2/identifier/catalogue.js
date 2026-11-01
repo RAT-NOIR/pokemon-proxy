@@ -35,9 +35,11 @@ function creerCatalogue(opts = {}) {
     // JUMEAU-V2 : y a-t-il, dans le catalogue d'AUJOURD'HUI, un produit PLUS RÉCENT que l'archive (idProduct > maxArchive) de la MÊME métacarte ? C'est le seul cas où la colonne des jumeaux
     // (fabriquée plus tôt) peut ignorer un jumeau du produit que la route s'apprête à affirmer. Une requête INDEXÉE (l'index unique sur idProduct borne le balayage aux produits plus récents que
     // l'archive : quelques dizaines), une par produit affirmé, jamais une lecture globale. Rend true / false ; une lecture qui échoue LÈVE (l'appelant en fait « on ne peut pas conclure »).
-    async function plusRecentDansMetacarte(maxArchive, idMetacard) {
+    // opts.maxTimeMS (drapeau V2_JUMEAUX_PREPARER_TOUS allumé, passé par fournisseurParDefaut) : la requête est bornée côté base ; dépassée, elle LÈVE (jamais un « false »). Absent : la requête d'avant.
+    async function plusRecentDansMetacarte(maxArchive, idMetacard, opts = {}) {
         if (!Number.isInteger(maxArchive) || !Number.isInteger(idMetacard)) throw new Error('plusRecentDansMetacarte : entiers attendus');
-        const trouves = await colLue('catalogue_produits').find({ idProduct: { $gt: maxArchive }, idMetacard }, { projection: { idProduct: 1 } }).limit(1).toArray();
+        const options = { projection: { idProduct: 1 }, ...(opts && Number.isInteger(opts.maxTimeMS) && opts.maxTimeMS > 0 ? { maxTimeMS: opts.maxTimeMS } : {}) };
+        const trouves = await colLue('catalogue_produits').find({ idProduct: { $gt: maxArchive }, idMetacard }, options).limit(1).toArray();
         return trouves.length > 0;
     }
 

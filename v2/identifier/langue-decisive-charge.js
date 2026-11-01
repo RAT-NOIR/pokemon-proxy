@@ -5,7 +5,7 @@
 // M-C (tour de correction 2) : ce module ne prépare QUE le SURVIVANT UNIQUE de la réduction (`survivantUnique`, les règles livrées) — jamais tous les candidats désignés — sous un PLAFOND de produits lus
 // (PLAFOND_CHARGE) et un TEMPS borné (DELAI_PREPARATION_MS). Pas de survivant unique, jumeaux au-delà du plafond, lecture en panne ou trop lente : il ne prépare rien (l'état d'avant, la résolution se refuse, la
 // question reste réduite par la langue). Une panne de lecture ne lève jamais.
-const { fournisseurParDefaut, idsAPreparer } = require('./jumeaux');
+const { fournisseurParDefaut, idsAffirmes } = require('./jumeaux');
 const LD = require('./langue-decisive');
 const DES = require('./designation');
 
@@ -16,7 +16,7 @@ const apresDelai = (p, ms) => new Promise((resolve, reject) => { const t = setTi
  * @param produits    Map déjà chargée (vivier compris) ; @param jumeaux le fournisseur déjà construit pour les produits affirmés ; @param version la version de la colonne lue UNE fois par la requête
  * @returns { jumeaux, produits, codeNumeroExiste } — les mêmes objets si rien n'est à ajouter.
  */
-async function preparer({ corpsListe, produits, jumeaux, catalogue, version, deps = {}, delaiMaxMs = LD.DELAI_PREPARATION_MS, designation = DES.REGLES_DESIGNATION } = {}) {
+async function preparer({ corpsListe, produits, jumeaux, catalogue, version, deps = {}, delaiMaxMs = LD.DELAI_PREPARATION_MS, designation = DES.REGLES_DESIGNATION, tous = false } = {}) {
     let codeNumeroExiste;
     try {
         // l'index se construit EN ARRIÈRE-PLAN dès le premier besoin (`indexSansAttente`) : tant qu'il n'est pas prêt R4 est FERMÉE et on ne l'attend pas (le scan suivant en profite) ; un catalogue sans cette méthode (banc)
@@ -39,10 +39,12 @@ async function preparer({ corpsListe, produits, jumeaux, catalogue, version, dep
         // l'EXTENSION de la désignation : ses candidats possibles en plus (I3 : au plafond, seule elle est abandonnée, jamais la préparation propre de LANGUE-DECISIVE)
         const survivantsDes = desActives && codeNumeroExiste && codeNumeroExiste.famille ? [...new Set((corpsListe || []).flatMap(c => DES.candidatsAPreparer({ corps: c, produits, regles: reglesDes })))].filter(i => !survivantsLD.includes(i)) : [];
         if (!survivantsLD.length && !survivantsDes.length) return avant;
-        const affirmes = (corpsListe || []).flatMap(c => idsAPreparer(c));            // JUMEAUX-VERDICTS : le fournisseur refait ici REMPLACE celui de la route — il garde les verdicts des candidats
+        const affirmes = (corpsListe || []).flatMap(c => idsAffirmes(c));
+        // JUMEAUX-VERDICTS (V2_JUMEAUX_PREPARER_TOUS) : le fournisseur refait ici REMPLACE celui de la route ; allumé, il reprend les verdicts déjà établis pour la requête (`jumeaux.verdicts`) et ne demande que les survivants qui manquent. Éteint : l'appel d'e833578c.
+        const optsVerdicts = tous === true ? { tous: true, deja: jumeaux && jumeaux.verdicts instanceof Map ? jumeaux.verdicts : undefined } : undefined;
         const r = await apresDelai((async () => {
             const preparer1 = async survivants => {
-                const j2 = await fournisseurParDefaut(catalogue, version, [...new Set([...affirmes, ...survivants])]);
+                const j2 = await fournisseurParDefaut(catalogue, version, [...new Set([...affirmes, ...survivants])], optsVerdicts);
                 return { j2, manquants: [...new Set(survivants.flatMap(id => { const g = j2(id); return g && g.conclu === true && Array.isArray(g.ids) ? g.ids : []; }))].filter(i => Number.isInteger(i) && !produits.has(i)) };
             };
             let { j2, manquants } = await preparer1([...survivantsLD, ...survivantsDes]);
