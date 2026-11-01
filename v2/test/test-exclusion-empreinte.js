@@ -39,7 +39,9 @@ function monde(marqueur) {
     // l'exporteur : une ligne portant le marqueur n'est pas exportée
     const dossier = path.join(os.tmpdir(), `exp-empreinte-${process.pid}-${Date.now()}`);
     const lignes = [{ _id: 'l1', source: 'etiquette-admin', etat: 'confirmee', cleR2: CLE, verite: 1, reponse: { statut: 'identifiee', idProduct: 1 }, rev: 1 }, { _id: 'l2', source: 'etiquette-admin', etat: 'confirmee', cleR2: CLE, verite: 2, reponse: { statut: 'identifiee', idProduct: 2 }, rev: 1, empreinteExtension: true }];
-    const colFn = nom => ({ find: () => ({ sort: () => ({ toArray: async () => (nom === 'banc_lignes' ? lignes : []) }) }), countDocuments: async () => 0 });
+    // BANC-200 : l'export lit d'abord l'état du juge (banc_seaux, find(...).toArray()) et REFUSE s'il ne se lit pas : la fausse base répond « aucun seau juge », lisible
+    const liste = nom => (nom === 'banc_lignes' ? lignes : []);
+    const colFn = nom => ({ find: () => ({ sort: () => ({ toArray: async () => liste(nom) }), toArray: async () => liste(nom) }), countDocuments: async () => 0 });
     const r = await exporterBancAdmin({ dossier, colFn, stockage: { lire: async () => Buffer.from('photo') }, base: 'test_scratch' });
     const man = JSON.parse(fs.readFileSync(path.join(dossier, 'manifeste.json'), 'utf8')), lg = JSON.parse(fs.readFileSync(path.join(dossier, 'lignes.json'), 'utf8'));
     H.v('5. exporteur : la ligne marquée n\'est pas exportée, le manifeste COMPTE l\'exclusion', [lg.map(x => x.id), man.exclues, man.lignes], [['l1'], 1, 1]);

@@ -70,7 +70,8 @@ const pct = (a, b) => (b ? (100 * a / b).toFixed(1) + ' %' : 'n/a');
     const cfg = { ...cfg0, probable: true, empreinteExtension: true, modeleEmpreinte: MODELE };
     const cat = creerCatalogue({ cfg: cfg0, visuels: { entree: id => V.entree(id), tirage: id => V.tirageJumeaux(id), resoudre: async () => null, impressions: async () => [] } });
     await cat.indexCodeNumero(); await cat.indexFamilles();
-    const A = await db.collection('analyses').find({}).toArray();
+    // BANC-200 (tour 2) : jamais un scan du JUGE (juge-garde ; l'état du juge illisible arrête la mesure)
+    const A = await require('../banc/juge-garde').sansJuge(n => db.collection(n), await db.collection('analyses').find({}).toArray());
     const JN = new Map((await db.collection('journal_scans').find({}).toArray()).map(j => [String(j._id), j]));
     const Aid = new Set(A.map(a => String(a._id)));
     const orph = [...JN.values()].filter(j => !Aid.has(String(j._id)));

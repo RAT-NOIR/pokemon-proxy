@@ -87,6 +87,8 @@ module.exports = {
             const parPorteurResolution = L.limiteur({ nom: 'banc-resoudre-cardmarket', max: cfg.limites.etiquetteParPorteurHeure, fenetreMs: 3600e3, cle: q => (q.v2 && q.v2.porteur ? `${q.v2.porteur.type}:${q.v2.porteur.id}` : null) });
             router.post('/api/banc/resoudre-cardmarket', resoudrePorteur(cfg), exigerInstallation, exigerAdministrateur, parPorteurResolution, traiterResolution(cfg, deps));
         }
+        // BANC-200 : les seaux (juge scellé, entraînement), derrière V2_BANC_SEAU=1 ; éteint, les routes n'existent pas. Toute la logique : seau.js ; ici, seulement le montage.
+        if (cfg.bancSeau === true) require('./seau-routes').monter(router, cfg, deps.seaux || require('./seau').creerSeaux({ cfg }));
         router.delete('/api/banc/contributions', resoudrePorteur(cfg), exigerInstallation, traiterEffacement(purge));
         demarrerPurge(purge, undefined, undefined, { banc });
     },

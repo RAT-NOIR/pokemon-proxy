@@ -22,10 +22,13 @@ const arg = (nom, defaut) => { const a = process.argv.find(x => x.startsWith(`--
     const { c, db } = await ouvrir();
     process.env.R2_ACCESS_KEY_ID = process.env.R2_ESSAI_BANC_LECTURE_CLE_ID; process.env.R2_SECRET_ACCESS_KEY = process.env.R2_ESSAI_BANC_LECTURE_SECRET;
     const r2 = require('../../collecte-cartes/r2'); await r2.verifierBucket('rm-essai-banc');
-    const photo = async scanId => { const a = await db.collection('analyses').findOne({ _id: new (require(path.join(RACINE, 'node_modules', 'mongoose')).Types.ObjectId)(scanId) }); return a && a.photoBanc ? r2.lireBinaire('rm-essai-banc', a.photoBanc.cle) : null; };
+    // (la lecture d'une photo par scanId passe aussi par la garde du juge)
+    const jugeEtat = await require('../banc/juge-garde').etatDuJuge(n => db.collection(n));
+    const photo = async scanId => { if (jugeEtat.scanIds.has(String(scanId))) return null; const a = await db.collection('analyses').findOne({ _id: new (require(path.join(RACINE, 'node_modules', 'mongoose')).Types.ObjectId)(scanId) }); return a && a.photoBanc ? r2.lireBinaire('rm-essai-banc', a.photoBanc.cle) : null; };
     const carte420 = async buf => (await sharp(buf).resize(420, 587, { fit: 'fill' }).jpeg({ quality: 92 }).toBuffer()).toString('base64');
     // deux cartes SANS tampon : les deux premières analyses étiquetées (hors paires du contrôle), tirage reproductible
-    const A = await db.collection('analyses').find({ 'photoBanc.cle': { $type: 'string' } }, { projection: { cartes: 1 } }).limit(400).toArray();
+    // BANC-200 : jamais une photo du JUGE (juge-garde ; l'état du juge illisible arrête la vérification)
+    const A = await require('../banc/juge-garde').sansJuge(n => db.collection(n), await db.collection('analyses').find({ 'photoBanc.cle': { $type: 'string' } }, { projection: { cartes: 1 } }).limit(400).toArray());
     const pairesIds = new Set([851049, 851050, 851045, 851046, 692230, 761122, 760234, 761138, 857393, 859015, 769411, 769412]);
     const sans = A.filter(a => a.cartes.length === 1 && a.cartes[0].etiquetteAdmin && !pairesIds.has(a.cartes[0].etiquetteAdmin.idProduct) && ![437164, 449213, 299573].includes(a.cartes[0].etiquetteAdmin.idProduct)).slice(40, 42).map(a => String(a._id));
     const carnet = creerCarnet({ fichier: path.join(sortie, 'depense.json'), plafondUsd: plafond });

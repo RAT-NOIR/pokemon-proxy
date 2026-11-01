@@ -49,7 +49,14 @@ function nouvelleCle(attente = false) {
 }
 
 /** client = { deposerBinaire(bucket, cle, buffer, contentType), supprimer(bucket, cles) } (la forme de collecte-cartes/r2.js). */
-function creerStockage({ client, bucket, env = process.env } = {}) {
+// BANC-200 : les objets des SEAUX (photos en octets d'origine, mesures du client) vivent dans le MÊME bucket privé mais sous un AUTRE préfixe (`banc-seau/`), HORS de PREFIXE : ni le filet des orphelins,
+// ni la purge du banc réel ne les listent ni ne les suppriment. La clé est ADRESSÉE PAR LE CONTENU (sha256) : écrire deux fois la même photo écrit le même objet.
+const CLE_SEAU = /^banc-seau\/[0-9a-f]{16}\/[0-9a-f]{64}\.(jpg|png|webp|json)$/;
+const TYPE_SEAU = Object.freeze({ jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp', json: 'application/json' });
+const typeDeCleSeau = cle => TYPE_SEAU[String(cle).slice(String(cle).lastIndexOf('.') + 1)] || 'application/octet-stream';
+const cleSeau = (seauId, sha256, ext) => `banc-seau/${seauId}/${sha256}.${ext}`;
+
+function creerStockage({ client, bucket, env = process.env, cleRegex = CLE, typeDe = () => 'image/webp' } = {}) {
     const voulu = env.V2_BANC_BUCKET;
     if (typeof voulu !== 'string' || !voulu) throw refus('bucket-refuse', 'V2_BANC_BUCKET absente : le banc réel n\'a pas de stockage');
     if (typeof bucket !== 'string' || bucket !== voulu) throw refus('bucket-refuse', 'le bucket n\'est pas celui de V2_BANC_BUCKET');
@@ -57,11 +64,11 @@ function creerStockage({ client, bucket, env = process.env } = {}) {
         if (env[n] && env[n] === bucket) throw refus('bucket-refuse', 'V2_BANC_BUCKET ne peut pas désigner le bucket de ' + n);
     }
     if (!client || typeof client.deposerBinaire !== 'function' || typeof client.supprimer !== 'function') throw refus('client-invalide');
-    const cleOk = (c) => typeof c === 'string' && CLE.test(c);
+    const cleOk = (c) => typeof c === 'string' && cleRegex.test(c);
     return {
         async ecrire(cle, buffer) {
             if (!cleOk(cle) || !Buffer.isBuffer(buffer)) throw refus('cle-refusee');
-            await client.deposerBinaire(bucket, cle, buffer, 'image/webp');
+            await client.deposerBinaire(bucket, cle, buffer, typeDe(cle));
             return cle;
         },
         async supprimer(cle) {
@@ -88,26 +95,28 @@ function creerStockage({ client, bucket, env = process.env } = {}) {
 }
 
 /** Stockage réel : le client de collecte-cartes/r2.js, chargé seulement APRÈS le contrôle du bucket. L'appelant fait `await verifierBucket()` (endpoint UE). */
-function creerStockageReel(env = process.env) {
+function creerStockageReel(env = process.env, options = {}) {
     const bucket = env.V2_BANC_BUCKET;
     if (typeof bucket !== 'string' || !bucket) throw refus('bucket-refuse', 'V2_BANC_BUCKET absente : le banc réel n\'a pas de stockage');
     const r2 = require('../../collecte-cartes/r2');
-    const st = creerStockage({ client: r2, bucket, env });
+    const st = creerStockage({ client: r2, bucket, env, ...options });
     st.verifierBucket = () => r2.verifierBucket(bucket);
     return st;
 }
+/** BANC-200 : le stockage des seaux (même bucket V2_BANC_BUCKET, mêmes refus de bucket, préfixe `banc-seau/`). */
+const creerStockageSeauReel = (env = process.env) => creerStockageReel(env, { cleRegex: CLE_SEAU, typeDe: typeDeCleSeau });
 
 /** Pour les tests : mêmes gardes de clé, rien d'externe. */
-function creerStockageMemoire() {
+function creerStockageMemoire(cleRegex = CLE) {
     const o = new Map(), dates = new Map();
     return {
         async verifierBucket() { /* explicite : la mémoire n'a ni bucket ni endpoint à vérifier */ },
-        async ecrire(cle, buffer) { if (!CLE.test(String(cle)) || !Buffer.isBuffer(buffer)) throw refus('cle-refusee'); o.set(cle, buffer); dates.set(cle, new Date()); return cle; },
+        async ecrire(cle, buffer) { if (!cleRegex.test(String(cle)) || !Buffer.isBuffer(buffer)) throw refus('cle-refusee'); o.set(cle, buffer); dates.set(cle, new Date()); return cle; },
         async supprimer(cle) { o.delete(cle); dates.delete(cle); },
-        async lire(cle) { if (!CLE.test(String(cle)) || !o.has(cle)) throw refus('cle-refusee'); return o.get(cle); },
+        async lire(cle) { if (!cleRegex.test(String(cle)) || !o.has(cle)) throw refus('cle-refusee'); return o.get(cle); },
         async lister() { return [...o.keys()].map(cle => ({ cle, modifieLe: dates.get(cle) })); },
         cles() { return [...o.keys()]; },
     };
 }
 
-module.exports = { traiterImage, traiterPhoto, creerStockage, creerStockageReel, creerStockageMemoire, nouvelleCle, PREFIXE };
+module.exports = { traiterImage, traiterPhoto, creerStockage, creerStockageReel, creerStockageSeauReel, creerStockageMemoire, nouvelleCle, PREFIXE, CLE_SEAU, cleSeau };
