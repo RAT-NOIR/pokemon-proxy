@@ -35,6 +35,15 @@ const decimal01 = (nom, v, defaut) => {
     return n;
 };
 
+// LEVIERS-ABDE : l'écart minimal du score c3 se règle entre 0,05 et 0,5, jamais en dehors. Mesuré (serie-P-verifications.md §9.2) : à 0 chaque ex aequo devient un probable DÉBITÉ (44 faux sur 254 servis) ; au-delà de 0,5 le probable s'éteint sans le dire.
+// Un réglage hors de cette plage est une configuration invalide (les routes v2 répondent 503), comme toute variable mal écrite : une faute de frappe sur l'essai ne coûte jamais de crédit.
+const ECART_LEVIERS_MIN = 0.05, ECART_LEVIERS_MAX = 0.5;
+const ecartLeviers = (nom, v, defaut) => {
+    const n = decimal01(nom, v, defaut);
+    if (n < ECART_LEVIERS_MIN || n > ECART_LEVIERS_MAX) throw new Error(`configuration invalide : ${nom}="${v}" (attendu un nombre de ${ECART_LEVIERS_MIN} à ${ECART_LEVIERS_MAX})`);
+    return n;
+};
+
 // PLAFOND-DECLARE : quatre variables n'ont plus d'objet (les pannes et les introuvables ne sont plus plafonnés ; question et sans-prix partagent le compteur des déclarations). Posées, elles ne rendent
 // JAMAIS la configuration invalide (un 503 pour un réglage mort serait pire que le réglage) : UN avertissement par processus, qui NOMME les variables et n'affiche jamais leur valeur.
 const VARIABLES_SANS_OBJET = Object.freeze(['V2_PLAFOND_PANNES', 'V2_PLAFOND_QUESTIONS', 'V2_SANS_PRIX_JOUR', 'V2_JUMEAUX_REMBOURSES_JOUR']);
@@ -246,6 +255,17 @@ function lireConfig(env = process.env) {
         probableCosinusMin: decimal01('V2_PROBABLE_COSINUS_MIN', env.V2_PROBABLE_COSINUS_MIN, 0.38),     // GARDE RETENUE (tour 2) : choisie sur le RÉGLAGE seul, 0 probable faux sur les trois bancs
         // TOUR 2 : « vecteur exigé » — un probable demande un cosinus MESURÉ pour le 1er candidat (vecteur de l'extension, photo redressée, visuel propre) ; sinon la question reste réservée.
         probableVecteurExige: booleen('V2_PROBABLE_VECTEUR_EXIGE', env.V2_PROBABLE_VECTEUR_EXIGE, true),
+        // LEVIERS-ABDE (ordre n°17, 01/11/2026) : quatre leviers de la reconnaissance, derrière UN drapeau RÉSERVÉ À L'ESSAI, ÉTEINT par défaut (0), « 0 » ou « 1 » seulement : la réponse est celle d'avant, octet pour octet.
+        //   a : un pool de 10 candidats (choix d'avant + vivier de la lecture non contredit + produits du top 10 de l'empreinte), trié par le score c3 ;
+        //   b : l'admission du probable par l'écart c3 >= leviersEcart ET aucun champ lu ne contredit (remplace θ 0,38 / vecteur exigé / « tous les autres contredits ») ;
+        //   d : les alias français (nomFr normalisé = le nom lu) entrent au pool ;
+        //   e : « jumeaux-trop-nombreux » devient une question aux 3 premiers, au lieu d'un introuvable (identifier/adaptateur.js).
+        // N'agit que sur une QUESTION, avec V2_PROBABLE allumé et une extension >= 2.0.1 portant un vecteur ; ne change jamais un sûr (identifier/leviers-abde.js). leviersEcart (V2_LEVIERS_ECART) : l'écart minimal du score c3, 0,1 par défaut.
+        leviersAbde: booleen('V2_LEVIERS_ABDE', env.V2_LEVIERS_ABDE, false),
+        leviersEcart: ecartLeviers('V2_LEVIERS_ECART', env.V2_LEVIERS_ECART, 0.1),
+        // V2_LEVIERS_UN_CANDIDAT (tour 2) : une question à UN SEUL candidat peut devenir un PROBABLE (« à confirmer », jamais un sûr) sous TOUTES les gardes de b (écart c3, I2 prix, I3 même dessin, motif/contradiction, champ contredit, alias échec fermé).
+        // Strict comme V2_CONFIRMATION_NOMBREUX : SEULE la valeur exacte « 1 » l'allume ; toute autre valeur (ou l'absence) l'éteint, sans invalider la configuration. Sans effet si V2_LEVIERS_ABDE et V2_PROBABLE ne sont pas allumés.
+        leviersUnCandidat: env.V2_LEVIERS_UN_CANDIDAT === '1',
         // TEMPS-ETAPES (identifier/temps-etapes.js) : quatre coupes de TEMPS qui ne changent aucune décision, chacune ÉTEINTE par défaut (0) : la route est alors celle d'avant, octet pour octet.
         // voisinsUneFois : la recherche des voisins une fois par requête ; empreinteTot : la recherche et la garde des zones partent pendant l'attente du modèle ; finParallele : les lectures/écritures annexes de la fin de requête partent ensemble.
         // orbUtile : la règle G (recherche des voisins + garde des zones, donc l'ORB) n'est pas consultée quand la chaîne a rendu un INTROUVABLE — elle ne peut rien y changer (arbitrage-g.js, promotion-g.js) ; la réponse dit alors `empreinte: { utilisee: false, code: 'muette' }`.

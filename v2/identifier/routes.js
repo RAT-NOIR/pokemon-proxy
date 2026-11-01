@@ -159,6 +159,7 @@ const mongoose = require('mongoose');
 const registre = require('../registre');
 const { fauxRes } = require('./captureres');
 const { adapter, codeLangueDe, prixLiveDe, affirmerParLaRoute } = require('./adaptateur');
+const { appliquerLeviers } = require('./leviers-abde');       // LEVIERS-ABDE (V2_LEVIERS_ABDE, éteint par défaut : jamais appelée)
 const { consulterProbable, avecNiveau, actif: niveauServi, cosinusDesCandidats, estGroupe } = require('./probable-route');   // PROBABLE : le niveau « probable » (V2_PROBABLE, éteint : jamais appelée), et `niveau` servi aux extensions >= 2.0.1
 const { appliquerMarqueurs } = require('./garde-marqueurs');       // MARQUEURS : le jumbo par le titre et la garde des groupes, derrière V2_JUMBO_TITRE et V2_GARDE_MARQUEURS (éteints : jamais appelée)
 const { fournisseurParDefaut, idsAffirmes, idsACharger } = require('./jumeaux');
@@ -571,10 +572,10 @@ function traiterIdentifier(cfg, deps = {}) {
                     let jumeaux = jumeaux0, ctxLD = {};
                     if (produits !== null) { const pr = await T.mesurer('base', () => preparerLD({ corpsListe: [c], produits, jumeaux: jumeaux0, catalogue, version: version0, deps })); produits = pr.produits; jumeaux = pr.jumeaux; if (pr.codeNumeroExiste) ctxLD = { codeNumeroExiste: pr.codeNumeroExiste }; }
                     resultat = produits === null ? { issue: 'panne', analyse: null, erreur: { code: 'INDISPONIBLE' } }
-                        : (deps.adapter || adapter)({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux, ...ctxLD });
+                        : (deps.adapter || adapter)({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux, ...ctxLD, ...(cfg.leviersAbde === true && niveauServi(cfg, entree) ? { leviersE: true } : {}) });
                     noterQuestion();
                     // SECONDE-LECTURE : seulement le cas visé, derrière son interrupteur ; la réponse d'avant reste si elle ne CONFIRME pas (jamais pire). AVANT la réservation ci-dessous : une affirmation confirmée n'en a pas.
-                    if (resultat.issue === 'question') {
+                    if (resultat.issue === 'question' && !resultat.jumeauxEnQuestion) {
                         const rejouer = jum => (deps.adapter || adapter)({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux: jum, ...ctxLD });
                         let sl = null;
                         try { sl = await T.mesurer('seconde', () => consulterSecondeLecture({ deps, cfg, entree, scanId, resultat, corpsChaine: c, produits, jumeaux, rejouer })); } catch (e) { journalErreur('seconde lecture', e); }
@@ -582,7 +583,7 @@ function traiterIdentifier(cfg, deps = {}) {
                     }
                     noterQuestion();
                     // F1-TAMPON puis LOT TAMPONS : lire les marques (liste fermée) pour trancher une paire séparée ; ou la mention de la règle 2 des prix. Derrière son interrupteur ; la réponse d'avant reste si la preuve n'est pas faite.
-                    if (resultat.issue === 'question' || resultat.issue === 'affirmee') {
+                    if ((resultat.issue === 'question' || resultat.issue === 'affirmee') && !resultat.jumeauxEnQuestion) {
                         try {
                             const lt = await T.mesurer('tampon', () => consulterLectureTampon({ deps, cfg, entree, scanId, resultat, corpsChaine: c, produits, version: version0, avecBorne,
                                 affirmer: (id, surcharge, critere) => affirmerParLaRoute(c, id, { produits: surcharge || produits, langueInterface: entree.langueInterface, cfg, ficheServie: false }, critere), journal: journalErreur }));
@@ -593,7 +594,7 @@ function traiterIdentifier(cfg, deps = {}) {
                     // une AFFIRMATION de la chaîne devenue une question (le produit a des jumeaux) : son crédit est encore pris, il est RÉSERVÉ plus bas, comme pour la règle G
                     if (resultat.issue === 'question' && c.success === true && c.carte && c.carte.ambigu === false) reqH.regleGRaison = 'jumeaux';
                     // MODELE-VISUEL-API : le vecteur de l'extension, si (et seulement si) V2_EMPREINTE_EXTENSION est allumé ET que la requête en porte ; jamais sur une panne. La voie V2_REGLE_G ci-dessous reste pour les requêtes sans vecteur.
-                    if (resultat.issue !== 'panne' && fournisseurEmpreinte && entree.empreintes) {
+                    if (resultat.jumeauxEnQuestion === true) { /* e : jamais promue */ } else if (resultat.issue !== 'panne' && fournisseurEmpreinte && entree.empreintes) {
                         if (te.orbUtile && resultat.issue === 'introuvable') {
                             // TEMPS-ETAPES (V2_TE_ORB_UTILE) : la règle G ne peut RIEN changer à un introuvable de la chaîne — arbitrer() rend « garder » quel que soit G, et l'introuvable ne se promeut jamais (depuisIntrouvable: false ;
                             // l'introuvable est déjà remboursé) : la recherche des voisins et la garde des zones (l'ORB) ne sont pas lancées. Ce que la réponse en dit : G se tait.
@@ -616,7 +617,7 @@ function traiterIdentifier(cfg, deps = {}) {
                     }
                     // SUR-PAR-IMAGE : une question que rien n'a tranchée, relue par le vecteur de l'extension (derrière V2_SUR_PAR_IMAGE ET V2_EMPREINTE_EXTENSION). Jamais quand la règle G a déjà changé le résultat ou
                     // contredit la chaîne (deux sources en conflit ne donnent pas un sûr), jamais sur autre chose qu'une question. La réponse d'avant reste si la preuve n'est pas faite.
-                    if (resultat.issue === 'question' && cfg.surParImage === true && entree.empreintes && !desaccordG && !(empreinteInfo && empreinteInfo.influence)) {
+                    if (resultat.issue === 'question' && cfg.surParImage === true && entree.empreintes && !desaccordG && !(empreinteInfo && empreinteInfo.influence) && !resultat.jumeauxEnQuestion) {
                         try {
                             const si = await T.mesurer('sur', () => consulterSurParImage({ cfg, entree, resultat, corpsChaine: c, produits, version: version0, jumeaux, affirmer: (id, surcharge, critere) => affirmerParLaRoute(c, id, { produits: surcharge || produits, langueInterface: entree.langueInterface, cfg, ficheServie: false }, critere),
                                 charger: cfg.vivierImage === true ? ids => catalogue.lire(ids) : undefined,         // VIVIER-IMAGE : les lignes des produits ajoutés au vivier (éteint : rien n'est passé, rien n'est lu)
@@ -645,7 +646,14 @@ function traiterIdentifier(cfg, deps = {}) {
                     }
                     // PROBABLE : une QUESTION dont un candidat se détache (signal A) ; la décision seulement ici, le débit à l'affichage plus bas (une fois la question écrite). Éteint, rien n'est lu.
                     if (resultat.issue === 'question' && cfg.probable === true) {
-                        try { probableDecide = consulterProbable({ cfg, entree, resultat, corpsChaine: c, produits, version: version0, traceMarqueurs, memo: te.voisinsUneFois === true }); }
+                        try {
+                            if (cfg.leviersAbde === true) {
+                                // LEVIERS-ABDE (V2_LEVIERS_ABDE, essai seulement) : à la place de l'admission d'avant, le pool de 10 trié par c3, l'écart c3, les alias français (identifier/leviers-abde.js). Elle ne lit qu'une QUESTION et ne
+                                // rend qu'une question (les 3 premiers du classement) et au plus un désigné : un sûr ne change jamais. Une exception laisse la question d'avant.
+                                const lv = await appliquerLeviers({ cfg, entree, resultat, corpsChaine: c, produits, version: version0, traceMarqueurs, catalogue, ctxQuestion: { langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux, ...ctxLD }, memo: te.voisinsUneFois === true });
+                                if (lv) { if (lv.resultat) resultat = lv.resultat; probableDecide = lv.probable; }
+                            } else probableDecide = consulterProbable({ cfg, entree, resultat, corpsChaine: c, produits, version: version0, traceMarqueurs, memo: te.voisinsUneFois === true });
+                        }
                         catch (e) { journalErreur('probable', e); probableDecide = null; }
                     }
                     // CALCUL-CLIENT : une QUESTION que la règle G aurait pu trancher avec des mesures que le serveur ne calcule pas (V2_ORB_SERVEUR=0) — on demande ces mesures au client qui l'annonce. Jamais quand G a
@@ -798,7 +806,7 @@ function traiterIdentifier(cfg, deps = {}) {
                 ...(porteur.compte && porteur.compte.banc === true ? { banc: true } : {}),           // le compte de MESURE : exclu des statistiques d'usage (journal-hors-banc.js)
                 // B1b.5 : de quoi servir /reponse sans relire le catalogue — l'état, la question, la zone (aucune donnée de l'annonce) et la lecture de la langue
                 cartes: cartes.map((c, i) => ({ idProduct: c.carte ? c.carte.idProduct : null, statut: c.statut, raison: c.raison, etat: c.etat ?? null, question: c.question ?? null, zone: c.zone ?? null,
-                    ...(i === 0 && sortie.probable ? { probable: { idProduct: sortie.probable.idProduct, signal: sortie.probable.signal } } : {}),     // PROBABLE : la surveillance, interne, jamais servie telle quelle
+                    ...(i === 0 && sortie.probable ? { probable: { idProduct: sortie.probable.idProduct, signal: sortie.probable.signal, ...(sortie.probable.levier ? { levier: sortie.probable.levier } : {}) } } : {}),     // PROBABLE : la surveillance, interne, jamais servie telle quelle
                     ...(sortie.lectures ? { lecture: sortie.lectures[i] } : i === 0 && sortie.lecture ? { lecture: sortie.lecture } : {}),
                     ...((sortie.motifs ? sortie.motifs[i] : i === 0 ? sortie.motif : null) ? { motifJumeaux: sortie.motifs ? sortie.motifs[i] : sortie.motif } : {}) })),     // JUMEAU-V2 : le motif de la garde, PAR CARTE (interne, jamais servi)
                 produits: cartes.flatMap(c => (c.carte ? [c.carte] : c.candidats)), facturation,
