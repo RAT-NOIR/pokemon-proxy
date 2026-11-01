@@ -22,9 +22,9 @@ const nomJaDuTexte = texte => /ja:\s*"([^"]*)"/.exec(String(texte ?? ''))?.[1] ?
 const typeJa = ja => { const m = /^基本(.)エネルギー$/.exec(String(ja ?? '')); return m ? (TYPE_JA[m[1]] ?? null) : null; };
 
 /** Les cartes candidates : même nomEn que le produit ET une impression de l'expansion SV-P. Dédoublonnées par _id. Rend les _id. */
-function candidates(nom, cartes) {
+function candidates(nom, cartes, expansion = EXPANSION) {
     const ids = new Set();
-    for (const c of cartes || []) if (c && c.nomEn === nom && (c.impressions || []).some(i => i && i.expansion === EXPANSION)) ids.add(c._id);
+    for (const c of cartes || []) if (c && c.nomEn === nom && (c.impressions || []).some(i => i && i.expansion === expansion)) ids.add(c._id);
     return [...ids];
 }
 

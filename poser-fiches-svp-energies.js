@@ -42,31 +42,43 @@ if (!SOURCES_POSEES_APRES.includes(SOURCE_IMPRESSION)) throw new Error(`${SOURCE
  * @param {object} o.clone      lireClone() (parProduit)
  * @param {(localId:string)=>string|null} o.nomJa
  */
-function planifier({ produits, lignes, nums, fiches, cartes, setDoc, clone, nomJa }) {
+// LE PROFIL : tout ce qui distingue un set de l'autre (règle de jugement, expansion, preuve…). Le plan, l'écriture, la relecture et la simulation du site sont UNE seule
+// implémentation (poser-fiches-energies-m6a.js importe ces fonctions avec son profil — §21 bis). Le profil SV-P est celui par défaut : comportement inchangé.
+const PROFIL_SVP = Object.freeze({
+    outil: 'poser-fiches-svp-energies',
+    expansion: E.EXPANSION, idExpansion: ID_EXPANSION, preuve: PREUVE, route: 'SV-P', totalParDefaut: 'SV-P', sourceNumeroFiche: SOURCE_NUMERO_FICHE,
+    juger: E.juger,
+    verifierSet(setDoc) {
+        const tirage = setDoc?.tirage ?? setDoc?.region;
+        if (tirage !== 'jp') throw new Error(`le set ${setDoc?._id} n'est pas japonais (tirage « ${tirage} ») : l'outil ne vaut que pour SV-P`);
+        if (![].concat(setDoc.bulba?.expansion ?? []).includes(E.EXPANSION) || [].concat(setDoc.bulba?.expansion).length !== 1) throw new Error(`le set ${setDoc._id} n'a pas pour unique nom d'expansion « ${E.EXPANSION} »`);
+        if (![].concat(setDoc.idExpansion ?? []).includes(ID_EXPANSION)) throw new Error(`le set ${setDoc._id} n'a pas l'expansion Cardmarket ${ID_EXPANSION}`);
+    },
+    preuveNumero: (p, j) => `Cardmarket idProduct ${p.idProduct} n°${j.numero} (numeros_cartes) ; TCGdex ${j.tcgdex} « ${j.nomJa} » nomme ce produit (thirdParty.cardmarket) au même numéro`,
+    detail: (p, j) => `SV-P « ${p.name} » -> carte ${j.carteId} : TCGdex ${j.tcgdex} (thirdParty.cardmarket) nomme le produit au numéro Cardmarket ${j.numero}, nom japonais « ${j.nomJa} » = type ${j.type}, une seule carte « ${p.name} » porte une impression SV-P`
+});
+
+function planifier({ produits, lignes, nums, fiches, cartes, setDoc, clone, nomJa }, profil = PROFIL_SVP) {
+    profil.verifierSet(setDoc);
     const tirage = setDoc?.tirage ?? setDoc?.region;
-    if (tirage !== 'jp') throw new Error(`le set ${setDoc?._id} n'est pas japonais (tirage « ${tirage} ») : l'outil ne vaut que pour SV-P`);
-    if (![].concat(setDoc.bulba?.expansion ?? []).includes(E.EXPANSION) || [].concat(setDoc.bulba?.expansion).length !== 1) throw new Error(`le set ${setDoc._id} n'a pas pour unique nom d'expansion « ${E.EXPANSION} »`);
-    if (![].concat(setDoc.idExpansion ?? []).includes(ID_EXPANSION)) throw new Error(`le set ${setDoc._id} n'a pas l'expansion Cardmarket ${ID_EXPANSION}`);
     const parId = new Map((cartes || []).map(c => [c._id, c]));
     const avecLigne = new Set((lignes || []).map(l => l.idProduct));
     const retenus = [], refus = [], aImprimer = new Set();
     for (const p of produits) {
         if (avecLigne.has(p.idProduct)) { refus.push({ idProduct: p.idProduct, condition: null, raison: 'a déjà une ligne' }); continue; }
-        const j = E.juger({ produit: p, numeroAppris: nums.get(p.idProduct), nommes: clone.parProduit.get(p.idProduct) || [], nomJa, cartes });
+        const j = profil.juger({ produit: p, numeroAppris: nums.get(p.idProduct), nommes: clone.parProduit.get(p.idProduct) || [], nomJa, cartes });
         if (!j.ok) { refus.push({ idProduct: p.idProduct, condition: j.condition, raison: j.raison }); continue; }
         const carte = parId.get(j.carteId);
         const f = fiches.get(p.idProduct) || {};
         const cle = `${j.carteId}|${numeroComparable(j.numero)}`;
-        const aDeja = (carte.impressions || []).some(i => i && i.tirage === tirage && i.expansion === E.EXPANSION && numeroComparable(i.numero) === numeroComparable(j.numero)) || aImprimer.has(cle);
+        const aDeja = (carte.impressions || []).some(i => i && i.tirage === tirage && i.expansion === profil.expansion && numeroComparable(i.numero) === numeroComparable(j.numero)) || aImprimer.has(cle);
         aImprimer.add(cle);
-        const total = (carte.impressions || []).find(i => i && i.expansion === E.EXPANSION && i.total)?.total ?? 'SV-P';
-        const impression = aDeja ? null : { tirage, expansion: E.EXPANSION, deck: null, numero: j.numero, total, rarete: null, source: SOURCE_IMPRESSION,
-            preuveNumero: `Cardmarket idProduct ${p.idProduct} n°${j.numero} (numeros_cartes) ; TCGdex ${j.tcgdex} « ${j.nomJa} » nomme ce produit (thirdParty.cardmarket) au même numéro` };
+        const total = (carte.impressions || []).find(i => i && i.expansion === profil.expansion && i.total)?.total ?? profil.totalParDefaut;
+        const impression = aDeja ? null : { tirage, expansion: profil.expansion, deck: null, numero: j.numero, total, rarete: null, source: SOURCE_IMPRESSION, preuveNumero: profil.preuveNumero(p, j) };
         retenus.push({
             p, carteId: j.carteId, numero: j.numero, idMetacard: f.idMetacard ?? null, impression, ajouteSet: !(carte.sets || []).includes(setDoc._id), slugSet: setDoc._id,
-            ligne: { _id: `${j.carteId}|${p.idProduct}`, carteId: j.carteId, idProduct: p.idProduct, idExpansion: ID_EXPANSION, tirage, preuve: PREUVE, slug: f.slug ?? null, slugSet: setDoc._id, numeroFiche: j.numero,
-                numeroFicheSource: SOURCE_NUMERO_FICHE, route: 'SV-P',
-                detail: `SV-P « ${p.name} » -> carte ${j.carteId} : TCGdex ${j.tcgdex} (thirdParty.cardmarket) nomme le produit au numéro Cardmarket ${j.numero}, nom japonais « ${j.nomJa} » = type ${j.type}, une seule carte « ${p.name} » porte une impression SV-P` }
+            ligne: { _id: `${j.carteId}|${p.idProduct}`, carteId: j.carteId, idProduct: p.idProduct, idExpansion: profil.idExpansion, tirage, preuve: profil.preuve, slug: f.slug ?? null, slugSet: setDoc._id, numeroFiche: j.numero,
+                numeroFicheSource: profil.sourceNumeroFiche, route: profil.route, detail: profil.detail(p, j) }
         });
     }
     return { retenus, refus };
@@ -117,25 +129,25 @@ async function ecrire(db, plan) {
 }
 
 /** Ce que le PLAN attend, comparé à ce qui est en base. */
-async function relire(db, plan) {
+async function relire(db, plan, profil = PROFIL_SVP) {
     const lignes = new Map((await db.collection('cartes_produits').find({ _id: { $in: plan.retenus.map(r => r.ligne._id) } }, { projection: { preuve: 1, numeroFiche: 1 } }).toArray()).map(l => [l._id, l]));
     const cartes = new Map((await db.collection('cartes').find({ _id: { $in: [...new Set(plan.retenus.map(r => r.carteId))] } }, { projection: { sets: 1, liens: 1, impressions: 1 } }).toArray()).map(c => [c._id, c]));
-    const lignesOk = plan.retenus.filter(r => { const l = lignes.get(r.ligne._id); return l && l.preuve === PREUVE && l.numeroFiche === r.numero; }).length;
-    const impressionsOk = plan.retenus.filter(r => r.impression).filter(r => (cartes.get(r.carteId)?.impressions || []).some(i => i.expansion === E.EXPANSION && numeroComparable(i.numero) === numeroComparable(r.numero) && i.source === SOURCE_IMPRESSION)).length;
+    const lignesOk = plan.retenus.filter(r => { const l = lignes.get(r.ligne._id); return l && l.preuve === profil.preuve && l.numeroFiche === r.numero; }).length;
+    const impressionsOk = plan.retenus.filter(r => r.impression).filter(r => (cartes.get(r.carteId)?.impressions || []).some(i => i.expansion === profil.expansion && numeroComparable(i.numero) === numeroComparable(r.numero) && i.source === SOURCE_IMPRESSION)).length;
     const par = parCarteDuPlan(plan);
     const cartesOk = [...par].filter(([id, w]) => { const c = cartes.get(id); return c && w.ids.every(x => (c.liens?.idProduct || []).includes(x)) && [...w.sets].every(s => (c.sets || []).includes(s)); }).length;
     return { lignesOk, impressionsOk, cartesOk, attendu: plan.retenus.length };
 }
 
 /** Ce que les écritures changeraient pour le SITE, par sa règle IMPORTÉE : fiches et visuels avant / après (docs différents : l'impression ajoutée est dans `apres`). */
-function simulerSite({ site, setDoc, docs, lignesAvant, plan }) {
+function simulerSite({ site, setDoc, docs, lignesAvant, plan }, profil = PROFIL_SVP) {
     const tir = setDoc.tirage ?? setDoc.region;
     const apresDocs = docs.map(d => {
         const ajouts = plan.retenus.filter(r => r.carteId === d._id);
         if (!ajouts.length) return d;
         return { ...d, sets: [...new Set([...(d.sets || []), setDoc._id])], impressions: [...(d.impressions || []), ...ajouts.filter(r => r.impression).map(r => r.impression)] };
     });
-    const ajoutees = plan.retenus.map(r => ({ idProduct: r.p.idProduct, carteId: r.carteId, idExpansion: ID_EXPANSION, slug: r.ligne.slug, slugSet: r.slugSet, numeroFiche: r.numero }));
+    const ajoutees = plan.retenus.map(r => ({ idProduct: r.p.idProduct, carteId: r.carteId, idExpansion: profil.idExpansion, slug: r.ligne.slug, slugSet: r.slugSet, numeroFiche: r.numero }));
     const evaluer = (D, lignes) => {
         const parId = new Map(D.map(d => [d._id, d]));
         const F = site.fichesDesProduits(site.regle, setDoc, D, lignes);
@@ -249,7 +261,7 @@ async function executer({ argv, ouvrir, lireClone, chargerSite, log = console.lo
     } finally { await fermer(); }
 }
 
-module.exports = { planifier, garderCalibration, verifierAttendu, operationsEcriture, ecrire, relire, simulerSite, executer, PREUVE, SOURCE_IMPRESSION, ID_EXPANSION };
+module.exports = { planifier, garderCalibration, verifierAttendu, operationsEcriture, ecrire, relire, simulerSite, parCarteDuPlan, executer, PREUVE, SOURCE_IMPRESSION, ID_EXPANSION, PROFIL_SVP };
 
 if (require.main === module) {
     (async () => {
