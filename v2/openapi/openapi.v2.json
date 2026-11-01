@@ -4506,6 +4506,33 @@
               "null"
             ]
           },
+          "visuelMentionLangues": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "fr": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "en": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "fr",
+              "en"
+            ],
+            "additionalProperties": false,
+            "x-conditionnel": "capacitesClient mention-langues-1",
+            "description": "AJOUT FACULTATIF (additif, MENTION-LANGUES) : la mention du visuel dans les DEUX langues, indépendante de la langue de l'interface. Servi SEULEMENT aux extensions qui déclarent la capacité `mention-langues-1` (champ `capacitesClient` de la requête) ; absent sinon (le Produit est celui d'avant, clé comprise). `fr` et `en` valent chacun un texte de 1 à 40 caractères ou `null` ; une mention que le serveur ne sait dire qu'en français a `en: null` (jamais une langue pour une autre). Le tout vaut `null` sans visuel servi ou sans mention. `visuelMention` (la chaîne résolue par la langue de l'interface) ne change pas."
+          },
           "prixGuide": {
             "oneOf": [
               {
