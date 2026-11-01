@@ -27,11 +27,12 @@
 //     l'administrateur) : tout refus de dépôt arrête la série AVANT /api/identifier (code 15), jamais de retombée sur l'adresse de l'annonce. Les lignes viennent du tableau (--cles, --n, --graine, --g-probable, --sans-declarations sont refusés).
 // Usage : node v2/mesures/serie-essai.js --resultats=<resultats-*.json> --nav=<nav-bancs.json> --photos=<dossier des photos des bancs, <clé de photo>.jpg|png|webp> --n=<N> --graine=<entier> --plafond-usd=<USD> --carnet=<fichier.jsonl>
 //         [--compte=ordinaire  (les 9 lignes du tableau du compte de test : ni --n, ni --graine, ni --cles, ni --g-probable)]
-//         [--cartes=<dossier des cartes redressées, <clé de photo>.jpg>] [--g-probable [--scans=<dossier>,<dossier>] [--tampons=<json>] [--version-extension=2.0.1] [--sans-declarations]] [--env=<fichier .env>] [--pause-s=6] [--cout-estime-usd=0.0037] [--modele-id=… --modele-sha256=…] [--sortie=<rapport.json>] [--base=https://rat-market-api-essai.onrender.com]
+//         [--cartes=<dossier des cartes redressées, <clé de photo>.jpg>] [--g-probable [--scans=<dossier>,<dossier>] [--tampons=<json>] [--version-extension=2.0.1] [--sans-declarations]] [--cles-avec-verite-seulement  (ne tire que des lignes qui ont une vérité : un sûr n'y reste jamais non jugé)] [--eteindre-si-sur-faux=V2_PROMOTION_SURS --commit-essai=<commit>  (un sûr FAUX arrête la série, pose la variable à 0 sur l'essai par render/poser-variables-essai.js, journalise l'heure et la ligne ; code de sortie 12)] [--env=<fichier .env>] [--pause-s=6] [--cout-estime-usd=0.0037] [--modele-id=… --modele-sha256=…] [--sortie=<rapport.json>] [--base=https://rat-market-api-essai.onrender.com]
 const fs = require('fs'), path = require('path'), crypto = require('crypto');
 const SP = require('./serie-probable');
 const CT = require('./serie-compte-test');
 
+const CODE_EXTINCTION = 12;                                               // la série s'est arrêtée sur un sûr FAUX et a éteint la variable (voir decisionExtinction)
 const HOTE_ESSAI = 'rat-market-api-essai.onrender.com';
 const NOM_IDENTIFIANT = 'V2_ESSAI_BANC_IDENTIFIANT', NOM_MOT_DE_PASSE = 'V2_ESSAI_BANC_MOT_DE_PASSE';
 const NOM_ORDINAIRE_IDENTIFIANT = 'V2_ESSAI_ORDINAIRE_IDENTIFIANT', NOM_ORDINAIRE_MOT_DE_PASSE = 'V2_ESSAI_ORDINAIRE_MOT_DE_PASSE';      // COMPTE-TEST : l'AUTRE couple, jamais mélangé avec celui du compte de mesure
@@ -50,6 +51,34 @@ function baseAutorisee(brut) {
     try { u = new URL(String(brut)); } catch { throw new Arret('adresse illisible'); }
     if (u.protocol !== 'https:' || u.hostname !== HOTE_ESSAI || u.port !== '' || u.username !== '' || u.password !== '' || (u.pathname !== '/' && u.pathname !== '') || u.search !== '' || u.hash !== '') throw new Arret(`hôte refusé : seul https://${HOTE_ESSAI} est visé`);
     return `https://${HOTE_ESSAI}`;
+}
+
+// ── EXTINCTION AUTOMATIQUE (DECISION-SURS, 01/11) : `--eteindre-si-sur-faux=<VARIABLE> --commit-essai=<commit>`. Dès qu'une ligne rend un SÛR dont le produit n'est pas la vérité, la série s'arrête, la variable est posée à 0 sur
+// l'ESSAI par l'outil existant (render/poser-variables-essai.js : sauvegarde chiffrée, essai à blanc, relecture, déploiement de --attendu=, restauration si échec), et l'heure et la ligne sont journalisées. Jamais la production.
+// 🔑 Écrit par ce qu'il AUTORISE : une seule variable est éteignable (V2_PROMOTION_SURS) ; la décision est PURE ; l'appel réel à Render est INJECTÉ (deps.eteindre), jamais lancé par un banc.
+const VARIABLES_EXTINCTION = Object.freeze(['V2_PROMOTION_SURS']);
+const OUTIL_VARIABLES_ESSAI = 'C:\\Users\\Yung\\rat-market-travail\\api\\render\\poser-variables-essai.js';
+const COMMIT_ESSAI = /^[0-9a-f]{8,}$/;
+/**
+ * La décision PURE « sûr faux => éteindre ». @param observations [{ sur: boolean, produit }] ce que la ligne a rendu (la première réponse, et le verdict final d'un second envoi) ; @param verite l'idProduct de la vérité du banc
+ * @returns { eteindre: boolean, raison: string } — vrai SEULEMENT si la variable est éteignable, la vérité connue (entier) et qu'une observation est un SÛR dont le produit n'est pas la vérité. Sans vérité : jamais (rien ne se juge).
+ */
+function decisionExtinction({ variable, observations, verite } = {}) {
+    const non = raison => ({ eteindre: false, raison });
+    if (!VARIABLES_EXTINCTION.includes(variable)) return non('variable non éteignable');
+    if (!Number.isInteger(verite)) return non('vérité inconnue : rien ne se juge');
+    const faux = (Array.isArray(observations) ? observations : []).find(x => x && x.sur === true && x.produit !== verite);
+    return faux ? { eteindre: true, raison: `sûr FAUX : produit ${faux.produit}, vérité ${verite}` } : non('aucun sûr faux');
+}
+/** L'exécution réelle : pose `<variable>=0` sur l'essai par poser-variables-essai.js (--appliquer --attendu=<commit>). Le spawn est injectable ; jamais appelée par un banc. @returns { ok, statut } */
+function eteindreSurRender({ variable, commit }, deps = {}) {
+    if (!VARIABLES_EXTINCTION.includes(variable) || !COMMIT_ESSAI.test(String(commit))) return { ok: false, statut: null, erreur: 'variable ou commit refusé' };
+    const spec = path.join(require('os').tmpdir(), `eteindre-${variable}-${Date.now()}.json`);
+    fs.writeFileSync(spec, JSON.stringify({ [variable]: { valeur: '0' } }));
+    try {
+        const r = (deps.spawn || require('child_process').spawnSync)(process.execPath, [deps.outil || OUTIL_VARIABLES_ESSAI, spec, '--appliquer', `--attendu=${commit}`], { encoding: 'utf8', timeout: 25 * 60000 });
+        return { ok: r.status === 0, statut: r.status };
+    } finally { try { fs.unlinkSync(spec); } catch { /* spécification déjà retirée */ } }
 }
 
 /** Un PRNG à graine (mulberry32) : la même graine rend la même suite. */
@@ -180,6 +209,13 @@ async function serie(o, deps = {}) {
         if (o.n !== undefined && o.n !== null && !Number.isNaN(o.n)) throw new Arret('--compte=ordinaire ne se combine pas avec --n (les 9 lignes sont celles du tableau)');
         if (o.graine !== undefined && o.graine !== null && !Number.isNaN(o.graine)) throw new Arret('--compte=ordinaire ne se combine pas avec --graine (les 9 lignes sont celles du tableau)');
     }
+    const eteindre = o.eteindreSiSurFaux === undefined || o.eteindreSiSurFaux === null ? null : o.eteindreSiSurFaux;
+    if (eteindre !== null) {
+        if (!VARIABLES_EXTINCTION.includes(eteindre)) throw new Arret(`--eteindre-si-sur-faux n'admet que ${VARIABLES_EXTINCTION.join(', ')} : rien n'est lancé`);
+        if (!COMMIT_ESSAI.test(String(o.commitEssai))) throw new Arret('--eteindre-si-sur-faux exige --commit-essai=<commit de la tête de la branche de l\'essai> : rien n\'est lancé');
+        if (ct) throw new Arret('--eteindre-si-sur-faux ne se combine pas avec --compte=ordinaire');
+    }
+    const eteindreF = deps.eteindre || (a => eteindreSurRender(a));
     const ids = lireIdentifiants(o.env || process.env, o.fichierEnv, deps.lireFichier, ct ? { identifiant: NOM_ORDINAIRE_IDENTIFIANT, motDePasse: NOM_ORDINAIRE_MOT_DE_PASSE } : undefined);
     if (!ids) throw new Arret(`${ct ? NOM_ORDINAIRE_IDENTIFIANT : NOM_IDENTIFIANT} ou ${ct ? NOM_ORDINAIRE_MOT_DE_PASSE : NOM_MOT_DE_PASSE} absent : aucune requête n'est envoyée`);
     const origineSite = o.origineSite || ORIGINE_SITE;
@@ -201,7 +237,7 @@ async function serie(o, deps = {}) {
     }
     const nav = o.nav && o.nav.photos ? o.nav.photos : {};
     const EV = require('../identifier/empreinte-vecteur');
-    const candidates = lignesLocales(o.resultats).filter(l => nav[clePhoto(l.cle)] && Array.isArray(nav[clePhoto(l.cle)].emb) && trouverFichier(o.photos, clePhoto(l.cle)));
+    const candidates = lignesLocales(o.resultats).filter(l => (o.clesAvecVeriteSeulement !== true || Number.isInteger(l.verite)) && nav[clePhoto(l.cle)] && Array.isArray(nav[clePhoto(l.cle)].emb) && trouverFichier(o.photos, clePhoto(l.cle)));
     if (!candidates.length) throw new Arret('aucune ligne du banc n\'a à la fois un vecteur (nav-bancs.json) et une photo locale');
     // --cles : EXACTEMENT cette liste de lignes, dans cet ordre (une clé nue vaut sa ligne « <clé>:0 ») ; ni --n ni --graine ; une clé inconnue, sans photo ou sans vecteur, un doublon, une liste vide : refus avant toute requête
     let lignes;
@@ -420,8 +456,31 @@ async function serie(o, deps = {}) {
     /** UNE passe sur les lignes (même ordre à chaque passe), avec le jeton gardé en MÉMOIRE ; le carnet est commun. */
     const jouer = async (passe, versionMin) => {
         const resultats = [], durees = [], erreurs = [];
-        let arret = null, deSuite = 0, rang = 0, fautifLigne = null, questionsVues = 0, complementsVus = 0, alerte = false, ecartLigne = null, ligneNonJugee = null;
+        let arret = null, deSuite = 0, rang = 0, fautifLigne = null, questionsVues = 0, complementsVus = 0, alerte = false, ecartLigne = null, ligneNonJugee = null, extinction = null, arretExt = null;
+        const sursNonJuges = [];                                                                       // I2 : les sûrs rendus sur une ligne SANS vérité : jamais jugés, jamais passés sous silence
         const serieId = hashSerie(passe), etiquetteCle = passe > 1 ? `${stamp}p${passe}` : stamp;
+        /**
+         * Le jugement d'une ligne (extinction automatique + sûrs non jugés). Appelé dès la première réponse, puis sur le verdict final d'un second envoi. Ne lève jamais (l'exécuteur est enveloppé).
+         * I2 : un sûr sur une ligne SANS vérité ne peut pas être jugé faux, donc n'éteint rien ; il est COMPTÉ, écrit au carnet et listé en rouge au rapport de série.
+         */
+        const jugerSurs = async (l, rang, serieId, issue, observations) => {
+            const surs = observations.filter(x => x && x.sur === true);
+            if (surs.length && !Number.isInteger(l.verite) && !sursNonJuges.some(x => x.cle === l.cle)) {
+                const nj = { rang, cle: l.cle, produit: surs[0].produit, scanId: typeof issue.scanId === 'string' ? issue.scanId : null };
+                sursNonJuges.push(nj);
+                carnet.noter({ serie: serieId, rang, cle: l.cle, surNonJuge: nj });
+                log(`🔴 SÛR NON JUGÉ (ligne sans vérité) : ${l.cle} (rang ${rang}) rend le sûr ${nj.produit} : jamais comptable juste ni faux, à regarder à la main`);
+            }
+            if (eteindre === null || extinction) return;
+            const d = decisionExtinction({ variable: eteindre, verite: l.verite, observations });
+            if (!d.eteindre) return;
+            const quand = new Date((deps.maintenant || Date.now)()).toISOString();
+            let res; try { res = await eteindreF({ variable: eteindre, commit: o.commitEssai }); } catch (x) { res = { ok: false, statut: null, erreur: (x && (x.code || x.name)) || 'erreur' }; }
+            extinction = { quand, rang, cle: l.cle, scanId: typeof issue.scanId === 'string' ? issue.scanId : null, raison: d.raison, variable: eteindre, ok: Boolean(res && res.ok), statut: res ? res.statut ?? null : null };
+            carnet.noter({ serie: serieId, rang, cle: l.cle, extinction });                                    // l'heure et la ligne, au carnet, avant de rendre la main
+            log(`EXTINCTION ${quand} : ${d.raison} sur ${l.cle} (rang ${rang}) : ${eteindre}=0 sur l'essai ${extinction.ok ? 'POSÉE' : 'NON POSÉE (statut ' + extinction.statut + ') : À ÉTEINDRE À LA MAIN'}`);
+            arretExt = `EXTINCTION AUTOMATIQUE (${d.raison}, ligne ${l.cle}) : ${eteindre}=0 ${extinction.ok ? 'posée' : 'NON POSÉE'} : série arrêtée avant le scan suivant`;
+        };
         for (const l of lignes) {
             rang++;
             if (!carnet.peutDepenser()) { arret = `plafond atteint (${carnet.total().toFixed(4)} USD déjà inscrits, plafond ${o.plafondUsd}) : arrêt avant le scan ${rang}`; break; }
@@ -454,12 +513,16 @@ async function serie(o, deps = {}) {
                 if (id.statut !== 200 || !id.corps) throw incertaine(`identifier-${id.statut}`);
                 if (!(analyse && analyse.photoRecue === true)) throw new Arret('photo non rattachée : le serveur a pu retomber sur l\'adresse de l\'annonce ; série arrêtée');
                 issue = id.corps;
-                if (gp) {                                                                                                         // sans l'option : AUCUNE lecture d'horloge de plus, le client est celui d'avant
+                // I1 : le jugement « sûr faux => éteindre » se fait ICI, avant suiteProbable / suiteCompteTest (ni une exception ni un Arret de la suite ne peut le sauter) ; I2 : un sûr sans vérité est compté, listé, jamais jugé
+                { const s0 = sureDe(issue); await jugerSurs(l, rang, serieId, issue, [{ sur: s0.sur, produit: s0.produit }]); }
+                if (gp && !extinction) {                                                                                          // sans l'option : AUCUNE lecture d'horloge de plus, le client est celui d'avant
                     premierMs = horloge() - debut;                                                                                // le PREMIER VERDICT : le dépôt de la photo + la première réponse de /api/identifier
                     suite = await suiteProbable({ l, rang, serieId, etiquette: etiquetteCle, carteB64, issue, premierMs });      // jamais d'exception : un refus du serveur est rendu dans `suite.arretReseau`
                 }
-                if (ct) suiteCT = await suiteCompteTest({ l, rang, serieId, etiquette: etiquetteCle, carteB64, issue, att: CT.TABLEAU[rang - 1] });   // jamais d'exception : une issue incertaine est rendue dans `arretReseau`
+                if (suite && suite.verdict === 'sur-faux') await jugerSurs(l, rang, serieId, issue, [{ sur: true, produit: suite.produit }]);       // le verdict FINAL d'un second envoi
+                if (ct && !extinction) suiteCT = await suiteCompteTest({ l, rang, serieId, etiquette: etiquetteCle, carteB64, issue, att: CT.TABLEAU[rang - 1] });   // jamais d'exception : une issue incertaine est rendue dans `arretReseau`
             } catch (e) {
+                if (extinction) { arret = arretExt; break; }                                           // I1 : un sûr faux déjà jugé ne se perd pas dans l'exception qui suit
                 if (e instanceof Arret) { arret = e.raison; break; }
                 erreurs.push({ cle: l.cle, code: (e && (e.code || e.name)) || 'erreur' });
                 if (ct) {                                                                              // COMPTE-TEST : une ligne NON JUGÉE n'est jamais sautée — la série s'arrête (code 16), le bilan exige 9 lignes jugées sur 9
@@ -478,6 +541,8 @@ async function serie(o, deps = {}) {
             resultats.push({ cle: l.cle, ms, essaiSur: s.sur, essaiProduit: s.produit, localSur: l.localSur, localProduit: l.localProduit, verite: l.verite,
                 ...(suite ? { famille: SP.familleDe(l, o.releveTampons), avecVerite: l.verite !== null && l.verite !== undefined, premierMs, premierNiveau: suite.premierNiveau, complementRecu: suite.complementRecu, verdictPremier: suite.verdictPremier, verdict: suite.verdict, chemin: suite.chemin, produit: suite.produit, candidats: suite.candidats, secondEnvoi: suite.secondEnvoi, declaration: suite.declaration } : {}), ...(suiteCT ? { compteTest: suiteCT.entree } : {}) });
             log(`  ${rang}/${lignes.length} ${l.cle} : ${ms} ms, essai ${s.sur ? `sûr ${s.produit}` : 'pas sûr'}, local ${l.localSur ? `sûr ${l.localProduit}` : 'pas sûr'}`);
+            // EXTINCTION AUTOMATIQUE (jugée dès la première réponse, avant toute suite : relecture I1) : le premier SÛR FAUX a déjà éteint la variable ; la série s'arrête ici, après avoir inscrit la ligne.
+            if (extinction) { arret = arretExt; break; }
             if (suiteCT) {
                 const e = suiteCT.entree;
                 log(`      tableau ligne ${rang} : niveau ${e.niveau}, facturation ${JSON.stringify(e.facturation && { debite: e.facturation.debite, reserve: e.facturation.reserve, rembourse: e.facturation.rembourse, motif: e.facturation.motif, raisonNonRembourse: e.facturation.raisonNonRembourse })}, déclaré ${e.declarationEnvoyee ?? 'rien'}, restant ${e.soldeAvant.offre.restant} -> ${e.soldeApres ? e.soldeApres.offre.restant : '?'} : ${suiteCT.ecart ? 'ÉCART' : suiteCT.arretReseau ? 'ARRÊT' : 'conforme'}`);
@@ -497,6 +562,7 @@ async function serie(o, deps = {}) {
         log(`${passe > 1 ? `[série ${passe}] ` : ''}durée par scan : n ${stats.n}, p50 ${stats.p50} ms, p95 ${stats.p95} ms`);
         log(`comparaison essai / local (mêmes lignes) : ${JSON.stringify(comparaison)}`);
         if (erreurs.length) log(`erreurs : ${JSON.stringify(erreurs)}`);
+        if (sursNonJuges.length) log(`🔴 SÛRS NON JUGÉS : ${sursNonJuges.length} ligne(s) sans vérité ont rendu un sûr : ${sursNonJuges.map(x => x.cle).join(' ')}`);
         log(arret ? `ARRÊT : ${arret}` : 'série terminée');
         log(`dépense inscrite au carnet : ${carnet.total().toFixed(4)} USD sur un plafond de ${o.plafondUsd}`);
         let rapportProbable = null;
@@ -508,7 +574,7 @@ async function serie(o, deps = {}) {
             log(`rapport probable : sûrs ${T_.surJuste} justes / ${T_.surFaux} FAUX · probables ${T_.probableJuste} justes / ${T_.probableFaux} FAUX · questions ${T_.questionDansCandidats} (vérité dans les candidats) / ${T_.questionHorsCandidats} (hors) · introuvables ${T_.introuvable} · sans vérité ${T_.sansVerite} · réponse directe juste ${T_.reponseDirecteJuste} %`);
             log(`premier verdict : n ${rapportProbable.premierVerdict.n}, p50 ${rapportProbable.premierVerdict.p50} ms, p95 ${rapportProbable.premierVerdict.p95} ms ; total : p50 ${rapportProbable.dureeTotale.p50} ms, p95 ${rapportProbable.dureeTotale.p95} ms`);
         }
-        return { arret, resultats, durees, stats, comparaison, erreurs, capacites, jetonEmpreinteAnnonce: capacites.includes('empreinte'), depenseUsd: carnet.total(), serie: serieId, lignes: lignes.map(l => l.cle), ...(gp ? { fautif: fautifLigne, alerte, rapportProbable } : {}), ...(ct ? { compteTest: true, ecart: ecartLigne, ligneNonJugee } : {}) };
+        return { arret, resultats, durees, stats, comparaison, erreurs, capacites, jetonEmpreinteAnnonce: capacites.includes('empreinte'), depenseUsd: carnet.total(), serie: serieId, lignes: lignes.map(l => l.cle), ...(gp ? { fautif: fautifLigne, alerte, rapportProbable } : {}), ...(extinction ? { extinction } : {}), sursNonJuges, ...(ct ? { compteTest: true, ecart: ecartLigne, ligneNonJugee } : {}) };
     };
 
     const r1 = await jouer(1, ping.corps.versionMinExtension);
@@ -537,7 +603,7 @@ async function serie(o, deps = {}) {
     const r2 = await jouer(2, ping2.corps.versionMinExtension);
     return { ...r1, deuxieme: { ...r2, capacites: capacites2, jetonEmpreinteAnnonce: capacites2.includes('empreinte') } };
 }
-module.exports = { serie, baseAutorisee, echantillon, aleatoire, quantile, statistiques, lireVariable, lireIdentifiants, ouvrirCarnet, lignesLocales, sureDe, comparer, Arret, HOTE_ESSAI, NOM_IDENTIFIANT, NOM_MOT_DE_PASSE, NOM_ORDINAIRE_IDENTIFIANT, NOM_ORDINAIRE_MOT_DE_PASSE, ORIGINE_SITE, MODELE_DEFAUT, COUT_ESTIME_DEFAUT_USD };
+module.exports = { serie, baseAutorisee, echantillon, aleatoire, quantile, statistiques, lireVariable, lireIdentifiants, ouvrirCarnet, lignesLocales, sureDe, comparer, decisionExtinction, eteindreSurRender, VARIABLES_EXTINCTION, CODE_EXTINCTION, Arret, HOTE_ESSAI, NOM_IDENTIFIANT, NOM_MOT_DE_PASSE, NOM_ORDINAIRE_IDENTIFIANT, NOM_ORDINAIRE_MOT_DE_PASSE, ORIGINE_SITE, MODELE_DEFAUT, COUT_ESTIME_DEFAUT_USD };
 
 if (require.main === module) {
     const arg = n => { const a = process.argv.find(x => x.startsWith(`--${n}=`)); return a ? a.slice(n.length + 3) : null; };
@@ -546,7 +612,7 @@ if (require.main === module) {
         const necessaire = n => { const v = arg(n); if (!v) throw new Arret(`argument --${n}= manquant`); return v; };
         const resultats = JSON.parse(fs.readFileSync(necessaire('resultats'), 'utf8')), nav = JSON.parse(fs.readFileSync(necessaire('nav'), 'utf8'));
         const modele = arg('modele-id') && arg('modele-sha256') ? { id: arg('modele-id'), sha256: arg('modele-sha256') } : MODELE_DEFAUT;
-        const ecrire = (fichier, r) => fs.writeFileSync(fichier, JSON.stringify({ serie: r.serie, lignes: r.lignes, stats: r.stats, comparaison: r.comparaison, erreurs: r.erreurs, arret: r.arret, depenseUsd: r.depenseUsd, jetonEmpreinteAnnonce: r.jetonEmpreinteAnnonce, resultats: r.resultats, ...(r.rapportProbable ? { fautif: r.fautif, rapportProbable: r.rapportProbable } : {}), ...(r.compteTest ? { compteTest: true, ecart: r.ecart, ligneNonJugee: r.ligneNonJugee, lignesJugees: r.resultats.length } : {}) }, null, 1));
+        const ecrire = (fichier, r) => fs.writeFileSync(fichier, JSON.stringify({ serie: r.serie, lignes: r.lignes, stats: r.stats, comparaison: r.comparaison, erreurs: r.erreurs, arret: r.arret, ...(r.extinction ? { extinction: r.extinction } : {}), ...(r.sursNonJuges && r.sursNonJuges.length ? { sursNonJuges: r.sursNonJuges } : {}), depenseUsd: r.depenseUsd, jetonEmpreinteAnnonce: r.jetonEmpreinteAnnonce, resultats: r.resultats, ...(r.rapportProbable ? { fautif: r.fautif, rapportProbable: r.rapportProbable } : {}), ...(r.compteTest ? { compteTest: true, ecart: r.ecart, ligneNonJugee: r.ligneNonJugee, lignesJugees: r.resultats.length } : {}) }, null, 1));
         const signal = arg('deuxieme-apres-signal');
         if (signal && !arg('sortie2')) throw new Arret('--deuxieme-apres-signal exige --sortie2= (la sortie de la série 2)');
         // MODE --g-probable : les dossiers des visuels de référence (lecture seule), le relevé des tampons (famille « tamponnee »), les déclarations ; les valeurs par défaut sont celles de extraire-mesures-groupe.js
@@ -559,11 +625,11 @@ if (require.main === module) {
         const fCles = arg('cles');
         const cles = fCles ? (() => { const t = fs.readFileSync(fCles, 'utf8').trim(); const l = t.startsWith('[') ? JSON.parse(t) : t.split(/\r?\n/).map(x => x.trim()).filter(x => x && !x.startsWith('#')); return l.map(x => (x && typeof x === 'object' ? x.cle : x)); })() : undefined;
         const compte = arg('compte') === null ? undefined : arg('compte');                           // COMPTE-TEST : seule la valeur « ordinaire » existe (serie() refuse toute autre)
-        const r = await serie({ compte, base: arg('base') || undefined, resultats, nav, photos: necessaire('photos'), cartes: arg('cartes'), cles, gProbable: gProbable || undefined, scans, releveTampons, declarations: process.argv.includes('--sans-declarations') ? false : undefined, versionExtension: arg('version-extension') || undefined, n: fCles ? undefined : num('n', NaN), graine: fCles ? undefined : num('graine', NaN), plafondUsd: num('plafond-usd', NaN), carnet: arg('carnet'),
+        const r = await serie({ compte, base: arg('base') || undefined, resultats, nav, photos: necessaire('photos'), cartes: arg('cartes'), cles, gProbable: gProbable || undefined, scans, releveTampons, declarations: process.argv.includes('--sans-declarations') ? false : undefined, versionExtension: arg('version-extension') || undefined, n: fCles ? undefined : num('n', NaN), graine: fCles ? undefined : num('graine', NaN), plafondUsd: num('plafond-usd', NaN), carnet: arg('carnet'), clesAvecVeriteSeulement: process.argv.includes('--cles-avec-verite-seulement') || undefined, eteindreSiSurFaux: arg('eteindre-si-sur-faux') || undefined, commitEssai: arg('commit-essai') || undefined,
             fichierEnv: arg('env') || process.env.V2_ESSAI_ENV || null, pauseS: num('pause-s', 6), coutEstimeUsd: arg('cout-estime-usd') === null ? undefined : num('cout-estime-usd', NaN), modele, env: process.env,
             deuxiemeApresSignal: signal || undefined, attenteMaxMin: num('attente-max-min', 120), apresSerie1: async r1 => { if (arg('sortie')) ecrire(arg('sortie'), r1); } });
         if (arg('sortie') && !signal) ecrire(arg('sortie'), r);
         if (signal && r.deuxieme) ecrire(arg('sortie2'), r.deuxieme);
-        process.exit(compte === 'ordinaire' ? CT.codeSortie(r) : gProbable ? SP.codeSortie(r) : (r.arret || (r.deuxieme && r.deuxieme.arret) ? 1 : 0));          // 10 = probable FAUX, 11 = sûr FAUX (voir serie-probable.js), 1 = autre arrêt
+        process.exit(r.extinction ? CODE_EXTINCTION : compte === 'ordinaire' ? CT.codeSortie(r) : gProbable ? SP.codeSortie(r) : (r.arret || (r.deuxieme && r.deuxieme.arret) ? 1 : 0));          // 10 = probable FAUX, 11 = sûr FAUX (voir serie-probable.js), 1 = autre arrêt
     })().catch(e => { console.error(e instanceof Arret ? `ARRÊT : ${e.raison}` : `ERREUR ${e && (e.code || e.name)}`); process.exit(e instanceof Arret ? 2 : 1); });
 }
