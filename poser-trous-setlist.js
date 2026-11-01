@@ -136,17 +136,18 @@ function chargerClone(chemin, charger = require) {
     return c;
 }
 
-module.exports = { planifier, entreesDeTitres, ecrire, chargerClone };
+// (principal est défini plus bas ; exporté en fin de fichier pour le banc)
 
 // ───────────────────────── ligne de commande ─────────────────────────
-async function principal() {
-    require('dotenv').config();
+async function principal(deps = {}) {
+    if (!deps.argv) require('dotenv').config();
     const LOT = require('./collecte-cartes/lot-seulement');
     const AUTORISES = [/^--ecrire$/, /^--produits=\d+(,\d+)*$/, /^--seulement=.+\.json$/, /^--liste=.+\.json$/, /^--attendu=\d+$/, /^--clone=.+$/];
-    const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
+    const ARGV = deps.argv || process.argv.slice(2);
+    const inconnus = ARGV.filter(a => !AUTORISES.some(r => r.test(a)));
     if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')} — autorisé : --produits=<ids>, --liste=<f>.json, --seulement=<f>.json, --attendu=<N>, --clone=<clone.js>, --ecrire`); process.exit(2); }
-    const arg = n => process.argv.slice(2).find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3);
-    const ecrireOui = process.argv.includes('--ecrire');
+    const arg = n => ARGV.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3);
+    const ecrireOui = ARGV.includes('--ecrire');
     if (!arg('produits')) { console.error('❌ --produits=<id,id,…> est obligatoire (un lot nomme ses produits)'); process.exit(2); }
     const cibles = arg('produits').split(',').map(Number);
     let SEULEMENT = null;
@@ -155,14 +156,14 @@ async function principal() {
 
     const { TABLE, TABLE_AUTO, TABLE_SANS_PAGE } = require('./collecte-cartes/table-sets');
     const { produitsDeLExpansion } = require('./collecte-cartes/jointure');
-    const { ouvrirLecture } = require('./audit-catalogue/lecture-audit');
+    const ouvrirLecture = deps.ouvrirLecture || require('./audit-catalogue/lecture-audit').ouvrirLecture;
     const b = await ouvrirLecture();          // LECTURE : utilisateurs de lecture (jamais MONGODB_URI ni MONGODB_CARTES_URI)
     let plan = [];
     const cartesParId = new Map();
     try {
         const nc = await b.prod.collection('catalogue_produits').find({ idProduct: { $in: cibles } }, { projection: { idProduct: 1, idExpansion: 1 } }).toArray();
         const parExp = new Map(); for (const x of nc) (parExp.get(x.idExpansion) || parExp.set(x.idExpansion, []).get(x.idExpansion)).push(x.idProduct);
-        const clone = chargerClone(arg('clone'));
+        const clone = chargerClone(arg('clone'), deps.charger);
         for (const [exp, ids] of parExp) {
             const L = [...TABLE, ...TABLE_AUTO, ...TABLE_SANS_PAGE].find(l => l.exp === exp && l.slugSet && l.bulba);
             if (!L) { for (const id of ids) plan.push({ idProduct: id, statut: 'set-sans-ligne', raison: `aucune ligne de table pour l'expansion ${exp}` }); continue; }
@@ -208,20 +209,24 @@ async function principal() {
     if (hors.length) { console.error(`❌ ARRÊT : ${hors.length} idProduct de --seulement ne sont pas écrivables aujourd'hui (${hors.join(', ')}) — la liste ne correspond plus à l'état de la base, rien n'est écrit`); process.exit(1); }
     const v = LOT.verifierAttendu({ retenus: retenus.length, attendu: Number(arg('attendu')) });
     if (!v.ok) { console.error(`❌ ARRÊT : ${v.motif} — rien n'est écrit`); process.exit(1); }
-    const { ouvrirConnexions } = require('./collecte-cartes/garde');
+    const ouvrirConnexions = deps.ouvrirConnexions || require('./collecte-cartes/garde').ouvrirConnexions;
+    // 🔴 la FORME RÉELLE de ouvrirConnexions (collecte-cartes/garde.js) : { cartes: <Connection mongoose>, prod, fermer } — la base est `cx.cartes.db`, JAMAIS `cx.db`
     const cx = await ouvrirConnexions({ buckets: [], production: false });
+    const dbCartes = cx && cx.cartes && cx.cartes.db;
+    if (!dbCartes || typeof dbCartes.collection !== 'function') { if (cx && cx.fermer) await cx.fermer(); throw new Error('ouvrirConnexions n\'a pas rendu { cartes: { db } } — rien n\'est écrit'); }
     try {
-        const R = await ecrire({ db: cx.db, plan, retenus: SEULEMENT });
+        const R = await ecrire({ db: dbCartes, plan, retenus: SEULEMENT });
         // RELECTURE : chaque ligne et chaque impression écrites sont relues sur la base
         let relu = 0;
         for (const r of retenus) {
-            const c = await cx.db.collection('cartes').findOne({ _id: r.carteId }, { projection: { impressions: 1 } });
+            const c = await dbCartes.collection('cartes').findOne({ _id: r.carteId }, { projection: { impressions: 1 } });
             const impOk = (c.impressions || []).some(i => i.source === 'setlist' && i.expansion === r.impression.expansion && cleNumero(String(i.numero)) === cleNumero(String(r.numero)));
-            const ligOk = !r.ligne || !!(await cx.db.collection('cartes_produits').findOne({ _id: r.ligne._id }));
+            const ligOk = !r.ligne || !!(await dbCartes.collection('cartes_produits').findOne({ _id: r.ligne._id }));
             if (impOk && ligOk) relu++;
         }
         console.log(`   RELECTURE : ${relu}/${retenus.length} produits retrouvés (impression + ligne)`);
         if (relu !== retenus.length || R.traites !== retenus.length) { console.error('❌ la relecture ne retrouve pas tout ce qui devait être écrit'); process.exitCode = 1; }
     } finally { await cx.fermer(); }
 }
+module.exports = { planifier, entreesDeTitres, ecrire, chargerClone, principal };
 if (require.main === module) principal().catch(x => { console.error('❌', x.message); process.exit(1); });

@@ -172,6 +172,81 @@ const fauxDb = () => {
     const db2 = fauxDb();
     const R2 = await ecrire({ db: db2, plan, retenus: new Set([1]), log: () => { }, err: () => { } });
     try { assert.strictEqual(db2.journal.length, 0); assert.strictEqual(R2.lignes, 0); ok++; console.log('  ok  hors liste : rien d\'écrit'); } catch (err) { ko++; console.log('  KO  hors liste\n      ' + err.message); }
+    await bancPrincipal();
     console.log(`\n${ok} ok, ${ko} KO`);
     process.exit(ko ? 1 : 0);
 })();
+
+// ───── le CHEMIN --ecrire de principal(), de bout en bout, sur une fausse base de la VRAIE forme (2026-11-01, tour 2 : `cx.db` n'existe pas, la base est `cx.cartes.db`)
+async function bancPrincipal() {
+    const fs = require('fs'), os = require('os'), path = require('path');
+    const { principal } = require('./poser-trous-setlist');
+    const correspond = (d, f) => Object.entries(f).every(([k, v]) => {
+        if (k === 'impressions') return true;
+        if (v && typeof v === 'object' && Array.isArray(v.$in)) return v.$in.includes(d[k]);
+        if (Array.isArray(d[k])) return d[k].includes(v);
+        return d[k] === v;
+    });
+    const faux = (s) => ({
+        collection: nom => ({
+            find: (f = {}) => ({ toArray: async () => (s[nom] || []).filter(d => correspond(d, f)) }),
+            findOne: async (f = {}) => (s[nom] || []).find(d => correspond(d, f)) || null,
+            updateOne: async (f, maj, o = {}) => {
+                const col = s[nom] || (s[nom] = []);
+                let d = col.find(x => x._id === f._id);
+                const nm = f.impressions && f.impressions.$not && f.impressions.$not.$elemMatch;
+                if (nm && d && (d.impressions || []).some(i => Object.entries(nm).every(([k, v]) => i[k] === v))) return { modifiedCount: 0 };
+                if (!d) { if (!o.upsert) return { modifiedCount: 0 }; d = { _id: f._id, ...(maj.$setOnInsert || {}) }; col.push(d); return { modifiedCount: 0, upsertedCount: 1 }; }
+                if (maj.$push && maj.$push.impressions) d.impressions = [...(d.impressions || []), maj.$push.impressions];
+                if (maj.$addToSet) { d.liens = d.liens || {}; d.liens.idProduct = [...new Set([...(d.liens.idProduct || []), maj.$addToSet['liens.idProduct']])]; }
+                return { modifiedCount: 1 };
+            }
+        })
+    });
+    const monde = () => {
+        const b = base();
+        const cartes = b.cartes.map(c => ({ ...c, sets: ['Double-Blaze'] }));
+        const cartesStore = {
+            cartes, collecte_etat: [{ _id: 'Double-Blaze', titres: b.titres, pages: b.pages }],
+            images: b.images.map(i => ({ ...i })), cartes_produits: [{ _id: '235852|557447', carteId: 235852, idProduct: 557447, idExpansion: 3836 }, { _id: '235858|557449', carteId: 235858, idProduct: 557449, idExpansion: 3836 }]
+        };
+        const prodStore = {
+            catalogue_produits: b.produits.map(p => ({ idProduct: p.idProduct, idExpansion: 3836, idMetacard: p.idMetacard, name: p.name })),
+            numeros_cartes: b.produits.map(p => ({ idProduct: p.idProduct, numero: p.numero, slug: p.slug, slugSet: p.slugSet, variante: null }))
+        };
+        return { cartesStore, dbCartes: faux(cartesStore), dbProd: faux(prodStore) };
+    };
+    const liste = path.join(os.tmpdir(), `f3-banc-${process.pid}.json`);
+    fs.writeFileSync(liste, JSON.stringify([557448]));
+    const argv = ['--produits=557448', '--clone=x', `--seulement=${liste}`, '--attendu=1', '--ecrire'];
+    const charger = () => ({ lireClone: () => ({ cartes: [{ cardmarket: [], noms: {}, famille: 'data', setId: 'x', localId: '1' }], sets: [] }) });
+    const muet = async f => { const l = console.log; console.log = () => { }; try { return await f(); } finally { console.log = l; } };
+    const lancer = async (m, formeConnexion) => {
+        process.exitCode = 0;
+        const ouvrirLecture = async () => ({ prod: m.dbProd, cartes: m.dbCartes, fermer: async () => { } });
+        const ouvrirConnexions = async () => formeConnexion(m);
+        let erreur = null;
+        await muet(() => principal({ argv, ouvrirLecture, ouvrirConnexions, charger }).catch(x => { erreur = x; }));
+        const code = process.exitCode; process.exitCode = 0;
+        return { erreur, code };
+    };
+    const essai = async (nom, f) => { try { await f(); ok++; console.log('  ok  ' + nom); } catch (err) { ko++; console.log('  KO  ' + nom + '\n      ' + String(err.message).split('\n').join('\n      ')); } };
+    console.log('principal --ecrire (fausse ouvrirConnexions de la vraie forme { cartes: { db }, prod, fermer })');
+    await essai('--ecrire jusqu\'à ecrire() + relecture : impression, ligne, liens, code de sortie 0', async () => {
+        const m = monde();
+        const r = await lancer(m, mm => ({ cartes: { db: mm.dbCartes }, prod: null, fermer: async () => { } }));
+        assert.strictEqual(r.erreur, null, 'principal a levé : ' + (r.erreur && r.erreur.message));
+        assert.strictEqual(r.code, 0, 'la relecture ne retrouve pas tout');
+        const c = m.cartesStore.cartes.find(x => x._id === 235857);
+        assert.ok(c.impressions.some(i => i.source === 'setlist' && i.numero === '090'), 'impression « setlist » 090 écrite sur la carte');
+        assert.ok(m.cartesStore.cartes_produits.some(l => l.idProduct === 557448 && l.carteId === 235857), 'ligne écrite');
+        assert.deepStrictEqual(c.liens.idProduct, [557448]);
+    });
+    await essai('une connexion de la MAUVAISE forme ({ db }) est refusée sans rien écrire', async () => {
+        const m = monde();
+        const r = await lancer(m, mm => ({ db: mm.dbCartes, fermer: async () => { } }));
+        assert.ok(r.erreur && /ouvrirConnexions/.test(r.erreur.message), 'doit lever en nommant ouvrirConnexions : ' + (r.erreur && r.erreur.message));
+        assert.strictEqual(m.cartesStore.cartes_produits.length, 2);
+    });
+    fs.unlinkSync(liste);
+}
