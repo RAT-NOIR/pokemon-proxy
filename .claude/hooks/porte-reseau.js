@@ -26,10 +26,13 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-// PORTÉE (décision de l'utilisateur, 01/11 soir) : la garde protège les sessions du CATALOGUE et leurs sous-agents (qui portent le session_id du parent), rien d'autre.
-// Une autre session lancée depuis ce dépôt (l'agent API, ses tests, son verrou, ses essais) n'est pas de son ressort et passe. Écrite par ce qu'elle garde : une session
-// LISTÉE ici est examinée ; une entrée SANS session_id textuel non vide reste examinée (fermé par défaut). Une session du catalogue s'ajoute ici par une branche et une fusion.
-const SESSIONS_CATALOGUE = ['b6c3ed77-b76c-4e82-bea9-c3689df9e0e3'];
+// PORTÉE PAR DOSSIER (décision de l'utilisateur, 01/11) : la garde s'applique à TOUTE session et tout sous-agent (reprise comprise, aucun identifiant à ajouter). Écrite par ce qu'elle
+// AUTORISE : seuls les dossiers de la liste fermée DOSSIERS_LIBRES (ceux de l'API) en sont libres — un appel dont le « dossier effectif » y est entièrement passe sans autre examen (code 0).
+// Dossier effectif : shell = le dossier courant calculé ici (cwd de l'entrée, mis à jour par un cd littéral en tête d'instruction) pour CHAQUE instruction autre qu'un cd, et une commande
+// n'est libre que si toutes le sont (un dossier incertain n'est pas libre) ; Write/Edit/NotebookEdit = le fichier visé ; tout autre outil = le cwd. cwd absent, vide, non textuel ou
+// relatif => pas libre. La comparaison est sans casse, sur le chemin résolu ET le chemin réel (jonctions, noms courts 8.3), par dossier (« …\api-v2-bis » n'est pas dans « …\api-v2 »).
+// LIMITE CONNUE : un agent qui fait `cd` vers un dossier de l'API sort de la garde (elle vise l'erreur d'un agent de bonne foi, comme la limite 16 ci-dessous).
+const DOSSIERS_LIBRES = ['C:\\Users\\Yung\\Desktop\\pokemon-proxy-api-v2', 'C:\\Users\\Yung\\rat-market-travail\\api'];
 const MESSAGE_WEBFETCH ='accès réseau par la porte seulement : node collecte-cartes/porte-reseau.js lire <url> --texte --sortie=<fichier>';
 const MAX_SCRIPT = 2 * 1024 * 1024;
 const DEPOT = path.resolve(__dirname, '..', '..');
@@ -116,6 +119,13 @@ function reel(abs) {
         if (parent === cur) return path.resolve(abs);
         reste = path.join(path.basename(cur), reste); cur = parent;
     }
+}
+
+/** Un chemin est libre s'il est ABSOLU et que son chemin résolu ET son chemin réel sont chacun sous un dossier libre (résolu ou réel). Toute autre chose : non. */
+function estLibre(p) {
+    if (typeof p !== 'string' || !p || !path.isAbsolute(p)) return false;
+    const libres = DOSSIERS_LIBRES.flatMap(d => [path.resolve(d), reel(d)]);
+    return [bas(p), bas(reel(p))].every(c => libres.some(d => sous(c, d)));
 }
 
 /** git, résolu comme au CLAUDE.md §3 (jamais un numéro de version en dur). */
@@ -348,6 +358,7 @@ function verdictShell(cmd, cwd) {
     for (const m of cmd.matchAll(/&\s*["']?\$(\w+)/g)) if (!(m[1].toLowerCase() === 'g' && gOk)) raisons.push(`& $${m[1]} : cible non résolue (seul $g défini comme au CLAUDE.md §3 est admis)`);
     const ctx = { cwd, incertain: false, estPorte: false };
     const hors = [];
+    let executees = 0, horsLibre = 0;       // instructions autres qu'un cd, et parmi elles celles dont le dossier n'est pas libre
     // boucle A : sur le texte ORIGINAL (cd, git, scripts, ouverture d'adresse)
     for (const ins of cmd.split(/[;|&\r\n]+/)) {
         if (!ins.trim()) continue;
@@ -362,6 +373,7 @@ function verdictShell(cmd, cwd) {
             continue;
         }
         if (CD_PARTOUT.test(ins)) ctx.incertain = true;
+        executees++; if (ctx.incertain || !estLibre(ctx.cwd)) horsLibre++;
         if (/^\s*(&\s*)?(["'][^"']*git(\.exe)?["']|\$g\b|git(\.exe)?(?![\w-]))/i.test(ins)) { const g = verdictGit(ins); if (g) raisons.push(g); continue; }
         hors.push(ins);
         const tl = jetons(ins.replace(/^\s*&\s*/, '')), ip = tl.findIndex(x => /^porte-reseau(\.js)?$/i.test(path.basename(x)));       // B3 : `lever` est une action de l'utilisateur
@@ -390,6 +402,7 @@ function verdictShell(cmd, cwd) {
     }
     const reste = hors.join(' ; ');
     if (ECRIT_SCRIPT.test(reste) && LANCE_SCRIPT.test(reste)) raisons.push('écriture d\'un script (.js, .py, .ps1) puis exécution dans la même commande');
+    raisons.libre = executees > 0 && horsLibre === 0;
     return raisons;
 }
 
@@ -397,22 +410,24 @@ function verdict(entree) {
     let e;
     try { e = JSON.parse(entree); } catch { return { refus: 'entrée du hook illisible (JSON attendu) : refusé par prudence' }; }
     if (!e || typeof e !== 'object' || Array.isArray(e)) return { refus: 'entrée du hook sans tool_name lisible : refusé par prudence' };
-    if (typeof e.session_id === 'string' && e.session_id && !SESSIONS_CATALOGUE.includes(e.session_id.toLowerCase())) return { refus: null };     // hors du catalogue : pas l'affaire de la porte
     if (typeof e.tool_name !== 'string') return { refus: 'entrée du hook sans tool_name lisible : refusé par prudence' };
     const nom = e.tool_name.toLowerCase();
-    if (nom === 'webfetch') return { refus: `WebFetch est fermé : ${MESSAGE_WEBFETCH}` };
-    if (/^mcp__(claude-in-chrome|claude_browser|remote-devices)__/.test(nom)) return { refus: `outil de navigation « ${e.tool_name} » fermé : ${MESSAGE_WEBFETCH}` };
+    if (nom === 'webfetch' && !estLibre(typeof e.cwd === 'string' ? e.cwd : null)) return { refus: `WebFetch est fermé : ${MESSAGE_WEBFETCH}` };
+    if (/^mcp__(claude-in-chrome|claude_browser|remote-devices)__/.test(nom) && !estLibre(typeof e.cwd === 'string' ? e.cwd : null)) return { refus: `outil de navigation « ${e.tool_name} » fermé : ${MESSAGE_WEBFETCH}` };
     const entreeOutil = e.tool_input && typeof e.tool_input === 'object' ? e.tool_input : {};
     const cwd = typeof e.cwd === 'string' && e.cwd ? e.cwd : process.cwd();
+    const cwdLu = typeof e.cwd === 'string' && path.isAbsolute(e.cwd) ? e.cwd : null;      // le seul cwd qui peut rendre un appel libre ; absent, vide, non textuel ou relatif : jamais
     if (nom === 'write' || nom === 'edit' || nom === 'notebookedit') {
         const f = entreeOutil.file_path ?? entreeOutil.notebook_path ?? entreeOutil.path;
         if (typeof f !== 'string' || !f) return { refus: `${e.tool_name} sans chemin lisible : refusé par prudence` };
+        if (estLibre(path.isAbsolute(f) ? f : (cwdLu ? path.resolve(cwdLu, f) : null))) return { refus: null };     // le fichier visé est dans un dossier de l'API
         const c = cibleProtegee(path.resolve(cwd, f));
         return { refus: c ? `écriture refusée (${c}) : ${f}` : null };
     }
-    if (nom !== 'powershell' && nom !== 'bash') return { refus: `outil « ${e.tool_name} » non prévu par la porte : fermé par défaut` };
+    if (nom !== 'powershell' && nom !== 'bash') return estLibre(cwdLu) ? { refus: null } : { refus: `outil « ${e.tool_name} » non prévu par la porte : fermé par défaut` };
     if (typeof entreeOutil.command !== 'string') return { refus: `commande ${e.tool_name} sans texte lisible : refusé par prudence` };
-    const raisons = verdictShell(entreeOutil.command, cwd);
+    const raisons = verdictShell(entreeOutil.command, cwdLu || cwd);
+    if (cwdLu && raisons.libre) return { refus: null };      // chaque instruction s'exécute dans un dossier de l'API
     return { refus: raisons.length ? `accès réseau refusé par la porte : ${raisons.join(' ; ')}. ${MESSAGE_WEBFETCH}` : null };
 }
 
@@ -431,4 +446,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { verdict, OUTILS, PRIMITIVES, MESSAGE_WEBFETCH, SESSIONS_CATALOGUE };
+module.exports = { verdict, OUTILS, PRIMITIVES, MESSAGE_WEBFETCH, DOSSIERS_LIBRES };
