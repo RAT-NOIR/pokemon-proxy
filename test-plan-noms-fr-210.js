@@ -78,7 +78,9 @@ egal('N20 sans le niveau espece : le nom de la carte TCGdex, comme avant', [P.ca
 // meme espece, forme plus accentuee ailleurs (Medhyena / Medhyèna) : la forme accentuee, que la page officielle porte
 const cloneAccent = { sets: clone.sets, cartes: [...clone.cartes, T('sv9', '30', 'Poochyena', 'Medhyèna')] };
 P = M.planifierCandidats({ cartes: [{ _id: 21, nomEn: 'Poochyena', categorie: 'pokemon', impressions: [] }], liens: [ligne(21, 777)], clone: cloneAccent, niveaux: ['espece'] });
-egal('N21 forme accentuee de l\'espece, lien conserve', [P.candidats[0].nomTcgdex, P.candidats[0].temoin, P.candidats[0].lien], ['Medhyèna', 'nom-en', undefined]);
+egal('N21 forme accentuee de l\'espece, lien conserve', [P.candidats[0].nomTcgdex, P.candidats[0].temoin, P.candidats[0].lien], ['Medhyèna', 'nom-en', 'id-accents']);
+P = M.planifierCandidats({ cartes: [{ _id: 21, nomEn: 'Poochyena', categorie: 'pokemon', impressions: [] }], liens: [ligne(21, 777)], clone, niveaux: ['espece'] });
+egal('N22 avec niveaux, le lien par l\'identifiant porte un lien non vide (id)', P.candidats.length > 0 && P.candidats.every(c => typeof c.lien === 'string' && c.lien.length > 0), true);
 
 // cartes a proprietaire : la page de CARTE (titre = nom TCGdex, nom anglais = le notre sans le suffixe, numero = celui de la carte TCGdex liee)
 const texteCarte = (titre, anglais, num) => `${titre} — Poképédia\n\nAller au contenu\n\nNom japonais\nエリカ\n\nNom anglais\n${anglais}\n\nExtension\nX\n\nNumérotation\n${num}\n`;

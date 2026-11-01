@@ -185,12 +185,13 @@ function planifierCandidats({ cartes, liens, clone, niveaux = [] }) {
             if (r.ok) {
                 const b = decomposerFr(nomLien).base;
                 if (b && accents(r.base) > accents(b) && nomLien.includes(b)) {
-                    candidats.push({ carteId: c._id, nomEn: c.nomEn ?? null, nomTcgdex: nomLien.replace(b, r.base), temoin, ...(lien ? { lien } : {}), refsTcgdex: [...uniques.keys()] });
+                    candidats.push({ carteId: c._id, nomEn: c.nomEn ?? null, nomTcgdex: nomLien.replace(b, r.base), temoin, lien: lien || 'id-accents', refsTcgdex: [...uniques.keys()] });
                     continue;
                 }
             }
         }
-        candidats.push({ carteId: c._id, nomEn: c.nomEn ?? null, nomTcgdex: nomLien, temoin, ...(lien ? { lien } : {}), refsTcgdex: [...uniques.keys()] });
+        const lienFinal = lien || (niveaux.length ? 'id' : undefined);   // lot des 210 : toute ligne à écrire porte son lien (retour arrière par nomFrLien)
+        candidats.push({ carteId: c._id, nomEn: c.nomEn ?? null, nomTcgdex: nomLien, temoin, ...(lienFinal ? { lien: lienFinal } : {}), refsTcgdex: [...uniques.keys()] });
     }
     return { candidats, sansNom, population };
 }
