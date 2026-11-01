@@ -81,7 +81,7 @@ const { MENTION_EDITION_1 } = require('../identifier/emprunt');
     H.v('D8b. (relecture I1) la même chose quand leur image porte imageEmprunteeTirage (refus « image-empruntee », rendu pour tout set) : WCD 1011 et Battle Academy 1012 restent refusés', [e(avec, 1011), e(avec, 1012)], [undefined, undefined]);
     H.v('D8c. (relecture I2) un set d\'aucune famille, donc sans bandeau (1013, 1014) : refusé ; 1013 (image empruntée) est compté « sans bandeau », 1014 (staff-prerelease) n\'est pas éligible', [e(avec, 1013), e(avec, 1014)], [undefined, undefined]);
     H.v('D9. (relecture M4) les admis par (D) sont IDENTIFIÉS : 1001, 1005, 1007', avec.entrees.filter(x => x.mention === MENTION_EDITION_1 && avec.emprunts.includes(x.idProduct)).map(x => x.idProduct).sort(), [1001, 1005, 1007]);
-    H.v('D9b. compteurs : 3 admis, sans bandeau = 30th 1006 + 1013 = 2', [avec.denominateurs.admisCatalogue['tamponnee-empruntee'], avec.denominateurs.tamponneeSansBandeau], [3, 2]);
+    H.v('D9b. compteurs : 3 admis ; sans bandeau = 1 (30th 1006) ; 1013, d\'un set d\'aucune famille hors liste, n\'est même pas éligible (tour 2)', [avec.denominateurs.admisCatalogue['tamponnee-empruntee'], avec.denominateurs.tamponneeSansBandeau], [3, 1]);
     const sorti = new Set(refSans.map(x => x[0]).filter(i => !new Set(refAvec.map(y => y[0])).has(i)));
     H.v('D10. (relecture M4) les produits qui QUITTENT le refus sont exactement les admis : 1001, 1005, 1007', [...sorti].sort(), [1001, 1005, 1007]);
     H.v('D11. (relecture M2) le crochet sink.refuse reçoit le produit et SA famille de refus (1008 : tamponnees-nommees ; 1002 : prize-packs) ', [refAvec.find(x => x[0] === 1008)?.[1], refAvec.find(x => x[0] === 1002)?.[1]], ['tamponnees-nommees', 'prize-packs']);
@@ -91,12 +91,22 @@ const { MENTION_EDITION_1 } = require('../identifier/emprunt');
     // (relecture, mutations non attrapées) la fonction seule, sur des cas qui ne passent pas par la construction de la liste
     const { admissionTamponneeEmpruntee: adm } = require('../chargeur/decision');
     const L = new Set([1]), imE = { set: 'x', cleR2: 'cartes/x.webp', langue: 'en', imageEmprunteeTirage: true };
-    const base = { ligne: { idProduct: 1 }, regle, liste: L, im: imE, ecrits: false };
+    const base = { ligne: { idProduct: 1 }, regle, liste: L, im: imE, typesEcrits: [] };
     const pp = set(  'Play-Pokemon-Prize-Pack-Series-Seven', 1), tot = set('Trick-or-Trade-2024', 2), ba = set('Battle-Academy-2020', 3), a = set('Set-A', 4);
     H.v('D13. mutation « !im retiré » : sans image, aucune admission et aucune exception', [adm({ ...base, set: pp, im: null, refus: 'prize-packs' }), adm({ ...base, set: pp, im: undefined, refus: 'prize-packs' })], [null, null]);
     H.v('D14. mutation « staff-prerelease admis » : ce refus n\'est jamais admis, même dans un set Prize Pack', adm({ ...base, set: pp, refus: 'staff-prerelease' }), null);
     H.v('D15. mutation « famille élargie » : un refus d\'une AUTRE famille que celle du set (wcd dans un set Prize Pack) n\'est pas admis', adm({ ...base, set: pp, refus: 'wcd' }), null);
     H.v('D16. mutation « Trick or Trade assoupli » : un set Battle Academy (famille tamponnees-nommees) n\'est jamais éligible, un set Trick or Trade l\'est', [adm({ ...base, set: ba, refus: 'tamponnees-nommees' }), adm({ ...base, set: tot, refus: 'tamponnees-nommees' })?.nature], [null, 'tamponnee-empruntee']);
-    H.v('D17. le bandeau est imposé : un set sans bandeau dérivé ne passe que si la ligne en ÉCRIT un', [adm({ ...base, set: a, refus: 'image-empruntee' }), adm({ ...base, set: a, refus: 'image-empruntee', ecrits: true })?.nature], [{ sansBandeau: true }, 'tamponnee-empruntee']);
+    // tour 2 (relecture p8) ── I1 : la garde s'écrit par ce qu'elle AUTORISE ; M2 : le bandeau est un TAMPON de la liste fermée
+    const setsInconnus = ['Battle-Academy-2026', 'WCD-2026', 'Set-A', 'Trick-or-Trade-Special', 'Play-Pokemon-Prize-Pack'].map((id, i) => set(id, 50 + i));
+    H.v('D17. (I1) un set d\'AUCUNE famille et absent de la liste nommée (Battle-Academy-2026, WCD-2026, Set-A...) est REFUSÉ, même avec un tampon écrit sur la ligne et une image empruntée', setsInconnus.map(s => adm({ ...base, set: s, refus: 'image-empruntee', typesEcrits: ['STAFF'] })), [null, null, null, null, null]);
+    const sea = set('Southeast-Asia-Promos', 60);
+    H.v('D18. (I1) un set NOMMÉ dans la liste fermée (Southeast-Asia-Promos) passe, mais SEULEMENT avec un tampon écrit : sans, « sans bandeau »', [adm({ ...base, set: sea, refus: 'image-empruntee' }), adm({ ...base, set: sea, refus: 'image-empruntee', typesEcrits: ['STAFF'] })?.nature], [{ sansBandeau: true }, 'tamponnee-empruntee']);
+    H.v('D19. (M2) un marqueur écrit qui n\'est pas un TAMPON (JUMBO, EDITION_1, BATTLE_ACADEMY, WCD, NON_LEGAL, FINITION_NON_VISIBLE) n\'est pas un bandeau', adm({ ...base, set: sea, refus: 'image-empruntee', typesEcrits: ['JUMBO', 'EDITION_1', 'BATTLE_ACADEMY', 'WCD', 'NON_LEGAL', 'FINITION_NON_VISIBLE'] }), { sansBandeau: true });
+    H.v('D19b. (M2) la liste fermée des tampons est celle de la table des marqueurs : chacun existe, aucun n\'est un type sans libellé', require('../chargeur/decision').TYPES_TAMPON.every(t => require('../identifier/marqueurs').NOMS_TYPES.includes(t)), true);
+    H.v('D20. WCD et Battle Academy gardent leurs règles quand (D) reçoit un type écrit : refus de la famille', [adm({ ...base, set: set('WCD-2024', 70), refus: 'image-empruntee', typesEcrits: ['STAFF'] }), adm({ ...base, set: ba, refus: 'image-empruntee', typesEcrits: ['STAFF'] })], [null, null]);
+    // M1 : les éléments du Set sont validés
+    const refusSet = async x => { try { await decider({ sets, docs, lignes, metacarte, regle, tamponneesEmpruntees: x }); return 'accepté'; } catch (e) { return /Set d'idProduct/.test(e.message) ? 'refusé' : 'autre erreur'; } };
+    H.v('D21. (M1) un Set d\'idProduct en chaîne, nul, négatif ou non entier est refusé avant tout traitement ; un Set d\'entiers passe', [await refusSet(new Set(['1001'])), await refusSet(new Set([0])), await refusSet(new Set([-4])), await refusSet(new Set([1.5])), await refusSet(new Set([1001]))], ['refusé', 'refusé', 'refusé', 'refusé', 'accepté']);
     H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

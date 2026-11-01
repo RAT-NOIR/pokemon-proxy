@@ -131,14 +131,19 @@ const MENTION_EMPRUNT_TAMPONNEE = MENTION_EDITION_1;
 // Autorisé : un set Prize Pack, un set 30th Celebration, un set Trick or Trade (le bandeau TRICK_OR_TRADE que le set dérive), ou un set d'AUCUNE famille fermée dont l'image est l'emprunt du catalogue ; et un refus
 // de la famille du set ou « image-empruntee » (jamais « staff-prerelease », jamais une autre famille). Le MARQUEUR concret est IMPOSÉ (relecture I2) : sans bandeau (dérivé du set, ou écrit sur la ligne), le produit
 // reste refusé, avec sa raison dédiée { sansBandeau: true }, comptée par l'appelant.
-function admissionTamponneeEmpruntee({ ligne, set, im, refus, regle, liste, ecrits = false }) {
+// Tour 2 (relecture p8, I1) : un set d'AUCUNE famille est REFUSÉ — l'image empruntée du catalogue ne passe que sur des sets NOMMÉS dans cette liste fermée (les sets où le catalogue a écrit des emprunts hors des
+// familles : aucun n'a de bandeau dérivé, donc aucun ne sert sans marqueur écrit sur la ligne). Un set absent de la liste (un Battle-Academy-2026, un WCD-2026...) n'est jamais admis.
+const SETS_EMPRUNT_NOMMES = Object.freeze(['Evolutions', 'Southeast-Asia-Promos', 'Pokemon-Card-Game-Classic-Venusaur-Lugia-ex-Deck', 'Pokemon-Card-Game-Classic-Blastoise-Suicune-ex-Deck']);
+// Tour 2 (M2) : le « bandeau » est un TAMPON de cette liste fermée (types de marqueurs.js), dérivé du set OU écrit sur la ligne — pas n'importe quel marqueur (JUMBO, EDITION_1, BATTLE_ACADEMY, WCD... n'en sont pas).
+const TYPES_TAMPON = Object.freeze(['STAFF', 'PRERELEASE', 'LEAGUE', 'LEAGUE_CUP', 'CHAMPIONSHIP', 'REGIONAL', 'PLACE', 'PROFESSOR', 'PLAY_POKEMON', 'TRICK_OR_TRADE', 'POKEMON_CENTER', 'GAMESTOP', 'TOYS_R_US', 'KFC', 'INDOMILK', 'ORIGINS', 'SNOWFLAKE']);
+function admissionTamponneeEmpruntee({ ligne, set, im, refus, regle, liste, typesEcrits = [] }) {
     if (!liste || !im || !liste.has(ligne.idProduct)) return null;
     const f = familleDuSet(set._id), derive = MQ.marqueursDuSet(set._id);
-    const setAutorise = f === 'prize-packs' || f === '30th-celebration' || (f === 'tamponnees-nommees' && derive.some(x => x.type === 'TRICK_OR_TRADE')) || f === null;
+    const setAutorise = f === 'prize-packs' || f === '30th-celebration' || (f === 'tamponnees-nommees' && derive.some(x => x.type === 'TRICK_OR_TRADE')) || (f === null && SETS_EMPRUNT_NOMMES.includes(set._id));
     const refusAdmis = refus === 'image-empruntee' || (f !== null && refus === f);
-    if (!setAutorise || !refusAdmis || (f === null && refus !== 'image-empruntee')) return null;
+    if (!setAutorise || !refusAdmis) return null;
     if (!regle.visuelAdmisPourLaRegion(im, set.tirage ?? set.region, editionLocaleDuSet(set.editionLocale))) return null;
-    if (!(ecrits === true || derive.some(x => x.type !== 'WCD' && x.type !== 'NON_LEGAL'))) return { sansBandeau: true };
+    if (![...derive.map(x => x.type), ...typesEcrits].some(t => TYPES_TAMPON.includes(t))) return { sansBandeau: true };
     return { im, visuel: 'autre-tirage', mention: MENTION_EMPRUNT_TAMPONNEE, nature: 'tamponnee-empruntee' };
 }
 // JUMBO-VISUEL (décision du coordinateur, 27/10) — BASE SET : les 69 fiches Pokémon (n° 1 à 69) de la page « Base Set » portent le scan « Édition 1 » de TCGdex, servi à TOUS les produits de la fiche ; Cardmarket ne dit pas lequel
@@ -212,7 +217,7 @@ function verifierRegle(regle) {
  * @returns {Promise<{ entrees: object[], denominateurs: object, liens: Map<string, Map<string, number[]>> }>} — n'écrit rien nulle part.
  */
 async function decider({ sets, docs, lignes, metacarte, regle, journal = () => { }, cederLaMain = true, sink = null, exclureBasseDefinition = EXCLURE_BASSE_DEFINITION, jumbosVisuel = null, tamponneesEmpruntees = null }) {
-    if (tamponneesEmpruntees !== null && !(tamponneesEmpruntees instanceof Set)) throw new Error('tamponneesEmpruntees : un Set d\'idProduct (entiers) est attendu, ou null');          // relecture M3 : refus explicite avant tout traitement
+    if (tamponneesEmpruntees !== null && (!(tamponneesEmpruntees instanceof Set) || [...tamponneesEmpruntees].some(x => !Number.isSafeInteger(x) || x <= 0))) throw new Error('tamponneesEmpruntees : un Set d\'idProduct (entiers > 0) est attendu, ou null');          // relecture M3 : refus explicite avant tout traitement
     // `jumbosVisuel` (JUMBO-VISUEL) : null, ou la Map idProduct → 'emprunt' | 'sans-visuel' du fichier du catalogue (jumbos-visuel.js, jugée ici par la MÊME garde). 'emprunt' : le JUMBO est identique à sa carte, son visuel est
     // EMPRUNTÉ (entrée `autre-tirage` sans mention, bandeau JUMBO). 'sans-visuel' : le scan de la carte normale n'est pas le sien, l'entrée reste (marqueurs, partages, groupe) mais aucun visuel ne sera servi (sink.masque).
     // `sink` { entree(e), lien(setId, cle, idProducts) } : les résultats sortent UN À UN (le chargeur les range en colonnes sans jamais tenir le tableau des entrées ni la Map des liens) ;
@@ -353,7 +358,7 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         // REPLI-REIMPRESSIONS : APRÈS le choix (la fonction partagée n'est pas touchée), AVANT toute entrée : jamais l'image d'un autre tirage à une réimpression
         let refus = im ? refusDeRepli({ ligne: l, set: s, im, visuel }) : null;
         if (!im || refus) {
-            const a = admissionDuCatalogue({ ligne: l, set: s, carte: c, regle, positions }) || admissionTamponneeEmpruntee({ ligne: l, set: s, im, refus, regle, liste: tamponneesEmpruntees, ecrits: Boolean(ecritsDe.get(l)?.elements?.length) });
+            const a = admissionDuCatalogue({ ligne: l, set: s, carte: c, regle, positions }) || admissionTamponneeEmpruntee({ ligne: l, set: s, im, refus, regle, liste: tamponneesEmpruntees, typesEcrits: (ecritsDe.get(l)?.elements || []).map(x => x && x.type) });
             if (a && a.sansBandeau) d.tamponneeSansBandeau++;
             else if (a) { ({ im, visuel, mention } = a); refus = null; contredit = false; admise = a.nature; }
         }
@@ -446,4 +451,4 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
     return { entrees, denominateurs: d, liens, ...(sink ? {} : { jumeaux, melanges: [...melanges].sort((a, b) => a - b), emprunts: [...empruntes].sort((a, b) => a - b), masques: [...masques].sort((a, b) => a - b) }) };
 }
 
-module.exports = { baseSetEdition1, BASE_SET, decider, verifierRegle, cleFiche, REGLE_REQUISE, FAMILLES_SANS_REPLI, refusDeRepli, estEmprunt, positionDuSlug, admissionDuCatalogue, admissionTamponneeEmpruntee, EXCLURE_BASSE_DEFINITION, partageIncoherent, varianteAvecPreuve };
+module.exports = { baseSetEdition1, BASE_SET, decider, verifierRegle, cleFiche, REGLE_REQUISE, FAMILLES_SANS_REPLI, refusDeRepli, estEmprunt, positionDuSlug, admissionDuCatalogue, admissionTamponneeEmpruntee, TYPES_TAMPON, SETS_EMPRUNT_NOMMES, EXCLURE_BASSE_DEFINITION, partageIncoherent, varianteAvecPreuve };
