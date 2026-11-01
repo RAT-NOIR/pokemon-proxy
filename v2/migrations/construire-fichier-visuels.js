@@ -75,6 +75,8 @@ async function principal(argv = process.argv, env = process.env, deps = {}) {
         const lecture = TE.lireFichierTamponnees(nomTamponnees, { sha256Attendu: pinTamponnees });
         if (!lecture.ok) return stop(`--tamponnees-empruntees : liste refusée, aucune construction : ${lecture.raison}`);
         tamponnees = lecture;
+        // I2 (relecture p8) : sans --catalogue=<fichier>, le catalogue se lit par une connexion à la base `test` — la PRODUCTION ; avec la liste, la construction n'ouvre aucune connexion à la production
+        if (catalogueJson === null && !deps.catalogue) return stop('--tamponnees-empruntees : le catalogue doit venir de --catalogue=<fichier> (sans lui il se lit par une connexion à la base `test`, la production) : refus, aucune construction');
     }
     const LS = require('../chargeur/lecture-seule'); const S = require('../chargeur/scellement'); const R2 = require('../chargeur/r2-prive'); const F = require('../chargeur/format'); const DEPOT = require('./depot-r2');
     if (!S.secretValide(env.V2_VISUELS_HMAC)) return stop(`V2_VISUELS_HMAC absent ou trop court (${S.SECRET_MIN} caractères au moins) : une archive non scellée n'est jamais produite`);

@@ -70,6 +70,30 @@ const { principal } = require('../migrations/construire-fichier-visuels');
     recu = 'inchangé';
     await lancer([`--vers=${vers}`], essai, { source, catalogue: new Map([[1, 1]]), decider });
     H.v('O7. SANS l\'option : la décision ne reçoit rien (l\'archive est celle d\'avant, octet pour octet)', recu, undefined);
+    // ── tour 2 (relecture p8, I2) : la cible est PROUVÉE différente de la production, pas déclarée ──────────
+    const CE = T.cibleEstEssai;
+    const prod = { R2_BUCKET_IMAGES: 'images-prod', V2_VISUELS_PROD_BUCKET: 'visuels-prod' };
+    const dep = { V2_CIBLE: 'essai', V2_VISUELS_R2_BUCKET: 'visuels-essai', V2_VISUELS_ESSAI_BUCKET: 'visuels-essai', ...prod };
+    H.v('C1. chemin POSITIF : essai déclaré, bucket visé = bucket d\'essai, tous deux différents des buckets de la production connus', CE(dep, { deposer: true }).ok, true);
+    H.v('C2. essai == R2_BUCKET_IMAGES (le bucket d\'images de la production) : refus', CE({ ...dep, V2_VISUELS_R2_BUCKET: 'images-prod', V2_VISUELS_ESSAI_BUCKET: 'images-prod' }, { deposer: true }).ok, false);
+    H.v('C3. essai == le bucket des visuels de la production : refus', CE({ ...dep, V2_VISUELS_R2_BUCKET: 'visuels-prod', V2_VISUELS_ESSAI_BUCKET: 'visuels-prod' }, { deposer: true }).ok, false);
+    H.v('C3b. l\'égalité est jugée après trim (« visuels-prod  » == « visuels-prod »)', CE({ ...dep, V2_VISUELS_R2_BUCKET: ' visuels-prod ', V2_VISUELS_ESSAI_BUCKET: 'visuels-prod' }, { deposer: true }).ok, false);
+    H.v('C4. aucune référence de la production connue : « je ne sais pas » = refus (une garde qui ne peut pas conclure refuse)', CE({ V2_CIBLE: 'essai', V2_VISUELS_R2_BUCKET: 'x', V2_VISUELS_ESSAI_BUCKET: 'x' }, { deposer: true }).ok, false);
+    H.v('C4b. une seule référence de production connue suffit à conclure quand elle diffère', CE({ V2_CIBLE: 'essai', V2_VISUELS_R2_BUCKET: 'x', V2_VISUELS_ESSAI_BUCKET: 'x', R2_BUCKET_IMAGES: 'images-prod' }, { deposer: true }).ok, true);
+    H.v('C5. la base connectée, lue sur la connexion réelle : seule « rm_essai » passe (« test » = la production, « cartes », vide, absente de la lecture = refus)', ['rm_essai', 'test', 'cartes', '', 'rm_essai2'].map(b => CE(dep, { deposer: true, baseConnectee: b }).ok), [true, false, false, false, false]);
+    H.v('C5b. sans connexion (aucune base ouverte) : rien à refuser sur ce point', CE(dep, { deposer: true, baseConnectee: null }).ok, true);
+    H.v('C6. sans dépôt, seul V2_CIBLE compte ; sans rien : refus', [CE({ V2_CIBLE: 'essai' }).ok, CE({}).ok], [true, false]);
+    // le chemin --deposer de la commande, avec des buckets ÉGAUX (M7) : le positif atteint la décision (le banc s'arrête là, rien n'est déposé), l'égalité essai == production est refusée avant
+    const envDepot = { ...dep, V2_VISUELS_HMAC: SECRET, V2_VISUELS_R2_COMPTE: 'compte-banc', V2_VISUELS_R2_ECR_CLE_ID: 'cle-banc', V2_VISUELS_R2_ECR_SECRET: 'secret-banc', V2_VISUELS_R2_OBJET: 'objet-banc.rmv' };
+    recu = null;
+    const dPos = await lancer(['--deposer', ...epingle, '--catalogue=' + bonne], envDepot, { source, catalogue: new Map([[1, 1]]), decider });
+    H.v('O8. (M7) --deposer, buckets égaux et différents de la production : la décision REÇOIT la liste (le banc s\'arrête avant tout dépôt)', [recu instanceof Set, dPos.code], [true, 1]);
+    recu = null;
+    const dEgal = await lancer(['--deposer', ...epingle, '--catalogue=' + bonne], { ...envDepot, V2_VISUELS_R2_BUCKET: 'images-prod', V2_VISUELS_ESSAI_BUCKET: 'images-prod' }, { source, catalogue: new Map([[1, 1]]), decider });
+    H.v('O8b. (M7) --deposer avec essai == production : refus, la décision n\'est PAS atteinte, rien n\'est déposé', [recu, dEgal.code, /production|essai/i.test(dEgal.texte)], [null, 1, true]);
+    // le catalogue vient d'un FICHIER : jamais une connexion à la base de production
+    const sansCatalogue = await lancer([`--vers=${vers}`, ...epingle], essai, { source });
+    H.v('O9. avec la liste, le catalogue vient de --catalogue=<fichier> : sans lui (donc par la connexion à la base `test`), refus', [sansCatalogue.code, /catalogue/i.test(sansCatalogue.texte)], [1, true]);
     fs.rmSync(dossier, { recursive: true, force: true });
     H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

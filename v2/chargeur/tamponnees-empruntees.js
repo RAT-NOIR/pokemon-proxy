@@ -49,11 +49,19 @@ function lireFichierTamponnees(chemin, { sha256Attendu } = {}) {
  * V2_VISUELS_ESSAI_BUCKET nomme (les deux non vides). Tout le reste, y compris une variable absente, est refusé.
  * @returns {{ ok: true } | { ok: false, raison }}
  */
-function cibleEstEssai(env, { deposer = false } = {}) {
+// Tour 2 (relecture p8, I2) : la cible est PROUVÉE différente de la production, pas seulement déclarée. Avec un dépôt : le bucket d'essai doit être PROUVÉ différent de chaque bucket de la production que l'environnement
+// nomme (R2_BUCKET_IMAGES, le bucket d'images ; V2_VISUELS_PROD_BUCKET, le bucket des visuels) ; si AUCUN n'est nommé, la garde ne peut pas conclure et REFUSE. Et la base de la connexion réelle, quand il y en a une
+// (`baseConnectee`, le nom lu sur la connexion), doit être exactement « rm_essai » (« test » est la production).
+const texteEnv = v => (typeof v === 'string' ? v.trim() : '');
+function cibleEstEssai(env, { deposer = false, baseConnectee = null } = {}) {
     if (!env || env.V2_CIBLE !== 'essai') return refus('la liste des tamponnées empruntées ne sert qu\'à l\'ESSAI : V2_CIBLE doit valoir exactement « essai »');
+    if (baseConnectee !== null && baseConnectee !== 'rm_essai') return refus(`la base de la connexion réelle est « ${String(baseConnectee).slice(0, 40)} », pas « rm_essai » : la cible n'est pas l'essai`);
     if (deposer) {
-        const vise = typeof env.V2_VISUELS_R2_BUCKET === 'string' ? env.V2_VISUELS_R2_BUCKET.trim() : '', essai = typeof env.V2_VISUELS_ESSAI_BUCKET === 'string' ? env.V2_VISUELS_ESSAI_BUCKET.trim() : '';
+        const vise = texteEnv(env.V2_VISUELS_R2_BUCKET), essai = texteEnv(env.V2_VISUELS_ESSAI_BUCKET);
         if (!vise || !essai || vise !== essai) return refus('avec --deposer, le bucket visé (V2_VISUELS_R2_BUCKET) doit être celui de l\'essai nommé par V2_VISUELS_ESSAI_BUCKET : l\'un manque ou ils diffèrent, je ne peux pas conclure que la cible est l\'essai');
+        const production = [env.R2_BUCKET_IMAGES, env.V2_VISUELS_PROD_BUCKET].map(texteEnv).filter(Boolean);
+        if (!production.length) return refus('avec --deposer, aucun bucket de la production n\'est nommé (R2_BUCKET_IMAGES, V2_VISUELS_PROD_BUCKET) : je ne peux pas prouver que le bucket d\'essai en diffère, la cible n\'est pas démontrée essai');
+        if (production.includes(essai)) return refus('le bucket d\'essai est le bucket de la PRODUCTION (essai == production) : la cible n\'est pas l\'essai');
     }
     return { ok: true };
 }
