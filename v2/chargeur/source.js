@@ -56,9 +56,14 @@ async function lireEnFlux(collection, projection, convertir) {
 }
 
 /** La source par défaut : la lecture seule de `cartes` (ouvrir injectable). Rend { ok:true, sets, docs, lignes, fermer } ou { ok:false, raison }. */
-async function sourceCartes({ env = process.env, ouvrir = LS.ouvrir } = {}) {
+async function sourceCartes({ env = process.env, ouvrir = LS.ouvrir, controleBase = null } = {}) {
     const o = await ouvrir({ env });
     if (!o.ok) return o;
+    // `controleBase(nomBase)` (TAMPONNÉES-EMPRUNTÉES, tour 4) : le nom de la base lu SUR la connexion ouverte est jugé AVANT la moindre lecture ; un refus ferme la connexion et se rend comme une valeur
+    if (typeof controleBase === 'function') {
+        const r = controleBase(typeof o.nomBase === 'string' ? o.nomBase : '');
+        if (!r || r.ok !== true) { try { await o.cartes.fermer(); } catch { /* déjà fermée */ } return { ok: false, raison: (r && r.raison) || 'le contrôle de la base n\'a pas pu conclure' }; }
+    }
     const c = o.cartes, I = interneur();
     try {
         const editionLocale = { horsListe: 0, valeurs: {} };
