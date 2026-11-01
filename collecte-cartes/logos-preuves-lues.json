@@ -1523,58 +1523,6 @@
    "idPlanche": "L205"
   },
   {
-   "set": "Dynamax-Clash-Thunder",
-   "fichier": "Logo ZH/CS1AC.png",
-   "cleR2": "logos/manuel/Logo-ZH/CS1AC.png",
-   "sha256": "8b90f6bed7961bc2a1f5ba46150a00c1eec0a8f3715e5e331ebdbf3b67316c1a",
-   "sha1": "9c550fc1628b62c31442b182a80c3713ed3ce414",
-   "sourceBase": "manuel",
-   "texteLu": "极巨争锋 雷",
-   "nomFiche": "nomJa 极巨争锋 ; sous-nom 雷 = Thunder",
-   "le": "2026-11-01",
-   "regardee": true,
-   "idPlanche": "L206"
-  },
-  {
-   "set": "Storming-Emergence-Abundant",
-   "fichier": "Logo ZH/CSM1CC.png",
-   "cleR2": "logos/manuel/Logo-ZH/CSM1CC-561b68b51d.png",
-   "sha256": "660e8088c653181ebc17e6627864ba848a4887beea708fe0a77912fe269bff6b",
-   "sha1": "561b68b51db49d3ff00ebf1b0d5bc01f30040ba5",
-   "sourceBase": "manuel",
-   "texteLu": "横空出世 泽",
-   "nomFiche": "nomJa 横空出世 ; sous-nom 泽 = Abundant (correspondance du sous-nom non vérifiable par la fiche)",
-   "le": "2026-11-01",
-   "regardee": true,
-   "idPlanche": "L207"
-  },
-  {
-   "set": "Storming-Emergence-Radiant",
-   "fichier": "Logo ZH/CSM1AC.png",
-   "cleR2": "logos/manuel/Logo-ZH/CSM1AC-06e49183a7.png",
-   "sha256": "ee7cc94eec9f4b8fa423affbb3dadc3250d30f13c992a7988fb11a673e8c20db",
-   "sha1": "06e49183a7a4df15d7a43407f651d79d51bfff48",
-   "sourceBase": "manuel",
-   "texteLu": "横空出世 赫",
-   "nomFiche": "nomJa 横空出世 ; sous-nom 赫 = Radiant (idem)",
-   "le": "2026-11-01",
-   "regardee": true,
-   "idPlanche": "L208"
-  },
-  {
-   "set": "Storming-Emergence-Verdant",
-   "fichier": "Logo ZH/CSM1BC.png",
-   "cleR2": "logos/manuel/Logo-ZH/CSM1BC-35c7a2ea43.png",
-   "sha256": "44773bf7ae56c0eaab1e1766e8fe97c6aaeb3367e22c52128ec07c221eacb778",
-   "sha1": "35c7a2ea430fc0975cb27f5efe83250351ab6485",
-   "sourceBase": "manuel",
-   "texteLu": "横空出世 苍",
-   "nomFiche": "nomJa 横空出世 ; sous-nom 苍 = Verdant (idem)",
-   "le": "2026-11-01",
-   "regardee": true,
-   "idPlanche": "L209"
-  },
-  {
    "set": "Gem-Pack-Vol-4",
    "fichier": "Logo ZH/CBB4C.png",
    "cleR2": "logos/manuel/Logo-ZH/CBB4C.png",
@@ -1627,136 +1575,6 @@
    "idPlanche": "L213"
   },
   {
-   "set": "Shining-Synergy-Supreme",
-   "fichier": "Logo ZH/CSM2BC.png",
-   "cleR2": "logos/manuel/Logo-ZH/CSM2BC.png",
-   "sha256": "bbc3c54651475e4859bfb5c86231a98b7884f5edd0a41d645b14e9c6bffb9fcf",
-   "sha1": "71fd3eb45599030a4a5bde4ba112acc41c7783fd",
-   "sourceBase": "manuel",
-   "texteLu": "交相辉映 魁",
-   "nomFiche": "nomJa 交相辉映 ; sous-nom 魁 = Supreme",
-   "le": "2026-11-01",
-   "regardee": true,
-   "idPlanche": "L214"
-  },
-  {
-   "set": "Shining-Synergy-Summon",
-   "fichier": "Logo ZH/CSM2CC.png",
-   "cleR2": "logos/manuel/Logo-ZH/CSM2CC.png",
-   "sha256": "bbd3340c5385d33f19d244b3d52f55c7f41f236a4bd5aaa6307d2e7cd365cfea",
-   "sha1": "bdd772162bef5b1f2c7f9a7b7b77ab50c434bddf",
-   "sourceBase": "manuel",
-   "texteLu": "交相辉映 唤",
-   "nomFiche": "nomJa 交相辉映 ; sous-nom 唤 = Summon",
-   "le": "2026-11-01",
-   "regardee": true,
-   "idPlanche": "L215"
-  },
-  {
-   "set": "Dynamax-Clash-Flame",
-   "fichier": "Logo ZH/CS1BC.png",
-   "cleR2": "logos/manuel/Logo-ZH/CS1BC.png",
-   "sha256": "663c6b5ccaccda7e267dc9df1688bc0b96d977bd32d93b38aa750bd3043dfa53",
-   "sha1": "1beef5ab69d86b5383fe20500ef97625a70bb3a8",
-   "sourceBase": "manuel",
-   "texteLu": "极巨争锋 焰",
-   "nomFiche": "nomJa 极巨争锋 ; sous-nom 焰 = Flame",
-   "le": "2026-11-01",
-   "regardee": true,
-   "idPlanche": "L216"
-  },
-  {
-   "set": "Shining-Synergy-Shower",
-   "fichier": "Logo ZH/CSM2AC.png",
-   "cleR2": "logos/manuel/Logo-ZH/CSM2AC.png",
-   "sha256": "785bc04541c480f0b0b2534876a4bceacb17850453ba586db3aa3b584ace1c2f",
-   "sha1": "16ff1058adfefbcd5ab24356a9037eaf532c591d",
-   "sourceBase": "manuel",
-   "texteLu": "交相辉映 沐",
-   "nomFiche": "nomJa 交相辉映 ; sous-nom 沐 = Shower",
-   "le": "2026-11-01",
-   "regardee": true,
-   "idPlanche": "L218"
-  },
-  {
-   "set": "Primordial-Arts-Overgrow",
-   "fichier": "Logo ZH/CS3AC.png",
-   "cleR2": "logos/manuel/Logo-ZH/CS3AC.png",
-   "sha256": "1f167786cc2379e20a5f4bf53bffed8ee067ce41d45ed7b5b8b04ed04b3fe40f",
-   "sha1": "8e9523391221e4f700cd5a5a677f17870c45f255",
-   "sourceBase": "manuel",
-   "texteLu": "洪荒演武 茂",
-   "nomFiche": "nomJa 洪荒演武 ; sous-nom 茂 = Overgrow",
-   "le": "2026-11-01",
-   "regardee": true,
-   "idPlanche": "L219"
-  },
-  {
-   "set": "Nine-Colors-Gathering-Friends",
-   "fichier": "Logo ZH/CS4AC.png",
-   "cleR2": "logos/manuel/Logo-ZH/CS4AC.png",
-   "sha256": "98aff9fd8e975ac03f4c3d5a82e6a8eb7619e3ea2ad0617737c9c4f973d962df",
-   "sha1": "532c6bc1e0082e1ea5db47e619eb8a7802ffcb1a",
-   "sourceBase": "manuel",
-   "texteLu": "九彩汇聚 朋",
-   "nomFiche": "nomJa 九彩汇聚 ; sous-nom 朋 = Friends",
-   "le": "2026-11-01",
-   "regardee": true,
-   "idPlanche": "L220"
-  },
-  {
-   "set": "Primordial-Arts-Torrent",
-   "fichier": "Logo ZH/CS3BC.png",
-   "cleR2": "logos/manuel/Logo-ZH/CS3BC.png",
-   "sha256": "dc7e6253708238eba0c3b84b625cd5e587fa82ede4f54b74bdbf4a3edaaacc6d",
-   "sha1": "a932f96281e8d31878ffd37ec78215111162cb1e",
-   "sourceBase": "manuel",
-   "texteLu": "洪荒演武 激",
-   "nomFiche": "nomJa 洪荒演武 ; sous-nom 激 = Torrent",
-   "le": "2026-11-01",
-   "regardee": true,
-   "idPlanche": "L221"
-  },
-  {
-   "set": "Brave-Stars-Brave",
-   "fichier": "Logo ZH/CS5BC.png",
-   "cleR2": "logos/manuel/Logo-ZH/CS5BC.png",
-   "sha256": "c07059f57d023b8213c80c3ae0e121d38adbd2884cc5fbbfd111ec9000bc13b6",
-   "sha1": "72b97bc3d4889682274a563ca9fdfebf39d2f8a2",
-   "sourceBase": "manuel",
-   "texteLu": "勇魅群星 勇",
-   "nomFiche": "nomJa 勇魅群星 ; sous-nom 勇 = Brave",
-   "le": "2026-11-01",
-   "regardee": true,
-   "idPlanche": "L222"
-  },
-  {
-   "set": "Nine-Colors-Gathering-Origin",
-   "fichier": "Logo ZH/CS4BC.png",
-   "cleR2": "logos/manuel/Logo-ZH/CS4BC.png",
-   "sha256": "cf4e7cada5ad934733f47fcdee7f24a62405e3715f25a54572feed21cd69cbb2",
-   "sha1": "961543b6a6d03845a6961fd49398c3913a1691d3",
-   "sourceBase": "manuel",
-   "texteLu": "九彩汇聚 源",
-   "nomFiche": "nomJa 九彩汇聚 ; sous-nom 源 = Origin",
-   "le": "2026-11-01",
-   "regardee": true,
-   "idPlanche": "L223"
-  },
-  {
-   "set": "Brave-Stars-Charm",
-   "fichier": "Logo ZH/CS5AC.png",
-   "cleR2": "logos/manuel/Logo-ZH/CS5AC.png",
-   "sha256": "17bf639596d353ea38a1e04e8b3fdd8d6df6914d6571571da498fd7867461bd2",
-   "sha1": "f0eaa6898bd992267976a12fc429acbebffef37f",
-   "sourceBase": "manuel",
-   "texteLu": "勇魅群星 魅",
-   "nomFiche": "nomJa 勇魅群星 ; sous-nom 魅 = Charm",
-   "le": "2026-11-01",
-   "regardee": true,
-   "idPlanche": "L224"
-  },
-  {
    "set": "30th-Celebration-Simplified-Chinese",
    "fichier": "Logo ZH/30THP.png",
    "cleR2": "logos/manuel/Logo-ZH/30THP.png",
@@ -1768,19 +1586,6 @@
    "le": "2026-11-01",
    "regardee": true,
    "idPlanche": "L225"
-  },
-  {
-   "set": "Azure-Shadow-Pursuit",
-   "fichier": "Logo ZH/CS6BC.png",
-   "cleR2": "logos/manuel/Logo-ZH/CS6BC.png",
-   "sha256": "d078564820b51ac08157ba4809514eb8a094aab1ce95e4b8d5f3d8d81ee56ae3",
-   "sha1": "c4ed74853e7bbb5ecd3ed01bc1affed7982fa404",
-   "sourceBase": "manuel",
-   "texteLu": "碧海暗影 逐",
-   "nomFiche": "nomJa 碧海暗影 ; sous-nom 逐 = Pursuit",
-   "le": "2026-11-01",
-   "regardee": true,
-   "idPlanche": "L226"
   },
   {
    "set": "Primordial-Arts-V-Starter-Deck",
@@ -1796,19 +1601,6 @@
    "idPlanche": "L227"
   },
   {
-   "set": "Azure-Shadow-Roar",
-   "fichier": "Logo ZH/CS6AC.png",
-   "cleR2": "logos/manuel/Logo-ZH/CS6AC.png",
-   "sha256": "1e3191eb9008df387ba72c35f6580972447edcec75672406a0b054a40e120b98",
-   "sha1": "0daeec72cd834ec669b26e2b2ff465ea90e5ea35",
-   "sourceBase": "manuel",
-   "texteLu": "碧海暗影 啸",
-   "nomFiche": "nomJa 碧海暗影 ; sous-nom 啸 = Roar",
-   "le": "2026-11-01",
-   "regardee": true,
-   "idPlanche": "L228"
-  },
-  {
    "set": "Shining-Synergy-GX-Starter-Deck",
    "fichier": "apport-manuel/DECK ZH/CSM2DC.png",
    "cleR2": "logos/apport-manuel/deck-zh/CSM2DC-4d9778f2fa.png",
@@ -1820,19 +1612,6 @@
    "le": "2026-11-01",
    "regardee": true,
    "idPlanche": "L229"
-  },
-  {
-   "set": "Vivid-Portrayals-Indigo",
-   "fichier": "Logo ZH/CS2BC.png",
-   "cleR2": "logos/manuel/Logo-ZH/CS2BC.png",
-   "sha256": "7557b24a71f294497a4cbab7412b514ba578ff758debd039212895cfc6757389",
-   "sha1": "43caa425a487b99a7cdd21f4598b9000de758446",
-   "sourceBase": "manuel",
-   "texteLu": "浓墨重彩 靛",
-   "nomFiche": "nomJa 浓墨重彩 ; sous-nom 靛 = Indigo",
-   "le": "2026-11-01",
-   "regardee": true,
-   "idPlanche": "L231"
   },
   {
    "set": "Gem-Pack-Vol-2",
@@ -2056,32 +1835,6 @@
    "idPlanche": "L251"
   },
   {
-   "set": "Pokemon-Art-Illustration-Celebration-Gathering",
-   "fichier": "apport-manuel/DECK ZH/CSYC.png",
-   "cleR2": "logos/apport-manuel/deck-zh/CSYC-b3e1a5641c.png",
-   "sha256": "1637d659acea8411c77253a1d8d8c1e2517b9c099176192fa57cc1c41ad328d5",
-   "sha1": "b3e1a5641c1300a2bc4212a033f81e02e3bc1621",
-   "sourceBase": "apport-manuel",
-   "texteLu": "宝可梦艺术插画庆典 聚",
-   "nomFiche": "Pokemon Art Illustration Celebration Gathering (聚 = Gathering)",
-   "le": "2026-11-01",
-   "regardee": true,
-   "idPlanche": "L253"
-  },
-  {
-   "set": "Pokemon-Art-Illustration-Celebration-Scene",
-   "fichier": "apport-manuel/DECK ZH/CSJC.png",
-   "cleR2": "logos/apport-manuel/deck-zh/CSJC-d222d07b4e.png",
-   "sha256": "1c3aa535f1f52cc524c3109cbafc10ed1ab6435524fc38fa736cb4ea9604afb5",
-   "sha1": "d222d07b4eac2fcf19c0ec3fcd95ba3612d9c170",
-   "sourceBase": "apport-manuel",
-   "texteLu": "宝可梦艺术插画庆典 景",
-   "nomFiche": "Pokemon Art Illustration Celebration Scene (景 = Scene)",
-   "le": "2026-11-01",
-   "regardee": true,
-   "idPlanche": "L254"
-  },
-  {
    "set": "Shining-Pokemon-Poke-Ball-Box",
    "fichier": "apport-manuel/DECK ZH/CSMJC.png",
    "cleR2": "logos/apport-manuel/deck-zh/CSMJC-8b161fdba5.png",
@@ -2172,5 +1925,30 @@
    "regardee": true,
    "idPlanche": "L265"
   }
- ]
+ ],
+ "retiresParLeCoordinateur": {
+  "le": "2026-11-01",
+  "motif": "sous-nom chinois d'un caractère : la fiche ne porte que le nom commun, la concordance nom pour nom n'est pas démontrée",
+  "sets": [
+   "Dynamax-Clash-Thunder",
+   "Storming-Emergence-Abundant",
+   "Storming-Emergence-Radiant",
+   "Storming-Emergence-Verdant",
+   "Shining-Synergy-Supreme",
+   "Shining-Synergy-Summon",
+   "Dynamax-Clash-Flame",
+   "Shining-Synergy-Shower",
+   "Primordial-Arts-Overgrow",
+   "Nine-Colors-Gathering-Friends",
+   "Primordial-Arts-Torrent",
+   "Brave-Stars-Brave",
+   "Nine-Colors-Gathering-Origin",
+   "Brave-Stars-Charm",
+   "Azure-Shadow-Pursuit",
+   "Azure-Shadow-Roar",
+   "Vivid-Portrayals-Indigo",
+   "Pokemon-Art-Illustration-Celebration-Gathering",
+   "Pokemon-Art-Illustration-Celebration-Scene"
+  ]
+ }
 }

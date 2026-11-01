@@ -75,9 +75,9 @@ verifier('plan = attendu : écriture permise ; plan ≠ attendu : refus AVANT é
     verifier('les autres sets ne bougent pas', S.docs[1].logo.niveau, 'inconnu');
     S = faux([set({}, entree({ niveau: 'compose' }))]); r = await lancer(S, { ecrire: true, attendu: 0 });
     verifier('niveau déjà posé : 0 écrit même avec attendu 0, niveau intact', [r.ecrits, S.ecritures, S.docs[0].logo.niveau], [0, 0, 'compose']);
-    // la table réelle du dépôt est lisible et complète
+    // la table réelle du dépôt est lisible et complète : 167 lues concordantes, moins les 19 sous-noms chinois d'un caractère retirés par le coordinateur (01/11)
 const reelle = R.lignesDePreuvesDuFichier();
-verifier('table réelle : 167 lignes lues', reelle.size, 167);
+verifier('table réelle : 148 lignes lues', reelle.size, 148);
 console.log(`\n${ok} passés, ${ko} en échec`);
 if (ko) process.exitCode = 1;
 })().catch(e => { console.error(e); process.exit(1); });
