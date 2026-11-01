@@ -92,7 +92,8 @@ function jugerLigne(x, e) {
     r.statut = 'prete';
     r.raison = `le produit « ${e.produit.name} » n'est pas « ${e.carte.nomEn} » ; la carte ${autre._id} « ${autre.nomEn} » porte son n°${N} et reçoit déjà sa ligne`;
     r.preuve = { produit: e.produit.name, numeroProduit: N, carteJointe: e.carte.nomEn, autreCarte: autre._id, autreCarteNom: autre.nomEn, ligne: e.ligne };
-    r.avant = { ligne: e.ligne, liensAvaient: !!(e.carte.liens && (e.carte.liens.idProduct || []).includes(x.idProduct)) };
+    const liens = (e.carte.liens && e.carte.liens.idProduct) || [];
+    r.avant = { ligne: e.ligne, liensAvaient: liens.includes(x.idProduct), liensIndex: liens.indexOf(x.idProduct), liensAvant: [...liens] };
     return r;
 }
 
@@ -195,7 +196,7 @@ function jugerTotal(d, e) {
 function construireRetour(plan, retenus, extra = {}) {
     const mods = [];
     for (const r of plan.filter(p => retenus.has(p.id) && p.statut === 'prete')) {
-        if (r.type === 'ligne') mods.push({ id: r.id, type: 'ligne', collection: 'cartes_produits', _id: r.avant.ligne._id, carteId: r.avant.ligne.carteId, idProduct: r.avant.ligne.idProduct, document: r.avant.ligne, liensAvaient: r.avant.liensAvaient });
+        if (r.type === 'ligne') mods.push({ id: r.id, type: 'ligne', collection: 'cartes_produits', _id: r.avant.ligne._id, carteId: r.avant.ligne.carteId, idProduct: r.avant.ligne.idProduct, document: r.avant.ligne, liensAvaient: r.avant.liensAvaient, liensIndex: r.avant.liensIndex, liensAvant: r.avant.liensAvant });
         else if (r.type === 'impression') mods.push({ id: r.id, type: 'impression', collection: 'cartes', _id: r.carteId, champ: 'impressions', index: r.avant.index, valeur: r.avant.impression });
         else if (r.type === 'total') mods.push({ id: r.id, type: 'total', collection: 'sets', _id: r.id.slice(6), champ: 'totalImprime', avant: r.avant.totalImprime, apres: r.apres.totalImprime });
     }
@@ -235,7 +236,12 @@ async function revenir({ db, retour, log = console.log }) {
     for (const m of [...retour.modifications].reverse()) {
         if (m.type === 'ligne') {
             const r = await db.collection('cartes_produits').replaceOne({ _id: m._id }, m.document, { upsert: true });
-            if (m.liensAvaient) await db.collection('cartes').updateOne({ _id: m.carteId }, { $addToSet: { 'liens.idProduct': m.idProduct } });
+            if (m.liensAvaient) {
+                // le lien revient à sa POSITION d'origine (jamais en fin de tableau), et une seule fois
+                const c = await db.collection('cartes').findOne({ _id: m.carteId });
+                const actuels = (c && c.liens && c.liens.idProduct) || [];
+                if (c && !actuels.includes(m.idProduct)) await db.collection('cartes').updateOne({ _id: m.carteId }, { $push: { 'liens.idProduct': { $each: [m.idProduct], $position: Math.max(0, Math.min(m.liensIndex ?? actuels.length, actuels.length)) } } });
+            }
             (r.upsertedCount ? n++ : deja++);
         } else if (m.type === 'impression') {
             const f = m.valeur;
@@ -250,6 +256,37 @@ async function revenir({ db, retour, log = console.log }) {
     }
     log(`   RETOUR : ${n} valeur(s) remise(s), ${deja} déjà en place`);
     return { remises: n, deja };
+}
+
+/**
+ * Le chemin d'ÉCRITURE réel, séparé de principal() pour être banqué avec une connexion de la VRAIE forme : `ouvrirConnexions` (collecte-cartes/garde.js)
+ * rend { cartes, prod, fermer } ; la base native vit sur `cartes.db` (il n'y a pas de `cx.db`).
+ */
+async function lancerEcriture({ ouvrir, plan, liste, attendu, fichierRetour, log = console.log, err = console.error }) {
+    const t = trancher({ plan, liste, attendu });
+    if (t.motif) throw new Error(`ARRÊT : ${t.motif} — rien n'est écrit`);
+    const cx = await ouvrir();
+    try {
+        const db = cx.cartes.db;
+        const R = await ecrire({ db, plan, retenus: t.retenus, fichierRetour, log });
+        let relu = 0;
+        for (const m of R.retour.modifications) {
+            if (m.type === 'ligne') {
+                const liens = ((await db.collection('cartes').findOne({ _id: m.carteId })) || {}).liens;
+                relu += !(await db.collection('cartes_produits').findOne({ _id: m._id })) && !((liens && liens.idProduct) || []).includes(m.idProduct) ? 1 : 0;
+            } else if (m.type === 'impression') {
+                const c = await db.collection('cartes').findOne({ _id: m._id }); const d = IMPRESSIONS.find(x => idImp(x) === m.id);
+                relu += !(c.impressions || []).some(i => memeImp(i, d.faux)) && (c.impressions || []).some(i => memeImp(i, d.vrai)) ? 1 : 0;
+            } else if (m.type === 'total') relu += (await db.collection('sets').findOne({ _id: m._id })).totalImprime === m.apres ? 1 : 0;
+        }
+        log(`   RELECTURE : ${relu}/${R.retour.modifications.length} modifications retrouvées`);
+        if (relu !== R.retour.modifications.length) err('❌ la relecture ne retrouve pas tout ce qui devait être écrit');
+        return { relu, attendu: R.retour.modifications.length };
+    } finally { await cx.fermer(); }
+}
+async function lancerRetour({ ouvrir, retour, log = console.log }) {
+    const cx = await ouvrir();
+    try { return await revenir({ db: cx.cartes.db, retour, log }); } finally { await cx.fermer(); }
 }
 
 /** La liste d'un lot : un tableau NON VIDE d'identifiants (chaînes) sans doublon. */
@@ -272,7 +309,7 @@ function trancher({ plan, liste, attendu }) {
     return { retenus: liste, motif: null };
 }
 
-module.exports = { DECISION, LIGNES, IMPRESSIONS, TOTAUX, idLigne, idImp, idTotal, jugerLigne, jugerImpression, jugerTotal, construireRetour, ecrire, revenir, lireListe, trancher, nomsDuProduit, entreesDeTitres };
+module.exports = { lancerEcriture, lancerRetour, DECISION, LIGNES, IMPRESSIONS, TOTAUX, idLigne, idImp, idTotal, jugerLigne, jugerImpression, jugerTotal, construireRetour, ecrire, revenir, lireListe, trancher, nomsDuProduit, entreesDeTitres };
 
 // ───────────────────────── ligne de commande ─────────────────────────
 async function principal() {
@@ -291,8 +328,7 @@ async function principal() {
         const retour = JSON.parse(fs.readFileSync(arg('revenir'), 'utf8'));
         if (!retour || !Array.isArray(retour.modifications) || !retour.modifications.length) { console.error('❌ fichier de retour vide ou mal formé — rien n\'est écrit'); process.exit(2); }
         const { ouvrirConnexions } = require('./collecte-cartes/garde');
-        const cx = await ouvrirConnexions({ buckets: [], production: false });
-        try { await revenir({ db: cx.db, retour }); } finally { await cx.fermer(); }
+        await lancerRetour({ ouvrir: () => ouvrirConnexions({ buckets: [], production: false }), retour });
         return;
     }
 
@@ -376,21 +412,10 @@ async function principal() {
         return;
     }
     const liste = lireListe(fs.readFileSync(arg('seulement'), 'utf8'));
-    const t = trancher({ plan, liste, attendu: Number(arg('attendu')) });
-    if (t.motif) { console.error(`❌ ARRÊT : ${t.motif} — rien n'est écrit`); process.exit(1); }
     const { ouvrirConnexions } = require('./collecte-cartes/garde');
-    const cx = await ouvrirConnexions({ buckets: [], production: false });
     try {
-        const R = await ecrire({ db: cx.db, plan, retenus: t.retenus, fichierRetour: arg('retour') });
-        // RELECTURE
-        let relu = 0;
-        for (const m of R.retour.modifications) {
-            if (m.type === 'ligne') relu += (!(await cx.db.collection('cartes_produits').findOne({ _id: m._id }))) && !((await cx.db.collection('cartes').findOne({ _id: m.carteId }, { projection: { liens: 1 } })).liens?.idProduct || []).includes(m.idProduct) ? 1 : 0;
-            else if (m.type === 'impression') { const c = await cx.db.collection('cartes').findOne({ _id: m._id }, { projection: { impressions: 1 } }); const d = IMPRESSIONS.find(x => idImp(x) === m.id); relu += !(c.impressions || []).some(i => memeImp(i, d.faux)) && (c.impressions || []).some(i => memeImp(i, d.vrai)) ? 1 : 0; }
-            else if (m.type === 'total') relu += (await cx.db.collection('sets').findOne({ _id: m._id })).totalImprime === m.apres ? 1 : 0;
-        }
-        console.log(`   RELECTURE : ${relu}/${R.retour.modifications.length} modifications retrouvées`);
-        if (relu !== R.retour.modifications.length) { console.error('❌ la relecture ne retrouve pas tout ce qui devait être écrit'); process.exitCode = 1; }
-    } finally { await cx.fermer(); }
+        const R = await lancerEcriture({ ouvrir: () => ouvrirConnexions({ buckets: [], production: false }), plan, liste, attendu: Number(arg('attendu')), fichierRetour: arg('retour') });
+        if (R.relu !== R.attendu) process.exitCode = 1;
+    } catch (e) { console.error(`❌ ${e.message}`); process.exit(1); }
 }
 if (require.main === module) principal().catch(x => { console.error('❌', String(x.message || x).replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>')); process.exit(1); });

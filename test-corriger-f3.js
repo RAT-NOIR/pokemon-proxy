@@ -243,7 +243,7 @@ const ky = () => ({
         sets: [{ _id: 'Wind-from-the-Sea', totalImprime: 92 }]
     });
     const planE = () => [
-        { id: M.idLigne(LG), type: 'ligne', statut: 'prete', carteId: 71404, avant: { ligne: base().cartes_produits[0], liensAvaient: true } },
+        { id: M.idLigne(LG), type: 'ligne', statut: 'prete', carteId: 71404, avant: { ligne: base().cartes_produits[0], liensAvaient: true, liensIndex: 0, liensAvant: [677582, 677601] } },
         { id: M.idImp(D_ER), type: 'impression', statut: 'prete', carteId: 29833, avant: { index: 0, impression: clone(FAUX_ER) } },
         { id: M.idTotal(D_T), type: 'total', statut: 'prete', avant: { totalImprime: 92 }, apres: { totalImprime: 87 } },
         { id: 'imp:autre', type: 'impression', statut: 'attend', carteId: 5, avant: null }
@@ -294,8 +294,8 @@ const ky = () => ({
         assert.strictEqual(R.remises, 3);
         const att = base();
         const norm = c => c.slice().sort((a, b) => String(a._id).localeCompare(String(b._id)));
-        const lien = x => norm(x.cartes).map(c => ({ ...c, liens: { idProduct: [...c.liens.idProduct].sort() } }));
-        assert.deepStrictEqual(lien(db.cols), lien(att));
+        assert.deepStrictEqual(norm(db.cols.cartes), norm(att.cartes));   // SANS trier : l'ordre de liens.idProduct et des impressions doit être celui d'origine
+        assert.deepStrictEqual(db.cols.cartes.find(c => c._id === 71404).liens.idProduct, [677582, 677601]);
         assert.deepStrictEqual(norm(db.cols.cartes_produits), norm(att.cartes_produits));
         assert.deepStrictEqual(db.cols.sets, att.sets);
         assert.deepStrictEqual(db.cols.cartes.find(c => c._id === 29833).impressions.map(i => i.numero), ['059', '050']);
@@ -309,6 +309,36 @@ const ky = () => ({
         db.cols.sets[0].totalImprime = 99;
         await M.revenir({ db, retour: JSON.parse(fs.readFileSync(f, 'utf8')), log: () => { } });
         assert.strictEqual(db.cols.sets[0].totalImprime, 99);
+    });
+    await t('LE FILTRE DU RETRAIT (tirage, expansion, numéro) : une impression au même numéro et à la même expansion d\'un AUTRE tirage survit', async () => {
+        const b = base(); b.cartes[0].impressions.push({ tirage: 'intl', expansion: 'Base Expansion Pack', numero: '059', total: '102' });
+        const db = fauxDb(b);
+        await M.ecrire({ db, plan: planE(), retenus: tous, fichierRetour: path.join(tmp, 'retour8.json'), log: () => { } });
+        assert.deepStrictEqual(db.cols.cartes.find(c => c._id === 29833).impressions.map(i => `${i.tirage}:${i.numero}`), ['jp:050', 'intl:059']);
+    });
+    await t('PLUSIEURS impressions identiques (même tirage, expansion, numéro) : refus, jamais deux retirées d\'un coup', () => {
+        const e = er(); e.carte.impressions.push(clone(FAUX_ER));
+        const r = M.jugerImpression(D_ER, e); assert.strictEqual(r.statut, 'refus', JSON.stringify(r)); assert.ok(/impressions identiques/.test(r.raison));
+    });
+    await t('CHEMIN --ecrire RÉEL : ouvrirConnexions rend { cartes, prod, fermer } (la base native est cx.cartes.db, PAS cx.db) ; la connexion est fermée', async () => {
+        const f = path.join(tmp, 'retour9.json'); const db = fauxDb(base()); let ferme = 0;
+        const cx = { cartes: { db }, prod: null, fermer: async () => { ferme++; } };
+        const R = await M.lancerEcriture({ ouvrir: async () => cx, plan: planE(), liste: tous, attendu: 3, fichierRetour: f, log: () => { }, err: () => { } });
+        assert.strictEqual(R.relu, 3); assert.strictEqual(R.attendu, 3); assert.strictEqual(ferme, 1);
+        assert.strictEqual(db.cols.sets[0].totalImprime, 87); assert.strictEqual(db.cols.cartes_produits.length, 1);
+    });
+    await t('CHEMIN --ecrire RÉEL : un --attendu faux ou une liste non « prête » n\'ouvre même pas la connexion', async () => {
+        let ouvertures = 0; const ouvrir = async () => { ouvertures++; return { cartes: { db: fauxDb(base()) }, prod: null, fermer: async () => { } }; };
+        await assert.rejects(M.lancerEcriture({ ouvrir, plan: planE(), liste: tous, attendu: 2, fichierRetour: path.join(tmp, 'retour10.json'), log: () => { }, err: () => { } }));
+        await assert.rejects(M.lancerEcriture({ ouvrir, plan: planE(), liste: new Set([...tous, 'imp:autre']), attendu: 4, fichierRetour: path.join(tmp, 'retour11.json'), log: () => { }, err: () => { } }));
+        assert.strictEqual(ouvertures, 0);
+    });
+    await t('CHEMIN --revenir RÉEL : même forme de connexion, base remise, connexion fermée', async () => {
+        const f = path.join(tmp, 'retour12.json'); const db = fauxDb(base());
+        await M.ecrire({ db, plan: planE(), retenus: tous, fichierRetour: f, log: () => { } });
+        let ferme = 0; const cx = { cartes: { db }, prod: null, fermer: async () => { ferme++; } };
+        const R = await M.lancerRetour({ ouvrir: async () => cx, retour: JSON.parse(fs.readFileSync(f, 'utf8')), log: () => { } });
+        assert.strictEqual(R.remises, 3); assert.strictEqual(ferme, 1); assert.strictEqual(db.cols.sets[0].totalImprime, 92);
     });
     await t('la décision : 1 ligne, 10 impressions, 1 total ; aucun doublon', () => {
         assert.strictEqual(M.LIGNES.length, 1); assert.strictEqual(M.IMPRESSIONS.length, 10); assert.strictEqual(M.TOTAUX.length, 1);
