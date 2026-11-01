@@ -53,7 +53,11 @@ function officielsDesTables(dossier = path.join(__dirname, 'collecte-cartes')) {
 function analyserArguments(argv) {
     const erreurs = [];
     const ecrire = argv.includes('--ecrire'), viaEcriture = argv.includes('--lecture-via-ecriture'), reclasser = argv.includes('--reclasser');
-    for (const x of argv) if (!/^(--ecrire|--reclasser|--lecture-via-ecriture|--attendu=.*)$/.test(x)) erreurs.push(`argument inconnu : ${x} — autorisés : --ecrire, --reclasser, --attendu=<n>, --lecture-via-ecriture`);
+    for (const x of argv) if (!/^(--ecrire|--reclasser|--lecture-via-ecriture|--attendu=.*|--preuve-lue=.*)$/.test(x)) erreurs.push(`argument inconnu : ${x} — autorisés : --ecrire, --reclasser, --preuve-lue=<table.json>, --attendu=<n>, --lecture-via-ecriture`);
+    const pl = argv.find(x => x.startsWith('--preuve-lue='));
+    const preuveLue = pl === undefined ? null : pl.slice(13);
+    if (pl !== undefined && !preuveLue) erreurs.push('--preuve-lue exige le chemin de la table (--preuve-lue=<table.json>)');
+    if (pl !== undefined && reclasser) erreurs.push('--preuve-lue et --reclasser sont deux modes distincts : un seul à la fois');
     const att = argv.find(x => x.startsWith('--attendu='));
     let attendu = null;
     if (att !== undefined) {
@@ -61,7 +65,7 @@ function analyserArguments(argv) {
         else attendu = Number(att.slice(10));
         if (!ecrire) erreurs.push('--attendu n\'a de sens qu\'avec --ecrire');
     } else if (ecrire) erreurs.push('--ecrire exige --attendu=<n> (le nombre de champs à écrire, annoncé par la simulation)');
-    return { erreurs, ecrire, attendu, viaEcriture, reclasser };
+    return { erreurs, ecrire, attendu, viaEcriture, reclasser, preuveLue };
 }
 /** Le plan confirme-t-il le nombre annoncé ? Rend la raison du refus (avant toute écriture), ou null. */
 const verifierPlan = (plan, attendu) => plan === attendu ? null : `le plan écrirait ${plan} champs, --attendu=${attendu} : refus avant toute écriture (relancer la simulation)`;
@@ -80,6 +84,34 @@ if (require.main === module) (async () => {
     const proj = Object.fromEntries(['logo', 'logoFr', 'logoCompose', 'logoOfficiel', 'logoSemiOfficiel', 'logoGenerique', 'tirage', 'region'].map(k => [k, 1]));
     const sets = await S.find({}, { projection: proj }).toArray();
     if (!sets.length) throw new Error('collection sets vide : base fausse');
+    if (A.preuveLue) {
+        // MODE « source unique + preuve lue » (testeur, 2026-11-01) : voir collecte-cartes/preuve-lue-logos.js. Distinct de --reclasser ; `logo.source` n'est jamais modifiée.
+        const R = require('./collecte-cartes/preuve-lue-logos');
+        const table = R.lignesDePreuvesDuFichier(path.resolve(A.preuveLue));
+        const { plan, refus } = R.aPoserPreuveLue(sets, table);
+        console.log(`PREUVE LUE « inconnu » → « officiel » : ${sets.length} sets lus · table : ${table.size} lignes · ${plan.length} champs à reclasser · ${refus.length} refusés`);
+        for (const x of plan) console.log(`   ${x._id} ${x.chemin} ${x.fichier} ← « ${x.ligne.texteLu} » = « ${x.ligne.nomFiche} »`);
+        for (const r of refus) console.log(`   ⚠️ refusé ${r.set} ${r.fichier} : ${r.raison}`);
+        if (!ECRIRE) { console.log('(simulation seule — --preuve-lue=<table> --ecrire --attendu=<n> sous lot-additif.js ; rien n\'est écrit)'); await cx.fermer(); return; }
+        const refusPlan = verifierPlan(plan.length, A.attendu);
+        if (refusPlan) { console.error(`❌ ${refusPlan}`); await cx.fermer(); process.exit(2); }
+        const le = new Date().toISOString();
+        let ecrits = 0, deja = 0;
+        for (const x of plan) {
+            const u = await S.updateOne({ _id: x._id, [`${x.chemin}.niveau`]: 'inconnu', [`${x.chemin}.fichier`]: x.fichier, [`${x.chemin}.source`]: x.ligne.sourceBase, [`${x.chemin}.niveauAvant`]: { $exists: false } },
+                { $set: R.champsAEcrire(x, le) });
+            if (u.modifiedCount === 1) ecrits++; else deja++;
+        }
+        const relus = await S.find({}, { projection: proj }).toArray();
+        const apres = R.aPoserPreuveLue(relus, table);
+        const poses = plan.filter(x => { const e = relus.find(r => r._id === x._id)?.[x.chemin]; return e?.niveau === 'officiel' && e?.niveauAvant === 'inconnu' && e?.niveauPreuve === R.niveauPreuveDe(x.ligne) && e?.source === x.ligne.sourceBase; }).length;
+        console.log(`RECLASSÉ : ${ecrits} champs (${deja} non modifiés) · RELU : ${poses} champs « officiel » avec preuve lue, ${apres.plan.length} encore à reclasser`);
+        await cx.fermer();
+        const discord = ecrits !== A.attendu ? `${ecrits} reclassés, ${A.attendu} attendus` : poses !== A.attendu ? `${poses} relus, ${A.attendu} attendus` : apres.plan.length ? `${apres.plan.length} encore à reclasser` : null;
+        console.log(discord ? `🔴 NE CONCORDE PAS : ${discord}` : `✅ concordant : ${ecrits} reclassés = ${A.attendu} attendus`);
+        if (discord) process.exitCode = 1;
+        return;
+    }
     const { officielsManuels, lignes } = officielsDesTables();
     // la table des concordances ne sert QU'AU reclassement : le mode additif garde exactement son comportement d'avant (relecture du 31/10)
     const concordances = A.reclasser ? concordancesDesTables() : new Map();
