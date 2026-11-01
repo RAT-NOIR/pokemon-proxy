@@ -97,6 +97,9 @@ const memeNomQueLeProduit = (lu, nomProduit) => {
     const cles = new Set(J.clesNom(SANS_ACCENTS(J.decomposerNomCardmarket(nomProduit).nom)));
     return J.clesNom(SANS_ACCENTS(lu)).some(k => cles.has(k));
 };
+/** Égalité de deux noms japonais : NFKC, espaces et points médians retirés ; l'un ou l'autre côté vide = non (rien à comparer n'est jamais une concordance). */
+const cleJaponaise = s => (texte(s) ? String(s).normalize('NFKC').replace(/[\s・･·]/g, '') : '');
+const memeNomJaponais = (lu, nomJa) => cleJaponaise(lu) !== '' && cleJaponaise(lu) === cleJaponaise(nomJa);
 /**
  * Tour 4 (1) : le nom lu est exigé PARTOUT. Lu en anglais, il se compare au nom anglais du produit (`nomEn`).
  * Décision du testeur (27/10) : lu en français, il se compare au nom FRANÇAIS du produit (`nomFr`, numeros_cartes) — SEULEMENT si le produit est un tirage français (langue du produit = langue lue) ;
@@ -105,6 +108,8 @@ const memeNomQueLeProduit = (lu, nomProduit) => {
 const motifDeNom = (lu, produit, langueProduit) => {
     if (lu.langue === 'en') return memeNomQueLeProduit(lu.nom, produit?.nomEn) ? null : 'nom-different';
     if (lu.langue === 'fr' && langueProduit === 'fr') return memeNomQueLeProduit(lu.nom, produit?.nomFr) ? null : 'nom-different';
+    // a-reste (japonais) : un nom lu en japonais se compare au nom JAPONAIS de la carte désignée par la ligne (`produit.nomJa`, témoin de lecture, jamais écrit en public), SEULEMENT pour un tirage japonais ; jamais au nom anglais.
+    if (lu.langue === 'ja' && langueProduit === 'ja') return memeNomJaponais(lu.nom, produit?.nomJa) ? null : 'nom-different';
     return 'nom-langue-non-anglaise';
 };
 /**

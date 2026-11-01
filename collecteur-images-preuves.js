@@ -94,6 +94,10 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
         const slugs = [...new Set([...lignesDe.values()].flat().map(l => l.slugSet).filter(Boolean))];
         const setsDe = new Map((slugs.length ? await lire.sets(slugs) : []).map(s => [s._id, s]));
         // ➕ HD-ZH : la règle de remplacement lit ce que la carte SERT déjà (cartes.images) et les documents de ces entrées (lecture seule, par le lecteur du plan) — jamais ce que le manifeste en dit
+        // a-reste (japonais) : le nom JAPONAIS de la carte désignée par la ligne, lu seulement pour les entrées qui LISENT du japonais (lu.langue 'ja') — témoin de lecture, jamais écrit en public
+        const nomsJa = new Map();
+        const carteIdsJa = [...new Set(r.appariees.filter(a => a.entree.lu?.langue === 'ja').flatMap(a => (lignesDe.get(a.entree.idProduct) ?? []).map(l => l.carteId)).filter(c => c != null))];
+        if (carteIdsJa.length && lire.nomsJa) for (const c of await lire.nomsJa(carteIdsJa)) nomsJa.set(c._id, c.nomJa ?? null);
         const servies = new Map();
         const carteIdsRemplacement = [...new Set(r.appariees.filter(a => a.entree.regle === PV.REGLE_MEME_DESSIN).flatMap(a => (lignesDe.get(a.entree.idProduct) ?? []).map(l => l.carteId)).filter(c => c != null))];
         if (carteIdsRemplacement.length) {
@@ -117,7 +121,7 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
             const set = setsDe.get(L.slugSet);
             if (!set) { non('set-absent', L.slugSet); continue; }
             if ((set.tirage ?? set.region) !== E.langue) { non('tirage-du-set-different', `set ${set.tirage ?? set.region}, état ${E.langue}`); continue; }
-            const produit = { idProduct: id, idExpansion: E.idExpansion ?? L.idExpansion ?? null, tirage: E.langue, tamponnee: E.tamponnee ?? null, numero: L.numeroFiche ?? numerosDe.get(id)?.numero ?? null, carteId: L.carteId, slugSet: L.slugSet, slug: L.slug ?? numerosDe.get(id)?.slug ?? null, nomEn: E.name ?? null, nomFr: numerosDe.get(id)?.nomFr ?? null };
+            const produit = { idProduct: id, idExpansion: E.idExpansion ?? L.idExpansion ?? null, tirage: E.langue, tamponnee: E.tamponnee ?? null, numero: L.numeroFiche ?? numerosDe.get(id)?.numero ?? null, carteId: L.carteId, slugSet: L.slugSet, slug: L.slug ?? numerosDe.get(id)?.slug ?? null, nomEn: E.name ?? null, nomFr: numerosDe.get(id)?.nomFr ?? null, nomJa: nomsJa.get(L.carteId) ?? null };
             if (e.regle === PV.REGLE_MEME_DESSIN) { const s = servies.get(L.carteId); produit.imagesServies = s?.images ?? []; produit.documentsServis = s?.documents ?? new Map(); }
             // tour 4 (2) : pour une position (Battle Academy, Trainer Kit), la règle a besoin de TOUS les produits de ces sets et des impressions de la carte (lecture seule)
             if (PV.setAdmisPourPosition(L.slugSet)) {
@@ -212,6 +216,7 @@ function lireDepuisLaBase(db, prodDb) {
         fiches: (carteIds, slugs) => par(db.collection('cartes_produits'), { carteId: { $in: carteIds }, slugSet: { $in: slugs } }, { _id: 0, idProduct: 1, carteId: 1, slugSet: 1, numeroFiche: 1 }),
         numeros: ids => lots(ids, lot => par(prodDb.collection('numeros_cartes'), { idProduct: { $in: lot } }, { _id: 0, idProduct: 1, numero: 1, slug: 1, nomFr: 1 })),
         sets: slugs => par(db.collection('sets'), { _id: { $in: slugs } }, { tirage: 1, region: 1 }),
+        nomsJa: ids => lots(ids, lot => par(db.collection('cartes'), { _id: { $in: lot } }, { nomJa: 1 })),
         // tour 4 (2) : tous les produits des sets à position, et les impressions des cartes (le numéro imprimé lu doit en être une)
         positions: () => par(db.collection('cartes_produits'), { slugSet: { $regex: '^Battle-Academy|Trainer-Kit' } }, { _id: 0, idProduct: 1, slugSet: 1, numeroFiche: 1 }),
         impressions: ids => par(db.collection('cartes'), { _id: { $in: ids } }, { impressions: 1 })
