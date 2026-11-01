@@ -470,7 +470,7 @@ async function lever(f) { try { await f(); return null; } catch (e) { return e; 
         const alias = dir => {
             const r = spawnSync('cmd', ['/d', '/c', `for %I in ("${dir}") do @echo %~sI`], { encoding: 'utf8', windowsVerbatimArguments: true });
             const court = (r.stdout || '').trim();
-            if (court && court.toLowerCase() !== dir.toLowerCase() && court.includes('~')) return { chemin: court, nettoyer() {} };
+            if (court && court.toLowerCase() !== dir.toLowerCase() && court.includes('~')) return { chemin: path.join(path.dirname(dir), path.basename(court)), nettoyer() {} };       // seul le DERNIER segment est court : le parent reste sous la racine déclarée
             const lien = `${dir}-lien`; spawnSync('cmd', ['/d', '/c', 'mklink', '/J', lien, dir], { encoding: 'utf8' });
             return { chemin: lien, nettoyer() { spawnSync('cmd', ['/d', '/c', 'rmdir', lien]); } };       // rmdir NON récursif : retire le lien seul
         };

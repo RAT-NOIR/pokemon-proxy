@@ -254,6 +254,9 @@ const CAS = [
     ['C2 : cd -', ps('cd -; node reseau.js', T), 2],
     ['C2 : cd par variable', ps('cd $env:TEMP; node reseau.js', T), 2],
     ['C2 : Pop-Location', ps('Pop-Location; node reseau.js', T), 2],
+    ['C2 : cd caché dans un if + script SUIVI du cwd : dossier incertain', ps('if ($true) { cd sous }; node smoke-test.js', WT), 2],
+    ['C2 : cd vers un dossier inexistant + script SUIVI du cwd', ps('cd absent; node smoke-test.js', WT), 2],
+    ['C2 : cd caché par cmd /c + script SUIVI du cwd', ps('cmd /c "cd sous"; node smoke-test.js', WT), 2],
     ['C2 : cmd /c "cd … && node …"', ps('cmd /c "cd sous && node net.js"', T), 2],
     // ── C3 : worktree du même dépôt ──
     ['C3 : script du worktree (suivi, identique à son HEAD), cwd = worktree', ps('node smoke-test.js', WT), 0],
