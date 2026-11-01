@@ -8767,6 +8767,25 @@
           },
           "creeLe": {
             "type": "string"
+          },
+          "pseudo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Le pseudo de la Communauté (null tant qu'aucun n'est posé). Présent seulement quand la Communauté est montée (V2_GALERIE=1) ; sinon la clé est absente."
+          },
+          "role": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "administrateur",
+              "moderateur",
+              null
+            ],
+            "description": "Le rôle de modération (null : aucun). Présent seulement quand la Communauté est montée (V2_GALERIE=1)."
           }
         },
         "required": [
@@ -10055,7 +10074,20 @@
       },
       "GaleriePoseArt": {
         "type": "object",
+        "description": "Un art posé sur une page, avec de quoi l'afficher (correction 3 du site) : `url` est celle de la copie publique de la banque, `largeur` et `hauteur` ses dimensions en pixels. Un art qui n'est plus public est omis de la page.",
         "properties": {
+          "url": {
+            "type": "string",
+            "description": "Adresse https de la copie publique de l'art."
+          },
+          "largeur": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "hauteur": {
+            "type": "integer",
+            "minimum": 1
+          },
           "art": {
             "type": "string"
           },
@@ -10081,7 +10113,10 @@
           "art",
           "col",
           "row",
-          "fmt"
+          "fmt",
+          "url",
+          "largeur",
+          "hauteur"
         ],
         "additionalProperties": false
       },

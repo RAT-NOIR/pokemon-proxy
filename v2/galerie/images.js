@@ -45,6 +45,8 @@ function estAnime(b, format) {
     return false;
 }
 
+// Instrumentation : combien de fois l'image REÇUE a été décodée en entier (le banc exige UN décodage par image acceptée, ZÉRO pour une image refusée).
+const compteur = { decodages: 0 };
 let enCours = 0;
 /** Une recompression à la fois par instance : au-delà, `occupe` (la route répond INDISPONIBLE + reessayerDans). */
 async function sousVerrou(travail) {
@@ -69,16 +71,24 @@ async function traiter(octets, { pixelsMax, octetsMax, declare = null }) {
     if (!meta || !(meta.width > 0) || !(meta.height > 0)) throw refus('illisible');
     if (meta.pages && meta.pages > 1) throw refus('animee');
     if (meta.width * meta.height > pixelsMax) throw refus('trop-de-pixels');
+    // MÉMOIRE (relecture 1, S-I2) : ni cache ni parallélisme de libvips pendant cette recompression (réglages GLOBAUX de sharp : relevés et RÉTABLIS après, le scanner ne les subit pas), et UN SEUL décodage de l'image reçue —
+    // la vignette est dérivée de la sortie de 2 000 px, déjà orientée et sans métadonnées, jamais de l'original.
+    const avant = { cache: sharp.cache(), concurrence: sharp.concurrency() };
+    sharp.cache(false);
+    sharp.concurrency(1);
     try {
-        const base = () => sharp(octets, { limitInputPixels: pixelsMax, failOn: 'error' }).rotate();          // l'orientation EXIF est APPLIQUÉE, puis l'étiquette tombe avec les métadonnées
+        const base = () => { compteur.decodages++; return sharp(octets, { limitInputPixels: pixelsMax, failOn: 'error' }).rotate(); };          // l'orientation EXIF est APPLIQUÉE, puis l'étiquette tombe avec les métadonnées
         const principale = await base().resize({ width: COTE_MAX, height: COTE_MAX, fit: 'inside', withoutEnlargement: true }).webp({ quality: QUALITE }).toBuffer({ resolveWithObject: true });
-        const vignette = await base().resize({ width: VIGNETTE, height: VIGNETTE, fit: 'inside', withoutEnlargement: true }).webp({ quality: QUALITE }).toBuffer();
+        const vignette = await sharp(principale.data).resize({ width: VIGNETTE, height: VIGNETTE, fit: 'inside', withoutEnlargement: true }).webp({ quality: QUALITE }).toBuffer();
         const { dominant } = await sharp(vignette).stats();
         const hex = n => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
         return { image: principale.data, vignette, largeur: principale.info.width, hauteur: principale.info.height, couleur: `#${hex(dominant.r)}${hex(dominant.g)}${hex(dominant.b)}`, format };
     } catch (e) {
         if (e instanceof RefusFichier) throw e;
         throw refus('illisible');                                           // la borne de pixels est jugée plus haut, dans l'en-tête ; le décodeur la porte aussi (limitInputPixels) et toute autre erreur est un fichier illisible
+    } finally {
+        sharp.cache({ memory: avant.cache.memory.max, files: avant.cache.files.max, items: avant.cache.items.max });
+        sharp.concurrency(avant.concurrence);
     }
 }
-module.exports = { RefusFichier, TYPES, COTE_MAX, VIGNETTE, formatParSignature, estAnime, traiter, sousVerrou };
+module.exports = { RefusFichier, TYPES, COTE_MAX, VIGNETTE, compteur, formatParSignature, estAnime, traiter, sousVerrou };

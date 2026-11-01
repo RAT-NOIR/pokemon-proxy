@@ -116,7 +116,8 @@ function routesComptes(router, cfg) {
             catch (e) { if (e && e.code === 'SUITE_INVALIDE') return repondreErreur(res, 'ENTREE', 'Requête invalide', { detail: 'suite' }); throw e; }
             const [solde, hist, installations] = tout;
             res.setHeader('Cache-Control', 'no-store');
-            return res.status(200).json({ success: true, compte: { email: compte.email, verifie: compte.verifie, creeLe: compte.creeLe }, solde, installations,
+            const extra = await require('../galerie/profil').champsCompte(compte);    // ajout : pseudo et role, seulement si la Communauté est branchée
+            return res.status(200).json({ success: true, compte: { email: compte.email, verifie: compte.verifie, creeLe: compte.creeLe, ...extra }, solde, installations,
                 historique: { lignes: hist.lignes, suite: hist.suite ?? null } });
         } catch (e) { console.error(`❌ [v2 compte] ${nomErreur(e)}`); return indispo(res); }
     });

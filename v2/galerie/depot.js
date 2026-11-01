@@ -7,6 +7,7 @@
 const G = require('./base');
 const F = require('./forme');
 const I = require('./images');
+const svc = require('./service');
 
 const EXPIRE_S = 300, GRACE_FINALISATION_MS = 15 * 60e3, PURGE_MS = 24 * 3600e3;
 
@@ -41,7 +42,8 @@ function lireCorpsFinalisation(b) {
     return { nom: b.nom.normalize('NFKC').trim(), format: b.format };
 }
 
-async function supprimerBrut(stockage, cle) { try { await stockage.supprimer(cle); } catch (e) { console.error(`❌ [galerie] objet brut non effacé (${(e && (e.name || e.code)) || 'erreur'}) : la règle de cycle de vie de 24 h le retirera`); } }
+// l'objet brut qui ne part pas entre dans la file de reprise (purges_r2) : le balayeur le retire ; la règle de cycle de vie R2 n'est qu'un filet
+async function supprimerBrut(stockage, cle) { await svc.supprimerOuFile(stockage, cle, 'depot'); }
 
 async function finaliser({ compteId, pseudo, depotId, corps, bornes, stockage, maintenant = new Date() }) {
     const mien = String(compteId);
@@ -51,7 +53,12 @@ async function finaliser({ compteId, pseudo, depotId, corps, bornes, stockage, m
     const depot = await G.col('depots').findOne({ _id: depotId, compteId: mien });
     if (!depot) return { introuvable: true };                                                // le dépôt d'un autre compte répond pareil que l'absent
     if (depot.etat === 'finalise') return { ok: { id: depot.artId, statut: 'en-attente' } };   // rejouée : la même illustration
-    if (depot.etat === 'en-cours') return refus(503, 'INDISPONIBLE', 'finalisation-en-cours', { reessayerDans: 3 });
+    if (depot.etat === 'en-cours') {
+        // une instance arrêtée en pleine finalisation laisse le dépôt « en-cours » : au-delà de 5 minutes il est REPRIS (sinon tout rejeu répondrait 503 jusqu'à la purge)
+        if (!(depot.priseLe && depot.priseLe < new Date(maintenant.getTime() - 5 * 60e3))) return refus(503, 'INDISPONIBLE', 'finalisation-en-cours', { reessayerDans: 3 });
+        await G.col('depots').updateOne({ _id: depotId, etat: 'en-cours', priseLe: depot.priseLe }, { $set: { etat: 'ouvert' } });
+        depot.etat = 'ouvert';
+    }
     if (depot.etat !== 'ouvert' || depot.finaliseAvant <= maintenant) return { introuvable: true };
     // la prise est atomique : un seul appel finalise ce dépôt
     const pris = await G.col('depots').findOneAndUpdate({ _id: depotId, compteId: mien, etat: 'ouvert' }, { $set: { etat: 'en-cours', priseLe: maintenant } }, { returnDocument: 'after' });
@@ -86,7 +93,7 @@ async function finaliser({ compteId, pseudo, depotId, corps, bornes, stockage, m
         for (const s of ['.webp', '-480.webp']) { try { await stockage.supprimer(`${cle}${s}`); } catch { /* le cycle de vie ne couvre pas attente/ : reprise à la main */ } }
         await clore('ouvert'); throw e;
     }
-    await G.col('arts').insertOne({ _id: artId, auteurId: mien, pseudo, nom: l.nom, fmt: l.format, largeur: t.largeur, hauteur: t.hauteur, couleur: t.couleur, poids: t.image.length, cle, clePublique, etat: 'en-attente', recuLe: maintenant, publieLe: null,
+    await G.col('arts').insertOne({ _id: artId, auteurId: mien, pseudo, nom: l.nom, mots: svc.motsDe(l.nom, pseudo), fmt: l.format, largeur: t.largeur, hauteur: t.hauteur, couleur: t.couleur, poids: t.image.length, cle, clePublique, etat: 'en-attente', recuLe: maintenant, publieLe: null,
         nbJaime: 0, nbEnregistre: 0, motif: null, certification: { droits: true, nonOfficielle: true, le: maintenant }, depotId });
     await supprimerBrut(stockage, depot.cle);                                                 // l'octet reçu n'est jamais gardé
     await clore('finalise', { artId });

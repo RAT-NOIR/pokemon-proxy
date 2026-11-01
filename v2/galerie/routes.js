@@ -13,7 +13,8 @@ const L = require('../transport/limites');
 const S = require('../comptes/sessions');
 const { resoudrePorteur, exigerSession } = require('../porteur');
 const { exigerVerifieAvec } = require('../collection/routes');
-const { verifierTurnstile } = require('../comptes/turnstile');
+const { jugerJeton, hotesDuSiteDe } = require('./turnstile');
+const { creerMemo } = require('./memo');
 const G = require('./base');
 const F = require('./forme');
 const svc = require('./service');
@@ -40,6 +41,9 @@ function routesGalerie(router, cfg, deps = {}) {
     const compteDe = q => (q.v2 && q.v2.porteur ? `compte:${q.v2.porteur.id}` : null);
     const lim = (nom, max, fenetreMs, cle) => L.limiteur({ nom: `g-${nom}`, max, fenetreMs, cle, colonne: () => G.col('limites'), code: 'LIMITE_DEBIT' });
     const li = g.limites;
+    // MÉMO serveur (S-I4) : `tri=tendances`, `/filtres` et `/formats` coûtent des agrégations ; leur résultat est PUBLIC, donc partagé 45 s entre tous les lecteurs (deps.memoTtlMs règle, 0 coupe)
+    const memo = creerMemo({ ttlMs: deps.memoTtlMs === undefined ? 45000 : deps.memoTtlMs, maintenant });
+    const hotesDuSite = hotesDuSiteDe(cfg.origines.site);
 
     const dispo = (req, res, next) => (G.branche() ? next() : indispo(res));                // aucune base dédiée branchée : 503, jamais un repli
     const exigerVerifie = exigerVerifieAvec('Confirmez votre adresse e-mail pour utiliser la Communauté');
@@ -69,18 +73,20 @@ function routesGalerie(router, cfg, deps = {}) {
         if (!absent(categorie) && !F.CATEGORIES.includes(categorie)) return entree(res, 'categorie');
         if (!absent(tri) && !F.TRIS_PUBLICATIONS.includes(tri)) return entree(res, 'tri');
         if (suite.detail) return entree(res, suite.detail);
-        const r = await svc.listerPublications({ categorie: absent(categorie) ? undefined : categorie, tri: absent(tri) ? 'nouveautes' : tri, ...p, o: suite.o, maintenant: maintenant() });
+        const demande = { categorie: absent(categorie) ? undefined : categorie, tri: absent(tri) ? 'nouveautes' : tri, ...p, o: suite.o };
+        const calcul = () => svc.listerPublications({ ...demande, urlPublique: stockage().urlPublique, maintenant: maintenant() });
+        const r = demande.tri === 'tendances' ? await memo.obtenir(`fil|${JSON.stringify(Object.keys(demande).sort().map(k => [k, demande[k]]))}`, calcul) : await calcul();
         publique(res);
         return res.status(200).json({ success: true, publications: r.publications, suite: r.suite });
     }));
     router.get('/api/galerie/filtres', ...LECTURE, protege('filtres', async (req, res) => {
-        const f = await svc.filtresDeLaGalerie();
+        const f = await memo.obtenir('filtres', () => svc.filtresDeLaGalerie());
         publique(res);
         return res.status(200).json({ success: true, ...f });
     }));
     router.get('/api/galerie/:id/pages/:n', ...LECTURE, protege('page', async (req, res) => {
         if (!/^[1-9][0-9]{0,2}$/.test(req.params.n)) return entree(res, 'page');
-        const p = F.idValide(req.params.id) ? await svc.pageDePublication(req.params.id, Number(req.params.n)) : null;
+        const p = F.idValide(req.params.id) ? await svc.pageDePublication(req.params.id, Number(req.params.n), stockage().urlPublique) : null;
         if (!p) return introuvable(res);
         publique(res);
         return res.status(200).json({ success: true, page: p });
@@ -90,14 +96,16 @@ function routesGalerie(router, cfg, deps = {}) {
         const { format, q, tri } = req.query, suite = F.lireSuite(req.query.suite);
         if (!absent(format) && !F.FORMATS_ART.includes(format)) return entree(res, 'format');
         if (!absent(tri) && !F.TRIS_PUBLICATIONS.includes(tri)) return entree(res, 'tri');
-        if (!absent(q) && (typeof q !== 'string' || F.problemeTexte(q, { min: 1, max: 40 }))) return entree(res, 'q');
+        if (!absent(q) && (typeof q !== 'string' || F.problemeTexte(q.trim(), { min: 2, max: 40 }))) return entree(res, 'q');
         if (suite.detail) return entree(res, suite.detail);
-        const r = await svc.listerArts({ format: absent(format) ? undefined : format, q: absent(q) ? undefined : q, tri: absent(tri) ? 'nouveautes' : tri, o: suite.o, urlPublique: stockage().urlPublique, maintenant: maintenant() });
+        const demande = { format: absent(format) ? undefined : format, q: absent(q) ? undefined : q.trim(), tri: absent(tri) ? 'nouveautes' : tri, o: suite.o };
+        const calcul = () => svc.listerArts({ ...demande, urlPublique: stockage().urlPublique, maintenant: maintenant() });
+        const r = demande.tri === 'tendances' ? await memo.obtenir(`banque|${JSON.stringify(Object.keys(demande).sort().map(k => [k, demande[k]]))}`, calcul) : await calcul();
         publique(res);
         return res.status(200).json({ success: true, arts: r.arts, suite: r.suite });
     }));
     router.get('/api/banque/formats', ...LECTURE, protege('formats', async (req, res) => {
-        const formats = await svc.formatsDeLaBanque();
+        const formats = await memo.obtenir('formats', () => svc.formatsDeLaBanque());
         publique(res);
         return res.status(200).json({ success: true, formats });
     }));
@@ -180,8 +188,11 @@ function routesGalerie(router, cfg, deps = {}) {
         if (!session) {
             // sans session : Turnstile OBLIGATOIRE, vérifié côté serveur (jeton à usage unique, jamais stocké). Une erreur de vérification REFUSE : jamais d'ouverture par défaut.
             if (typeof b.turnstile !== 'string' || !b.turnstile) return repondreErreur(res, 'ENTREE', 'Vérification anti-robot échouée', { detail: 'defi-anti-robot' }, 422);
+            if (!env.V2_GALERIE_TURNSTILE_SECRET) return indispo(res);
+            // un jeton n'est accepté qu'UNE fois (empreinte gardée 10 min) : le rejeu est refusé SANS rappeler le fournisseur
+            if (!(await svc.jetonNeuf(b.turnstile))) return repondreErreur(res, 'ENTREE', 'Vérification anti-robot échouée', { detail: 'defi-anti-robot' }, 422);
             let ok;
-            try { ok = await verifierTurnstile(b.turnstile, req.ip, { fetch: fetchTurnstile(), secret: env.V2_GALERIE_TURNSTILE_SECRET }); }
+            try { ok = await jugerJeton(b.turnstile, req.ip, { fetch: fetchTurnstile(), secret: env.V2_GALERIE_TURNSTILE_SECRET, hotesDuSite, action: 'signalement' }); }
             catch (e) { console.error(`❌ [v2 galerie] Turnstile en échec (${nomErreur(e)})`); return indispo(res); }
             if (ok !== true) return repondreErreur(res, 'ENTREE', 'Vérification anti-robot échouée', { detail: 'defi-anti-robot' }, 422);
         }

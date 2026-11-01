@@ -2,7 +2,8 @@
 // Vérification Cloudflare Turnstile. `fetch` et `secret` sont INJECTABLES : les bancs n'émettent aucune requête réelle.
 const URL_VERIF = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 const TIMEOUT_MS = 5000;
-async function verifierTurnstile(jeton, ip, { fetch = globalThis.fetch, secret = process.env.TURNSTILE_SECRET } = {}) {
+/** La réponse COMPLÈTE de siteverify (success, hostname, action…), ou false quand le fournisseur n'a pas répondu 200. Lève si le secret manque (fail-closed). */
+async function lireVerdictTurnstile(jeton, ip, { fetch = globalThis.fetch, secret = process.env.TURNSTILE_SECRET } = {}) {
     if (!secret) throw new Error('turnstile-non-configure');           // fail-closed : la route répond 503
     if (typeof jeton !== 'string' || !jeton) return false;
     const corps = new URLSearchParams({ secret, response: jeton });
@@ -11,6 +12,10 @@ async function verifierTurnstile(jeton, ip, { fetch = globalThis.fetch, secret =
     const r = await fetch(URL_VERIF, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: corps, redirect: 'error', signal: AbortSignal.timeout(TIMEOUT_MS) });
     if (!r || !r.ok) return false;
     const j = await r.json();
+    return j && typeof j === 'object' ? j : false;
+}
+async function verifierTurnstile(jeton, ip, options = {}) {
+    const j = await lireVerdictTurnstile(jeton, ip, options);
     return j && j.success === true;
 }
-module.exports = { verifierTurnstile };
+module.exports = { verifierTurnstile, lireVerdictTurnstile };

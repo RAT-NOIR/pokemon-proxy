@@ -43,7 +43,7 @@ function lirePseudo(v) {
 function lireSuite(v) {
     if (v === undefined || v === '') return { o: 0 };
     if (typeof v !== 'string' || v.length > 64) return { detail: 'suite' };
-    try { const j = JSON.parse(Buffer.from(v, 'base64url').toString('utf8')); if (objet(j) && Number.isInteger(j.o) && j.o >= 0 && j.o <= 20000) return { o: j.o }; } catch { /* illisible */ }
+    try { const j = JSON.parse(Buffer.from(v, 'base64url').toString('utf8')); if (objet(j) && Number.isInteger(j.o) && j.o >= 0 && j.o <= 2000) return { o: j.o }; } catch { /* illisible */ }
     return { detail: 'suite' };
 }
 const ecrireSuite = o => Buffer.from(JSON.stringify({ o }), 'utf8').toString('base64url');

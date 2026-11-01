@@ -28,7 +28,9 @@ const OPENAPI = require('../openapi/openapi.v2.json'); const { valider } = requi
 
     // ── ce que le contrat publié dit d'une route : le schéma de la réponse (chemin + méthode + statut)
     const schemaDe = (modele, methode, statut) => { const op = OPENAPI.paths[modele] && OPENAPI.paths[modele][methode.toLowerCase()]; const r = op && op.responses[String(statut)]; return r && r.content && r.content['application/json'].schema; };
+    const JOUEES = new Set();
     const verifier = (nom, modele, methode, r) => {
+        JOUEES.add(`${methode.toUpperCase()} ${modele} ${r.statut}`);
         const s = schemaDe(modele, methode, r.statut);
         if (!s) { H.v(`${nom} : le statut ${r.statut} est DOCUMENTÉ par le contrat pour ${methode} ${modele}`, false, true); return; }
         const v = valider(r.json, s, OPENAPI);
@@ -36,13 +38,20 @@ const OPENAPI = require('../openapi/openapi.v2.json'); const { valider } = requi
     };
 
     const luma = await compte('luma'), noa = await compte('noa'), modo = await compte('modo-conf', { role: 'moderateur' }), sansPseudo = await compte(null);
-    const idPub = await svc.publierPourExploitation({ auteurId: luma.id, titre: 'Page Michi', categories: ['methode-michi'], n: 3, pages: 2, arts: [{ art: F.nouvelId(), col: 0, row: 0, fmt: '2h' }], cartes: [{ cle: '1234|001', nom: 'Pikachu' }, null],
+    const artPose = F.nouvelId();      // un art public RÉEL : la pose d'une page exige qu'il existe
+    await dbG.collection('arts').insertOne({ _id: artPose, etat: 'public', auteurId: luma.id, pseudo: 'luma', nom: 'Art posé', mots: ['art', 'pose', 'luma'], fmt: '2h', clePublique: `galerie/pub/${artPose}`, largeur: 400, hauteur: 279, nbJaime: 0, nbEnregistre: 0, publieLe: new Date() });
+    const idPub = await svc.publierPourExploitation({ auteurId: luma.id, titre: 'Page Michi', categories: ['methode-michi'], n: 3, pages: 2, arts: [{ art: artPose, col: 0, row: 0, fmt: '2h' }], cartes: [{ cle: '1234|001', nom: 'Pikachu' }, null],
         pagesSuite: [{ n: 2, arts: [], cartes: [{ cle: '1234|002', nom: 'Raichu' }] }], attributs: { couleur: ['jaune'], type: ['electrique'], illustrateur: ['Arita'], set: ['Base-Set'] }, certification: { cgu: '2026-10' }, etat: 'public' });
     const attenteId = await svc.publierPourExploitation({ auteurId: luma.id, titre: 'Attente', categories: ['couleur'], n: 3, pages: 1, arts: [], cartes: [], etat: 'en-attente' });
 
     // ═══ A. lecture ═══
     verifier('A1 GET /api/galerie', '/api/galerie', 'GET', await H.appel(sv.url, '/api/galerie', { entetes: { 'x-forwarded-for': IP() } }));
     verifier('A1 GET /api/galerie (filtres de requête)', '/api/galerie', 'GET', await H.appel(sv.url, '/api/galerie?categorie=methode-michi&tri=tendances&set=Base-Set&carte=1234', { entetes: { 'x-forwarded-for': IP() } }));
+    {   // C-I1 : les arts POSÉS portent url, largeur, hauteur (correction 3 du site), sur le fil ET sur la page
+        const fil = (await H.appel(sv.url, '/api/galerie', { entetes: { 'x-forwarded-for': IP() } })).json.publications[0].arts[0];
+        const pg = (await H.appel(sv.url, `/api/galerie/${idPub}/pages/1`, { entetes: { 'x-forwarded-for': IP() } })).json.page.arts[0];
+        H.v('   A : un art posé a EXACTEMENT { art, col, row, fmt, url, largeur, hauteur } (fil et page)', [Object.keys(fil), Object.keys(pg), fil.url.startsWith(stockage.urlPublique + '/galerie/pub/'), fil.largeur, fil.hauteur], [['art', 'col', 'row', 'fmt', 'url', 'largeur', 'hauteur'], ['art', 'col', 'row', 'fmt', 'url', 'largeur', 'hauteur'], true, 400, 279]);
+    }
     verifier('A2 GET /api/galerie/filtres', '/api/galerie/filtres', 'GET', await H.appel(sv.url, '/api/galerie/filtres', { entetes: { 'x-forwarded-for': IP() } }));
     verifier('A3 GET /api/galerie/{id}/pages/{n}', '/api/galerie/{id}/pages/{n}', 'GET', await H.appel(sv.url, `/api/galerie/${idPub}/pages/2`, { entetes: { 'x-forwarded-for': IP() } }));
     verifier('A3 la page absente (en attente)', '/api/galerie/{id}/pages/{n}', 'GET', await H.appel(sv.url, `/api/galerie/${attenteId}/pages/1`, { entetes: { 'x-forwarded-for': IP() } }));
@@ -118,19 +127,104 @@ const OPENAPI = require('../openapi/openapi.v2.json'); const { valider } = requi
     H.v('le contrat publie 22 opérations de la Communauté, chacune conditionnelle à V2_GALERIE=1, avec sa sécurité déclarée', [galerie.length, galerie.every(o => /V2_GALERIE=1/.test(o.op['x-conditionnel'])), galerie.every(o => Array.isArray(o.op.security))], [22, true, true]);
     H.v('   les écritures déclarent X-Rat-Market ; les lectures publiques ne déclarent aucune sécurité', [galerie.filter(o => ['put', 'post', 'delete'].includes(o.m)).every(o => (o.op.parameters || []).some(p => p.$ref === '#/components/parameters/XRatMarket')), galerie.filter(o => o.m === 'get' && !/enregistres|moderation/.test(o.chemin)).every(o => o.op.security.length === 0)], [true, true]);
     H.v('   les quatre codes nouveaux sont dans la liste fermée des codes d\'erreur', ['INTERDIT', 'INTROUVABLE', 'FICHIER', 'LIMITE_DEBIT'].filter(c => !OPENAPI.components.schemas.ReponseErreur.properties.erreur.properties.code.enum.includes(c)), []);
-    H.vrai('   les exemples du contrat valident (Publication)', valider({ id: 'k3J9x0Qw2m8LzTfA1bC4dE', pseudo: 'luma', publieLe: '2026-11-01T10:00:00.000Z', titre: 'Page Michi', categories: ['methode-michi', 'couleur'], n: 3, pages: 2, jaime: null, petitCompteur: true, arts: [{ art: 'Zy9x8W7v6U5t4S3r2Q1pOn', col: 0, row: 0, fmt: '2h' }], cartes: [{ cle: '1234|001', nom: 'Pikachu' }, null] }, OPENAPI.components.schemas.Publication, OPENAPI).ok);
+    H.vrai('   les exemples du contrat valident (Publication)', valider({ id: 'k3J9x0Qw2m8LzTfA1bC4dE', pseudo: 'luma', publieLe: '2026-11-01T10:00:00.000Z', titre: 'Page Michi', categories: ['methode-michi', 'couleur'], n: 3, pages: 2, jaime: null, petitCompteur: true, arts: [{ art: 'Zy9x8W7v6U5t4S3r2Q1pOn', col: 0, row: 0, fmt: '2h', url: 'https://pub.exemple.test/galerie/pub/Zy9x8W7v6U5t4S3r2Q1pOn.webp', largeur: 400, hauteur: 279 }], cartes: [{ cle: '1234|001', nom: 'Pikachu' }, null] }, OPENAPI.components.schemas.Publication, OPENAPI).ok);
     // le validateur sait dire NON sur ces schémas (une clé en trop, un type faux, un nombre à la place du null arrondi)
     H.v('   le validateur dit NON : clé en trop, type faux, champ manquant', [
         valider({ ...s1.json, extra: 1 }, OPENAPI.components.schemas.ReponseSignalement, OPENAPI).ok,
         valider({ success: true, jaime: 'oui', compteur: null, petitCompteur: true }, OPENAPI.components.schemas.ReponseJaime, OPENAPI).ok,
         valider({ success: true, octetsMax: 5 }, OPENAPI.components.schemas.ReponseBornesIllustrations, OPENAPI).ok], [false, false, false]);
+    // ═══ C-I4 : le pilote des statuts documentés — chaque opération reçoit ses refus (401, 403, 404, 400, 429), validés contre le schéma publié ═══
+    const idArt = art.id, inconnu = () => F.nouvelId();
+    const OPS = [
+        { m: 'GET', modele: '/api/galerie', url: '/api/galerie', mauvais: '/api/galerie?zzz=1' },
+        { m: 'GET', modele: '/api/galerie/filtres', url: '/api/galerie/filtres', mauvais: '/api/galerie/filtres?zzz=1' },
+        { m: 'GET', modele: '/api/galerie/{id}/pages/{n}', url: `/api/galerie/${idPub}/pages/1`, mauvais: `/api/galerie/${idPub}/pages/zzz`, absent: `/api/galerie/${inconnu()}/pages/1` },
+        { m: 'GET', modele: '/api/banque', url: '/api/banque', mauvais: '/api/banque?tri=zzz' },
+        { m: 'GET', modele: '/api/banque/formats', url: '/api/banque/formats', mauvais: '/api/banque/formats?zzz=1' },
+        { m: 'GET', modele: '/api/illustrations/bornes', url: '/api/illustrations/bornes', mauvais: '/api/illustrations/bornes?zzz=1' },
+        ...['jaime', 'enregistre'].flatMap(v => ['PUT', 'DELETE'].flatMap(m => [
+            { m, modele: `/api/classeurs/{id}/${v}`, url: `/api/classeurs/${idPub}/${v}`, session: true, ecriture: true, absent: `/api/classeurs/${inconnu()}/${v}`, mauvais: `/api/classeurs/!!/${v}` },
+            { m, modele: `/api/illustrations/{id}/${v}`, url: `/api/illustrations/${idArt}/${v}`, session: true, ecriture: true, absent: `/api/illustrations/${inconnu()}/${v}`, mauvais: `/api/illustrations/!!/${v}` }])),
+        { m: 'GET', modele: '/api/enregistres', url: '/api/enregistres', session: true, mauvais: '/api/enregistres?zzz=1' },
+        { m: 'POST', modele: '/api/galerie/{id}/remix', url: `/api/galerie/${idPub}/remix`, session: true, ecriture: true, absent: `/api/galerie/${inconnu()}/remix`, mauvais: '/api/galerie/!!/remix' },
+        { m: 'PUT', modele: '/api/compte/pseudo', url: '/api/compte/pseudo', session: true, ecriture: true, corps: { pseudo: 'pilote-pseudo' }, mauvaisCorps: { pseudo: 'a' } },
+        { m: 'POST', modele: '/api/illustrations/depot', url: '/api/illustrations/depot', session: true, ecriture: true, corps: { type: 'image/png', octets: 1000 }, mauvaisCorps: { type: 'image/png' } },
+        { m: 'POST', modele: '/api/illustrations/depot/{depot}/finaliser', url: `/api/illustrations/depot/${inconnu()}/finaliser`, session: true, ecriture: true, corps: { nom: 'x', format: '1', certifieDroits: true, certifieNonOfficielle: true }, mauvaisCorps: { nom: 1 }, absent: `/api/illustrations/depot/${inconnu()}/finaliser` },
+        { m: 'POST', modele: '/api/signalements', url: '/api/signalements', ecriture: true, session: false, corps: { cible: `galerie:${idPub}`, motif: 'autre' }, mauvaisCorps: { motif: 'zzz' } },
+        { m: 'GET', modele: '/api/admin/moderation', url: '/api/admin/moderation?file=publications', session: true, moderation: true, mauvais: '/api/admin/moderation?file=zzz' },
+        { m: 'POST', modele: '/api/admin/moderation/{id}/decision', url: `/api/admin/moderation/pub.${inconnu()}/decision`, session: true, ecriture: true, moderation: true, corps: { decision: 'accepter' }, mauvaisCorps: { decision: 'zzz' }, absent: `/api/admin/moderation/pub.${inconnu()}/decision` }
+    ];
+    const corpsDe = o => (o.m === 'GET' ? undefined : (o.corps || {}));
+    for (const o of OPS) {
+        const lib = `${o.m} ${o.modele.replace('/api/', '')}`.slice(0, 44);
+        if (o.session) verifier(`401 — ${lib}`, o.modele, o.m, await H.appel(sv.url, o.url, { methode: o.m, corps: corpsDe(o), entetes: { 'x-forwarded-for': IP(), origin: SITE, 'x-rat-market': '1' } }));
+        if (o.ecriture && o.session) verifier(`403 ORIGINE — ${lib}`, o.modele, o.m, await appel(o.m, o.url, { c: o.moderation ? modo : noa, corps: corpsDe(o), sansSite: true }));
+        if (o.ecriture && !o.session) verifier(`403 ORIGINE — ${lib}`, o.modele, o.m, await appel(o.m, o.url, { corps: corpsDe(o), sansSite: true }));
+        if (o.absent) verifier(`404 — ${lib}`, o.modele, o.m, await appel(o.m, o.absent, { c: o.moderation ? modo : noa, corps: corpsDe(o) }));
+        if (o.mauvais) verifier(`400 — ${lib}`, o.modele, o.m, await appel(o.m, o.mauvais, { c: o.moderation ? modo : noa, corps: corpsDe(o), sansSite: o.m === 'GET' }));
+        if (o.mauvaisCorps) verifier(`400 — ${lib}`, o.modele, o.m, await appel(o.m, o.url, { c: o.moderation ? modo : noa, corps: o.mauvaisCorps }));
+    }
+    {   // les refus de FICHIER (413, 415, 422) et les CONFLITS (409), joués pour de vrai, validés contre le schéma publié
+        const octetsDe = async (buffer, type, c = noa) => { const o2 = await appel('POST', '/api/illustrations/depot', { c, corps: { type, octets: buffer.length } }); stockage.deposer(o2.json.urlDepot, buffer); return appel('POST', `/api/illustrations/depot/${o2.json.depotId}/finaliser`, { c, corps: { nom: 'x', format: '1', certifieDroits: true, certifieNonOfficielle: true } }); };
+        const fin415 = await octetsDe(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>'), 'image/png');
+        verifier('415 — finaliser (un SVG)', '/api/illustrations/depot/{depot}/finaliser', 'POST', fin415);
+        const fin422 = await octetsDe(Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16]), require('crypto').randomBytes(200)]), 'image/jpeg');
+        verifier('422 — finaliser (un fichier illisible)', '/api/illustrations/depot/{depot}/finaliser', 'POST', fin422);
+        H.v('   (415 format et 422 illisible : les codes du site)', [fin415.statut, fin415.json.erreur.detail, fin422.statut, fin422.json.erreur.detail], [415, 'format', 422, 'illisible']);
+        const gros = await appel('POST', '/api/illustrations/depot', { c: noa, corps: { type: 'image/png', octets: 9 * 1024 * 1024 } });
+        verifier('413 — depot (au-dessus de 8 Mio)', '/api/illustrations/depot', 'POST', gros);
+        const svB = async (gal) => { const c1 = { ...cfg, galerie: { ...cfg.galerie, ...gal(cfg.galerie) } }; const ap = express(); ap.set('trust proxy', true); transport.enTete(ap, c1); ap.use(express.json());
+            ap.use(assembler([{ enTete() { }, routes(r, c, d) { routes.routesGalerie(r, c, { ...d, stockage, fetchTurnstile: turnstile, env: A.ENV_VALIDE }); } }], c1, {})); return H.serveur(ap); };
+        const svBornes = await svB(g => ({ bornes: { ...g.bornes, illustrationsMax: 1 }, limites: { ...g.limites, jaimeMax: 1, classeursMax: 1 } }));
+        const appelB = (methode, chemin, c, corps) => H.appel(svBornes.url, chemin, { methode, corps, entetes: { 'x-forwarded-for': IP(), origin: SITE, 'x-rat-market': '1', cookie: c.cookie } });
+        const d1 = await compte('born-' + (++n)); await appelB('POST', '/api/illustrations/depot', d1, { type: 'image/png', octets: 1000 });
+        verifier('409 — depot (borne-illustrations)', '/api/illustrations/depot', 'POST', await appelB('POST', '/api/illustrations/depot', d1, { type: 'image/png', octets: 1000 }));
+        for (const [genre, op] of [['jaime', 'PUT'], ['enregistre', 'PUT']]) {
+            for (const [modele, url, autre] of [['/api/classeurs/{id}/' + genre, `/api/classeurs/${idPub}/${genre}`, `/api/illustrations/${idArt}/${genre}`], ['/api/illustrations/{id}/' + genre, `/api/illustrations/${idArt}/${genre}`, `/api/classeurs/${idPub}/${genre}`]]) {
+                const cb = await compte('v-' + (++n)); await appelB('PUT', autre, cb);
+                const r409 = await appelB(op, url, cb); verifier(`409 — ${op} ${modele.replace('/api/', '')} (borne)`.slice(0, 52), modele, op, r409);
+            }
+        }
+        const cr = await compte('rx-' + (++n)); await appelB('POST', `/api/galerie/${idPub}/remix`, cr, {});
+        verifier('409 — remix (borne-classeurs)', '/api/galerie/{id}/remix', 'POST', await appelB('POST', `/api/galerie/${idPub}/remix`, cr, {}));
+        verifier('409 — decision (déjà décidé : etat)', '/api/admin/moderation/{id}/decision', 'POST', await appel('POST', `/api/admin/moderation/art.${fin.json.id}/decision`, { c: modo, corps: { decision: 'accepter' } }));
+        await svBornes.fermer();
+    }
+    {   // 429 : une limite à 1 par fenêtre ; chaque opération reçoit un compte et une adresse NEUFS, deux appels ; le 429 est validé contre le schéma publié
+        const limites = Object.fromEntries(Object.entries(cfg.galerie.limites).map(([k, v]) => [k, /(Heure|Jour)$/.test(k) ? 1 : v]));
+        const cfg1 = { ...cfg, galerie: { ...cfg.galerie, limites } };
+        const app3 = express(); app3.set('trust proxy', true); transport.enTete(app3, cfg1); app3.use(express.json());
+        app3.use(assembler([{ enTete() { }, routes(r, c, d) { routes.routesGalerie(r, c, { ...d, stockage, fetchTurnstile: turnstile, env: A.ENV_VALIDE }); } }], cfg1, {}));
+        const sv3 = await H.serveur(app3); const obtenus = [];
+        for (const o of OPS) {
+            const c = o.moderation ? await compte('modo-' + (++n), { role: 'moderateur' }) : await compte('lim-' + (++n)), ip = IP();
+            const deux = []; for (let i = 0; i < 3 && !deux.some(x => x.statut === 429); i++) deux.push(await H.appel(sv3.url, o.url, { methode: o.m, corps: corpsDe(o), entetes: { 'x-forwarded-for': ip, origin: SITE, 'x-rat-market': '1', cookie: c.cookie } }));
+            const r429 = deux.find(x => x.statut === 429); obtenus.push([o.m + ' ' + o.modele, Boolean(r429)]);
+            if (r429) verifier(`429 — ${o.m} ${o.modele.replace('/api/', '')}`.slice(0, 50), o.modele, o.m, r429);
+        }
+        H.v('   429 : chacune des 22 opérations de la Communauté rend LIMITE_DEBIT quand sa limite est atteinte', obtenus.filter(x => !x[1]).map(x => x[0]), []);
+        await sv3.fermer();
+    }
+
     // ═══ base dédiée pas branchée : chaque route répond 503 INDISPONIBLE (jamais un repli sur la base de l'API), conforme au schéma publié ═══
     await G.debrancher();
-    const sansBase = [['GET', '/api/galerie'], ['GET', '/api/banque/formats'], ['GET', '/api/illustrations/bornes'], ['PUT', `/api/classeurs/${idPub}/jaime`], ['POST', `/api/galerie/${idPub}/remix`], ['PUT', '/api/compte/pseudo'], ['POST', '/api/illustrations/depot'], ['POST', '/api/signalements'], ['GET', '/api/admin/moderation?file=publications'], ['GET', '/api/enregistres']];
-    const modeles = { [`/api/classeurs/${idPub}/jaime`]: '/api/classeurs/{id}/jaime', [`/api/galerie/${idPub}/remix`]: '/api/galerie/{id}/remix', '/api/admin/moderation?file=publications': '/api/admin/moderation' };
+    const sansBase = OPS.map(o => [o.m, o.url]);
+    const modeles = Object.fromEntries(OPS.map(o => [o.url, o.modele]));
     const r503 = [];
     for (const [m, ch] of sansBase) { const r = await appel(m, ch, { c: modo, corps: m === 'GET' ? undefined : { pseudo: 'x-y-z', type: 'image/png', octets: 5, cible: `galerie:${idPub}`, motif: 'autre', turnstile: 'jeton-valide' } }); r503.push([m, r.statut, r.json && r.json.erreur && r.json.erreur.code]); verifier(`503 sans base — ${m} ${ch.split('?')[0].slice(0, 28)}`, modeles[ch] || ch, m, r); }
-    H.v('   sans base dédiée branchée : 503 INDISPONIBLE pour chacune des 10 routes essayées (un seul code, aucune route ne se rabat sur la base de l\'API)', [...new Set(r503.map(x => `${x[1]} ${x[2]}`))], ['503 INDISPONIBLE']);
+    H.v('   sans base dédiée branchée : 503 INDISPONIBLE pour chacune des 22 opérations (un seul code, aucune route ne se rabat sur la base de l\'API)', [...new Set(r503.map(x => `${x[1]} ${x[2]}`))], ['503 INDISPONIBLE']);
+    // ═══ C-I4 : chaque statut DOCUMENTÉ d'une opération de la Communauté est JOUÉ ici, ou déclaré « non joué » avec sa raison (comme pour les abonnements) ═══
+    const GENERIQUE = 'statut du bloc d\'erreurs commun des lectures publiques ; aucune branche de cette route ne le produit (pas d\'identifiant ni de paramètre à refuser) — à resserrer dans le contrat';
+    const NON_JOUES = {
+        'GET /api/galerie 404': GENERIQUE, 'GET /api/galerie/filtres 404': GENERIQUE, 'GET /api/galerie/filtres 400': GENERIQUE, 'GET /api/banque 404': GENERIQUE,
+        'GET /api/banque/formats 400': GENERIQUE, 'GET /api/banque/formats 404': GENERIQUE, 'GET /api/illustrations/bornes 400': GENERIQUE, 'GET /api/illustrations/bornes 404': GENERIQUE,
+        ...Object.fromEntries(['classeurs', 'illustrations'].flatMap(t => ['jaime', 'enregistre'].map(v => [`DELETE /api/${t}/{id}/${v} 409`, 'retirer un vote ne dépasse aucune borne : le code ne produit pas de 409 pour un DELETE (statut du bloc commun des écritures) — à resserrer dans le contrat']))),
+    };
+
+    const documentes = galerie.flatMap(o => Object.keys(o.op.responses).filter(s => /^\d+$/.test(s)).map(s => `${o.m.toUpperCase()} ${o.chemin} ${s}`));
+    const manquants = documentes.filter(k => !JOUEES.has(k) && !NON_JOUES[k]);
+    H.v('   statuts documentés ni joués ni déclarés (chacun est joué ci-dessus, ou déclaré avec sa raison)', manquants, []);
+    H.v('   chaque statut déclaré « non joué » est bien documenté (pas de déclaration périmée) et n\'est pas joué (pas de déclaration inutile)', [Object.keys(NON_JOUES).filter(k => !documentes.includes(k)), Object.keys(NON_JOUES).filter(k => JOUEES.has(k))], [[], []]);
     await sv.fermer(); await sv2.fermer(); await dbG.dropDatabase();
     await H.fermerBac();
     H.bilan();

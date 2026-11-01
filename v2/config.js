@@ -3,6 +3,8 @@
 // ACHETE-AVANT-JOUR (2026-10-17) : la poche `achete` (analyses payées avec la 1.0.5) se débite AVANT `jour`, ordre FIXÉ dans le code (poches.ordreDe) ; V2_ORDRE_POCHES ne peut pas la nommer.
 // Les autres anciennes (essai, accueil, hebdo, abonnement) restent des NOMS CONNUS en lecture seule : le grand livre sait encore RENDRE un débit pris avant la bascule (rendrePoche),
 // et les soldes anciens restent lisibles ; aucune ne se DÉBITE plus (essayerPoche) et V2_ORDRE_POCHES ne peut plus les nommer.
+// Les hôtes PUBLICS de production des images (CONTRAT-2 règle 6) : une seule définition, reprise par `images.hotesPublics` ET par la garde du stockage de la Communauté (galerie/r2.js : son adresse publique ne peut pas en être une).
+const HOTES_PUBLICS_PRODUCTION = Object.freeze(['pub-7d992e666c3d4a2b870b680a920045b6.r2.dev', 'rat-market.fr']);
 const POCHES = Object.freeze(['jour']);
 const POCHES_ANCIENNES = Object.freeze(['essai', 'accueil', 'hebdo', 'abonnement', 'achete']);
 const entier = (nom, v, defaut, min = 0, max = Infinity) => {
@@ -208,7 +210,7 @@ function lireConfig(env = process.env) {
                    fichierBanc: banc ? (env.V2_VISUELS_BANC_FICHIER || null) : null },
         // PHOTO-EXTENSION : `photoExtensionOctetsMax` = la borne du corps BINAIRE de POST /api/banc/photo (les octets de l'image telle que Vinted la sert) : 2 Mio. Une photo d'annonce affichée (f800, ~800 px de large)
         // pèse 100 à 300 ko : la marge est de 7 à 20 fois. Plus grande : 413 avant toute lecture (Content-Length).
-        images: { hotesPublics: ['pub-7d992e666c3d4a2b870b680a920045b6.r2.dev', 'rat-market.fr'], imageUrlsMax: 20, scannerOctetsMax: 12 * 1024 * 1024, photoExtensionOctetsMax: 2 * 1024 * 1024 },
+        images: { hotesPublics: [...HOTES_PUBLICS_PRODUCTION], imageUrlsMax: 20, scannerOctetsMax: 12 * 1024 * 1024, photoExtensionOctetsMax: 2 * 1024 * 1024 },
         // PHOTO-EXTENSION : le téléchargement serveur de la photo d'un scan d'ADMINISTRATEUR n'est plus qu'un REPLI (quand l'extension n'envoie pas l'image à POST /api/banc/photo) : il attend `delaiS` secondes
         // (défaut 15) après la réponse du scan pour laisser l'extension envoyer sa photo, puis au plus un téléchargement toutes les `intervalleS` secondes (défaut 10) et au plus `maxJour` par jour UTC
         // (défaut 400, la décision du testeur du 2026-10-13), comptés dans la base (banc/photo-repli.js). maxJour 0 coupe le repli.
@@ -329,4 +331,4 @@ function lireConfig(env = process.env) {
         cookieSecure
     });
 }
-module.exports = { lireConfig, POCHES, POCHES_ANCIENNES };
+module.exports = { lireConfig, POCHES, POCHES_ANCIENNES, HOTES_PUBLICS_PRODUCTION };

@@ -50,9 +50,16 @@ const { lireGalerie } = require('../galerie/config');
     const code = r => r.json && r.json.erreur && r.json.erreur.code, detail = r => r.json && r.json.erreur && r.json.erreur.detail;
     const brut = n => dbG.collection(n);
     const nouvelleId = () => F.nouvelId();
+    let tjn = 0; const tj = (prefixe = 'jeton-valide') => `${prefixe}-${++tjn}`;       // un jeton Turnstile n'est accepté qu'UNE fois (replay refusé) : chaque appel en apporte un neuf
 
+    // un art public RÉEL (la pose d'une page exige qu'il existe et soit public) : posé une fois, à part de la banque lue par les scènes
+    let artDePage = null;
+    async function artPourPages() {
+        if (!artDePage) { artDePage = nouvelleId(); await brut('arts').insertOne({ _id: artDePage, etat: 'public', auteurId: 'exploitation', pseudo: 'exploitation', nom: 'Art de page', mots: ['art', 'page'], fmt: '2h', clePublique: `galerie/pub/${artDePage}`, largeur: 400, hauteur: 279, nbJaime: 0, nbEnregistre: 0, publieLe: new Date() }); }
+        return artDePage;
+    }
     async function publier(auteur, o = {}) {
-        return svc.publierPourExploitation({ auteurId: auteur.id, titre: 'Page Michi', categories: ['methode-michi', 'couleur'], n: 3, pages: 2, arts: [{ art: nouvelleId(), col: 0, row: 0, fmt: '2h' }],
+        return svc.publierPourExploitation({ auteurId: auteur.id, titre: 'Page Michi', categories: ['methode-michi', 'couleur'], n: 3, pages: 2, arts: [{ art: await artPourPages(), col: 0, row: 0, fmt: '2h' }],
             cartes: [{ cle: '1234|001', nom: 'Pikachu' }, null, { cle: '-5|12', nom: 'Dresseur' }], pagesSuite: [{ n: 2, arts: [], cartes: [{ cle: '1234|002', nom: 'Raichu' }] }],
             attributs: { couleur: ['jaune'], type: ['electrique'], illustrateur: ['Mitsuhiro Arita'], set: ['Base-Set'] }, certification: { cgu: '2026-10' }, etat: 'public', ...o });
     }
@@ -137,7 +144,7 @@ const { lireGalerie } = require('../galerie/config');
         const p = r.json.publications[0];
         H.v('2. GET /api/galerie : 200, Cache-Control public max-age=60, { success, publications, suite }', [r.statut, r.entetes['cache-control'], Object.keys(r.json)], [200, 'public, max-age=60', ['success', 'publications', 'suite']]);
         H.v('   Publication : exactement les clés du site, dans l\'ordre', Object.keys(p), ['id', 'pseudo', 'publieLe', 'titre', 'categories', 'n', 'pages', 'jaime', 'petitCompteur', 'arts', 'cartes']);
-        H.v('   sous 5 j\'aime : jaime null et petitCompteur true ; un art { art, col, row, fmt } ; une pochette vide est null', [p.jaime, p.petitCompteur, Object.keys(p.arts[0]), p.cartes[1], p.n, p.pages], [null, true, ['art', 'col', 'row', 'fmt'], null, 3, 2]);
+        H.v('   sous 5 j\'aime : jaime null et petitCompteur true ; un art posé { art, col, row, fmt, url, largeur, hauteur } ; une pochette vide est null', [p.jaime, p.petitCompteur, Object.keys(p.arts[0]), p.cartes[1], p.n, p.pages], [null, true, ['art', 'col', 'row', 'fmt', 'url', 'largeur', 'hauteur'], null, 3, 2]);
         H.vrai('   aucune donnée du lecteur ni de l\'auteur : ni identifiant de compte, ni adresse, ni cookie posé', !JSON.stringify(r.json).includes(luma.id) && !/@/.test(JSON.stringify(r.json)) && r.entetes['set-cookie'] === undefined);
         const avecCookie = await lire(sv, '/api/galerie', noa);
         H.vrai('   la réponse est la MÊME pour un lecteur connecté (aucune personnalisation)', JSON.stringify(avecCookie.json) === JSON.stringify(r.json));
@@ -168,15 +175,15 @@ const { lireGalerie } = require('../galerie/config');
     for (const a of [artA, artB]) await appel(sv, 'POST', `/api/admin/moderation/art.${idArt(a)}/decision`, { c: admin, corps: { decision: 'accepter' } });
     {
         const r = await lire(sv, '/api/banque');
-        H.v('3. GET /api/banque : { success, arts, suite } ; seuls les arts publics (acceptés)', [r.statut, Object.keys(r.json), r.json.arts.length], [200, ['success', 'arts', 'suite'], 2]);
+        H.v('3. GET /api/banque : { success, arts, suite } ; seuls les arts publics (acceptés)', [r.statut, Object.keys(r.json), r.json.arts.length], [200, ['success', 'arts', 'suite'], 3]);   // 2 déposés et acceptés + l'art public des pages d'essai
         const a = r.json.arts.find(x => x.nom === 'Bande large');
         H.v('   Art : exactement les clés du site ; url publique R2 de la copie acceptée ; pseudo en crédit', [Object.keys(a), a.url === `${stockage.urlPublique}/galerie/pub/${idArt(artB)}.webp`, a.auteur, a.fmt, a.largeur, a.hauteur, a.aime, a.petitCompteur], [['id', 'nom', 'fmt', 'auteur', 'aime', 'petitCompteur', 'url', 'largeur', 'hauteur'], true, 'noa', '2h', 400, 279, null, true]);
-        H.v('   format=2h ; q=doux (nom) ; q=NOA (auteur, casse ignorée) ; q=%.* (regex échappée) ; tri=top', [(await lire(sv, '/api/banque?format=2h')).json.arts.length, (await lire(sv, '/api/banque?q=doux')).json.arts.length, (await lire(sv, '/api/banque?q=NOA')).json.arts.length, (await lire(sv, '/api/banque?q=.*')).json.arts.length, (await lire(sv, '/api/banque?tri=top')).statut], [1, 1, 1, 0, 200]);
+        H.v('   format=2h ; q=doux (nom) ; q=NOA (auteur, casse ignorée) ; q=%.* (regex échappée) ; tri=top', [(await lire(sv, '/api/banque?format=2h')).json.arts.length, (await lire(sv, '/api/banque?q=doux')).json.arts.length, (await lire(sv, '/api/banque?q=NOA')).json.arts.length, (await lire(sv, '/api/banque?q=.*')).json.arts.length, (await lire(sv, '/api/banque?tri=top')).statut], [2, 1, 1, 0, 200]);
         for (const q of ['format=3', 'tri=zzz', 'q=', 'q=' + 'a'.repeat(41), 'y=1']) { const x = await lire(sv, `/api/banque?${q}`); if (q === 'q=') H.v('   q vide : traité comme absent', x.statut, 200); else H.v(`   ${q.slice(0, 20)} : 400`, [x.statut, code(x)], [400, 'ENTREE']); }
         const f = await lire(sv, '/api/banque/formats');
-        H.v('   GET /api/banque/formats : les quatre formats, comptés sur le public', [f.json, f.entetes['cache-control']], [{ success: true, formats: { '1': 1, '2h': 1, '2v': 0, '4': 0 } }, 'public, max-age=60']);
+        H.v('   GET /api/banque/formats : les quatre formats, comptés sur le public', [f.json, f.entetes['cache-control']], [{ success: true, formats: { '1': 1, '2h': 2, '2v': 0, '4': 0 } }, 'public, max-age=60']);
         const bo = await lire(sv, '/api/illustrations/bornes');
-        H.v('   GET /api/illustrations/bornes : { success, octetsMax, pixelsMax } (8 Mio, 24 Mpx)', [bo.json, bo.entetes['cache-control']], [{ success: true, octetsMax: 8388608, pixelsMax: 24000000 }, 'public, max-age=60']);
+        H.v('   GET /api/illustrations/bornes : { success, octetsMax, pixelsMax } (8 Mio, 12 Mpx)', [bo.json, bo.entetes['cache-control']], [{ success: true, octetsMax: 8388608, pixelsMax: 12000000 }, 'public, max-age=60']);
         const attenteArt = await lire(sv, `/api/illustrations/${idArt(artC)}/jaime`);
         H.vrai('   l\'art en attente n\'est dans aucune lecture publique', !JSON.stringify((await lire(sv, '/api/banque?q=Colonne')).json).includes('Colonne'));
         const lim = await serveur(variante({}, { lectureIpHeure: 2 }));
@@ -249,7 +256,7 @@ const { lireGalerie } = require('../galerie/config');
         const o = await appel(svD, 'POST', '/api/illustrations/depot', { c: dep, corps: { type: 'image/webp', octets: 5000 } });
         H.v('5. POST /api/illustrations/depot : 201 { success, depotId, urlDepot, expireDans: 300 }', [o.statut, Object.keys(o.json), o.json.expireDans], [201, ['success', 'depotId', 'urlDepot', 'expireDans'], 300]);
         const u = new URL(o.json.urlDepot);
-        H.v('   l\'URL est sur l\'origine R2 d\'écriture, sous le préfixe galerie/depot/<ref>/<depotId> du bucket de l\'ESSAI, avec taille et type signés', [u.origin === stockage.origineEcriture, new RegExp(`^/${stockage.bucket}/galerie/depot/[0-9a-f]{16}/${o.json.depotId}$`).test(u.pathname), /content-length/.test(u.searchParams.get('X-Amz-SignedHeaders')), stockage.journal.at(-1).slice(2)], [true, true, true, ['image/webp', 5000, 300]]);
+        H.v('   l\'URL est sur l\'origine R2 d\'écriture, sous le préfixe galerie/depot/<ref>/<depotId> du bucket PRIVÉ de l\'ESSAI, avec taille et type signés', [u.origin === stockage.origineEcriture, new RegExp(`^/${stockage.bucketPrive}/galerie/depot/[0-9a-f]{16}/${o.json.depotId}$`).test(u.pathname), /content-length/.test(u.searchParams.get('X-Amz-SignedHeaders')), stockage.journal.at(-1).slice(2)], [true, true, true, ['image/webp', 5000, 300]]);
         H.vrai('   la <ref> du compte n\'est PAS l\'identifiant du compte', !o.json.urlDepot.includes(dep.id));
         const avant = stockage.journal.length;
         const t = await appel(svD, 'POST', '/api/illustrations/depot', { c: dep, corps: { type: 'image/svg+xml', octets: 100 } }), g = await appel(svD, 'POST', '/api/illustrations/depot', { c: dep, corps: { type: 'image/gif', octets: 100 } });
@@ -327,28 +334,28 @@ const { lireGalerie } = require('../galerie/config');
         const sig = (corps, c, ip) => H.appel(sv.url, '/api/signalements', { methode: 'POST', corps, entetes: { origin: SITE, 'x-rat-market': '1', 'x-forwarded-for': ip || IP(), ...(c ? { cookie: c.cookie } : {}) } });
         const sans = await sig(base);
         H.v('6. sans session et sans jeton Turnstile : 422 ENTREE defi-anti-robot, rien d\'enregistré', [sans.statut, code(sans), detail(sans), await brut('signalements').countDocuments({})], [422, 'ENTREE', 'defi-anti-robot', 0]);
-        const mauvais = await sig({ ...base, turnstile: 'jeton-pourri' });
+        const mauvais = await sig({ ...base, turnstile: tj('jeton-pourri') });
         H.v('   jeton refusé par le fournisseur : 422 defi-anti-robot', [mauvais.statut, detail(mauvais)], [422, 'defi-anti-robot']);
-        const bon = await sig({ ...base, turnstile: 'jeton-valide' });
+        const jetonBon = tj(); const bon = await sig({ ...base, turnstile: jetonBon });
         H.v('   jeton valide : 201 { success: true }', [bon.statut, bon.json], [201, { success: true }]);
         const appelT = turnstile.appels.at(-1), pT = new URLSearchParams(appelT.corps);
-        H.v('   la vérification est faite CÔTÉ SERVEUR auprès de siteverify, sans suivre de redirection, avec le secret de l\'environnement', [appelT.url, appelT.methode, appelT.redirect, pT.get('secret'), pT.get('response')], ['https://challenges.cloudflare.com/turnstile/v0/siteverify', 'POST', 'error', 'secret-turnstile-essai', 'jeton-valide']);
+        H.v('   la vérification est faite CÔTÉ SERVEUR auprès de siteverify, sans suivre de redirection, avec le secret de l\'environnement', [appelT.url, appelT.methode, appelT.redirect, pT.get('secret'), pT.get('response')], ['https://challenges.cloudflare.com/turnstile/v0/siteverify', 'POST', 'error', 'secret-turnstile-essai', jetonBon]);
         const stocke = await brut('signalements').find({}).toArray();
         H.v('   le signalement porte cible, motif, précision, date, échéance à 24 h, conservation 12 mois ; ni IP, ni jeton, ni compte', [stocke.length, stocke[0].cibleType, stocke[0].cibleId === idsPub[7], stocke[0].compteId, stocke[0].echeance - stocke[0].le, stocke[0].conserveJusqua > stocke[0].le, /jeton-valide|10\./.test(JSON.stringify(stocke))], [1, 'galerie', true, null, 86400e3, true, false]);
         const pan = await serveur(cfg, { ts: A.fauxTurnstile({ panne: true }) }), noSecret = await serveur(cfg, { env: { ...A.ENV_VALIDE, V2_GALERIE_TURNSTILE_SECRET: undefined } });
         const headers = () => ({ origin: SITE, 'x-rat-market': '1', 'x-forwarded-for': IP() });
-        const x1 = await H.appel(pan.url, '/api/signalements', { methode: 'POST', corps: { ...base, turnstile: 'jeton-valide' }, entetes: headers() }), x2 = await H.appel(noSecret.url, '/api/signalements', { methode: 'POST', corps: { ...base, turnstile: 'jeton-valide' }, entetes: headers() });
+        const x1 = await H.appel(pan.url, '/api/signalements', { methode: 'POST', corps: { ...base, turnstile: tj() }, entetes: headers() }), x2 = await H.appel(noSecret.url, '/api/signalements', { methode: 'POST', corps: { ...base, turnstile: tj() }, entetes: headers() });
         H.v('   fournisseur injoignable ou secret absent : 503 INDISPONIBLE — jamais d\'ouverture par défaut', [x1.statut, code(x1), x2.statut, code(x2)], [503, 'INDISPONIBLE', 503, 'INDISPONIBLE']);
         const avecSession = await sig(base, noa);
         H.v('   avec session : pas de Turnstile ; le compte est gardé (pour l\'anonymiser à sa suppression) ; un second signalement du même compte sur la même cible ne compte pas', [avecSession.statut, (await sig(base, noa)).statut, await brut('signalements').countDocuments({ compteId: noa.id })], [201, 201, 1]);
-        const existant = await sig({ ...base, turnstile: 'jeton-valide' }), inexistant = await sig({ cible: `galerie:${nouvelleId()}`, motif: 'droits', turnstile: 'jeton-valide' }), nonPublic = await sig({ cible: `galerie:${attente}`, motif: 'droits', turnstile: 'jeton-valide' });
+        const existant = await sig({ ...base, turnstile: tj() }), inexistant = await sig({ cible: `galerie:${nouvelleId()}`, motif: 'droits', turnstile: tj() }), nonPublic = await sig({ cible: `galerie:${attente}`, motif: 'droits', turnstile: tj() });
         H.v('   la réponse est la MÊME que la cible existe, soit absente ou non publique (et rien n\'est enregistré pour elles)', [existant.texte === inexistant.texte, existant.texte === nonPublic.texte, await brut('signalements').countDocuments({ cibleId: { $in: [attente] } })], [true, true, 0]);
         for (const [nom, corps] of [['cible mal formée', { ...base, cible: 'classeur:abc' }], ['motif inconnu', { ...base, motif: 'zzz' }], ['précision trop longue', { ...base, precision: 'a'.repeat(501) }], ['précision data:', { ...base, precision: 'data:text/html;base64,AAAA' }], ['champ en trop', { ...base, contact: 'a@b.fr' }], ['précision non texte', { ...base, precision: 5 }]]) {
-            const x = await sig({ ...corps, turnstile: 'jeton-valide' }); H.v(`   ${nom} : 400 ENTREE`, [x.statut, code(x)], [400, 'ENTREE']);
+            const x = await sig({ ...corps, turnstile: tj() }); H.v(`   ${nom} : 400 ENTREE`, [x.statut, code(x)], [400, 'ENTREE']);
         }
-        const rg = []; for (let i = 0; i < 12; i++) rg.push((await sig({ ...base, turnstile: 'jeton-valide' }, null, IPFIXE)).statut);
+        const rg = []; for (let i = 0; i < 12; i++) rg.push((await sig({ ...base, turnstile: tj() }, null, IPFIXE)).statut);
         H.v('   10 par heure et par adresse IP : le 11e est 429 LIMITE_DEBIT (V2_SIGNALEMENTS_IP_HEURE)', [rg.slice(0, 10).every(s => s === 201), rg[10], rg[11]], [true, 429, 429]);
-        const sansOrigine = await H.appel(sv.url, '/api/signalements', { methode: 'POST', corps: { ...base, turnstile: 'jeton-valide' }, entetes: { 'x-forwarded-for': IP() } });
+        const sansOrigine = await H.appel(sv.url, '/api/signalements', { methode: 'POST', corps: { ...base, turnstile: tj() }, entetes: { 'x-forwarded-for': IP() } });
         H.v('   sans Origin du site : 403 ORIGINE (même sans session)', [sansOrigine.statut, code(sansOrigine)], [403, 'ORIGINE']);
     }
 
@@ -440,12 +447,12 @@ const { lireGalerie } = require('../galerie/config');
         const s2 = s => H.appel(s.url, '/api/signalements', { methode: 'POST', corps: { cible: `galerie:${idsPub[8]}`, motif: 'autre' }, entetes: { origin: SITE, 'x-rat-market': '1', 'x-forwarded-for': IP() } });
         H.v('   MUTANT « Turnstile n\'est plus exigé sans session » : sans jeton, le réel refuse (422), le mutant accepte (201)', [(await s2(sv)).statut, (await s2(m2)).statut], [422, 201]);
         const m3 = await mutant([['if (ok !== true) return repondreErreur(res, \'ENTREE\', \'Vérification anti-robot échouée\', { detail: \'defi-anti-robot\' }, 422);', '']]);
-        const s3 = s => H.appel(s.url, '/api/signalements', { methode: 'POST', corps: { cible: `galerie:${idsPub[8]}`, motif: 'autre', turnstile: 'jeton-pourri' }, entetes: { origin: SITE, 'x-rat-market': '1', 'x-forwarded-for': IP() } });
+        const s3 = s => H.appel(s.url, '/api/signalements', { methode: 'POST', corps: { cible: `galerie:${idsPub[8]}`, motif: 'autre', turnstile: tj('jeton-pourri') }, entetes: { origin: SITE, 'x-rat-market': '1', 'x-forwarded-for': IP() } });
         H.v('   MUTANT « le verdict du fournisseur n\'est plus lu » : un jeton refusé passe', [(await s3(sv)).statut, (await s3(m3)).statut], [422, 201]);
         const m3b = await mutant([['catch (e) { console.error(`❌ [v2 galerie] Turnstile en échec (${nomErreur(e)})`); return indispo(res); }', 'catch (e) { ok = true; }']]);
         const pan = await serveur(cfg, { ts: A.fauxTurnstile({ panne: true }) }), panMut = await serveur(cfg, { ts: A.fauxTurnstile({ panne: true }), routes: A.charger('routes.js', [['catch (e) { console.error(`❌ [v2 galerie] Turnstile en échec (${nomErreur(e)})`); return indispo(res); }', 'catch (e) { ok = true; }']]) });
         H.v('   MUTANT « une erreur de vérification ouvre » : fournisseur en panne, le réel refuse (503), le mutant laisse passer (201)', [(await s2b(pan)).statut, (await s2b(panMut)).statut], [503, 201]);
-        function s2b(s) { return H.appel(s.url, '/api/signalements', { methode: 'POST', corps: { cible: `galerie:${idsPub[8]}`, motif: 'autre', turnstile: 'jeton-valide' }, entetes: { origin: SITE, 'x-rat-market': '1', 'x-forwarded-for': IP() } }); }
+        function s2b(s) { return H.appel(s.url, '/api/signalements', { methode: 'POST', corps: { cible: `galerie:${idsPub[8]}`, motif: 'autre', turnstile: tj() }, entetes: { origin: SITE, 'x-rat-market': '1', 'x-forwarded-for': IP() } }); }
         // rôle
         const m4 = await mutant([['return c && ROLES_MODERATION.includes(c.role) ? next() : interdit(res, \'admin\');', 'return next();']]);
         const simple2 = await compte({}, 'simple-mut');

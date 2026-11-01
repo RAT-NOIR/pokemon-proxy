@@ -16,8 +16,47 @@ const estDup = e => Boolean(e) && e.code === 11000;
 const COLL = Object.freeze({ galerie: 'publications', banque: 'arts' });
 const CHAMP = Object.freeze({ jaime: 'nbJaime', enregistre: 'nbEnregistre' });
 
+const FIN = String.fromCharCode(0xffff);
+/** Les MOTS d'un texte (minuscules, sans accent, lettres et chiffres) : la recherche `q` de la banque compare des PRÉFIXES de mots, sur un index multiclé, jamais une regex non ancrée (relecture 1, S-I4). */
+const motsDe = (...textes) => [...new Set(textes.flatMap(t => String(t || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)))].slice(0, 20);
+/** Le filtre de la recherche `q` : chaque mot de la requête est le PRÉFIXE d'un mot du nom ou du pseudo (index multiclé `mots_1_etat_1`). null : aucun mot exploitable. L'état « public » est ajouté par l'appelant. */
+function filtreRecherche(q) {
+    const mots = motsDe(q);
+    if (!mots.length) return null;
+    // $elemMatch : la borne basse et la borne haute doivent valoir pour le MÊME mot (sans lui, un tableau de deux mots satisfait chaque borne par un mot différent)
+    return { $and: mots.slice(0, 4).map(w => ({ mots: { $elemMatch: { $gte: w, $lt: w + FIN } } })) };
+}
+
 /** L'identifiant opaque d'un compte pour les lectures d'administration et les clés R2 : un HMAC, jamais l'identifiant de compte. */
 const refCompte = (compteId, secret) => crypto.createHmac('sha256', String(secret)).update(`galerie-ref|${compteId}`).digest('hex').slice(0, 16);
+
+// ═══ la file de reprise des suppressions R2 (relectures 1 et 2 : un échec ne se perd pas) ═══
+/** Une clé R2 à supprimer plus tard : `purges_r2` (base dédiée), rejouée par le balayeur (balayeur.js). Une seule entrée par clé. */
+async function mettreEnFile(cle, raison, maintenant = new Date()) {
+    await G.col('purges_r2').updateOne({ _id: cle }, { $setOnInsert: { raison, le: maintenant, essais: 0 } }, { upsert: true });
+}
+/** Supprime une clé ; si R2 échoue, la clé entre dans la file (comptée dans `bilan`). Rend true si l'objet est parti. */
+async function supprimerOuFile(stockage, cle, raison, bilan = null) {
+    if (!stockage) return false;
+    try { await stockage.supprimer(cle); return true; }
+    catch (e) {
+        console.error(`❌ [galerie] suppression R2 en échec (${(e && (e.name || e.code)) || 'erreur'}) : la clé entre dans la file de reprise`);
+        await mettreEnFile(cle, raison);
+        if (bilan) bilan.enFile++;
+        return false;
+    }
+}
+const clesDe = base => [`${base}.webp`, `${base}-480.webp`];
+/** L'objet `attente/` d'un art (image et vignette) : il ne survit à aucune décision. */
+async function purgerAttente(stockage, d, raison) { for (const k of clesDe(d.cle)) await supprimerOuFile(stockage, k, raison); }
+/** Les copies publiques ET celles d'attente d'un art retiré. */
+async function purgerCopies(stockage, d, raison) { for (const k of [...clesDe(d.clePublique), ...clesDe(d.cle)]) await supprimerOuFile(stockage, k, raison); }
+/** Un jeton Turnstile n'est accepté qu'UNE fois : seule son empreinte est gardée, dix minutes. true : jeton neuf ; false : déjà vu. */
+async function jetonNeuf(jeton, maintenant = new Date()) {
+    const h = crypto.createHash('sha256').update(`galerie-turnstile|${jeton}`).digest('hex');
+    try { await G.col('jetons_turnstile').insertOne({ h, expireLe: new Date(maintenant.getTime() + 10 * 60e3) }); return true; }
+    catch (e) { if (estDup(e)) return false; throw e; }
+}
 
 // ═══ pseudo ═══
 async function pseudoDe(compteId) { const p = await G.col('profils').findOne({ _id: String(compteId) }, { projection: { pseudo: 1 } }); return p ? p.pseudo : null; }
@@ -33,14 +72,22 @@ async function poserPseudo(compteId, pseudo, maintenant = new Date()) {
             if (moi || essai === 2) return { conflit: true };            // le pseudo est porté par un AUTRE compte (ou la création simultanée de MON profil n'a pas abouti)
         }
     }
-    await Promise.all([G.col('publications').updateMany({ auteurId: id }, { $set: { pseudo } }), G.col('arts').updateMany({ auteurId: id }, { $set: { pseudo } })]);
+    await G.col('publications').updateMany({ auteurId: id }, { $set: { pseudo } });
+    for (const a of await G.col('arts').find({ auteurId: id }, { projection: { nom: 1 } }).toArray()) await G.col('arts').updateOne({ _id: a._id }, { $set: { pseudo, mots: motsDe(a.nom, pseudo) } });
     return { ok: true, pseudo };
 }
 
 // ═══ lectures publiques : le fil des pages ═══
-function versPublication(d) {
+/** Les arts POSÉS d'une page portent de quoi s'afficher (correction 3 du site) : { art, col, row, fmt, url, largeur, hauteur }, lus sur la banque (un seul aller-retour pour toute la page). Un art qui n'est plus public est OMIS. */
+async function liensDesArts(listes, urlPublique) {
+    const ids = [...new Set(listes.flat().map(x => x.art))];
+    const lus = ids.length ? await G.col('arts').find({ _id: { $in: ids }, etat: 'public' }, { projection: { clePublique: 1, largeur: 1, hauteur: 1 } }).toArray() : [];
+    const m = new Map(lus.map(a => [a._id, a]));
+    return poses => poses.filter(x => m.has(x.art)).map(x => ({ art: x.art, col: x.col, row: x.row, fmt: x.fmt, url: `${urlPublique}/${m.get(x.art).clePublique}.webp`, largeur: m.get(x.art).largeur, hauteur: m.get(x.art).hauteur }));
+}
+function versPublication(d, arts = d.arts) {
     const c = compteur(d.nbJaime || 0);
-    return { id: d._id, pseudo: d.pseudo, publieLe: iso(d.publieLe), titre: d.titre, categories: d.categories, n: d.n, pages: d.pages, jaime: c.valeur, petitCompteur: c.petit, arts: d.arts, cartes: d.cartes };
+    return { id: d._id, pseudo: d.pseudo, publieLe: iso(d.publieLe), titre: d.titre, categories: d.categories, n: d.n, pages: d.pages, jaime: c.valeur, petitCompteur: c.petit, arts, cartes: d.cartes };
 }
 const PROJ_PUBLIC = { pagesSuite: 0, attributs: 0, auteurId: 0, certification: 0, motif: 0 };
 const depuisJours = (maintenant, j) => new Date(maintenant.getTime() - j * 86400e3);
@@ -64,7 +111,7 @@ async function page(coll, type, filtre, tri, o, taille, projection, maintenant) 
     }
     return { docs: docs.slice(0, taille), suite: docs.length > taille ? F.ecrireSuite(o + taille) : null };
 }
-async function listerPublications({ categorie, tri = 'nouveautes', carte, couleur, type, illustrateur, set, o = 0, maintenant = new Date() }) {
+async function listerPublications({ categorie, tri = 'nouveautes', carte, couleur, type, illustrateur, set, o = 0, urlPublique, maintenant = new Date() }) {
     const filtre = { etat: 'public' };
     if (categorie) filtre.categories = categorie;
     if (carte) filtre[/^-?\d+$/.test(carte) ? 'attributs.carteIds' : 'attributs.carte'] = carte;
@@ -73,19 +120,21 @@ async function listerPublications({ categorie, tri = 'nouveautes', carte, couleu
     if (illustrateur) filtre['attributs.illustrateur'] = illustrateur;
     if (set) filtre['attributs.set'] = set;
     const r = await page('publications', 'galerie', filtre, tri, o, PAGE, PROJ_PUBLIC, maintenant);
-    return { publications: r.docs.map(versPublication), suite: r.suite };
+    const poser = await liensDesArts(r.docs.map(d => d.arts), urlPublique);
+    return { publications: r.docs.map(d => versPublication(d, poser(d.arts))), suite: r.suite };
 }
 async function filtresDeLaGalerie() {
     const liste = async champ => (await G.col('publications').aggregate([{ $match: { etat: 'public' } }, { $unwind: `$attributs.${champ}` }, { $group: { _id: `$attributs.${champ}`, n: { $sum: 1 } } }, { $sort: { n: -1, _id: 1 } }, { $limit: 100 }]).toArray()).map(r => ({ valeur: r._id, n: r.n }));
     const [carte, couleur, type, illustrateur, set] = await Promise.all(['carte', 'couleur', 'type', 'illustrateur', 'set'].map(liste));
     return { carte, couleur, type, illustrateur, set };
 }
-async function pageDePublication(id, n) {
+async function pageDePublication(id, n, urlPublique) {
     const d = await G.col('publications').findOne({ _id: id, etat: 'public' }, { projection: { arts: 1, cartes: 1, pagesSuite: 1, pages: 1 } });
     if (!d || !Number.isInteger(n) || n < 1 || n > d.pages) return null;
-    if (n === 1) return { n: 1, arts: d.arts, cartes: d.cartes };
-    const p = (d.pagesSuite || []).find(x => x.n === n);
-    return p ? { n, arts: p.arts, cartes: p.cartes } : null;
+    const p = n === 1 ? d : (d.pagesSuite || []).find(x => x.n === n);
+    if (!p) return null;
+    const poser = await liensDesArts([p.arts], urlPublique);
+    return { n, arts: poser(p.arts), cartes: p.cartes };
 }
 
 // ═══ lectures publiques : la banque d'art ═══
@@ -96,7 +145,7 @@ function versArt(d, urlPublique) {
 async function listerArts({ format, q, tri = 'nouveautes', o = 0, urlPublique, maintenant = new Date() }) {
     const filtre = { etat: 'public' };
     if (format) filtre.fmt = format;
-    if (q) { const re = new RegExp(F.echapperRegex(q.normalize('NFKC')), 'i'); filtre.$or = [{ nom: re }, { pseudo: re }]; }
+    if (q) { const f = filtreRecherche(q); if (!f) return { arts: [], suite: null }; Object.assign(filtre, f); }
     const r = await page('arts', 'banque', filtre, tri, o, PAGE_ART, { auteurId: 0, certification: 0, motif: 0, cle: 0, depotId: 0 }, maintenant);
     return { arts: r.docs.map(d => versArt(d, urlPublique)), suite: r.suite };
 }
@@ -123,6 +172,8 @@ async function publierPourExploitation(p, maintenant = new Date()) {
     if (suite.length !== p.pages - 1 || suite.some((x, i) => !F.objet(x) || x.n !== i + 2 || !arts(x.arts) || !cartes(x.cartes))) mal('pages suivantes');
     const etat = p.etat || 'en-attente';
     if (!['en-attente', 'public'].includes(etat)) mal('etat');
+    const cites = [...new Set([p.arts, ...suite.map(x => x.arts)].flat().map(x => x.art))];
+    if (cites.length && (await G.col('arts').countDocuments({ _id: { $in: cites }, etat: 'public' })) !== cites.length) mal('un art cité n\'existe pas ou n\'est pas public');
     const toutes = [p.cartes, ...suite.map(x => x.cartes)].flat().filter(Boolean).map(x => x.cle);
     const texte = a => (Array.isArray(a) ? [...new Set(a.filter(x => typeof x === 'string' && x && !F.problemeTexte(x, { max: 80 })))].slice(0, 200) : []);
     const attrs = F.objet(p.attributs) ? p.attributs : {};
@@ -234,7 +285,6 @@ async function fileModeration({ file, o = 0, secret, stockage = null }) {
     return { elements: elements.slice(0, TAILLE_FILE), suite: elements.length > TAILLE_FILE ? F.ecrireSuite(o + TAILLE_FILE) : null };
 }
 
-const supprimerCopiesPubliques = async (stockage, d) => { for (const s of ['.webp', '-480.webp']) { try { await stockage.supprimer(`${d.clePublique}${s}`); } catch (e) { console.error(`❌ [galerie] copie publique non effacée (${(e && (e.name || e.code)) || 'erreur'}) : à reprendre`); await G.col('arts').updateOne({ _id: d._id }, { $set: { copiePubliqueAEffacer: true } }); } } };
 /**
  * Applique UNE décision. Le journal (qui, quand, quoi, motif) est écrit AVANT l'effet, puis le résultat en dessous : une décision n'a jamais d'effet sans trace.
  * Rend { introuvable } | { auteur } | { conflit } | { invalide } | { indispo } | { ok:true }.
@@ -258,7 +308,7 @@ async function decider({ id, decision, motif = null, precision = null, moderateu
         await trace({ cible: { type: s.cibleType, id: s.cibleId } });
         if (decision === 'retirer' && cible && cible.etat === 'public') {
             const r = await G.col(COLL[s.cibleType]).updateOne({ _id: cible._id, etat: 'public' }, { $set: { etat: 'retire', motif: note, retireLe: maintenant } });
-            if (r.modifiedCount === 1 && s.cibleType === 'banque') await supprimerCopiesPubliques(stockage, cible);
+            if (r.modifiedCount === 1 && s.cibleType === 'banque') await purgerCopies(stockage, cible, 'retrait');
         }
         await G.col('signalements').updateMany({ cibleType: s.cibleType, cibleId: s.cibleId, etat: 'ouvert', ...(decision === 'classer' ? { _id: s._id } : {}) }, { $set: { etat: decision === 'classer' ? 'classe' : 'traite', decideLe: maintenant } });
         await resultat('applique');
@@ -279,11 +329,13 @@ async function decider({ id, decision, motif = null, precision = null, moderateu
             catch (e) { console.error(`❌ [galerie] copie publique en échec (${(e && (e.name || e.code)) || 'erreur'}) : la publication reste en attente`); await resultat('echec-copie'); return { indispo: true }; }
         }
         const r = await coll.updateOne({ _id: brut, etat: 'en-attente' }, { $set: { etat: 'public', publieLe: maintenant, motif: null } });
-        if (r.modifiedCount !== 1) { if (type === 'banque') await supprimerCopiesPubliques(stockage, d); await resultat('conflit'); return { conflit: true }; }
+        if (r.modifiedCount !== 1) { if (type === 'banque') await purgerCopies(stockage, d, 'conflit-acceptation'); await resultat('conflit'); return { conflit: true }; }
+        if (type === 'banque') await purgerAttente(stockage, d, 'acceptation');      // la copie publique suffit : l'objet d'attente ne reste pas lisible
     } else {
         const r = await coll.updateOne({ _id: brut, etat: attendu }, { $set: { etat: decision === 'refuser' ? 'refuse' : 'retire', motif: note, ...(decision === 'retirer' ? { retireLe: maintenant } : {}) } });
         if (r.modifiedCount !== 1) { await resultat('conflit'); return { conflit: true }; }
-        if (decision === 'retirer' && type === 'banque') await supprimerCopiesPubliques(stockage, d);
+        if (decision === 'refuser' && type === 'banque') await purgerAttente(stockage, d, 'refus');
+        if (decision === 'retirer' && type === 'banque') await purgerCopies(stockage, d, 'retrait');
     }
     await resultat('applique');
     return { ok: true };
@@ -291,11 +343,18 @@ async function decider({ id, decision, motif = null, precision = null, moderateu
 
 // ═══ la suppression d'un compte ═══
 /** Tout ce que la Communauté garde d'un compte part avec lui : profil (pseudo), votes, arts (et leurs objets R2), dépôts ouverts, classeurs, publications ; ses signalements sont ANONYMISÉS (ils restent dans la file). Rend un décompte. */
-async function supprimerDuCompte(compteId, stockage = null) {
-    const id = String(compteId), n = {};
-    const effacer = async (cle) => { if (stockage) { try { await stockage.supprimer(cle); } catch (e) { console.error(`❌ [galerie] objet R2 non effacé à la suppression d'un compte (${(e && (e.name || e.code)) || 'erreur'})`); } } };
-    for (const a of await G.col('arts').find({ auteurId: id }, { projection: { cle: 1, clePublique: 1 } }).toArray()) for (const k of [a.cle, a.clePublique]) for (const s of ['.webp', '-480.webp']) await effacer(`${k}${s}`);
-    for (const d of await G.col('depots').find({ compteId: id, etat: { $in: ['ouvert', 'en-cours'] } }, { projection: { cle: 1 } }).toArray()) await effacer(d.cle);
+async function supprimerDuCompte(compteId, stockage = null, secret = null) {
+    const id = String(compteId), n = {}, bilan = { enFile: 0 };
+    // Une suppression R2 qui échoue n'est JAMAIS avalée : la clé entre dans la file de reprise (purges_r2), rejouée par le balayeur. Les dépôts expirés (sans document) se retrouvent par le PRÉFIXE du compte.
+    for (const a of await G.col('arts').find({ auteurId: id }, { projection: { cle: 1, clePublique: 1 } }).toArray()) for (const k of [...clesDe(a.cle), ...clesDe(a.clePublique)]) await supprimerOuFile(stockage, k, 'compte', bilan);
+    for (const d of await G.col('depots').find({ compteId: id }, { projection: { cle: 1 } }).toArray()) await supprimerOuFile(stockage, d.cle, 'compte', bilan);
+    if (stockage && secret) {
+        const prefixe = `galerie/depot/${refCompte(id, secret)}/`;
+        let apres = null;
+        do { const l = await stockage.lister(prefixe, { apres, max: 500 }); for (const o of l.objets) await supprimerOuFile(stockage, o.cle, 'compte', bilan); apres = l.suivant; } while (apres);
+    }
+    // les compteurs des cibles votées redescendent (un vote effacé ne reste pas compté)
+    for (const v of await G.col('votes').find({ compte: id }, { projection: { genre: 1, type: 1, cible: 1 } }).limit(20000).toArray()) await G.col(COLL[v.type]).updateOne({ _id: v.cible, [CHAMP[v.genre]]: { $gt: 0 } }, { $inc: { [CHAMP[v.genre]]: -1 } });
     n.votes = (await G.col('votes').deleteMany({ compte: id })).deletedCount;
     n.arts = (await G.col('arts').deleteMany({ auteurId: id })).deletedCount;
     n.depots = (await G.col('depots').deleteMany({ compteId: id })).deletedCount;
@@ -303,8 +362,9 @@ async function supprimerDuCompte(compteId, stockage = null) {
     n.publications = (await G.col('publications').deleteMany({ auteurId: id })).deletedCount;
     n.signalements = (await G.col('signalements').updateMany({ compteId: id }, { $set: { compteId: null } })).modifiedCount;
     n.profil = (await G.col('profils').deleteOne({ _id: id })).deletedCount;
+    n.purgesEnFile = bilan.enFile;
     return n;
 }
 
-module.exports = { PAGE, PAGE_ART, SEUIL_PETIT, refCompte, compteur, pseudoDe, poserPseudo, listerPublications, filtresDeLaGalerie, pageDePublication, versPublication, listerArts, formatsDeLaBanque, versArt,
+module.exports = { PAGE, PAGE_ART, SEUIL_PETIT, motsDe, filtreRecherche, mettreEnFile, supprimerOuFile, jetonNeuf, refCompte, compteur, pseudoDe, poserPseudo, listerPublications, filtresDeLaGalerie, pageDePublication, versPublication, listerArts, formatsDeLaBanque, versArt,
     publierPourExploitation, voter, recompterVotes, mesVotes, remixer, signaler, fileModeration, decider, supprimerDuCompte, COLL };

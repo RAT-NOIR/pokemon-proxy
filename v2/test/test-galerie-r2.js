@@ -32,26 +32,28 @@ const avec = (c) => { const e = { ...ENV_VALIDE, ...c }; for (const k of Object.
 
     // ═══ 3. les clés : tout sous galerie/ ═══
     for (const ok of ['galerie/depot/ab12/Cd34', 'galerie/attente/AbC_d-1.webp', 'galerie/pub/x/y-480.webp']) H.vrai(`3. clé admise : ${ok}`, R2.cleValide(ok));
-    for (const mauvais of ['depot/ab/cd', 'prive/ab/cd', '/galerie/x', 'galerie/', 'galerie/../vignettes/x', 'galerie//x', 'galerie/x y', 'galerie/é', 'Galerie/x', '', null, undefined, 42, `galerie/${'a'.repeat(300)}`])
+    for (const mauvais of ['depot/ab/cd', 'prive/ab/cd', '/galerie/x', 'galerie/', 'galerie/../vignettes/x', 'galerie//x', 'galerie/x y', 'galerie/a/./b', 'galerie/x.', 'galerie/x/', 'galerie/é', 'Galerie/x', '', null, undefined, 42, `galerie/${'a'.repeat(300)}`])
         H.vrai(`   clé REFUSÉE : ${String(mauvais).slice(0, 30)}`, !R2.cleValide(mauvais));
     {   // le stockage réel refuse toute clé hors du préfixe AVANT toute commande, et n'émet aucune commande pour elle
-        const envoyees = [];
-        const faux = { send: async (c) => { envoyees.push(c.constructor.name + ':' + c.input.Key); return { ContentLength: 3, Body: (async function* () { yield Buffer.from('abc'); })() }; } };
+        const envoyees = [], buckets = [];
+        const faux = { send: async (c) => { envoyees.push(c.constructor.name + ':' + c.input.Key); buckets.push(c.input.Bucket); return { ContentLength: 3, Body: (async function* () { yield Buffer.from('abc'); })() }; } };
         const c = R2.lireConfigR2(ENV_VALIDE).c, st = R2.creerStockage(c, { env: ENV_VALIDE, client: faux });
         let refus = 0; for (const f of [() => st.tete('prive/x'), () => st.lire('depot/x', 10), () => st.ecrire('autre/x', Buffer.from('a'), 'image/webp'), () => st.supprimer('../galerie/x'), () => st.copier('galerie/a', 'pub/b')]) { try { await f(); } catch (e) { refus++; } }
         H.v('   le stockage réel : 5 clés hors préfixe, 5 refus, ZÉRO commande envoyée', [refus, envoyees.length], [5, 0]);
         await st.ecrire('galerie/attente/x.webp', Buffer.from('a'), 'image/webp'); await st.tete('galerie/attente/x.webp'); await st.supprimer('galerie/attente/x.webp');
-        H.v('   et une clé sous galerie/ part bien, vers le bucket dédié (jamais un autre)', envoyees, ['PutObjectCommand:galerie/attente/x.webp', 'HeadObjectCommand:galerie/attente/x.webp', 'DeleteObjectCommand:galerie/attente/x.webp']);
+        H.v('   et une clé sous galerie/ part bien, vers le bucket PRIVÉ (jamais un autre)', [envoyees, buckets], [['PutObjectCommand:galerie/attente/x.webp', 'HeadObjectCommand:galerie/attente/x.webp', 'DeleteObjectCommand:galerie/attente/x.webp'], Array(3).fill('rm-galerie-essai-prive')]);
+        buckets.length = 0; await st.ecrire('galerie/pub/x.webp', Buffer.from('a'), 'image/webp');
+        H.v('   une clé galerie/pub/ part vers le bucket PUBLIC, et elle seule', buckets, ['rm-galerie-essai-public']);
     }
 
     // ═══ 4. la configuration : un bucket DÉDIÉ ═══
     H.vrai('4. configuration complète : admise, avec l\'origine d\'écriture R2 et l\'adresse publique sans barre finale', (c => c.ok && c.c.endpoint === 'https://abcdef0123456789abcdef0123456789.r2.cloudflarestorage.com' && c.c.urlPublique === 'https://pub.galerie-essai.test')(R2.lireConfigR2(ENV_VALIDE)));
     H.vrai('   juridiction UE : un endpoint *.eu.r2.cloudflarestorage.com explicite est admis', R2.lireConfigR2(avec({ V2_GALERIE_R2_ENDPOINT: 'https://abcdef0123456789abcdef0123456789.eu.r2.cloudflarestorage.com' })).ok);
     const NON = [
-        ['une variable absente (secret)', { V2_GALERIE_R2_SECRET: undefined }], ['une variable absente (bucket)', { V2_GALERIE_R2_BUCKET: undefined }], ['une variable absente (adresse publique)', { V2_GALERIE_R2_URL_PUBLIQUE: undefined }],
-        ['bucket de production (R2_BUCKET_IMAGES)', { V2_GALERIE_R2_BUCKET: 'rat-market-images' }], ['bucket égal à R2_BUCKET_BANC', { R2_BUCKET_BANC: 'rm-galerie-essai' }],
-        ['bucket égal à V2_VISUELS_R2_BUCKET', { V2_VISUELS_R2_BUCKET: 'rm-galerie-essai' }], ['bucket égal à n\'importe quelle autre variable *BUCKET*', { AUTRE_BUCKET_X: 'rm-galerie-essai' }],
-        ['nom de bucket mal formé', { V2_GALERIE_R2_BUCKET: 'Mauvais Nom' }], ['endpoint http', { V2_GALERIE_R2_ENDPOINT: 'http://abcdef0123456789abcdef0123456789.r2.cloudflarestorage.com' }],
+        ['une variable absente (secret)', { V2_GALERIE_R2_SECRET: undefined }], ['une variable absente (bucket privé)', { V2_GALERIE_R2_BUCKET_PRIVE: undefined }], ['une variable absente (bucket public)', { V2_GALERIE_R2_BUCKET_PUBLIC: undefined }], ['le même bucket pour le privé et le public', { V2_GALERIE_R2_BUCKET_PUBLIC: 'rm-galerie-essai-prive' }], ['bucket PUBLIC de production (R2_BUCKET_IMAGES)', { V2_GALERIE_R2_BUCKET_PUBLIC: 'rat-market-images' }], ['adresse publique = hôte public de la production', { V2_GALERIE_R2_URL_PUBLIQUE: 'https://rat-market.fr' }], ['une variable absente (adresse publique)', { V2_GALERIE_R2_URL_PUBLIQUE: undefined }],
+        ['bucket de production (R2_BUCKET_IMAGES)', { V2_GALERIE_R2_BUCKET_PRIVE: 'rat-market-images' }], ['bucket égal à R2_BUCKET_BANC', { R2_BUCKET_BANC: 'rm-galerie-essai-prive' }],
+        ['bucket égal à V2_VISUELS_PROD_BUCKET', { V2_VISUELS_PROD_BUCKET: 'rm-galerie-essai-prive' }], ['bucket égal à V2_VISUELS_ESSAI_BUCKET', { V2_VISUELS_ESSAI_BUCKET: 'rm-galerie-essai-public' }], ['bucket égal à n\'importe quelle autre variable *BUCKET*', { AUTRE_BUCKET_X: 'rm-galerie-essai-prive' }],
+        ['nom de bucket mal formé', { V2_GALERIE_R2_BUCKET_PRIVE: 'Mauvais Nom' }], ['endpoint http', { V2_GALERIE_R2_ENDPOINT: 'http://abcdef0123456789abcdef0123456789.r2.cloudflarestorage.com' }],
         ['endpoint qui n\'est pas R2', { V2_GALERIE_R2_ENDPOINT: 'https://exemple.test' }], ['endpoint avec un chemin', { V2_GALERIE_R2_ENDPOINT: 'https://abcdef0123456789abcdef0123456789.r2.cloudflarestorage.com/x' }],
         ['adresse publique http', { V2_GALERIE_R2_URL_PUBLIQUE: 'http://pub.galerie-essai.test' }], ['compte mal formé', { V2_GALERIE_R2_COMPTE: 'a b' }]
     ];
@@ -59,8 +61,8 @@ const avec = (c) => { const e = { ...ENV_VALIDE, ...c }; for (const k of Object.
     H.vrai('   aucune raison de refus n\'imprime une valeur de variable', NON.every(([, c]) => { const r = R2.lireConfigR2(avec(c)).raison || ''; return !/secret-essai|cle-id-essai|rat-market-images/.test(r); }));
     { // mutant : sans la comparaison aux autres variables de bucket, le bucket de production passe
         const m = charger('r2.js', [['if (memeNom.length) return refus(', 'if (false) return refus('], ["if (bucketsDeProduction(env).includes(bucket)) return refus(", 'if (false) return refus(']]);
-        H.v('   MUTANT « la comparaison aux buckets de production est retirée » : le réel refuse, le mutant admet', [R2.lireConfigR2(avec({ V2_GALERIE_R2_BUCKET: 'rat-market-images' })).ok, m.lireConfigR2(avec({ V2_GALERIE_R2_BUCKET: 'rat-market-images' })).ok], [false, true]);
-        const m2 = charger('r2.js', [["return typeof cle === 'string' && FORME_CLE.test(cle) && !cle.includes('..') && !cle.includes('//');", 'return true;']]);
+        H.v('   MUTANT « la comparaison aux buckets de production est retirée » : le réel refuse, le mutant admet', [R2.lireConfigR2(avec({ V2_GALERIE_R2_BUCKET_PRIVE: 'rat-market-images' })).ok, m.lireConfigR2(avec({ V2_GALERIE_R2_BUCKET_PRIVE: 'rat-market-images' })).ok], [false, true]);
+        const m2 = charger('r2.js', [["return typeof cle === 'string' && FORME_CLE.test(cle) && !cle.includes('..') && !cle.includes('//') && !cle.endsWith('.') && !cle.endsWith('/') && !cle.split('/').includes('.');", 'return true;']]);
         H.v('   MUTANT « la garde de préfixe est retirée » : une clé hors galerie/ passerait', [R2.cleValide('prive/x'), m2.cleValide('prive/x')], [false, true]);
     }
 
@@ -72,7 +74,7 @@ const avec = (c) => { const e = { ...ENV_VALIDE, ...c }; for (const k of Object.
         H.v('5. sous BANC_ISOLE=1 sans R2_BUCKET_BANC : la signature d\'une écriture est REFUSÉE', refus(banc), 'refus');
         H.v('   sous BANC_ISOLE=1 avec R2_BUCKET_BANC d\'un AUTRE bucket : refusée', refus({ ...banc, R2_BUCKET_BANC: 'autre-bucket' }), 'refus');
         H.v('   hors banc : signée', refus(ENV_VALIDE), 'signe');
-        const m = charger('r2.js', [['const exigerEcritureAutorisee = () => {', 'const exigerEcritureAutorisee = () => { return;']]);
+        const m = charger('r2.js', [['const exigerEcritureAutorisee = (bucket) => {', 'const exigerEcritureAutorisee = (bucket) => { return;']]);
         H.v('   MUTANT « le présigneur n\'appelle plus verifierEcritureR2 » : sous banc il signerait', (() => { try { m.creerStockage(c, { env: banc, client: {} }).presignerDepot({ cle: 'galerie/depot/a/b', type: 'image/webp', octets: 10, expire: 300 }); return 'signe'; } catch { return 'refus'; } })(), 'signe');
     }
     H.bilan();
