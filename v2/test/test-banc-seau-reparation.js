@@ -44,7 +44,7 @@ const code = async f => { try { await f(); return 'a réussi'; } catch (e) { ret
         const apres = await seaux.courant();
         H.v('1. (a) après la requête tuée : ecritures 2, termine 1, enVol 1, et la date de la dernière réservation', [apres.ecritures, apres.termine, apres.enVol, apres.derniereReservation instanceof Date], [2, 1, 1, true]);
         let e1 = null; try { await seaux.sceller(seau.id); } catch (e) { e1 = e; }
-        H.v('1. (b) le scellé est refusé avec un code DISTINCT ECRITURES_EN_VOL (pas « ecritures-en-cours »), l\'écart et l\'âge', [e1 && e1.detail, e1 && e1.enVol, e1 && typeof e1.ageMs === 'number', e1 && /1 écriture/.test(e1.message)], ['ECRITURES_EN_VOL', 1, true, true]);
+        H.v('1. (b) le scellé est refusé avec un code DISTINCT ECRITURES_EN_VOL (pas « ecritures-en-cours »), l\'écart et l\'âge', [e1 && e1.detail, e1 && e1.enVol, e1 && typeof e1.ageMs === 'number', e1 && /1 écriture/.test(e1.texte)], ['ECRITURES_EN_VOL', 1, true, true]);
         H.v('1. (b) …et l\'état reste ouvert (rien n\'est figé)', (await seau0(seau.id)).etat, 'ouvert');
         H.v('1. le banc est gelé : aucun autre seau ne peut naître (c\'est ce que la réparation débloque)', await code(() => seaux.declarer({ nom: 'tue-2', type: 'entrainement', cible: 5, par: 'test' })), 'seau-ouvert');
     });

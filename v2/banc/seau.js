@@ -235,7 +235,7 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
         if (enVol) {
             // 🔑 un écart qui DURE n'est plus une collision passagère : code DISTINCT, l'écart et l'âge de la dernière réservation (une requête tuée gèle le banc tant que personne ne répare)
             const ageMs = enVol.derniere ? Math.max(0, horloge().getTime() - enVol.derniere.getTime()) : null;
-            throw Object.assign(erreur('CONFLIT', 'ECRITURES_EN_VOL'), { message: `${enVol.ecart} écriture(s) en vol, dernière réservation ${ageMs === null ? 'à une date inconnue' : `il y a ${Math.round(ageMs / 1000)} s`} : si elle date, la requête est morte (node v2/banc/reparer-seau.js)`, enVol: enVol.ecart, ageMs });
+            throw Object.assign(erreur('CONFLIT', 'ECRITURES_EN_VOL'), { texte: `${enVol.ecart} écriture(s) en vol, dernière réservation ${ageMs === null ? 'à une date inconnue' : `il y a ${Math.round(ageMs / 1000)} s`} : si elle date, la requête est morte (node v2/banc/reparer-seau.js)`, enVol: enVol.ecart, ageMs });
         }
         throw erreur('CONFLIT', 'ecritures-en-cours');
     }

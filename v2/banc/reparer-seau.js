@@ -9,7 +9,7 @@
 const COL_SEAUX = 'banc_seaux', COL_TRACE = 'banc_reparations';
 const FORME_SEAU = /^[0-9a-f]{16}$/;
 const MINUTES_DEFAUT = 30;
-const erreur = (code, message) => Object.assign(new Error(message || code), { code, detail: code });
+const erreur = (code, message) => Object.assign(new Error(code), { code, detail: code, texte: message || code });
 
 /**
  * @param {{seauId:string, attendu:number, par:string, minutes?:number, colFn:(n:string)=>any, horloge?:()=>Date}} o
@@ -78,7 +78,7 @@ async function lancerCLI(argv, { env = process.env, connecter = connecterEcritur
         const r = await reparerSeau({ seauId: a.seau, attendu: a.attendu, par: a.par, minutes: a.minutes, colFn: c.colFn, ...(horloge ? { horloge } : {}) });
         journal(`seau ${r.seauId} réparé : termine ${r.avant.termine} -> ${r.apres.termine} (écart ${r.ecart}), trace dans banc_reparations`);
         return 0;
-    } catch (e) { console.error(`❌ REFUS : ${(e && e.code) || (e && e.name) || 'erreur'} — ${e && e.message ? e.message : ''}`); return 1; }
+    } catch (e) { console.error(`❌ REFUS : ${(e && e.code) || (e && e.name) || 'erreur'} — ${e && e.texte ? e.texte : ''}`); return 1; }
     finally { try { if (c && c.fermer) await c.fermer(); } catch { /* rien */ } }
 }
 

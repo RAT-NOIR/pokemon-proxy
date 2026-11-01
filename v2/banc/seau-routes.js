@@ -21,7 +21,7 @@ const PLACES_MAX = 4, PAR_PORTEUR_MAX = 2, DELAI_LECTURE_MS = 15000;
 
 /** Une erreur de seau.js → la réponse. Toute autre exception : 503, journalisée par son code seulement. */
 function repondre(res, e, ou) {
-    if (e && ['ENTREE', 'CONFLIT', 'CODE_INVALIDE', 'INDISPONIBLE'].includes(e.code)) return repondreErreur(res, e.code, e.detail === 'ECRITURES_EN_VOL' ? e.message : undefined, { detail: e.detail }, e.statut);
+    if (e && ['ENTREE', 'CONFLIT', 'CODE_INVALIDE', 'INDISPONIBLE'].includes(e.code)) return repondreErreur(res, e.code, e.detail === 'ECRITURES_EN_VOL' ? e.texte : undefined, { detail: e.detail }, e.statut);
     journal(ou, e); return repondreErreur(res, 'INDISPONIBLE');
 }
 const refuse = (res, detail, statut) => repondreErreur(res, 'ENTREE', undefined, { detail }, statut);
