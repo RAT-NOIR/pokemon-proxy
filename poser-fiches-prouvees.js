@@ -191,7 +191,7 @@ async function simulerServis({ cartesDb, lecture, plan, entrees, ajoutsSets }) {
 }
 
 async function executer({ argv, ouvrirLecture, ouvrirEcriture, log = console.log, err = console.error }) {
-    const AUTORISES = [/^--decision=[\d-]+$/, /^--attendu=\d+$/, /^--attendu-sets=\d+$/, /^--ecrire$/];
+    const AUTORISES = [/^--decision=[\w-]+$/, /^--attendu=\d+$/, /^--attendu-sets=\d+$/, /^--ecrire$/];
     const inconnus = argv.filter(a => !AUTORISES.some(r => r.test(a)));
     const arg = n => argv.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3);
     if (inconnus.length || !arg('decision')) { err(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}--decision=<date> obligatoire (décisions : ${Object.keys(DECISIONS).join(', ')})`); return 2; }
