@@ -18,7 +18,9 @@ const fini = x => typeof x === 'number' && Number.isFinite(x);
 // I3 (relecture p8, tour 2) : la preuve se DURCIT — la jambe « fenêtre ORB » ne suffit plus seule : le cosinus p8000 ne doit pas être CONTRAIRE (< cosContredit) contre ce scan. Un cosinus inconnu (scan absent de
 // l'index) n'est pas contraire ; la jambe « cosinus >= 0,9 » le satisfait d'elle-même. La 3e concordance ne rattrape JAMAIS un scan au cosinus contraire.
 const cosinusContraire = m => fini(m.cos) && m.cos < SEUILS.cosContredit;
-const concorde = m => ((fini(m.fen) && m.fen >= SEUILS.inliersConcorde) || (fini(m.cos) && m.cos >= SEUILS.cosConcorde)) && !cosinusContraire(m);
+// TOUR 3 (décision du coordinateur) : un cosinus INCONNU REFUSE aussi — la jambe fenêtre n'a que 13 négatifs calibrés, une garde qui ne peut pas conclure bloque. Un scan concorde donc SEULEMENT si son cosinus est
+// CONNU et non contraire (>= 0,7) ET l'une des deux jambes tient (fenêtre >= 30, ou cosinus >= 0,9). Le cosinus manquant se CALCULE (même modèle, même prétraitement que l'index) avant de juger ; sans cosinus, le produit reste refusé.
+const concorde = m => fini(m.cos) && !cosinusContraire(m) && ((fini(m.fen) && m.fen >= SEUILS.inliersConcorde) || m.cos >= SEUILS.cosConcorde);
 const contredit = m => fini(m.fen) && m.fen <= SEUILS.inliersContredit && (!fini(m.cos) || m.cos < SEUILS.cosContredit);
 const mesurable = m => fini(m.fen) || fini(m.cos);
 
@@ -42,7 +44,7 @@ function classerAvecTroisieme(mesures) {
     const base = classer(mesures);
     if (base.detail !== 'hesitante') return base;
     const aVerifier = mesures.filter(m => !concorde(m));
-    if (aVerifier.every(m => !cosinusContraire(m) && troisiemeConcordance(m.tierce)))
+    if (aVerifier.every(m => fini(m.cos) && !cosinusContraire(m) && troisiemeConcordance(m.tierce)))
         return { classe: 'meme', detail: 'hesitante-3e', sous: `hésitant admis par la 3e concordance (zone souple du catalogue : pHash <= ${SEUIL_SOUPLE.phashMax} ET ORB >= ${SEUIL_SOUPLE.inliersMin}) contre ${aVerifier.length} référence(s), les autres (${mesures.length - aVerifier.length}) concordent` };
     return { ...base, sous: base.sous + ' ; la 3e concordance échoue ou manque' };
 }

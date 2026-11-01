@@ -8,12 +8,12 @@ const P = require('../mesures/preuve-emprunt');
 (async () => {
     const m = (o = {}) => ({ cle: 'x/a.webp', cos: null, fen: null, ...o });
     // ── la règle (inchangée) ────────────────────────────────────────────────────────────────
-    H.v('R1. tous les scans concordent (fenêtre >= 30 ou cosinus >= 0,9) : « meme »', P.classer([m({ fen: 31 }), m({ cos: 0.9 }), m({ fen: 12, cos: 0.95 })]).classe, 'meme');
-    H.v('R2. le seuil est >= : 30 inliers concordent, 29 non (sans cosinus : hésitant)', [P.classer([m({ fen: 30 })]).classe, P.classer([m({ fen: 29 })]).classe], ['meme', 'indecidable']);
+    H.v('R1. tous les scans concordent (fenêtre >= 30 ou cosinus >= 0,9) : « meme »', P.classer([m({ fen: 31, cos: 0.8 }), m({ cos: 0.9 }), m({ fen: 12, cos: 0.95 })]).classe, 'meme');
+    H.v('R2. le seuil est >= : 30 inliers concordent, 29 non (cosinus connu 0,8)', [P.classer([m({ fen: 30, cos: 0.8 })]).classe, P.classer([m({ fen: 29, cos: 0.8 })]).classe], ['meme', 'indecidable']);
     H.v('R3. tous contredisent (fenêtre <= 15 ET cosinus < 0,7 ou inconnu) : « different »', P.classer([m({ fen: 15, cos: 0.69 }), m({ fen: 3 })]).classe, 'different');
-    H.v('R4. une référence sans AUCUNE mesure : indécidable (jamais admis), nommé « non mesurable »', [P.classer([m({ fen: 40 }), m({})]).classe, /non mesurable/.test(P.classer([m({})]).sous)], ['indecidable', true]);
+    H.v('R4. une référence sans AUCUNE mesure : indécidable (jamais admis), nommé « non mesurable »', [P.classer([m({ fen: 40, cos: 0.9 }), m({})]).classe, /non mesurable/.test(P.classer([m({})]).sous)], ['indecidable', true]);
     H.v('R5. aucune référence : indécidable', P.classer([]).classe, 'indecidable');
-    H.v('R6. mixte (une concorde, une contredit) : indécidable', P.classer([m({ fen: 40 }), m({ fen: 5, cos: 0.1 })]).classe, 'indecidable');
+    H.v('R6. mixte (une concorde, une contredit) : indécidable', P.classer([m({ fen: 40, cos: 0.8 }), m({ fen: 5, cos: 0.1 })]).classe, 'indecidable');
     H.v('R7. une mesure hésitante (cosinus 0,8 sans fenêtre) : « hesitante », pas « meme »', P.classer([m({ cos: 0.8 })]).detail, 'hesitante');
     // ── tour 2 (relecture p8) : les seuils sont TENUS par un test de chaque côté ─────────────
     H.v('R8. inliersContredit = 15 : 15 contredit (cosinus < 0,7), 16 NE contredit PAS (mutation 16..20)', [P.classer([m({ fen: 15, cos: 0.1 })]).detail, P.classer([m({ fen: 16, cos: 0.1 })]).detail, P.classer([m({ fen: 20, cos: 0.1 })]).detail], ['contredite', 'hesitante', 'hesitante']);
@@ -21,7 +21,12 @@ const P = require('../mesures/preuve-emprunt');
     H.v('R10. cosConcorde = 0,9 : 0,9 concorde, 0,89 et 0,87 non (mutation 0,85)', [P.classer([m({ cos: 0.9 })]).classe, P.classer([m({ cos: 0.89 })]).detail, P.classer([m({ cos: 0.87 })]).detail], ['meme', 'hesitante', 'hesitante']);
     // I3 (relecture p8) : la fenêtre ORB ne suffit PLUS seule si le cosinus p8000 est CONTRAIRE (< 0,7) ; un cosinus inconnu n'est pas contraire
     H.v('R11. fenêtre 40 face à un cosinus 0,46 : NE concorde PAS (le réseau dit « différent »), le produit n\'est pas admis', [P.classer([m({ fen: 40, cos: 0.46 })]).classe, P.classer([m({ fen: 40, cos: 0.46 })]).detail], ['indecidable', 'hesitante']);
-    H.v('R11b. la frontière : fenêtre 40 avec cosinus 0,69 refusée, avec 0,7 ou sans cosinus admise', [P.classer([m({ fen: 40, cos: 0.69 })]).classe, P.classer([m({ fen: 40, cos: 0.7 })]).classe, P.classer([m({ fen: 40 })]).classe], ['indecidable', 'meme', 'meme']);
+    H.v('R11b. la frontière : fenêtre 40 avec cosinus 0,69 refusée, avec 0,7 admise', [P.classer([m({ fen: 40, cos: 0.69 })]).classe, P.classer([m({ fen: 40, cos: 0.7 })]).classe], ['indecidable', 'meme']);
+    // tour 3 (décision du coordinateur) : un cosinus INCONNU REFUSE — une garde qui ne peut pas conclure bloque (la jambe fenêtre n'a que 13 négatifs calibrés)
+    H.v('R12. fenêtre 80 SANS cosinus (scan absent de l\'index) : NE concorde PAS ; le produit n\'est pas admis (hésitant, jamais « meme »)', [P.classer([m({ fen: 80 })]).classe, P.classer([m({ fen: 80 })]).detail], ['indecidable', 'hesitante']);
+    H.v('R12b. une seule référence sans cosinus suffit à refuser (les autres concordent par le cosinus)', P.classer([m({ cos: 0.95 }), m({ fen: 90 })]).classe, 'indecidable');
+    H.v('R12c. le cosinus devenu connu applique la règle normale : fenêtre 80 + cosinus 0,75 admise, + cosinus 0,5 refusée', [P.classer([m({ fen: 80, cos: 0.75 })]).classe, P.classer([m({ fen: 80, cos: 0.5 })]).classe], ['meme', 'indecidable']);
+    H.v('R12d. un cosinus inconnu ne bloque pas une CONTRADICTION par la fenêtre (<= 15) : « different » reste possible', P.classer([m({ fen: 3 })]).classe, 'different');
     H.v('R11c. UNE seule référence au cosinus contraire suffit à refuser (les autres concordent)', P.classer([m({ fen: 80, cos: 0.95 }), m({ fen: 45, cos: 0.4 })]).classe, 'indecidable');
     // ── la lecture sur R2 public ────────────────────────────────────────────────────────────
     const appels = []; const octets = Buffer.from('RIFFxxxxWEBPfake');
@@ -52,12 +57,13 @@ const P = require('../mesures/preuve-emprunt');
     H.v('T1. zone souple du catalogue : pHash <= 6 ET ORB >= 30', [P.troisiemeConcordance({ phash: 6, inliers: 30 }), P.troisiemeConcordance({ phash: 7, inliers: 80 }), P.troisiemeConcordance({ phash: 0, inliers: 29 })], [true, false, false]);
     H.v('T2. une mesure absente ou non finie ne concorde jamais', [P.troisiemeConcordance(null), P.troisiemeConcordance({ phash: NaN, inliers: 99 }), P.troisiemeConcordance({ phash: 1, inliers: undefined })], [false, false, false]);
     // un hésitant n'est admis que si la 3e concordance passe contre CHAQUE référence non déjà concordante
-    const h1 = P.classerAvecTroisieme([m({ cos: 0.8, tierce: { phash: 4, inliers: 50 } }), m({ fen: 40 })]);
+    const h1 = P.classerAvecTroisieme([m({ cos: 0.8, tierce: { phash: 4, inliers: 50 } }), m({ fen: 40, cos: 0.8 })]);
     H.v('T3. hésitant dont chaque référence non concordante passe la 3e concordance : « meme » (preuve nommée)', [h1.classe, /3e concordance/.test(h1.sous)], ['meme', true]);
     const h2 = P.classerAvecTroisieme([m({ cos: 0.8, tierce: { phash: 4, inliers: 50 } }), m({ cos: 0.75, tierce: { phash: 9, inliers: 50 } })]);
     H.v('T4. une seule référence qui échoue la 3e concordance : le produit reste indécidable (sans visuel)', h2.classe, 'indecidable');
     H.v('T5. sans mesure de 3e concordance (image illisible) : reste indécidable', P.classerAvecTroisieme([m({ cos: 0.8 })]).classe, 'indecidable');
     H.v('T6. la 3e concordance ne rattrape JAMAIS un « mixte » ou un « different » : seul un hésitant', [P.classerAvecTroisieme([m({ fen: 40 }), m({ fen: 5, cos: 0.1, tierce: { phash: 2, inliers: 90 } })]).classe, P.classerAvecTroisieme([m({ fen: 3, tierce: { phash: 1, inliers: 99 } })]).classe], ['indecidable', 'different']);
     H.v('T7. (relecture p8) la 3e concordance ne rattrape JAMAIS un scan au cosinus contraire (fenêtre 40, cosinus 0,46, pHash 2)', P.classerAvecTroisieme([m({ fen: 40, cos: 0.46, tierce: { phash: 2, inliers: 90 } })]).classe, 'indecidable');
+    H.v('T8. (tour 3) la 3e concordance ne rattrape pas non plus un scan SANS cosinus (fenêtre 40, cosinus inconnu, pHash 2)', P.classerAvecTroisieme([m({ fen: 40, tierce: { phash: 2, inliers: 90 } })]).classe, 'indecidable');
     H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });
