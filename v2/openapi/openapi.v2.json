@@ -7161,7 +7161,7 @@
               "type": "string"
             },
             "x-conditionnel": "V2_MESURES_CLIENT",
-            "description": "AJOUT FACULTATIF (contrat « calcul client ») : ce que le CLIENT sait calculer. Lu SEULEMENT si `V2_MESURES_CLIENT=1` ; seule la valeur `mesures-1` compte (le client calcule les mesures d'image de la règle G et fera le second envoi `POST /api/identifier/mesures`). Une valeur inconnue est ignorée, jamais un refus."
+            "description": "AJOUT FACULTATIF (contrat « calcul client ») : ce que le CLIENT sait calculer. Lu SEULEMENT si `V2_MESURES_CLIENT=1` ; seule la valeur `mesures-1` compte (le client calcule les mesures d'image de la règle G et fera le second envoi `POST /api/identifier/mesures`). Une valeur inconnue est ignorée, jamais un refus. AUTRE VALEUR LUE, indépendante de `V2_MESURES_CLIENT` (aucun drapeau) : `mention-langues-1` — le Produit porte alors `visuelMentionLangues` { fr, en } (voir le schéma Produit) ; même garde (tableau de 8 au plus, valeur exacte)."
           }
         },
         "required": [
