@@ -3,9 +3,9 @@
 //   · TABLEAU : les 9 lignes de la série, dans l'ORDRE, avec ce que l'essai doit répondre à chacune (§7 de serie-P-verifications.md : le niveau, la facturation servie, la déclaration envoyée, la réponse du serveur à cette
 //     déclaration, le quota restant du jour de Paris) — les valeurs sont celles du cahier des charges, lues dans le code du service (facturation.js, questions.js, ledger.js), jamais devinées ;
 //   · comparerLigne : confronte ce que l'essai a servi à la ligne attendue et rend LE PREMIER écart (champ, attendu, observé), ou null ; le client s'arrête là, sans adapter la suite ;
-//   · codeSortie : 14 = écart au tableau, 15 = dépôt de photo refusé au compte ordinaire (aucun scan lancé), 1 = autre arrêt, 0 = rien. (10, 11, 12 sont pris par serie-probable.js.)
+//   · codeSortie : 14 = écart au tableau, 15 = dépôt de photo refusé au compte ordinaire (aucun scan lancé), 16 = ligne NON JUGÉE (erreur hors Arret : la série s'arrête, le bilan exige 9 lignes jugées sur 9), 1 = autre arrêt, 0 = rien. (10, 11, 12 sont pris par serie-probable.js.)
 // Écrit par ce qu'il AUTORISE : une ligne n'est « conforme » que si CHAQUE champ listé est exactement celui du tableau ; un champ illisible, absent ou d'un autre type est un écart.
-const CODE_ECART = 14, CODE_PHOTO_REFUSEE = 15;
+const CODE_ECART = 14, CODE_PHOTO_REFUSEE = 15, CODE_LIGNE_NON_JUGEE = 16;
 const QUOTA_GRATUIT = 10;                                 // analyses RENDUES par jour de Paris pour un compte gratuit vérifié sans abonnement (config.quotas.gratuit)
 const PLAFOND_PROBABLE_AUCUNE = 3;                        // remboursements « aucune » sur un probable, par jour (plafondDesProbables)
 const VERSION_CLIENT = '2.0.1';                           // le niveau « probable » n'est servi qu'à partir de cette version (identifier/probable.js::VERSION_MIN_PROBABLE)
@@ -82,6 +82,18 @@ function departInvalide(soldeEtOffre) {
     return null;
 }
 
-const codeSortie = r => (r && r.ecart ? CODE_ECART : r && typeof r.arret === 'string' && r.arret.startsWith('PHOTO REFUSÉE') ? CODE_PHOTO_REFUSEE : r && r.arret ? 1 : 0);
+/**
+ * Le code de sortie, écrit par ce qu'il AUTORISE : 0 n'est rendu que si la série est allée au bout SANS arrêt, SANS écart, SANS erreur et avec TOUTES les lignes du tableau jugées (9 sur 9). Une ligne non jugée (erreur hors Arret :
+ * délai dépassé, fichier illisible…) est un échec dédié (16), jamais un « conforme » à 8 lignes sur 9. Un résultat absent ou illisible n'est pas 0 non plus.
+ */
+const codeSortie = r => {
+    if (!r || typeof r !== 'object') return 1;
+    if (r.ecart) return CODE_ECART;
+    if (typeof r.arret === 'string' && r.arret.startsWith('PHOTO REFUSÉE')) return CODE_PHOTO_REFUSEE;
+    if (r.ligneNonJugee || (Array.isArray(r.erreurs) && r.erreurs.length > 0)) return CODE_LIGNE_NON_JUGEE;
+    if (r.arret) return 1;
+    if (r.compteTest && !(Array.isArray(r.resultats) && r.resultats.length === TABLEAU.length)) return CODE_LIGNE_NON_JUGEE;
+    return 0;
+};
 
-module.exports = { TABLEAU, comparerLigne, comparerPremiere, comparerFacturation, departInvalide, codeSortie, CODE_ECART, CODE_PHOTO_REFUSEE, QUOTA_GRATUIT, PLAFOND_PROBABLE_AUCUNE, VERSION_CLIENT, CHAMPS_FACTURATION };
+module.exports = { TABLEAU, comparerLigne, comparerPremiere, comparerFacturation, departInvalide, codeSortie, CODE_ECART, CODE_PHOTO_REFUSEE, CODE_LIGNE_NON_JUGEE, QUOTA_GRATUIT, PLAFOND_PROBABLE_AUCUNE, VERSION_CLIENT, CHAMPS_FACTURATION };

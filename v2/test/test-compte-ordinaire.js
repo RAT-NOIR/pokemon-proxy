@@ -68,7 +68,7 @@ const vue = base => new Proxy(base, { get(t, p) {
     H.vrai('   le compte « banc-ordinaire » : adresse réservée .invalid, confirmé, marqué banc ET bancOrdinaire', !!c && c.email === ADR && /\.invalid$/.test(c.email) && c.verifie === true && c.banc === true && c.bancOrdinaire === true);
     H.v('   NON administrateur : aucun champ de rôle', [c.role, 'role' in c], [undefined, false]);
     H.v('   generation 0, solde à zéro, aucun abonnement, un seul compte créé et rien d\'autre', [c.generation, c.solde, c.abonnement.actif, await compterTout()], [0, { accueil: 0, achete: 0 }, false, { ...base0, comptes: (base0.comptes || 0) + 1 }]);
-    const mdp = val(NOM_MDP);
+    const mdp = val(NOM_MDP) ?? '';      // absent => '' : l'assertion échoue au lieu de planter le banc
     H.vrai('   le mot de passe écrit au .env est GÉNÉRÉ (32 caractères URL-sûrs), conforme à la politique, et il ouvre le compte', typeof mdp === 'string' && /^[A-Za-z0-9_-]{32}$/.test(mdp) && P.politique(mdp, CLE) === null && await P.verifier(mdp, c.motDePasse));
     H.v('   l\'identifiant écrit au .env est l\'adresse du compte', val(NOM_ID), ADR);
     H.v('   les noms des variables sont ceux du cahier des charges', [essai.NOM_ORDINAIRE_IDENTIFIANT, essai.NOM_ORDINAIRE_MOT_DE_PASSE, essai.ADRESSE_ORDINAIRE], [NOM_ID, NOM_MDP, ADR]);
@@ -85,7 +85,7 @@ const vue = base => new Proxy(base, { get(t, p) {
       H.v('3a. le compte existe, sans --reprendre : refus, ni .env ni hachage ne bougent', [r.code, lit() === env1, JSON.stringify((await col('comptes').findOne({ emailCle: CLE })).motDePasse) === h1, /--banc --ordinaire --reprendre/.test(r.texte)], [1, true, true, true]); }
     { const env1 = lit(), g1 = (await col('comptes').findOne({ emailCle: CLE })).generation;
       const r = await jouer(['--base=rm_essai', '--banc', '--ordinaire', '--reprendre'], { fichierEnv: fichier });
-      const c2 = await col('comptes').findOne({ emailCle: CLE }), mdp2 = val(NOM_MDP);
+      const c2 = await col('comptes').findOne({ emailCle: CLE }), mdp2 = val(NOM_MDP) ?? '';
       H.v('3b. --reprendre : code 0, mot de passe régénéré (valide, l\'ancien non), generation +1, toujours sans rôle', [r.code, mdp2 !== mdp, await P.verifier(mdp2, c2.motDePasse), await P.verifier(mdp, c2.motDePasse), c2.generation, 'role' in c2, espions.poserRole.length], [0, true, true, false, g1 + 1, false, 0]);
       H.v('   ... le .env : seule la ligne du mot de passe a changé', lit().replace(/^V2_ESSAI_ORDINAIRE_MOT_DE_PASSE=.*$/m, '#'), env1.replace(/^V2_ESSAI_ORDINAIRE_MOT_DE_PASSE=.*$/m, '#'));
       H.vrai('   ... aucune sortie ne contient ni l\'ancien ni le nouveau mot de passe', sorties.every(t => !t.includes(mdp) && !t.includes(mdp2))); }

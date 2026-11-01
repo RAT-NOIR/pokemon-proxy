@@ -17,7 +17,12 @@ const ADRESSE_ORDINAIRE = 'banc-ordinaire@rat-market.invalid';
 
 /** Le nom de la base RÉELLEMENT connectée (jamais une étiquette de configuration). Peut lever : l'appelant traite toute exception comme « pas la base de l'essai ». */
 const nomBaseReelle = () => require('../db').base().databaseName;
-/** La base de l'essai, d'après son nom (pure). `test_scratch` n'est admise que sous BANC_ISOLE=1 (un nom n'est pas une preuve : il existe aussi sur la production). */
+/**
+ * La lecture du nom de la base. Le nom se lit sur la connexion RÉELLE ; la couture `deps.nomBase` (un banc joue ainsi « la base de l'essai » et « la production » sur sa base en mémoire) n'est ADMISE que sous BANC_ISOLE=1 exactement,
+ * la variable que seul le harnais des bancs pose (test/_env-banc.js) : en production elle est absente, l'injection est ignorée et ce qu'un montage passerait ne change rien.
+ */
+function lecteurDeBase(deps, env = process.env) { return deps && typeof deps.nomBase === 'function' && env && env.BANC_ISOLE === '1' ? deps.nomBase : nomBaseReelle; }
+/** La base de l'essai, d'après son nom (pure). `test_scratch` n'est admise que sous BANC_ISOLE=1 : c'est la convention des bancs du dépôt (config.js « banc » et db.js exigent le nom ET la variable) ; un nom n'est pas une preuve, il existe aussi sur la production, où la variable est absente. */
 function baseDeLEssai(nom, env = process.env) { return nom === 'rm_essai' || (nom === 'test_scratch' && env && env.BANC_ISOLE === '1'); }
 /** Le compte de test ordinaire, lu en base (pure) : les deux marques strictes, l'adresse réservée, confirmé, aucun rôle. */
 function estCompteDeTestOrdinaire(c) {
@@ -27,7 +32,7 @@ function estCompteDeTestOrdinaire(c) {
 /** @returns {(req) => Promise<string|null>} l'identifiant (texte) du compte de mesure ou du compte de test ordinaire qui peut être exempté, sinon null — jamais d'exception. `deps.nomBase` : la lecture du nom de la base (un banc l'injecte). */
 function exemptionBanc(cfg, deps = {}) {
     const resoudre = resoudrePorteur(cfg);
-    const nomBase = deps && typeof deps.nomBase === 'function' ? deps.nomBase : nomBaseReelle;
+    const nomBase = lecteurDeBase(deps);
     return async function compteExempte(req) {
         try {
             if (cfg.installationBancExempte !== true) return null;
@@ -48,4 +53,4 @@ function exemptionBanc(cfg, deps = {}) {
         } catch { return null; }
     };
 }
-module.exports = { exemptionBanc, ADRESSE_ORDINAIRE, baseDeLEssai, estCompteDeTestOrdinaire };
+module.exports = { exemptionBanc, ADRESSE_ORDINAIRE, baseDeLEssai, lecteurDeBase, nomBaseReelle, estCompteDeTestOrdinaire };

@@ -93,6 +93,15 @@ const ADR = 'banc-ordinaire@rat-market.invalid';
         [EX.baseDeLEssai('rm_essai', {}), EX.baseDeLEssai('test', { BANC_ISOLE: '1' }), EX.baseDeLEssai('cartes', {}), EX.baseDeLEssai('rm_essai2', {}), EX.baseDeLEssai('', {}), EX.baseDeLEssai(undefined, {}), EX.baseDeLEssai('test_scratch', {}), EX.baseDeLEssai('test_scratch', { BANC_ISOLE: '1' }), EX.baseDeLEssai('test_scratch', { BANC_ISOLE: 'true' })],
         [true, false, false, false, false, false, false, true, false]);
 
+    {   // la couture d'injection du nom de la base est INUTILISABLE hors banc : sans BANC_ISOLE=1 exactement, la lecture est celle de la connexion réelle, quoi qu'un montage injecte
+        const injecte = () => 'rm_essai';
+        H.v('ORD-5e. lecteurDeBase : en production (BANC_ISOLE absent, « 0 », « true », « 1 » avec espace) l\'injection est IGNORÉE ; sous BANC_ISOLE=1 elle sert',
+            [EX.lecteurDeBase({ nomBase: injecte }, {}) === EX.nomBaseReelle, EX.lecteurDeBase({ nomBase: injecte }, { BANC_ISOLE: '0' }) === EX.nomBaseReelle, EX.lecteurDeBase({ nomBase: injecte }, { BANC_ISOLE: 'true' }) === EX.nomBaseReelle, EX.lecteurDeBase({ nomBase: injecte }, { BANC_ISOLE: ' 1' }) === EX.nomBaseReelle,
+                EX.lecteurDeBase({}, { BANC_ISOLE: '1' }) === EX.nomBaseReelle, EX.lecteurDeBase(undefined, { BANC_ISOLE: '1' }) === EX.nomBaseReelle, EX.lecteurDeBase({ nomBase: 'pas une fonction' }, { BANC_ISOLE: '1' }) === EX.nomBaseReelle, EX.lecteurDeBase({ nomBase: injecte }, { BANC_ISOLE: '1' }) === injecte],
+            [true, true, true, true, true, true, true, true]);
+        H.v('   (test_scratch sous BANC_ISOLE=1 : la convention des bancs du dépôt, config.js « banc » et db.js exigent le nom ET la variable ; en production la variable est absente et ni « test » ni test_scratch seul ne sont admis)',
+            [EX.baseDeLEssai('test_scratch', { BANC_ISOLE: undefined }), EX.baseDeLEssai('test', { BANC_ISOLE: '1' }), EX.baseDeLEssai('test', {}), EX.baseDeLEssai('cartes', { BANC_ISOLE: '1' })], [false, false, false, false]);
+    }
     {   // la liste fermée, jugée en PURE : chaque condition seule (la résolution de session en double déjà quelques-unes : confirmé, génération ; ici rien n'est supposé de la route)
         const bon = { banc: true, bancOrdinaire: true, verifie: true, emailCle: ADR };
         const cas = [['complet', bon, true], ['banc false', { ...bon, banc: false }, false], ['banc "true"', { ...bon, banc: 'true' }, false], ['banc absent', { ...bon, banc: undefined }, false], ['bancOrdinaire absent', { ...bon, bancOrdinaire: undefined }, false], ['bancOrdinaire 1', { ...bon, bancOrdinaire: 1 }, false],

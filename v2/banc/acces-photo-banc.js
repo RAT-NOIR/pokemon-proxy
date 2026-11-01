@@ -11,7 +11,7 @@ const EX = require('../installations/exemption-banc');
 
 /** @returns {(req, res, next) => Promise<void>} `deps.nomBase` : la lecture du nom de la base (un banc l'injecte). */
 function exigerPhotoAdminOuBanc(cfg, deps = {}) {
-    const nomBase = deps && typeof deps.nomBase === 'function' ? deps.nomBase : () => db.base().databaseName;
+    const nomBase = EX.lecteurDeBase(deps);      // la couture d'injection n'est admise que sous BANC_ISOLE=1 ; en production le nom se lit sur la connexion réelle
     return async function garde(req, res, next) {
         if (cfg && cfg.photoComptesBanc === true) {
             try {

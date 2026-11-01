@@ -176,6 +176,9 @@ async function serie(o, deps = {}) {
         if (o.deuxiemeApresSignal) throw new Arret('--compte=ordinaire ne se combine pas avec --deuxieme-apres-signal');
         if (o.declarations === false) throw new Arret('--compte=ordinaire ne se combine pas avec --sans-declarations (les déclarations sont ce qu\'il mesure)');
         if (o.cles !== undefined && o.cles !== null) throw new Arret('--compte=ordinaire ne se combine pas avec --cles (les 9 lignes sont celles du tableau)');
+        // --n et --graine : la ligne de commande rend NaN quand ils sont absents ; un nombre est une demande d'échantillon, que le tableau exclut
+        if (o.n !== undefined && o.n !== null && !Number.isNaN(o.n)) throw new Arret('--compte=ordinaire ne se combine pas avec --n (les 9 lignes sont celles du tableau)');
+        if (o.graine !== undefined && o.graine !== null && !Number.isNaN(o.graine)) throw new Arret('--compte=ordinaire ne se combine pas avec --graine (les 9 lignes sont celles du tableau)');
     }
     const ids = lireIdentifiants(o.env || process.env, o.fichierEnv, deps.lireFichier, ct ? { identifiant: NOM_ORDINAIRE_IDENTIFIANT, motDePasse: NOM_ORDINAIRE_MOT_DE_PASSE } : undefined);
     if (!ids) throw new Arret(`${ct ? NOM_ORDINAIRE_IDENTIFIANT : NOM_IDENTIFIANT} ou ${ct ? NOM_ORDINAIRE_MOT_DE_PASSE : NOM_MOT_DE_PASSE} absent : aucune requête n'est envoyée`);
@@ -402,7 +405,7 @@ async function serie(o, deps = {}) {
     /** UNE passe sur les lignes (même ordre à chaque passe), avec le jeton gardé en MÉMOIRE ; le carnet est commun. */
     const jouer = async (passe, versionMin) => {
         const resultats = [], durees = [], erreurs = [];
-        let arret = null, deSuite = 0, rang = 0, fautifLigne = null, questionsVues = 0, complementsVus = 0, alerte = false, ecartLigne = null;
+        let arret = null, deSuite = 0, rang = 0, fautifLigne = null, questionsVues = 0, complementsVus = 0, alerte = false, ecartLigne = null, ligneNonJugee = null;
         const serieId = hashSerie(passe), etiquetteCle = passe > 1 ? `${stamp}p${passe}` : stamp;
         for (const l of lignes) {
             rang++;
@@ -444,6 +447,12 @@ async function serie(o, deps = {}) {
             } catch (e) {
                 if (e instanceof Arret) { arret = e.raison; break; }
                 erreurs.push({ cle: l.cle, code: (e && (e.code || e.name)) || 'erreur' });
+                if (ct) {                                                                              // COMPTE-TEST : une ligne NON JUGÉE n'est jamais sautée — la série s'arrête (code 16), le bilan exige 9 lignes jugées sur 9
+                    ligneNonJugee = { rang, cle: l.cle, code: erreurs[erreurs.length - 1].code };
+                    carnet.noter({ serie: serieId, rang, cle: l.cle, ligneNonJugee });
+                    arret = `LIGNE NON JUGÉE, ligne ${rang} (${l.cle}) : erreur ${ligneNonJugee.code} : série arrêtée, ${resultats.length} ligne(s) jugée(s) sur ${lignes.length}`;
+                    break;
+                }
                 deSuite++;
                 if (deSuite >= ERREURS_DE_SUITE_MAX) { arret = `${ERREURS_DE_SUITE_MAX} erreurs de suite : arrêt (dernier code ${erreurs[erreurs.length - 1].code})`; break; }
                 continue;
@@ -484,7 +493,7 @@ async function serie(o, deps = {}) {
             log(`rapport probable : sûrs ${T_.surJuste} justes / ${T_.surFaux} FAUX · probables ${T_.probableJuste} justes / ${T_.probableFaux} FAUX · questions ${T_.questionDansCandidats} (vérité dans les candidats) / ${T_.questionHorsCandidats} (hors) · introuvables ${T_.introuvable} · sans vérité ${T_.sansVerite} · réponse directe juste ${T_.reponseDirecteJuste} %`);
             log(`premier verdict : n ${rapportProbable.premierVerdict.n}, p50 ${rapportProbable.premierVerdict.p50} ms, p95 ${rapportProbable.premierVerdict.p95} ms ; total : p50 ${rapportProbable.dureeTotale.p50} ms, p95 ${rapportProbable.dureeTotale.p95} ms`);
         }
-        return { arret, resultats, durees, stats, comparaison, erreurs, capacites, jetonEmpreinteAnnonce: capacites.includes('empreinte'), depenseUsd: carnet.total(), serie: serieId, lignes: lignes.map(l => l.cle), ...(gp ? { fautif: fautifLigne, alerte, rapportProbable } : {}), ...(ct ? { compteTest: true, ecart: ecartLigne } : {}) };
+        return { arret, resultats, durees, stats, comparaison, erreurs, capacites, jetonEmpreinteAnnonce: capacites.includes('empreinte'), depenseUsd: carnet.total(), serie: serieId, lignes: lignes.map(l => l.cle), ...(gp ? { fautif: fautifLigne, alerte, rapportProbable } : {}), ...(ct ? { compteTest: true, ecart: ecartLigne, ligneNonJugee } : {}) };
     };
 
     const r1 = await jouer(1, ping.corps.versionMinExtension);
@@ -522,7 +531,7 @@ if (require.main === module) {
         const necessaire = n => { const v = arg(n); if (!v) throw new Arret(`argument --${n}= manquant`); return v; };
         const resultats = JSON.parse(fs.readFileSync(necessaire('resultats'), 'utf8')), nav = JSON.parse(fs.readFileSync(necessaire('nav'), 'utf8'));
         const modele = arg('modele-id') && arg('modele-sha256') ? { id: arg('modele-id'), sha256: arg('modele-sha256') } : MODELE_DEFAUT;
-        const ecrire = (fichier, r) => fs.writeFileSync(fichier, JSON.stringify({ serie: r.serie, lignes: r.lignes, stats: r.stats, comparaison: r.comparaison, erreurs: r.erreurs, arret: r.arret, depenseUsd: r.depenseUsd, jetonEmpreinteAnnonce: r.jetonEmpreinteAnnonce, resultats: r.resultats, ...(r.rapportProbable ? { fautif: r.fautif, rapportProbable: r.rapportProbable } : {}), ...(r.compteTest ? { compteTest: true, ecart: r.ecart } : {}) }, null, 1));
+        const ecrire = (fichier, r) => fs.writeFileSync(fichier, JSON.stringify({ serie: r.serie, lignes: r.lignes, stats: r.stats, comparaison: r.comparaison, erreurs: r.erreurs, arret: r.arret, depenseUsd: r.depenseUsd, jetonEmpreinteAnnonce: r.jetonEmpreinteAnnonce, resultats: r.resultats, ...(r.rapportProbable ? { fautif: r.fautif, rapportProbable: r.rapportProbable } : {}), ...(r.compteTest ? { compteTest: true, ecart: r.ecart, ligneNonJugee: r.ligneNonJugee, lignesJugees: r.resultats.length } : {}) }, null, 1));
         const signal = arg('deuxieme-apres-signal');
         if (signal && !arg('sortie2')) throw new Arret('--deuxieme-apres-signal exige --sortie2= (la sortie de la série 2)');
         // MODE --g-probable : les dossiers des visuels de référence (lecture seule), le relevé des tampons (famille « tamponnee »), les déclarations ; les valeurs par défaut sont celles de extraire-mesures-groupe.js

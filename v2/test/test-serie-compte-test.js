@@ -64,6 +64,7 @@ function fauxServeur(comp = {}) {
         if (u.pathname === '/api/compte/lier') return rep(200, { success: true, compte: { verifie: comp.nonVerifie ? false : true, administrateur: comp.administrateur === true }, jetonInstallation: JETON_LIE });
         if ((init.headers || {}).Authorization !== `Bearer ${JETON_LIE}`) return rep(401, { success: false });
         if (u.pathname === '/api/solde') return rep(200, { success: true, solde: { total: 0, achete: 0, compte: { lie: true, administrateur: comp.administrateur === true } }, offre: { nom: comp.offre || 'gratuit', restant, remiseAZero: 'x' } });
+        if (u.pathname === '/api/photo' && comp.photoErreurAu && appels.filter(x => x.chemin === '/api/photo').length === comp.photoErreurAu) throw Object.assign(new Error('délai dépassé'), { name: 'TimeoutError' });
         if (u.pathname === '/api/photo') return comp.photoStatut ? rep(comp.photoStatut, { success: false }) : rep(200, { success: true, photoId: photoIdN(appels.filter(x => x.chemin === '/api/photo').length) });
         if (u.pathname === '/api/identifier/mesures') return rep(500, { success: false, erreur: 'ne devait JAMAIS être appelée' });
         if (u.pathname === '/api/identifier') {
@@ -95,7 +96,7 @@ const deps = (srv, extra = {}) => { const logs = []; return { fetch: srv.fetch, 
 const essaie = async f => { try { return { ok: await f() }; } catch (e) { return { arret: e instanceof S.Arret ? e.raison : `exception ${e && e.message}` }; } };
 const chemins = srv => srv.appels.map(a => a.chemin);
 const nChemin = (srv, c) => srv.appels.filter(a => a.chemin === c).length;
-const carnetLignes = f => fs.readFileSync(f, 'utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+const carnetLignes = f => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8').split(/\r?\n/).filter(Boolean).map(l => JSON.parse(l)) : []);
 
 (async () => {
     const fetchGlobal = globalThis.fetch;
@@ -113,8 +114,10 @@ const carnetLignes = f => fs.readFileSync(f, 'utf8').split(/\r?\n/).filter(Boole
             const s = fauxServeur(), d = deps(s), b = base();
             const r = await essaie(() => S.serie(b, d));
             const res = r.ok;
+            if (!res) H.v('1. la série conforme a abouti (aucun arrêt)', r.arret, 'aucun arrêt');      // un mutant qui l'arrête est tué par CETTE assertion, pas par un plantage plus bas
+            else {
             H.v('1a. série conforme : 9 lignes, aucun arrêt, aucun écart, code de sortie 0', [res && res.resultats.length, res && res.arret, res && res.ecart, res && res.compteTest, res && CT.codeSortie(res)], [9, null, null, true, 0]);
-            H.v('   le quota restant lu après chaque ligne est celui du tableau', res && res.resultats.map(x => x.compteTest.soldeApres.offre.restant), Object.values(RESTANT_APRES));
+            H.v('   le quota restant lu après chaque ligne est celui du tableau', res && res.resultats.map(x => x.compteTest?.soldeApres?.offre?.restant), Object.values(RESTANT_APRES));
             H.v('   les déclarations ENVOYÉES : rien, rien, a, b, aucune ×4, rien', res && res.resultats.map(x => x.compteTest.declarationEnvoyee), Object.values(CHOIX_ATTENDUS));
             H.v('1b. AUCUN second envoi de mesures : jamais un appel à /api/identifier/mesures', nChemin(s, '/api/identifier/mesures'), 0);
             H.v('   9 scans, 6 déclarations (3, 4, 5, 6, 7, 8), 10 lectures de solde (avant la série puis après chaque ligne)', [nChemin(s, '/api/identifier'), nChemin(s, '/api/identifier/reponse'), nChemin(s, '/api/solde')], [9, 6, 10]);
@@ -128,12 +131,13 @@ const carnetLignes = f => fs.readFileSync(f, 'utf8').split(/\r?\n/).filter(Boole
             H.vrai('   chaque réponse porte une Idempotency-Key distincte', new Set(s.appels.filter(a => a.chemin === '/api/identifier/reponse').map(a => a.entetes['Idempotency-Key'])).size === 6);
             const L = carnetLignes(b.carnet).filter(x => x.compteTest && x.compteTest.rang);
             H.v('1f. le carnet inscrit, par ligne : la facturation servie, le solde avant et après, la déclaration envoyée', [L.length, L.every(x => x.compteTest.facturation && x.compteTest.soldeAvant && x.compteTest.soldeApres && 'declarationEnvoyee' in x.compteTest)], [9, true]);
-            H.v('   ligne 8 (plafond) : la réponse du serveur est au carnet avec son message plafond-probable', L[7].compteTest.reponse.declaration, { rendue: false, raison: 'plafond-probable', plafondJour: 3 });
-            H.v('   ligne 5 : facturation de la réponse (remboursée) et solde 5 -> 6', [L[4].compteTest.reponse.facturation.rembourse, L[4].compteTest.soldeAvant.offre.restant, L[4].compteTest.soldeApres.offre.restant], [true, 6, 6]);
+            H.v('   ligne 8 (plafond) : la réponse du serveur est au carnet avec son message plafond-probable', L[7]?.compteTest?.reponse?.declaration, { rendue: false, raison: 'plafond-probable', plafondJour: 3 });
+            H.v('   ligne 5 : facturation de la réponse (remboursée) et solde 5 -> 6', [L[4]?.compteTest?.reponse?.facturation?.rembourse, L[4]?.compteTest?.soldeAvant?.offre?.restant, L[4]?.compteTest?.soldeApres?.offre?.restant], [true, 6, 6]);
             H.v('   le départ est au carnet (offre gratuite, restant 10)', carnetLignes(b.carnet).find(x => x.compteTest === 'depart').offre.restant, 10);
             const tout = fs.readFileSync(b.carnet, 'utf8') + d.logs.join('\n') + JSON.stringify(res);
             H.vrai('1g. aucun secret (mots de passe, jetons, cookie) dans le carnet, le journal ni le résultat', TOUS_LES_SECRETS.every(x => !tout.includes(x)));
             H.v('1h. la dépense inscrite : 9 scans x 0,0037', Math.round(res.depenseUsd * 1e4) / 1e4, 0.0333);
+            }
         }
 
         // ── 2. les couples d'identifiants ──
@@ -180,6 +184,7 @@ const carnetLignes = f => fs.readFileSync(f, 'utf8').split(/\r?\n/).filter(Boole
         const ecart = async (nom, ecraser, comp = {}, attendu) => {
             const s = fauxServeur({ ecraser, ...comp }), d = deps(s), b = base();
             const r = await essaie(() => S.serie(b, d)), res = r.ok;
+            if (!res) H.v(`6. ${nom} : la série a rendu un résultat (pas un arrêt de configuration)`, r.arret, 'un résultat');
             H.v(`6. ${nom} : arrêt sur la ligne ${attendu.rang}, champ « ${attendu.champ} », code 14`, [res && res.ecart && res.ecart.rang, res && res.ecart && res.ecart.champ, res && CT.codeSortie(res), /ÉCART AU TABLEAU/.test((res && res.arret) || '')], [attendu.rang, attendu.champ, 14, true]);
             H.v(`   aucun scan après la ligne fautive (${attendu.rang} scans au plus)`, nChemin(s, '/api/identifier'), attendu.rang);
             return { s, res, b, d };
@@ -211,8 +216,27 @@ const carnetLignes = f => fs.readFileSync(f, 'utf8').split(/\r?\n/).filter(Boole
           H.v('6z. même quand le serveur propose un complément de mesures, le client n\'envoie AUCUNE mesure', [nChemin(s, '/api/identifier/mesures'), r.ok && r.ok.arret], [0, null]); }
         { const { b, res } = await ecart('ligne 6 : écart au carnet', { 6: { repond: { facturation: F(0, 0, true, 'question'), declaration: { rendue: true, raison: null, plafondJour: 3 }, quota: 0 } } }, {}, { rang: 6, champ: 'quota restant apres' });
           const L = carnetLignes(b.carnet).filter(x => x.compteTest && x.compteTest.rang === 6);
-          H.v('   la ligne fautive est inscrite au carnet AVEC son écart (champ, attendu, observé)', [L.length, L[0] && L[0].compteTest.ecart && L[0].compteTest.ecart.champ, L[0] && L[0].compteTest.ecart.attendu, L[0] && L[0].compteTest.ecart.observe], [1, 'quota restant apres', 6, '5']);
-          H.v('   le rapport rend l\'écart et le code de sortie 14', [res.ecart.rang, CT.codeSortie(res)], [6, 14]); }
+          const ec = (L[0] && L[0].compteTest && L[0].compteTest.ecart) || {};
+          H.v('   la ligne fautive est inscrite au carnet AVEC son écart (champ, attendu, observé)', [L.length, ec.champ, ec.attendu, ec.observe], [1, 'quota restant apres', 6, '5']);
+          H.v('   le rapport rend l\'écart et le code de sortie 14', [res && res.ecart && res.ecart.rang, res && CT.codeSortie(res)], [6, 14]); }
+
+        // ── 6 ter. une ligne NON JUGÉE (erreur hors Arret : délai dépassé…) arrête la série ; le bilan compte 9 lignes jugées sur 9 ──
+        for (const [nom, au, jugees] of [['la ligne 9 (la dernière)', 9, 8], ['la ligne 5 (au milieu)', 5, 4], ['la ligne 1', 1, 0]]) {
+            const s = fauxServeur({ photoErreurAu: au }), d = deps(s), b = base();
+            const r = await essaie(() => S.serie(b, d)), res = r.ok;
+            H.v(`6t. le dépôt de photo expire sur ${nom} : arrêt « LIGNE NON JUGÉE », code 16, ${jugees} lignes jugées, jamais 0`, [res && /LIGNE NON JUGÉE/.test(res.arret || ''), res && CT.codeSortie(res), res && res.resultats.length, res && res.ligneNonJugee && res.ligneNonJugee.rang], [true, 16, jugees, au]);
+            H.v('   aucun scan après la ligne non jugée, et rien n\'est « continué »', nChemin(s, '/api/identifier'), au - 1);
+            H.v('   la ligne non jugée est au carnet (rang, code d\'erreur)', carnetLignes(b.carnet).filter(x => x.ligneNonJugee).map(x => [x.ligneNonJugee.rang, x.ligneNonJugee.code]), [[au, 'TimeoutError']]);
+        }
+        H.v('6u. codeSortie : moins de 9 lignes jugées sans arrêt ni écart = 16 (le bilan 9 sur 9 est exigé) ; 9 sur 9 = 0 ; une erreur au tableau = 16',
+            [CT.codeSortie({ compteTest: true, resultats: new Array(8).fill({}), arret: null, ecart: null }), CT.codeSortie({ compteTest: true, resultats: new Array(9).fill({}), arret: null, ecart: null }), CT.codeSortie({ compteTest: true, resultats: new Array(9).fill({}), arret: null, ecart: null, erreurs: [{ cle: 'x', code: 'E' }] }), CT.CODE_LIGNE_NON_JUGEE],
+            [16, 0, 16, 16]);
+        for (const [nom, extra, motif] of [['--n', { n: 3 }, /ne se combine pas avec --n/], ['--graine', { graine: 5 }, /ne se combine pas avec --graine/]]) {
+            const s = fauxServeur(); const r = await essaie(() => S.serie(base(extra), deps(s)));
+            H.v(`6v. ${nom} avec --compte=ordinaire : REFUSÉ avant toute requête (pas ignoré en silence)`, [motif.test(r.arret || ''), s.appels.length], [true, 0]);
+        }
+        { const s = fauxServeur(); const r = await essaie(() => S.serie(base({ n: NaN, graine: NaN }), deps(s)));
+          H.v('6w. n et graine absents (NaN : ce que la ligne de commande rend sans l\'option) : la série part', r.arret === undefined, true); }
 
         // ── 6 bis. CHAQUE champ de la facturation compte, seul (le juge pur, sans serveur) ──
         {
@@ -234,7 +258,7 @@ const carnetLignes = f => fs.readFileSync(f, 'utf8').split(/\r?\n/).filter(Boole
         for (const st of [404, 403, 401]) {
             const s = fauxServeur({ photoStatut: st }), d = deps(s); const r = await essaie(() => S.serie(base(), d)); const res = r.ok;
             H.v(`7. /api/photo répond ${st} au compte ordinaire : ${st === 401 ? 'jeton refusé' : 'PHOTO REFUSÉE'}, ZÉRO appel à /api/identifier`, [nChemin(s, '/api/identifier'), res && typeof res.arret === 'string' && res.arret.length > 0], [0, true]);
-            if (st !== 401) H.v('   code de sortie 15, aucun coût inscrit au carnet', [CT.codeSortie(res), res.depenseUsd], [15, 0]);
+            if (st !== 401) H.v('   code de sortie 15, aucun coût inscrit au carnet', [CT.codeSortie(res), res && res.depenseUsd], [15, 0]);
         }
         { const s = fauxServeur({ photoNonRecue: true }); const r = await essaie(() => S.serie(base(), deps(s)));
           H.v('7b. la garde anti-Vinted reste : photoRecue faux -> arrêt à l\'instant, aucune déclaration, aucun solde après', [r.ok && /photo non rattachée/.test(r.ok.arret || ''), nChemin(s, '/api/identifier/reponse')], [true, 0]); }

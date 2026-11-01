@@ -51,8 +51,15 @@ const MUTANTS = [
     ['SE : le client annonce capacitesClient (il pourrait recevoir un complément)', SE, "...(gp ? { capacitesClient: ['mesures-1'] } : {})", "...(gp || ct ? { capacitesClient: ['mesures-1'] } : {})", B_SE],
     ['SE : le solde après n\'est plus relu (le quota restant reste celui d\'avant)', SE, 'await lireApres();\n            if (apres)', 'if (apres)', B_SE],
     ['SE : la lettre attendue n\'est plus vérifiée avant l\'envoi', SE, '&& (!att.lettre || choix === att.lettre)) {', ') {', B_SE],
-    ['SE : le code de sortie d\'un écart redevient 1', SC, 'r && r.ecart ? CODE_ECART :', 'r && r.ecart ? 1 :', B_SE],
-    ['SE : le code de sortie d\'un dépôt refusé redevient 1', SC, "startsWith('PHOTO REFUSÉE') ? CODE_PHOTO_REFUSEE", "startsWith('PHOTO REFUSÉE') ? 1", B_SE],
+    ['SE : le code de sortie d\'un écart redevient 1', SC, 'if (r.ecart) return CODE_ECART;', 'if (r.ecart) return 1;', B_SE],
+    ['SE : le code de sortie d\'un dépôt refusé redevient 1', SC, "startsWith('PHOTO REFUSÉE')) return CODE_PHOTO_REFUSEE;", "startsWith('PHOTO REFUSÉE')) return 1;", B_SE],
+    // ── corrections de la relecture 1 ──
+    ['RL : la couture nomBase est admise hors banc (sans BANC_ISOLE=1)', EX, "deps && typeof deps.nomBase === 'function' && env && env.BANC_ISOLE === '1' ? deps.nomBase : nomBaseReelle", "deps && typeof deps.nomBase === 'function' ? deps.nomBase : nomBaseReelle", B_EX],
+    ['RL : une ligne non jugée est sautée (continue) en mode compte', SE, '                if (ct) {                                                                              // COMPTE-TEST : une ligne NON JUGÉE', '                if (false) {                                                                              // COMPTE-TEST : une ligne NON JUGÉE', B_SE],
+    ['RL : 8 lignes jugées sur 9 rendent 0', SC, "if (r.compteTest && !(Array.isArray(r.resultats) && r.resultats.length === TABLEAU.length)) return CODE_LIGNE_NON_JUGEE;", '', B_SE],
+    ['RL : une erreur au bilan n\'empêche plus le 0', SC, "if (r.ligneNonJugee || (Array.isArray(r.erreurs) && r.erreurs.length > 0)) return CODE_LIGNE_NON_JUGEE;", '', B_SE],
+    ['RL : --n est ignoré en silence avec --compte=ordinaire', SE, "if (o.n !== undefined && o.n !== null && !Number.isNaN(o.n)) throw new Arret(", 'if (false) throw new Arret(', B_SE],
+    ['RL : --graine est ignorée en silence avec --compte=ordinaire', SE, "if (o.graine !== undefined && o.graine !== null && !Number.isNaN(o.graine)) throw new Arret(", 'if (false) throw new Arret(', B_SE],
     // ── POST /api/photo (commit 4) ──
     ['PH : le drapeau V2_PHOTO_COMPTES_BANC n\'est plus consulté', AP, 'if (cfg && cfg.photoComptesBanc === true) {', 'if (true) {', B_PH],
     ['PH : la liste fermée n\'est plus exigée (la base de l\'essai suffit)', AP, 'EX.estCompteDeTestOrdinaire(c) && EX.baseDeLEssai(nomBase())', 'EX.baseDeLEssai(nomBase())', B_PH],
