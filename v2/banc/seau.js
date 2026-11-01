@@ -67,7 +67,7 @@ const empreinteErratum = e => hacher({ prec: e.prec, seauId: e.seauId, n: e.n, s
  * 🔑 Cette chaîne prouve sa COHÉRENCE INTERNE ; seule l'ancre (hors base) prouve qu'elle n'a pas été réécrite en entier : « non-ancre » est dit, jamais tu.
  * @returns {Promise<{ok:boolean, lignes:number, tete:string|null, errata:number, ancre:string, objets:number, problemes:object[]}>}
  */
-async function verifierChaineSeau(colFn, seauId, { ancre = null, stockage = null, relireR2 = false } = {}) {
+async function verifierChaineSeau(colFn, seauId, { ancre = null, stockage = null, relireR2 = false, exigerAncre = true } = {}) {
     const seau = await colFn(COLLECTIONS.seaux).findOne({ _id: seauId });
     if (!seau) throw erreur('CODE_INVALIDE', 'seau-inconnu', 404);
     const problemes = [];
@@ -92,7 +92,7 @@ async function verifierChaineSeau(colFn, seauId, { ancre = null, stockage = null
         const photos = await colFn(COLLECTIONS.photos).find({ seauId }).toArray();
         if (seau.photosEmpreinte !== empreintePhotos(photos)) problemes.push({ cause: 'photos' });
         if (seau.empreinteScellee !== empreinteScellee(seau)) problemes.push({ cause: 'scelle' });
-    } else if (seau.etat === 'scellement') problemes.push({ cause: 'scellement-inacheve' });
+    }
     // les vérités d'un juge scellé et la chaîne de ses errata
     const errata = await colFn(COLLECTIONS.errata).find({ seauId }).sort({ n: 1 }).toArray();
     if (seau.etat === 'scelle' && seau.type === 'juge') {
@@ -108,9 +108,12 @@ async function verifierChaineSeau(colFn, seauId, { ancre = null, stockage = null
     let etatAncre = 'sans-objet';
     if (seau.etat === 'scelle') {
         const a = ancre ? await ancre(seauId) : null;
-        if (!a) etatAncre = 'non-ancre';
-        else if (a.tete === seau.tete && a.empreinteScellee === seau.empreinteScellee && (a.veritesEmpreinte ?? null) === (seau.veritesEmpreinte ?? null) && a.n === seau.n) etatAncre = 'ok';
-        else { etatAncre = 'differente'; problemes.push({ cause: 'ancre' }); }
+        const dernierE = errata.length ? errata[errata.length - 1] : null;
+        if (!a) { etatAncre = 'non-ancre'; if (seau.type === 'juge' && exigerAncre) problemes.push({ cause: 'non-ancre' }); }       // 🔑 un JUGE non ancré n'est PAS ok : la chaîne seule ne prouve que sa cohérence interne
+        else if (!(a.tete === seau.tete && a.empreinteScellee === seau.empreinteScellee && (a.veritesEmpreinte ?? null) === (seau.veritesEmpreinte ?? null) && a.n === seau.n)) { etatAncre = 'differente'; problemes.push({ cause: 'ancre' }); }
+        // l'ancre porte AUSSI la tête de la chaîne des errata et leur nombre : des errata supprimés, ajoutés ou refaits sans ré-ancrage se voient
+        else if ((a.errata ?? 0) !== errata.length || (a.erratumTete ?? null) !== (dernierE ? dernierE.empreinte : null)) { etatAncre = 'perimee'; problemes.push({ cause: 'ancre-errata' }); }
+        else etatAncre = 'ok';
     }
     // chaque objet du bucket relu et re-haché (coûteux : une lecture par objet)
     let objets = 0;
@@ -163,59 +166,67 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
         if (!Number.isSafeInteger(c) || c < 1 || c > CIBLE_MAX) throw erreur('ENTREE', 'cible');
         if (note !== undefined && note !== null && (typeof note !== 'string' || note.length > NOTE_MAX)) throw erreur('ENTREE', 'note');
         if (typeof par !== 'string' || !par) throw erreur('ENTREE', 'declarant');
-        if (await col('seaux').findOne({ etat: { $in: ['ouvert', 'scellement'] } })) throw erreur('CONFLIT', 'seau-ouvert');
+        if (await col('seaux').findOne({ etat: 'ouvert' })) throw erreur('CONFLIT', 'seau-ouvert');
         if (await col('seaux').findOne({ nom })) throw erreur('CONFLIT', 'nom-pris');
         if (type === 'juge' && await col('seaux').findOne({ type: 'juge' })) throw erreur('CONFLIT', 'juge-existe');
         const dernier = await col('seaux').find({}).sort({ declareLe: -1 }).limit(1).toArray();
-        const s = { _id: crypto.randomBytes(8).toString('hex'), nom, type, cible: c, note: note ?? null, declareLe: horloge(), declarePar: par, prec: dernier.length ? dernier[0].empreinte : GENESE, etat: 'ouvert' };
+        const s = { _id: crypto.randomBytes(8).toString('hex'), nom, type, cible: c, note: note ?? null, declareLe: horloge(), declarePar: par, prec: dernier.length ? dernier[0].empreinte : GENESE, etat: 'ouvert',
+            ecritures: 0, termine: 0 };       // la BARRIÈRE D'ÉCRITURE : écritures réservées / terminées (hors de l'empreinte du seau : ce sont des compteurs, pas une déclaration)
         s.empreinte = empreinteSeau(s);
         try { await col('seaux').insertOne(s); }
         catch (e) { if (e && e.code === 11000) throw erreur('CONFLIT', 'concurrence'); throw e; }
         return vue(s);
     }
 
+    // 🔑 LA BARRIÈRE D'ÉCRITURE (tour 2). Toute écriture rattachée à un seau OUVERT (photo, mesure, ligne, vérité d'un juge) commence par RÉSERVER sa place : `updateOne({_id, etat:'ouvert'}, {$inc:{ecritures:1}})` — rien de modifié ⇒ refus ;
+    // elle écrit ensuite (objet du bucket, puis documents) et, quoi qu'il arrive, TERMINE (`$inc:{termine:1}`, sans condition d'état : l'écriture est faite ou défaite). Aucune insertion n'a lieu sans une réservation prise sur un seau ouvert.
+    // Le scellé ne passe que si `ecritures === termine` (aucune écriture en vol) ET si les deux compteurs n'ont pas bougé depuis la lecture de l'instantané : voir sceller().
+    async function reserver(seauId) {
+        const r = await col('seaux').updateOne({ _id: seauId, etat: 'ouvert' }, { $inc: { ecritures: 1 } });
+        if (!r || r.modifiedCount !== 1) throw erreur('CONFLIT', 'seau-scelle');
+    }
+    const terminer = async seauId => { try { await col('seaux').updateOne({ _id: seauId }, { $inc: { termine: 1 } }); } catch (e) { console.error(`🔴 [v2 banc-seau] écriture non terminée sur ${seauId} (${(e && (e.code || e.name)) || 'erreur'}) : le seau ne se scellera pas avant réparation`); throw e; } };
+    /** Exécute `travail` sous une réservation ; la terminaison est TOUJOURS posée. */
+    async function sousReservation(seauId, travail) {
+        await reserver(seauId);
+        try { return await travail(); } finally { await terminer(seauId); }
+    }
+
+    /**
+     * LE SCELLÉ, en UNE mise à jour conditionnelle. On lit le seau (état, compteurs), on refuse s'il reste des écritures en vol (`ecritures !== termine`), on calcule sur l'instantané, puis
+     * `updateOne({_id, etat:'ouvert', ecritures:<lu>, termine:<lu>}, {$set: {etat:'scelle', …}})`. Si une écriture a réservé entre-temps, rien ne change : on recommence, tête recalculée. Aucun état intermédiaire :
+     * deux scellés simultanés ne se gênent pas (un seul gagne, l'autre lit « scelle » et dit deja-scelle), et aucun ne remet l'état à « ouvert ».
+     */
     async function sceller(seauId) {
         await preparer();
         if (typeof seauId !== 'string' || !FORME_SEAU.test(seauId)) throw erreur('ENTREE', 'seau-id');
-        const s = await col('seaux').findOne({ _id: seauId });
-        if (!s) throw erreur('CODE_INVALIDE', 'seau-inconnu', 404);
-        if (s.etat === 'scelle') throw erreur('CONFLIT', 'deja-scelle');
-        // 🔑 SCELLÉ ATOMIQUE : (1) l'état passe de « ouvert » à « scellement » par une mise à jour conditionnelle — dès lors plus aucune écriture n'entre (cadre() ne sert que l'état « ouvert ») ; (2) on calcule ;
-        // (3) on relit les effectifs après une courte pause (une écriture déjà passée par cadre() peut finir) et on recommence si quelque chose a bougé ; (4) l'état passe de « scellement » à « scelle » par une
-        // mise à jour conditionnelle. Un refus rend l'état « ouvert » : un contrôle manqué ne fige rien.
-        const pris = await col('seaux').updateOne({ _id: seauId, etat: { $in: ['ouvert', 'scellement'] } }, { $set: { etat: 'scellement' } });
-        if (!pris || pris.matchedCount !== 1) throw erreur('CONFLIT', 'deja-scelle');
-        const rendre = async e => { await col('seaux').updateOne({ _id: seauId, etat: 'scellement' }, { $set: { etat: 'ouvert' } }); throw e; };
-        try {
-            for (let essai = 0; essai < 5; essai++) {
-                const lignes = await col('scans').find({ seauId }).sort({ rang: 1 }).toArray();
-                if (!lignes.length) await rendre(erreur('CONFLIT', 'seau-vide'));
-                if (s.type === 'juge' && lignes.length < s.cible) await rendre(erreur('CONFLIT', 'sous-cible'));
-                const photos = await col('photos').find({ seauId }).toArray();
-                const avecPhoto0 = new Set(photos.filter(p => p.index === 0).map(p => p.scanId));
-                if (lignes.some(l => !avecPhoto0.has(l.scanId))) await rendre(erreur('CONFLIT', 'ligne-sans-photo'));
-                const fin = { etat: 'scelle', scelleLe: horloge(), tete: lignes[lignes.length - 1].empreinte, n: lignes.length, photosEmpreinte: empreintePhotos(photos) };
-                if (s.type === 'juge') {
-                    // le juge ne se scelle que complètement étiqueté, et le scellé couvre les vérités
-                    const verites = await col('verites').find({ seauId }).toArray();
-                    const ans = await analyses().find({ _id: { $in: lignes.map(l => oid(l.scanId)) } }, { projection: { cartes: 1 } }).toArray();
-                    const attendues = ans.reduce((n, a) => n + (Array.isArray(a.cartes) ? a.cartes.length : 0), 0);
-                    if (ans.length !== lignes.length || verites.length !== attendues) await rendre(erreur('CONFLIT', 'verites-incompletes'));
-                    fin.veritesEmpreinte = empreinteVerites(verites);
-                }
-                fin.empreinteScellee = empreinteScellee({ ...s, ...fin });
-                await new Promise(r => setTimeout(r, 40));
-                const [n2, p2] = [await col('scans').countDocuments({ seauId }), await col('photos').countDocuments({ seauId })];
-                if (n2 !== lignes.length || p2 !== photos.length) continue;
-                const r = await col('seaux').updateOne({ _id: seauId, etat: 'scellement' }, { $set: fin });
-                if (!r || r.matchedCount !== 1) throw erreur('CONFLIT', 'deja-scelle');
-                return vue({ ...s, ...fin });
+        for (let essai = 0; essai < 12; essai++) {
+            const s = await col('seaux').findOne({ _id: seauId });
+            if (!s) throw erreur('CODE_INVALIDE', 'seau-inconnu', 404);
+            if (s.etat !== 'ouvert') throw erreur('CONFLIT', 'deja-scelle');
+            const [ec, te] = [s.ecritures ?? 0, s.termine ?? 0];
+            if (ec !== te) { await new Promise(r => setTimeout(r, 15)); continue; }           // des écritures sont en vol : on attend qu'elles aient fini
+            const lignes = await col('scans').find({ seauId }).sort({ rang: 1 }).toArray();
+            if (!lignes.length) throw erreur('CONFLIT', 'seau-vide');
+            if (s.type === 'juge' && lignes.length < s.cible) throw erreur('CONFLIT', 'sous-cible');
+            const photos = await col('photos').find({ seauId }).toArray();
+            const avecPhoto0 = new Set(photos.filter(p => p.index === 0).map(p => p.scanId));
+            if (lignes.some(l => !avecPhoto0.has(l.scanId))) throw erreur('CONFLIT', 'ligne-sans-photo');
+            const fin = { etat: 'scelle', scelleLe: horloge(), tete: lignes[lignes.length - 1].empreinte, n: lignes.length, photosEmpreinte: empreintePhotos(photos) };
+            if (s.type === 'juge') {
+                // le juge ne se scelle que complètement étiqueté, et le scellé couvre les vérités
+                const verites = await col('verites').find({ seauId }).toArray();
+                const ans = await analyses().find({ _id: { $in: lignes.map(l => oid(l.scanId)) } }, { projection: { cartes: 1 } }).toArray();
+                const attendues = ans.reduce((n, a) => n + (Array.isArray(a.cartes) ? a.cartes.length : 0), 0);
+                if (ans.length !== lignes.length || verites.length !== attendues) throw erreur('CONFLIT', 'verites-incompletes');
+                fin.veritesEmpreinte = empreinteVerites(verites);
             }
-            return await rendre(erreur('CONFLIT', 'ecritures-en-cours'));
-        } catch (e) {
-            if (!e || !e.detail) { try { await col('seaux').updateOne({ _id: seauId, etat: 'scellement' }, { $set: { etat: 'ouvert' } }); } catch { /* le verifier dira « scellement-inacheve » */ } }
-            throw e;
+            fin.empreinteScellee = empreinteScellee({ ...s, ...fin });
+            const r = await col('seaux').updateOne({ _id: seauId, etat: 'ouvert', ecritures: ec, termine: te }, { $set: fin });
+            if (r && r.matchedCount === 1) return vue({ ...s, ...fin });
+            // une écriture s'est glissée (ou un autre scellé a gagné) : on relit, tête recalculée
         }
+        throw erreur('CONFLIT', 'ecritures-en-cours');
     }
 
     // Le seau EN COURS et le scan, pour toute écriture : le client DIT quel seau il croit en cours (jamais déduit d'un état périmé).
@@ -275,14 +286,21 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
         if (deja) { if (deja.sha256 !== sha) throw erreur('CONFLIT', 'photo-differente'); return { etat: 'deja', rang: ligne ? ligne.rang : null, seauId: seau._id }; }
         const s = await stock();
         let dh = null; try { dh = await require('./dhash').dhash(octets); } catch { /* sans dHash : l'export le recalcule depuis l'objet, ou refuse */ }
-        if (!ligne) ligne = await creerLigne(seau, an, scanId, porteur, annonce);
-        await s.ecrire(cle, octets);
-        try { await col('photos').insertOne({ _id: id, seauId: seau._id, scanId, index, sha256: sha, octets: octets.length, type, cle, dhash: dh, recuLe: horloge() }); }
-        catch (e) {
-            if (e && e.code === 11000) { const x = await col('photos').findOne({ _id: id }); if (x && x.sha256 === sha) return { etat: 'deja', rang: ligne.rang, seauId: seau._id }; throw erreur('CONFLIT', 'photo-differente'); }
-            throw e;
-        }
-        return { etat: 'ecrit', rang: ligne.rang, seauId: seau._id };
+        // BARRIÈRE : place réservée d'abord ; l'objet du bucket, puis la ligne du scan (si neuve), puis le document de la photo ; la terminaison est posée quoi qu'il arrive
+        return sousReservation(seau._id, async () => {
+            await s.ecrire(cle, octets);
+            try {
+                if (!ligne) ligne = await creerLigne(seau, an, scanId, porteur, annonce);
+                await col('photos').insertOne({ _id: id, seauId: seau._id, scanId, index, sha256: sha, octets: octets.length, type, cle, dhash: dh, recuLe: horloge() });
+            } catch (e) {
+                // l'insertion a échoué : l'objet n'est retiré que si AUCUN document ne le nomme (la clé est adressée par le contenu, une autre photo peut la partager) ; sinon il reste, compté orphelin par le filet
+                let nomme = true; try { nomme = Boolean(await col('photos').findOne({ cle })); } catch { /* on garde */ }
+                if (!nomme) { try { await s.supprimer(cle); } catch { /* objet orphelin : sans document, jamais exporté */ } }
+                if (e && e.code === 11000) { const x = await col('photos').findOne({ _id: id }); if (x && x.sha256 === sha) return { etat: 'deja', rang: ligne ? ligne.rang : null, seauId: seau._id }; throw erreur('CONFLIT', 'photo-differente'); }
+                throw e;
+            }
+            return { etat: 'ecrit', rang: ligne.rang, seauId: seau._id };
+        });
     }
 
     async function enregistrerMesures({ scanId, porteur, seauId, octets }) {
@@ -295,10 +313,18 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
         const sha = sha256(octets), cle = S.cleSeau(seau._id, sha, 'json');
         const deja = await col('mesures').findOne({ _id: scanId });
         if (deja) { if (deja.sha256 !== sha) throw erreur('CONFLIT', 'mesures-differentes'); return { etat: 'deja' }; }
-        await (await stock()).ecrire(cle, octets);
-        try { await col('mesures').insertOne({ _id: scanId, seauId: seau._id, scanId, sha256: sha, octets: octets.length, cle, recuLe: horloge() }); }
-        catch (e) { if (e && e.code === 11000) return { etat: 'deja' }; throw e; }
-        return { etat: 'ecrit' };
+        const s = await stock();
+        return sousReservation(seau._id, async () => {          // BARRIÈRE : réservation, objet, document, terminaison
+            await s.ecrire(cle, octets);
+            try { await col('mesures').insertOne({ _id: scanId, seauId: seau._id, scanId, sha256: sha, octets: octets.length, cle, recuLe: horloge() }); }
+            catch (e) {
+                if (e && e.code === 11000) return { etat: 'deja' };
+                let nomme = true; try { nomme = Boolean(await col('mesures').findOne({ cle })); } catch { /* on garde */ }
+                if (!nomme) { try { await s.supprimer(cle); } catch { /* orphelin */ } }
+                throw e;
+            }
+            return { etat: 'ecrit' };
+        });
     }
 
     const ligneDe = async (scanId, porteur) => {
@@ -363,7 +389,12 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
         // 🔑 un JUGE scellé (ou en cours de scellement) ne reçoit plus AUCUNE vérité : une erreur humaine s'ajoute en ERRATUM (ajouterErratum), jamais par réécriture
         const seau = await col('seaux').findOne({ _id: p.ligne.seauId });
         if (!seau) throw erreur('CONFLIT', 'seau-illisible');
-        if (seau.type === 'juge' && seau.etat !== 'ouvert') throw erreur('CONFLIT', 'juge-scelle');
+        if (seau.type === 'juge') {
+            // le scellé du juge couvre les vérités : une vérité de juge s'écrit SOUS RÉSERVATION (la barrière d'écriture), jamais après le scellé
+            if (seau.etat !== 'ouvert') throw erreur('CONFLIT', 'juge-scelle');
+            try { return await sousReservation(seau._id, () => ecrireVerite(p)); }
+            catch (e) { if (e && e.detail === 'seau-scelle') throw erreur('CONFLIT', 'juge-scelle'); throw e; }
+        }
         return ecrireVerite(p);
     }
 

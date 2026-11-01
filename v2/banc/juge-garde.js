@@ -24,7 +24,7 @@ async function scanEstDuJuge(colFn, scanId) {
  * @returns {Promise<{existe:boolean, scanIds:Set<string>, shas:Set<string>, photoBanc:{cles:Set<string>, shas:Set<string>}, idsLigne:Set<string>}>}
  */
 async function etatDuJuge(colFn, { sel = null } = {}) {
-    const o = { existe: false, scanIds: new Set(), shas: new Set(), photoBanc: { cles: new Set(), shas: new Set() }, idsLigne: new Set() };
+    const o = { existe: false, scanIds: new Set(), shas: new Set(), photoBanc: { cles: new Set(), shas: new Set() }, idsLigne: new Set(), dhashes: [], sansDhash: 0 };
     try {
         const juges = await colFn(COL.seaux).find({ type: 'juge' }).toArray();
         if (!juges.length) return o;
@@ -32,7 +32,10 @@ async function etatDuJuge(colFn, { sel = null } = {}) {
         const ids = juges.map(s => s._id);
         const scans = await colFn(COL.scans).find({ seauId: { $in: ids } }, { projection: { scanId: 1 } }).toArray();
         for (const s of scans) o.scanIds.add(String(s.scanId));
-        for (const p of await colFn(COL.photos).find({ seauId: { $in: ids } }, { projection: { sha256: 1 } }).toArray()) if (p.sha256) o.shas.add(p.sha256);
+        for (const p of await colFn(COL.photos).find({ seauId: { $in: ids } }, { projection: { sha256: 1, dhash: 1 } }).toArray()) {
+            if (p.sha256) o.shas.add(p.sha256);
+            if (typeof p.dhash === 'string' && /^[0-9a-f]{16}$/.test(p.dhash)) o.dhashes.push(p.dhash); else o.sansDhash++;       // un dHash absent : la comparaison de l'appelant est impossible (il refuse)
+        }
         if (o.scanIds.size) {
             const oids = [...o.scanIds].filter(i => /^[0-9a-f]{24}$/i.test(i)).map(i => new mongoose.Types.ObjectId(i));
             const ans = oids.length ? await colFn('analyses').find({ _id: { $in: oids } }, { projection: { photoBanc: 1, cartes: 1 } }).toArray() : [];

@@ -142,6 +142,7 @@ async function exporterBancAdmin({ dossier, colFn, stockage, base, realpath = fs
     let J;
     try { J = await require('../banc/juge-garde').etatDuJuge(colFn, { sel: typeof env.V2_BANC_SEL === 'string' && env.V2_BANC_SEL ? env.V2_BANC_SEL : null }); }
     catch (e) { throw erreur('JUGE_ILLISIBLE', 'l\'état du juge ne se lit pas : l\'export refuse'); }
+    if (J.existe && J.sansDhash > 0) throw erreur('JUGE_ILLISIBLE', 'une photo du juge n\'a pas de dHash : la comparaison est impossible, l\'export refuse');
     juge();
     creerDossierNeuf(dossier, mkdir);
     juge();
@@ -149,13 +150,22 @@ async function exporterBancAdmin({ dossier, colFn, stockage, base, realpath = fs
     const lues = new Map();        // clé -> true (écrite) | false (illisible)
     const lignes = [];
     let sansPhoto = 0;
-    let exclues = 0, exclusJuge = 0;
+    let exclues = 0, exclusJuge = 0, exclusDhash = 0;
     for (const l of brutes) {
         if (J.existe && (J.photoBanc.cles.has(l.cleR2) || J.photoBanc.shas.has(l.sha256) || J.shas.has(l.sha256) || J.idsLigne.has(String(l._id)))) { exclusJuge++; continue; }
         // MODELE-VISUEL-API (tour 2, M6) : une ligne qui porte le marqueur du vecteur de l'extension n'est jamais exportée (aucun écrivain actuel n'en pose : la règle est là pour le prochain)
         if (l.empreinteExtension) { exclues++; continue; }
         let photo = null;
         const cle = l.cleR2;
+        // BANC-200 (tour 2) : la RE-PHOTO d'une carte du juge (dHash à ≤ 8 bits d'une photo du juge) n'entre pas non plus dans cet export ; une image qu'on ne sait pas décoder fait REFUSER (échec fermé)
+        if (J.existe && J.dhashes.length && typeof cle === 'string' && CLE_BANC.test(cle)) {
+            let b = null; try { b = await stockage.lire(cle); } catch { b = null; }
+            if (Buffer.isBuffer(b) && b.length) {
+                const DH = require('../banc/dhash');
+                let d; try { d = await DH.dhash(b); } catch { throw erreur('JUGE_ILLISIBLE', 'une photo ne se décode pas : le dHash contre le juge est impossible, l\'export refuse'); }
+                if (J.dhashes.some(j => DH.distance(d, j) <= DH.SEUIL_RE_PHOTO)) { exclusJuge++; exclusDhash++; continue; }
+            }
+        }
         if (typeof cle === 'string' && CLE_BANC.test(cle)) {
             const nom = path.basename(cle);
             if (!lues.has(nom)) {
@@ -180,7 +190,7 @@ async function exporterBancAdmin({ dossier, colFn, stockage, base, realpath = fs
     fs.mkdirSync(path.join(dossier, 'photos'), { recursive: true });
     const photos = [...lues.values()].filter(Boolean).length;
     ecrireDans(dossier, 'lignes.json', JSON.stringify(lignes, null, 1), juge);
-    ecrireDans(dossier, 'manifeste.json', JSON.stringify({ format: FORMAT, base, lignes: lignes.length, photos, sansPhoto, exclues, exclusJuge, etiquettesEnAttente: enAttente, source: 'etiquette-admin', exporteLe: new Date().toISOString().slice(0, 10) }, null, 1), juge);
+    ecrireDans(dossier, 'manifeste.json', JSON.stringify({ format: FORMAT, base, lignes: lignes.length, photos, sansPhoto, exclues, exclusJuge, exclusDhash, etiquettesEnAttente: enAttente, source: 'etiquette-admin', exporteLe: new Date().toISOString().slice(0, 10) }, null, 1), juge);
     return { lignes: lignes.length, photos, sansPhoto };
 }
 

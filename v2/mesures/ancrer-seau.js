@@ -16,18 +16,27 @@ async function ecrireAncre({ seauId, colFn, dossier = DOSSIER }) {
     const seau = await colFn(COLLECTIONS.seaux).findOne({ _id: String(seauId) });
     if (!seau) throw erreur('SEAU_INCONNU', 'seau inconnu');
     if (seau.etat !== 'scelle') throw erreur('SEAU_OUVERT', 'on n\'ancre qu\'un seau scellé');
-    const chaine = await verifierChaineSeau(colFn, seau._id);
+    const chaine = await verifierChaineSeau(colFn, seau._id, { exigerAncre: false });          // la chaîne doit être intacte ; l'ancre est justement ce qu'on est en train d'écrire
     if (!chaine.ok) throw erreur('CHAINE_ROMPUE', 'la chaîne est rompue : rien n\'est ancré');
     const a = {};
     for (const k of CHAMPS) if (k === 'seauId') a.seauId = seau._id; else if (seau[k] !== undefined) a[k] = seau[k] instanceof Date ? seau[k].toISOString() : seau[k];
+    // l'ancre porte AUSSI la chaîne des errata : sa tête et leur nombre
+    const errata = await colFn(COLLECTIONS.errata).find({ seauId: seau._id }).sort({ n: 1 }).toArray();
+    a.errata = errata.length; a.erratumTete = errata.length ? errata[errata.length - 1].empreinte : null;
     const existante = lireAncre(seau._id, dossier);
+    const ecrire = (drapeau) => { fs.mkdirSync(dossier, { recursive: true }); fs.writeFileSync(path.join(dossier, `${seau._id}.json`), JSON.stringify({ ...a, ancreLe: new Date().toISOString().slice(0, 10) }, null, 1) + '\n', { flag: drapeau }); };
     if (existante) {
         const meme = CHAMPS.every(k => JSON.stringify(existante[k] ?? null) === JSON.stringify(a[k] ?? null));
         if (!meme) throw erreur('ANCRE_DIFFERENTE', 'une ancre existe et diffère de la base : elle n\'est jamais remplacée');
-        return existante;
+        const [ee, te] = [existante.errata ?? 0, existante.erratumTete ?? null];
+        if (ee === a.errata && te === a.erratumTete) return existante;
+        // seule évolution permise : la chaîne des errata s'est ALLONGÉE à partir de la tête déjà ancrée (ré-ancrage) ; une chaîne raccourcie ou refaite n'est jamais ancrée
+        const prolonge = ee < a.errata && (ee === 0 || errata[ee - 1].empreinte === te);
+        if (!prolonge) throw erreur('ANCRE_DIFFERENTE', 'la chaîne des errata ne prolonge pas celle de l\'ancre : elle n\'est jamais remplacée');
+        ecrire('w');
+        return a;
     }
-    fs.mkdirSync(dossier, { recursive: true });
-    fs.writeFileSync(path.join(dossier, `${seau._id}.json`), JSON.stringify({ ...a, ancreLe: new Date().toISOString().slice(0, 10) }, null, 1) + '\n', { flag: 'wx' });
+    ecrire('wx');
     return a;
 }
 

@@ -27,7 +27,7 @@ const extDe = cle => String(cle).slice(String(cle).lastIndexOf('.') + 1);
  * @returns {Promise<{lignes:number, photos:number, exclusFuiteJuge:number, sansPhoto:number}>}
  * Le dossier temporaire du système n'est PLUS une racine permise par défaut : la racine est NOMMÉE (V2_EXPORT_RACINE) ; `V2_EXPORT_TEMP=1` rétablit l'ancien comportement (bancs, essais jetables).
  */
-async function exporterSeau({ seauId, usage, dossier, colFn, stockage, base, sansJuge = null, journal = l => console.log(l), realpath = fs.realpathSync.native, lstat = fs.lstatSync, env = process.env, tmpdir = null, mkdir = fs.mkdirSync }) {
+async function exporterSeau({ seauId, usage, dossier, colFn, stockage, base, sansJuge = null, journal = l => console.log(l), ancresDir = undefined, realpath = fs.realpathSync.native, lstat = fs.lstatSync, env = process.env, tmpdir = null, mkdir = fs.mkdirSync }) {
     if (!USAGES.includes(usage)) throw erreur('USAGE', 'usage absent ou inconnu : « mesure » ou « entrainement », sans valeur par défaut');
     if (typeof base !== 'string' || !base.trim() || base.trim().toLowerCase() === 'test') throw erreur('BASE-REFUSEE', 'base absente ou de production');
     if (typeof colFn !== 'function' || !stockage || typeof stockage.lire !== 'function') throw erreur('ENTREE', 'lecture de la base et du bucket requise');
@@ -44,8 +44,10 @@ async function exporterSeau({ seauId, usage, dossier, colFn, stockage, base, san
         if (typeof sansJuge !== 'string' || sansJuge.trim().length < 20) throw erreur('JUGE_ABSENT', 'aucun juge n\'existe : l\'export d\'entraînement ne peut pas exclure sa fuite (option --sans-juge="<raison de 20 caractères au moins>")');
         journal(`⚠️ export d'entraînement SANS JUGE, sur la raison : ${sansJuge.trim()}`);
     }
-    const ancre = id => require('../banc/ancre').lireAncre(id);
+    const ancre = id => require('../banc/ancre').lireAncre(id, ancresDir);
     const chaine = await verifierChaineSeau(colFn, seau._id, { ancre });
+    // 🔑 la mesure d'un JUGE exige son ANCRE (tête de la chaîne principale ET de celle des errata, versionnée hors de la base) : sans elle, rien ne prouve que la chaîne n'a pas été refaite
+    if (usage === 'mesure' && seau.type === 'juge' && chaine.ancre !== 'ok' && chaine.problemes.every(p => ['non-ancre', 'ancre-errata'].includes(p.cause))) throw erreur('NON_ANCRE', `le juge n'est pas (ou plus) ancré : ${chaine.ancre} — node v2/mesures/ancrer-seau.js, puis committer l'ancre`);
     if (!chaine.ok) throw erreur('CHAINE_ROMPUE', `la chaîne d'empreintes est rompue (${chaine.problemes.length} problème(s))`);
 
     const juge = () => B.jugerSortie(dossier, { realpath, lstat, env, tmpdir });
