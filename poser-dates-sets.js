@@ -48,6 +48,7 @@ const path = require('path');
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { lireMongo } = require('./collecte-cartes/lecture-sure');
 const r2 = require('./collecte-cartes/r2');
+const { lireReleves, sourceEcrite } = require('./collecte-cartes/releves-dates');
 
 const arg = n => (process.argv.find(a => a.startsWith(`--${n}=`)) || '').slice(n.length + 3) || null;
 const CLONE = arg('clone');
@@ -56,6 +57,8 @@ const SETS = arg('sets') ? arg('sets').split(',').map(x => x.trim()).filter(Bool
 // `--pages=<json>` : des pages de set lues HORS de l'archive R2 (sonde revisionsDe, avec pageid et revid), pour les sets qui n'ont
 // pas de `bulba.cleR2` — la voie « sans page ». Clé : l'_id du set (`id`), valeur : { page, revid, content }.
 const PAGES = new Map(arg('pages') ? JSON.parse(fs.readFileSync(arg('pages'), 'utf8')).filter(x => x.content).map(x => [x.id, x]) : []);
+// `--releves=<fichier.json>` : un relevé de dates SOURCÉ hors Bulbapedia, deux sources par entrée (collecte-cartes/releves-dates.js).
+const RELEVES_FICHIER = arg('releves');
 const MOIS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const RE_JOUR = new RegExp(`^(${MOIS.join('|')})\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s+(\\d{4})$`);
 
@@ -468,6 +471,22 @@ function retenirSets(sans, ids) {
     return { retenus: sans.filter(s => ids.includes(s._id)), absents: ids.filter(i => !presents.has(i)) };
 }
 
+/**
+ * Un relevé admis pour un set DÉJÀ daté : jamais réécrit. Signalé seulement s'il CONTREDIT la date en base (un autre jour) ; une date
+ * en base illisible (« March 9 / May 25, 2024 ») n'est ni confirmée ni contredite : elle est dite `illisibles`.
+ */
+function contradictionsAvecBase(admis, sets, champDe, absent) {
+    const r = { dejaDates: [], contradictions: [], illisibles: [] };
+    for (const s of sets) {
+        const a = admis[s._id], c = champDe(s);
+        if (!a || !c || absent.includes(s[c] ?? null)) continue;
+        const enBase = s[c], iso = isoPartiel(jourComplet(enBase) || '');
+        if (!iso) { r.illisibles.push({ id: s._id, enBase, releve: a.jour }); continue; }
+        (iso === a.iso ? r.dejaDates : r.contradictions).push({ id: s._id, champ: c, enBase, releve: a.jour });
+    }
+    return r;
+}
+
 async function principal() {
     const ecrire = process.argv.includes('--ecrire');
     if (!CLONE || !fs.existsSync(path.join(CLONE, 'data'))) { console.error('❌ --clone=<chemin du clone tcgdex/cards-database> requis (git clone --depth 1)'); process.exit(2); }
@@ -485,6 +504,21 @@ async function principal() {
     const illisibles = sets.filter(s => champDe(s) && !ABSENT.includes(s[champDe(s)] ?? null) && Number.isNaN(Date.parse(s[champDe(s)])));
     console.log(`« N/A » traités comme absents : ${sets.filter(s => champDe(s) && s[champDe(s)] === 'N/A').map(s => s.code).join(', ') || 'aucun'}`);
     console.log(`DÉNOMINATEUR : ${sets.length} sets publiés · sans date (règle du site) ${sans.length} · date présente mais illisible par Date.parse ${illisibles.length} (non touchées) : ${illisibles.map(s => `${s.code} « ${s[champDe(s)]} »`).join(' · ')}`);
+    // UN RELEVÉ SOURCÉ HORS BULBAPEDIA (--releves=<fichier>) : deux sources lues et concordantes par entrée, sinon rien (collecte-cartes/releves-dates.js).
+    let releves = { admis: {}, refus: [] };
+    if (RELEVES_FICHIER) {
+        releves = lireReleves(JSON.parse(fs.readFileSync(RELEVES_FICHIER, 'utf8')), { jourComplet, isoPartiel });
+        const dn = releves.denominateur, connus = new Set(sets.map(s => s._id));
+        console.log(`RELEVÉ ${RELEVES_FICHIER} : ${dn.cles} clés · ${dn.ignorees} ignorées (${dn.ignoreesNoms.join(', ') || 'aucune'}) · ${dn.entrees} entrées · ${dn.admises} admises (${Object.entries(releves.admis).map(([k, v]) => `${k} ${v.rang}`).join(' ; ') || 'aucune'}) · ${dn.refusees} refusées`);
+        for (const r of releves.refus) console.log(`   🔴 relevé REFUSÉ ${r.id} : ${r.raison}`);
+        for (const id of Object.keys(releves.admis)) if (!connus.has(id)) console.log(`   🔴 relevé ${id} : aucun set publié de cet _id — rien d'écrit`);
+        const cb = contradictionsAvecBase(releves.admis, sets, champDe, ABSENT);
+        for (const x of cb.dejaDates) console.log(`   relevé ${x.id} : déjà daté (${x.champ} = ${x.enBase}), même jour — rien à écrire`);
+        for (const x of cb.contradictions) console.log(`   🔴 relevé ${x.id} : CONTRADICTION avec la base (${x.champ} = ${x.enBase} ; relevé ${x.releve}) — jamais réécrite, à trancher`);
+        for (const x of cb.illisibles) console.log(`   relevé ${x.id} : date en base illisible (« ${x.enBase} ») — ni confirmée ni contredite, non réécrite`);
+        const horsPerimetre = Object.keys(releves.admis).filter(id => connus.has(id) && !sans.some(s => s._id === id) && !cb.dejaDates.concat(cb.contradictions, cb.illisibles).some(x => x.id === id));
+        for (const id of horsPerimetre) console.log(`   relevé ${id} : set publié mais sans champ de date (région sans champ) ou hors --sets — non écrit`);
+    }
     const decisions = [];
     for (const s of sans) {
         // Un set de réimpressions (Prize Packs, WCD…) n'a pas de tirage propre écrit ; il est occidental par sa région.
@@ -498,7 +532,7 @@ async function principal() {
         const o = off ? { iso: isoPartiel(off.jour), de: `officielle:${off.url} (« ${off.citation} », lu le ${off.lu})` } : null;
         // Un set de réimpressions n'a pas de page de SET archivée ; la page du PRODUIT (« Play! Pokémon Prize Pack Series One (TCG) »,
         // « Trick or Trade 2023 (TCG) ») est lue par la sonde et fournie par --pages, avec sa révision.
-        if (s.reimpressions && !PAGES.has(s._id) && !o && !RELEVES_BULBAPEDIA[s._id]) { d.raison = `set de réimpressions (${s.reimpressions}) : aucune page du produit fournie (--pages), aucune source officielle relevée`; continue; }
+        if (s.reimpressions && !PAGES.has(s._id) && !o && !RELEVES_BULBAPEDIA[s._id] && !releves.admis[s._id]) { d.raison = `set de réimpressions (${s.reimpressions}) : aucune page du produit fournie (--pages), aucune source officielle relevée`; continue; }
         let b = null;
         if (s.bulba?.cleR2) b = dateBulbapedia(await r2.lireTexte(process.env.R2_BUCKET_BRUT, s.bulba.cleR2), { ...s, tirage });
         else if (PAGES.has(s._id)) {
@@ -524,6 +558,9 @@ async function principal() {
         // (jour ou mois) : une période se range à son début (décision du 2026-09-25).
         const votes = [];
         if (o) votes.push({ source: 'officielle', ...o });
+        // le relevé admis : UNE voix (deux sources lues concordantes comptent comme une seule source), « officielle » si une adresse l'est, sinon tierce
+        const rel = releves.admis[s._id];
+        if (rel) votes.push({ source: rel.rang === 'officielle' ? 'officielle' : 'releve-tiers', iso: rel.iso, de: sourceEcrite(rel) });
         for (const c of b?.candidats || []) votes.push({ source: 'bulbapedia', iso: c.iso, de: `bulbapedia:${c.de}` });
         if (!b?.candidats?.length && b?.periode?.debutIso && b.periode.debutIso.length >= 7) votes.push({ source: 'bulbapedia', iso: b.periode.debutIso, de: `bulbapedia:${b.periode.de} (début de la période « ${b.periode.texte} »)` });
         // TCGdex : une voix seulement désigné par deux clés (occidental) ; par une seule (le code japonais, un nom), un témoin.
@@ -615,5 +652,5 @@ async function principal() {
     await fermer();
 }
 
-module.exports = { retenirSets, jourComplet, parties, dateBulbapedia, pairerIntl, lireSetsTcgdex, depuisIso, periodeDe, isoPartiel, majorite, texteDeIso, OFFICIELLES, RELEVES_BULBAPEDIA };
+module.exports = { contradictionsAvecBase, retenirSets, jourComplet, parties, dateBulbapedia, pairerIntl, lireSetsTcgdex, depuisIso, periodeDe, isoPartiel, majorite, texteDeIso, OFFICIELLES, RELEVES_BULBAPEDIA };
 if (require.main === module) principal().catch(e => { console.error(e); process.exit(1); });

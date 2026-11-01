@@ -14,13 +14,25 @@ const verifier = (nom, obtenu, attendu) => {
     const appels = [];
     const assurer = async (db, o) => { appels.push({ db, o }); return { entrees: 3, cles: 2, traitees: 2, fabriquees: 0, deja: 0, depuisDocument: 2, echecs: [], interrompu: false, sets: ['Set-A', 'Set-B'] }; };
     const db = { fictive: true }, arreter = () => false;
-    const r = await vignetterApresJointure(db, 'Set-A', { bucket: 'bucket-x', arreter, assurer });
+    const moyVide = async () => ({ entrees: 0, cles: 0, traitees: 0, fabriquees: 0, refaites: 0, retirees: 0, deja: 0, depuisDocument: 0, echecs: [], interrompu: false, sets: [] });   // ces blocs jugent la VIGNETTE : le moyen est neutralisé (pas de bruit), il a ses blocs plus bas
+    const r = await vignetterApresJointure(db, 'Set-A', { bucket: 'bucket-x', arreter, assurer, assurerMoy: moyVide });
     verifier('assurerVignettes est appelé une fois, sur la base donnée', [appels.length, appels[0].db === db], [1, true]);
     verifier('mêmes options que le worker : bucket, slug du set, parallèle 4, arrêt relayé', [appels[0].o.bucket, appels[0].o.slug, appels[0].o.parallele, appels[0].o.arreter === arreter], ['bucket-x', 'Set-A', 4, true]);
     verifier('le bilan est celui que le worker écrit (depuisDocument compris) et rend les sets vignettés', [r.vg.depuisDocument, r.vg.entrees, r.vg.echecs, r.sets], [2, 3, 0, ['Set-A', 'Set-B']]);
     const muet = { error() { } };
-    const e = await vignetterApresJointure(db, 'Set-A', { bucket: 'b', journal: muet, assurer: async () => { throw new Error('R2 injoignable'); } });
+    const e = await vignetterApresJointure(db, 'Set-A', { bucket: 'b', journal: muet, assurer: async () => { throw new Error('R2 injoignable'); }, assurerMoy: moyVide });
     verifier('un échec ne lève pas : il est rendu, aucun set', [e.vg.erreur, e.sets], ['R2 injoignable', []]);
+
+    // ── LE MOYEN (400 px) SE FABRIQUE DANS LA MÊME ÉTAPE (DEMANDE-CATALOGUE.md, le scan « moyen ») : même appel, mêmes sets revalidés
+    const appelsM = [];
+    const assurerMoy = async (db2, o) => { appelsM.push({ db2, o }); return { entrees: 2, cles: 1, traitees: 1, fabriquees: 1, refaites: 0, retirees: 0, deja: 0, depuisDocument: 0, echecs: [], interrompu: false, sets: ['Set-A', 'Set-C'] }; };
+    const rm = await vignetterApresJointure(db, 'Set-A', { bucket: 'bucket-x', arreter, assurer, assurerMoy });
+    verifier('le moyen est demandé après la vignette, sur le même set, le même bucket, avec la revérification des remplacements', [appelsM.length, appelsM[0].o.slug, appelsM[0].o.bucket, appelsM[0].o.reverifier, appelsM[0].o.arreter === arreter], [1, 'Set-A', 'bucket-x', true, true]);
+    verifier('le bilan porte le moyen à côté de la vignette ; les sets des deux sont rendus (sans doublon) pour la revalidation', [rm.vg.moyens.fabriquees, rm.vg.moyens.echecs, rm.vg.depuisDocument, rm.sets], [1, 0, 2, ['Set-A', 'Set-B', 'Set-C']]);
+    const em = await vignetterApresJointure(db, 'Set-A', { bucket: 'b', journal: muet, assurer, assurerMoy: async () => { throw new Error('moyen en panne'); } });
+    verifier('un échec du moyen ne perd PAS la vignette : elle reste rendue, l\'erreur du moyen est nommée à part', [em.vg.erreur, em.vg.moyens.erreur, em.sets], [undefined, 'moyen en panne', ['Set-A', 'Set-B']]);
+    const ev = await vignetterApresJointure(db, 'Set-A', { bucket: 'b', journal: muet, assurer: async () => { throw new Error('R2 injoignable'); }, assurerMoy });
+    verifier('un échec de la vignette ne prive pas le moyen de sa passe', [ev.vg.erreur, ev.vg.moyens.fabriquees, ev.sets], ['R2 injoignable', 1, ['Set-A', 'Set-C']]);
 
     // ── EFFET (sans R2) : une entrée réécrite sans vignette + un document `images` qui en porte une -> la vignette revient, recopiée
     // (depuisDocument), sans fabrication. `assurerVignettes` RÉEL, base fictive en mémoire, r2 remplacé (aucun accès réseau).
@@ -28,15 +40,24 @@ const verifier = (nom, obtenu, attendu) => {
     const chemin = require.resolve('./collecte-cartes/r2');
     require.cache[chemin] = { id: chemin, filename: chemin, loaded: true, exports: r2Faux };
     const V = { cleR2: 'vignettes/a/2.webp', w: 200, h: 280 };
-    const cartes = [{ _id: 1, images: [{ set: 'Set-A', numero: '2', cleR2: 'a/2', jointeLe: 'rejeu' }, { set: 'Set-B', numero: '1', cleR2: 'b/1', vignette: { cleR2: 'vignettes/b/1.webp' } }] }];
-    const imagesDocs = [{ cleR2: 'a/2', vignette: V }];
+    const M2 = { cleR2: 'moyens/a/2.webp', w: 400, h: 550 };
+    const cartes = [{ _id: 1, images: [{ set: 'Set-A', numero: '2', cleR2: 'a/2', w: 600, h: 825, jointeLe: 'rejeu' }, { set: 'Set-B', numero: '1', cleR2: 'b/1', w: 300, h: 420, vignette: { cleR2: 'vignettes/b/1.webp' } }] }];
+    const imagesDocs = [{ cleR2: 'a/2', sha256: 'S', vignette: V, moyen: { ...M2, de: 'S' } }];
+    // la base fictive filtre comme Mongo pour ce qu'elle emploie en LECTURE seulement par les deux assureurs eux-mêmes (ils refiltrent en JS) ; l'écriture applique les arrayFilters
+    const evalF = (v, c) => c === null ? (v === null || v === undefined) : (c && typeof c === 'object') ? ('$exists' in c ? (v !== undefined) === c.$exists : '$ne' in c ? v !== c.$ne : (() => { throw new Error('arrayFilter non prévu'); })()) : v === c;
     const dbFictive = { collection: nom => nom === 'cartes' ? {
-        find: () => ({ async *[Symbol.asyncIterator]() { for (const d of cartes) if (d.images.some(e => typeof e.cleR2 === 'string' && !e.vignette && e.set === 'Set-A')) yield d; } }),
-        updateOne: async (f, u, o) => { const cle = o.arrayFilters[0]['e.cleR2']; for (const e of cartes.find(d => d._id === f._id).images) if (e.cleR2 === cle && !e.vignette) e.vignette = u.$set['images.$[e].vignette']; return {}; }
-    } : { find: q => ({ toArray: async () => imagesDocs.filter(d => q.cleR2.$in.includes(d.cleR2)) }), updateOne: async () => { throw new Error('le document porte déjà la vignette : pas d\'écriture'); } } };
+        find: () => ({ async *[Symbol.asyncIterator]() { for (const d of cartes) yield d; } }),
+        updateOne: async (f, u, o) => {
+            const [champ, val] = Object.entries(u.$set)[0], nom2 = /\.(\w+)$/.exec(champ)[1];
+            for (const e of cartes.find(d => d._id === f._id).images) if (Object.entries(o.arrayFilters[0]).every(([k, c]) => evalF(e[k.replace(/^e\./, '')], c))) e[nom2] = val;
+            return {};
+        }
+    } : { find: q => ({ toArray: async () => imagesDocs.filter(d => q.cleR2.$in.includes(d.cleR2)) }), updateOne: async () => { throw new Error('le document porte déjà vignette et moyen : pas d\'écriture'); } } };
     const reel = await vignetterApresJointure(dbFictive, 'Set-A', { bucket: 'b' });
     verifier('EFFET : l\'entrée réécrite retrouve la vignette du document (depuisDocument 1, 0 fabriquée, 0 échec)', [cartes[0].images[0].vignette, reel.vg.depuisDocument, reel.vg.fabriquees, reel.vg.echecs], [V, 1, 0, 0]);
     verifier('EFFET : l\'entrée d\'un autre set, déjà vignettée, n\'est pas touchée ; le set est rendu pour la revalidation', [cartes[0].images[1].vignette.cleR2, reel.sets], ['vignettes/b/1.webp', ['Set-A']]);
+    verifier('EFFET MOYEN (assurerMoyens RÉEL, bout de chaîne) : la même entrée retrouve son moyen du document, SANS l\'empreinte, sans lire R2 ni déposer ; 0 échec ; aucun bruit', [cartes[0].images[0].moyen, reel.vg.moyens.depuisDocument, reel.vg.moyens.fabriquees, reel.vg.moyens.echecs, reel.vg.moyens.erreur], [M2, 1, 0, 0, undefined]);
+    verifier('EFFET MOYEN : l\'entrée de 300 px n\'a pas de moyen', cartes[0].images[1].moyen, undefined);
 
     // Le worker ET le rejeu passent par cette fonction (une seule définition) — lu dans le source, pas supposé.
     const src = fs.readFileSync(path.join(__dirname, 'collecteur-images.js'), 'utf8');

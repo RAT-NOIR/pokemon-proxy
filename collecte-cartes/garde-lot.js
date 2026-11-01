@@ -39,6 +39,10 @@ const COMPTEURS = Object.freeze({
     // de cleR2 et perd sa vignette) saute la clé disparue et laisse `images` égal : seul ce nombre le voit. S'annonce aussi : un retrait de
     // masse voulu s'annonce PAR SET (« vignettes-set set:S » : K), qui couvre les K clés perdues et le nombre.
     'vignettes-set': 'nombre d\'entrées de cartes.images qui portent une vignette, par set',
+    // ➕ 2026-10-31 (scan « moyen » 400 px, collecte-cartes/moyen.js) : le site lit `images[].moyen` ; un rejeu de jointure qui l'efface est la MÊME panne que celle des vignettes (2026-10-08).
+    // Mêmes deux compteurs, mêmes règles (clé par entrée + nombre par set ; annonce par set ; dispense du worker dans ses sets).
+    'moyens-images': 'entrées de cartes.images qui portent un moyen (400 px), UNE CLÉ PAR ENTRÉE (set|carte|numero|cleR2)',
+    'moyens-set': 'nombre d\'entrées de cartes.images qui portent un moyen (400 px), par set',
     'nom-affiche': 'le set porte un nomAffichage',
     // ➕ 2026-10-17 (PP-HOLO) : le champ explicite `partageeHoloNonHolo: true` (le scan tamponné sert le produit holo ET le non-holo ; l'API ne tranche jamais le brillant par l'image).
     // Un rejeu qui l'efface laisse `images` et les vignettes intacts : seul ce compteur le voit. Jamais dispensé par le worker (il n'écrit pas ce champ) ; s'annonce (retrait partiel voulu).
@@ -85,6 +89,7 @@ function compterEtat({ cartes = [], cartesProduits = [], sets = [] }) {
             const g = `set:${im.set}|${c._id}|${im.numero ?? ''}|${im.cleR2 ?? ''}`;
             inc(`entrees-cles ${g}`);   // interne (hors COMPTEURS) : dit si l'entrée existe encore, pour ne pas compter deux fois sa disparition
             if (im.vignette) { inc(`vignettes-images ${g}`); inc(`vignettes-set set:${im.set}`); }
+            if (im.moyen) { inc(`moyens-images ${g}`); inc(`moyens-set set:${im.set}`); }
         }
     }
     for (const s of sets) if (s.nomAffichage) inc(`nom-affiche set:${s._id}`);
@@ -104,33 +109,39 @@ function comparer(avant, apres, { annonces = {}, setsDuWorker = new Set() } = {}
     // vignettes : l'annonce PAR SET est un budget que consomment les clés perdues ; une clé annoncée ou dispensée « explique » aussi la
     // baisse du nombre de vignettes du set ; une entrée disparue l'explique seulement dans la mesure où `images` du set a réellement baissé
     const budgetSet = new Map(), expliquees = new Map(), disparues = new Map();
-    for (const [cle, a] of Object.entries(annonces)) { const [c, g] = decouper(cle); if (c === 'vignettes-set') budgetSet.set(setDe(g), a); }
+    // (2026-10-31) deux familles de champs d'image que le site lit et qu'un rejeu de jointure peut effacer : la vignette et le moyen — UNE règle, deux noms de compteurs
+    const FAMILLES = { 'vignettes-images': 'vignettes-set', 'moyens-images': 'moyens-set' };
+    const SETS_DES_FAMILLES = new Set(Object.values(FAMILLES));
+    const famDeSet = Object.fromEntries(Object.entries(FAMILLES).map(([i, s]) => [s, i]));
+    const kf = (fam, s) => `${fam}|${s}`;
+    for (const [cle, a] of Object.entries(annonces)) { const [c, g] = decouper(cle); if (c in famDeSet) budgetSet.set(kf(famDeSet[c], setDe(g)), a); }
     const pousse = (m, s, k = 1) => m.set(s, (m.get(s) || 0) + k);
     for (const [cle, n] of avant) {
         const m = apres.get(cle) || 0;
         if (m >= n) continue;
         const [compteur, groupe] = decouper(cle);
-        if (compteur === 'entrees-cles' || compteur === 'vignettes-set' || compteur === 'matiere-speciale') continue;   // interne / traité après
-        // l'entrée a disparu : c'est une baisse d'IMAGES (comptée par set), pas en plus une baisse de vignette
-        if (compteur === 'vignettes-images' && !apres.get(`entrees-cles ${groupe}`)) { pousse(disparues, setDe(groupe), n - m); continue; }
+        if (compteur === 'entrees-cles' || SETS_DES_FAMILLES.has(compteur) || compteur === 'matiere-speciale') continue;   // interne / traité après
+        // l'entrée a disparu : c'est une baisse d'IMAGES (comptée par set), pas en plus une baisse de vignette / de moyen
+        if (compteur in FAMILLES && !apres.get(`entrees-cles ${groupe}`)) { pousse(disparues, kf(compteur, setDe(groupe)), n - m); continue; }
         const baisse = n - m, annonce = annonces[cle] || 0;
-        // dispense du worker : même preuve (ses propres dates, sets de la fenêtre) pour les images et leurs vignettes — il réécrit des
+        // dispense du worker : même preuve (ses propres dates, sets de la fenêtre) pour les images et leurs vignettes / moyens — il réécrit des
         // entrées puis les revignette (collecteur-images.js)
         const setDuGroupe = setDe(groupe);
         let autorisee = baisse <= annonce ? 'annoncée'
-            : (compteur === 'images' || compteur === 'vignettes-images') && setsDuWorker.has(setDuGroupe) ? 'worker' : null;
-        if (autorisee && compteur === 'vignettes-images') pousse(expliquees, setDuGroupe, baisse);
-        if (!autorisee && compteur === 'vignettes-images' && (budgetSet.get(setDuGroupe) || 0) >= baisse) { pousse(budgetSet, setDuGroupe, -baisse); autorisee = 'annoncée'; }
+            : (compteur === 'images' || compteur in FAMILLES) && setsDuWorker.has(setDuGroupe) ? 'worker' : null;
+        if (autorisee && compteur in FAMILLES) pousse(expliquees, kf(compteur, setDuGroupe), baisse);
+        if (!autorisee && compteur in FAMILLES && (budgetSet.get(kf(compteur, setDuGroupe)) || 0) >= baisse) { pousse(budgetSet, kf(compteur, setDuGroupe), -baisse); autorisee = 'annoncée'; }
         baisses.push({ cle, compteur, groupe, avant: n, apres: m, baisse, annonce, autorisee });
     }
     for (const [cle, n] of avant) {
         const [compteur, groupe] = decouper(cle);
-        if (compteur !== 'vignettes-set') continue;
+        if (!SETS_DES_FAMILLES.has(compteur)) continue;
         const m = apres.get(cle) || 0;
         if (m >= n) continue;
+        const fam = famDeSet[compteur];
         const s = setDe(groupe), baisse = n - m, annonce = annonces[cle] || 0;
         const imgBaisse = Math.max(0, (avant.get(`images ${groupe}`) || 0) - (apres.get(`images ${groupe}`) || 0));
-        const explication = (expliquees.get(s) || 0) + Math.min(disparues.get(s) || 0, imgBaisse);
+        const explication = (expliquees.get(kf(fam, s)) || 0) + Math.min(disparues.get(kf(fam, s)) || 0, imgBaisse);
         const autorisee = baisse <= annonce + explication ? (baisse <= annonce ? 'annoncée' : 'expliquée par les clés')
             : setsDuWorker.has(s) ? 'worker' : null;
         baisses.push({ cle, compteur, groupe, avant: n, apres: m, baisse, annonce, autorisee });
@@ -200,7 +211,7 @@ const MARQUAGES_DU_LOT = Object.freeze(['partageeHoloNonHolo', 'partageeTamponNo
 const AMBIGUS_WORKER = Object.freeze(['basseDefinition']);
 const cleEntree = m => (m && typeof m.set === 'string' && m.set && typeof m.cleR2 === 'string' && m.cleR2 ? `${m.set}|${m.cleR2}` : null);
 // un champ d'entrée d'image tel que la comparaison le lit : la vignette sur sa forme figée (SITE_LIT.formes), le reste tel quel
-const champEntree = (m, k) => (k === 'vignette' ? SITE_LIT.formes['images.vignette'].map(f => valeur(m, `vignette.${f}`)) : valeur(m, k));
+const champEntree = (m, k) => (k === 'vignette' || k === 'moyen' ? SITE_LIT.formes[`images.${k}`].map(f => valeur(m, `${k}.${f}`)) : valeur(m, k));
 /** @returns {{images: object[], restaurees: object[], gardees: object[], indecidables: object[]}} — pure : ne modifie ni `sauvees` ni `actuelles` */
 function restaurerImages(sauvees, actuelles, { setsDuWorker = new Set() } = {}) {
     const S = (sauvees || []).filter(Boolean), A = (actuelles || []).filter(Boolean);
@@ -294,7 +305,7 @@ const SITE_LIT = Object.freeze({
     cartes: Object.freeze(['categorie', 'nomEn', 'nomJa', 'nomFr', 'illustrateur', 'ndex', 'pv', 'type', 'stade', 'faiblesse', 'resistance', 'retraite', 'attaques', 'liens.idProduct', 'liens.idMetacard', 'sets']),
     impressions: Object.freeze(['tirage', 'expansion', 'deck', 'numero', 'total', 'rarete', 'illustrateur']),
     // `partageeHoloNonHolo` : non lu par lireDonnee.ts (« non lu ici »), gardé par prudence — l'avoir en trop coûte une page, l'avoir oublié coûte trente jours
-    images: Object.freeze(['set', 'cleR2', 'w', 'h', 'numero', 'langue', 'languePreuve', 'source', 'mention', 'noteVariante', 'vignette', 'basseDefinition', 'partageeTamponNonSepare', 'produitsPartages', 'tamponNonRepresente', 'imageEmprunteeTirage', 'partageeHoloNonHolo',
+    images: Object.freeze(['set', 'cleR2', 'w', 'h', 'numero', 'langue', 'languePreuve', 'source', 'mention', 'noteVariante', 'vignette', 'moyen', 'basseDefinition', 'partageeTamponNonSepare', 'produitsPartages', 'tamponNonRepresente', 'imageEmprunteeTirage', 'partageeHoloNonHolo',
         // `differenceEmprunt` : lu par le site depuis le 2026-10-25 (lireDonnee.ts SPEC_IMAGE_CARTE), reporté le 2026-10-26 quand l'étape 0 ter a refusé le lot B1
         'differenceEmprunt']),
     // `preuve` : héritée de l'ancienne projection (le site ne la lit pas), gardée pour ne rien retirer à ce que `setsTouches` rendait
@@ -309,6 +320,7 @@ const SITE_LIT = Object.freeze({
     // alors que la comparaison ne le voit pas. (Les autres ancêtres déclarés — `logo`, `attaques`, `periodeDistribution`… — sont comparés EN ENTIER, moins la date `le` : un sous-champ nouveau y est vu.)
     formes: Object.freeze({
         'images.vignette': Object.freeze(['cleR2', 'w', 'h']),
+        'images.moyen': Object.freeze(['cleR2', 'w', 'h']),   // le scan « moyen » 400 px (jamais `de`, l'empreinte, qui vit sur le document `images` seul)
         dateSortieMois: Object.freeze(['iso', 'texte']),
         symbolesIdentification: Object.freeze(['cleR2', 'w', 'h', 'fichier', 'source'])
     })

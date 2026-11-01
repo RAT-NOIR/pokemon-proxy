@@ -9,9 +9,12 @@ async function t(nom, f) { try { await f(); ok++; console.log('  ok   ' + nom); 
 
 // ── le faux réseau : tout appel vers un hôte PikaQian est une faute, et il est compté ──
 const HOTES = /(^|\.)pikaqian\.com$|(^|\.)pokemon-tcg\.cn$/i;
-const appelsInterdits = [];
+// ➕ 2026-10-31 (décision du testeur) : l'hôte d'IMAGES est rouvert, et lui seul — ses appels se comptent À PART ; tout autre hôte PikaQian reste une faute
+const ROUVERT = 'images.pikaqian.com';
+const appelsInterdits = [], appelsImagesRouvertes = [];
 const hoteDe = u => { try { return new URL(typeof u === 'string' ? u : u?.url ?? String(u)).hostname; } catch { return ''; } };
 const reseau = async (url) => {
+    if (hoteDe(url) === ROUVERT) { appelsImagesRouvertes.push(String(url)); throw new Error('RÉSEAU (hôte d\'images rouvert, simulé) : ' + url); }
     if (HOTES.test(hoteDe(url))) { appelsInterdits.push(String(url)); throw new Error('RÉSEAU INTERDIT : ' + url); }
     throw new Error('requête inattendue : ' + url);
 };
@@ -114,12 +117,15 @@ const ALERTE_ECHUE = () => ({ _id: P.ID_ALERTE, active: true, depuis: new Date(T
         assert.strictEqual(r.etat, 'refuse-source-passive'); assert.strictEqual(r.sansJointure, true);
         assert.strictEqual(appelsInterdits.length, 0);
     });
-    await t('le client PikaQian réel (transport par défaut) refuse chaque requête : le faux réseau n\'est même pas appelé', async () => {
+    await t('le client PikaQian réel (transport par défaut) refuse chaque PAGE sans appel ; l\'hôte d\'IMAGES (rouvert le 31/10) part, et lui seul', async () => {
         const c = P.fabriquerClientPikaqian({ verrou: { tenu: true, perdu: false }, pause: async () => { } });
         await assert.rejects(() => c.page('https://pikaqian.com/sets/cs1bc'), /source passive/);
         const c2 = P.fabriquerClientPikaqian({ verrou: { tenu: true, perdu: false }, pause: async () => { } });
-        await assert.rejects(() => c2.image('https://images.pikaqian.com/cs1bc/0d0e0f10-1111-4222-8333-444455556666.webp'), /source passive/);
+        await assert.rejects(() => c2.image('https://images.pikaqian.com/cs1bc/0d0e0f10-1111-4222-8333-444455556666.webp'));
         assert.strictEqual(appelsInterdits.length, 0);
+        assert.deepStrictEqual(appelsImagesRouvertes, ['https://images.pikaqian.com/robots.txt']);
+        assert.strictEqual(SP.estPassive('pikaqian'), true);                                   // la source reste PASSIVE pour le worker
+        assert.deepStrictEqual([SP.imagesRouvertes('pikaqian', 'images.pikaqian.com'), SP.imagesRouvertes('pikaqian', 'pikaqian.com'), SP.imagesRouvertes('autre', 'images.pikaqian.com')], [true, false, false]);
     });
 
     console.log('l\'alimentateur et l\'enfilage');
