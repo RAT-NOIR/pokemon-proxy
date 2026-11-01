@@ -155,6 +155,38 @@ verifier('décision 2026-10-25 : liste fermée de 3 produits exactement (Karen, 
 verifier('décision 2026-10-25 : chaque entrée porte sa preuve (au moins 2 sources, références) et une voie connue', (() => { const { VOIES } = require('./collecte-cartes/fiches-prouvees'); return (DECISIONS['2026-10-25'] || []).map(x => [Array.isArray(x.preuve?.sources) && x.preuve.sources.length >= 2, Array.isArray(x.preuve?.references) && x.preuve.references.every(r => typeof r === 'string' && r.length > 10), VOIES.includes(x.voie)]); })(), [[true, true, true], [true, true, true], [true, true, true]]);
 verifier('décision 2026-10-25 : les entrées passent le planificateur sans champ inconnu (la preuve ne fuit pas dans la ligne écrite)', (() => { const e = DECISIONS['2026-10-25'] || []; if (!e.length) return 'vide'; const x = e[0]; const lec = { cartes: [{ _id: x.carteId, nomEn: 'K', sets: [], liens: {} }], produits: new Map([[x.idExpansion, [{ idProduct: x.idProduct, name: 'Karen', numero: '177a', idMetacard: 1 }]]]), existants: new Map(), etats: new Map() }; const p = planifier({ entrees: [x], lecture: lec }); return p.lignes.every(l => !('preuve_sources' in l) && l.preuve === 'fiche-prouvee') ? 'ok' : 'fuite'; })(), 'ok');
 
+// ── lot a-ebauches (2026-11-01) : Wartortle S19 et Bayleef S07 d'EC1 — les cartes EXISTENT et déclarent elles-mêmes « Pokémon-e Starter Deck » 019/029 et 007/029 (la voie de Bulbasaur S01) :
+//    ce sont deux LIGNES qui manquent, pas deux fiches simples (une fiche simple ferait doublon avec la vraie carte)
+const D11 = DECISIONS['2026-11-01-a-ebauches'] || [];
+verifier('décision 2026-11-01-a-ebauches : liste fermée de 2 produits exactement (Wartortle S19 → 41112, Bayleef S07 → 30518), voie impression-equivalente d\'EC1', [D11.map(x => [x.idProduct, x.carteId, x.voie, x.slugSet, x.expansionImpression, x.prefixe, x.total, x.tirage]), new Set(D11.map(x => x.idProduct)).size],
+    [[[654781, 41112, 'impression-equivalente', 'Base-Expansion-Pack', 'Pokémon-e Starter Deck', 'S', '029', 'jp'], [654769, 30518, 'impression-equivalente', 'Base-Expansion-Pack', 'Pokémon-e Starter Deck', 'S', '029', 'jp']], 2]);
+verifier('décision 2026-11-01-a-ebauches : chaque entrée porte sa preuve écrite (≥ 2 sources, références)', D11.map(x => [Array.isArray(x.preuve?.sources) && x.preuve.sources.length >= 2, Array.isArray(x.preuve?.references) && x.preuve.references.length >= 1]), [[true, true], [true, true]]);
+{
+    // les fixtures reproduisent la base réelle lue le 2026-11-01 : cartes 41112 / 30518 et métacartes 212828 / 212807
+    const wart = carte(41112, 'Wartortle', ['Doubleslap', 'Giant Wave'], [imp('intl', 'Expedition Base Set', '92', '165'), imp('jp', 'Pokémon-e Starter Deck', '019', '029')], { sets: ['Expedition-Base-Set'], liens: { idProduct: [274967], idMetacards: [212828] } });
+    const bay = carte(30518, 'Bayleef', ['Mysterious Powder', 'Razor Leaf'], [imp('intl', 'Expedition Base Set', '71', '165'), imp('jp', 'Pokémon-e Starter Deck', '007', '029')], { sets: ['Expedition-Base-Set'], liens: { idProduct: [274946], idMetacards: [212807] } });
+    const autreWart = carte(15236, 'Wartortle', ['Withdraw', 'Bite'], [imp('intl', 'Base Set', '42', '102')], { liens: { idProduct: [1], idMetacards: [9] } });
+    const prodW = { ...produit(654781, 'Wartortle [Doubleslap | Giant Wave]', 'S19', 212828), idExpansion: 5021, slugSet: 'Base-Expansion-Pack' }, prodB = { ...produit(654769, 'Bayleef [Mysterious Powder | Razor Leaf]', 'S07', 212807), idExpansion: 5021, slugSet: 'Base-Expansion-Pack' };
+    const lec = { cartes: [wart, bay, autreWart], produits: new Map([[5021, [prodW, prodB]]]), existants: new Map(), etats: new Map() };
+    const p = planifier({ entrees: D11, lecture: lec });
+    verifier('décision 2026-11-01-a-ebauches : planifiée sur la base lue, DEUX lignes « fiche-prouvee » (41112|654781, 30518|654769), aucun refus', [p.lignes.map(l => [l._id, l.preuve, l.slugSet, l.numeroFiche]), p.refus.length], [[['41112|654781', 'fiche-prouvee', 'Base-Expansion-Pack', null], ['30518|654769', 'fiche-prouvee', 'Base-Expansion-Pack', null]], 0]);
+    verifier('décision 2026-11-01-a-ebauches : le numéro S19 contre la carte 007 (ou l\'autre total) est refusé — la voie ne se laisse pas tromper', planifier({ entrees: [{ ...D11[0], carteId: 30518 }], lecture: lec }).lignes.length, 0);
+}
+
+// l'argument --decision accepte le nom d'une décision à lettres (« 2026-11-01-a-ebauches ») : l'ancien motif ([\d-]+) la refusait comme « argument inconnu » AVANT de la chercher
+(async () => {
+    const { executer } = require('./poser-fiches-prouvees');
+    const sorties = [];
+    const code = await executer({ argv: ['--decision=2026-11-01-zzz-inconnue'], ouvrirLecture: async () => { throw new Error('ne doit pas ouvrir'); }, ouvrirEcriture: async () => { throw new Error('ne doit pas ouvrir'); }, log: () => { }, err: m => sorties.push(m) });
+    verifier('--decision à lettres : acceptée par la ligne de commande (refusée ensuite comme DÉCISION inconnue, jamais comme argument inconnu)', [code, /argument inconnu/.test(sorties.join()), /décision « 2026-11-01-zzz-inconnue » inconnue/.test(sorties.join())], [2, false, true]);
+    // clés héritées d'Object.prototype : DECISIONS[nom] y rend un objet truthy ; seule une clé PROPRE est une décision
+    for (const nom of ['__proto__', 'constructor', 'toString', 'hasOwnProperty']) {
+        const s = [];
+        const c = await executer({ argv: [`--decision=${nom}`], ouvrirLecture: async () => { throw new Error('ne doit pas ouvrir'); }, ouvrirEcriture: async () => { throw new Error('ne doit pas ouvrir'); }, log: () => { }, err: m => s.push(m) });
+        verifier(`--decision=${nom} : refusée comme décision inconnue, code 2, sans connexion`, [c, /inconnue/.test(s.join())], [2, true]);
+    }
+})();
+
 (async () => {
     const banc = await ouvrirBanc();
     const { MongoClient } = require('mongodb');

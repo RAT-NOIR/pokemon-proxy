@@ -39,7 +39,7 @@ verifier('verifierPose : retrouvées sans insertion (reprise) → passe', verifi
         // ── le monde ──
         async function monde() {
             for (const d of [dbC, dbP]) for (const c of await d.listCollections().toArray()) await d.collection(c.name).drop();
-            await dbP.collection('codes_set').insertMany([{ codeSet: 'HP', idExpansion: 100 }, { codeSet: 'PRE', idExpansion: 200 }]);
+            await dbP.collection('codes_set').insertMany([{ codeSet: 'HP', idExpansion: 100 }, { codeSet: 'PRE', idExpansion: 200 }, { codeSet: 'RCL', idExpansion: 300 }]);
             const np = (idProduct, idExpansion, o = {}) => ({ idProduct, idExpansion, idMetacard: 1000 + idProduct, ...o });
             await dbP.collection('numeros_cartes').insertMany([
                 np(1, 9001, { slug: 'Rare-Candy-WCD06HP-090', slugSet: 'WCD-2006' }), np(2, 9002, { slug: 'Choice-Belt-WCD22HP-091', slugSet: 'WCD-2022' }),
@@ -48,13 +48,16 @@ verifier('verifierPose : retrouvées sans insertion (reprise) → passe', verifi
                 np(5, 9001, { slug: 'Holon-Adventurer-WCD06HP-093', slugSet: 'WCD-2006' }), np(14, 100, { numero: '093', slugSet: 'Holon-Phantoms' }),
                 np(21, 9100, { slug: 'Budew-V3-SEAPRE-004', slugSet: 'Southeast-Asia-Promos', codeSet: 'SEA' }), np(22, 9100, { slug: 'Fan-Rotom-V2-SEAPRE-005', slugSet: 'Southeast-Asia-Promos', codeSet: 'SEA' }),
                 np(23, 9100, { slug: 'Pikachu-SEAPRE-006', slugSet: 'Southeast-Asia-Promos', codeSet: 'SEA' }), np(33, 200, { numero: '006', slugSet: 'Prismatic' }),
-                np(31, 200, { numero: '004', slugSet: 'Prismatic' }), np(32, 200, { numero: '005', slugSet: 'Prismatic' })]);
-            await dbP.collection('catalogue_produits').insertMany([1, 2, 3, 4, 5, 11, 12, 13, 14, 21, 22, 23, 31, 32, 33].map(id => ({ idProduct: id, idExpansion: ({ 1: 9001, 2: 9002, 3: 9001, 4: 9001, 5: 9001, 21: 9100, 22: 9100, 23: 9100, 31: 200, 32: 200, 33: 200 })[id] ?? 100, idMetacard: 1000 + id, name: `Produit ${id}` })));
+                np(31, 200, { numero: '004', slugSet: 'Prismatic' }), np(32, 200, { numero: '005', slugSet: 'Prismatic' }),
+                // la forme « code d'origine collé au numéro » (Sonia-RCL167 sous le set PPP : le slug ne porte pas le code du set) ; 41 = le produit d'origine, 42 = un produit du set PPP à la forme décodable
+                np(41, 300, { numero: '167', slugSet: 'Rebel-Clash' }), np(43, 9200, { slug: 'Sonia-RCL167', slugSet: 'Professor-Program', codeSet: 'PPP' }), np(44, 9200, { slug: 'Sonia-V2-PPPRCL-167', slugSet: 'Professor-Program', codeSet: 'PPP' })]);
+            await dbP.collection('catalogue_produits').insertMany([1, 2, 3, 4, 5, 11, 12, 13, 14, 21, 22, 23, 31, 32, 33, 41, 43, 44].map(id => ({ idProduct: id, idExpansion: ({ 1: 9001, 2: 9002, 3: 9001, 4: 9001, 5: 9001, 21: 9100, 22: 9100, 23: 9100, 31: 200, 32: 200, 33: 200, 41: 300, 43: 9200, 44: 9200 })[id] ?? 100, idMetacard: 1000 + id, name: `Produit ${id}` })));
             await dbC.collection('cartes').insertMany([{ _id: 25165, nomEn: 'Rare Candy', attaques: [], impressions: [], liens: { idProduct: [11], idMetacards: [] } }, { _id: 267648, nomEn: 'Cinccino', attaques: [], impressions: [], liens: { idProduct: [12], idMetacards: [] } },
+                { _id: 30004, nomEn: 'Sonia', attaques: [], impressions: [{ tirage: 'intl', expansion: 'Rebel Clash', numero: '167', total: '192' }], liens: { idProduct: [41], idMetacards: [] } },
                 { _id: 25154, nomEn: 'Holon Adventurer', attaques: [], impressions: [], liens: { idProduct: [14], idMetacards: [] } }, { _id: 30003, nomEn: 'Pikachu', attaques: [], impressions: [], liens: { idProduct: [33], idMetacards: [] } },
                 { _id: 30001, nomEn: 'Budew', attaques: [{ nom: 'Itchy Pollen' }], impressions: [{ tirage: 'intl', expansion: 'Prismatic', numero: '004' }], liens: { idProduct: [31], idMetacards: [] } }]);
             await dbC.collection('cartes_produits').insertMany([{ _id: '25165|11', carteId: 25165, idProduct: 11 }, { _id: '267648|12', carteId: 267648, idProduct: 12 }, { _id: '25165|13', carteId: 25165, idProduct: 13 }, { _id: '25154|14', carteId: 25154, idProduct: 14 }, { _id: '30003|33', carteId: 30003, idProduct: 33 },
-                { _id: '25165|3', carteId: 25165, idProduct: 3, preuve: 'autre' }, { _id: '30001|31', carteId: 30001, idProduct: 31 }, { _id: '267648|32', carteId: 267648, idProduct: 32 }]);
+                { _id: '25165|3', carteId: 25165, idProduct: 3, preuve: 'autre' }, { _id: '30001|31', carteId: 30001, idProduct: 31 }, { _id: '267648|32', carteId: 267648, idProduct: 32 }, { _id: '30004|41', carteId: 30004, idProduct: 41 }]);
         }
         const etat = async () => JSON.stringify([await dbC.collection('cartes_produits').find({}).sort({ _id: 1 }).toArray(), await dbC.collection('cartes').find({}).sort({ _id: 1 }).toArray()]);
         const env = {
@@ -131,6 +134,22 @@ verifier('verifierPose : retrouvées sans insertion (reprise) → passe', verifi
         await monde(); await dbC.collection('cartes_produits').insertOne({ _id: '30001|21', preuve: 'autre', route: 'SEA' });
         r = lancer('poser-reimpressions.js', ['--codes=SEA', '--attendu=SEA:2', '--ecrire']);
         verifier('SEA : une ligne d\'une autre preuve CONVERTIE par l\'upsert → la garde rouge SORT en code 1 et le dit', [r.code, /LE COMPTE RÉEL NE COLLE PAS/.test(r.sortie)], [1, true]);
+
+        // ════ poser-reimpressions.js --forme-collee (Sonia-RCL167 : le code d'origine collé au numéro, sans le code du set) ════
+        const lignesPpp = async () => (await dbC.collection('cartes_produits').find({ preuve: 'reimpression+origine+numero', route: 'PPP' }).toArray()).map(l => `${l._id}:${l.route}`).sort();
+        await monde(); avant = await etat();
+        r = lancer('poser-reimpressions.js', ['--codes=PPP']);
+        verifier('PPP sans l\'option : seul le produit à forme décodable est résolu (1), « Sonia-RCL167 » reste non décodé, RIEN d\'écrit', [r.code, /resolu 1/.test(r.sortie), /nonDecode 1/.test(r.sortie), await etat() === avant], [0, true, true, true]);
+        r = lancer('poser-reimpressions.js', ['--codes=PPP', '--forme-collee']);
+        verifier('PPP --forme-collee (mesure) : exit 0, 2 résolus, 0 non décodé, RIEN d\'écrit', [r.code, /resolu 2/.test(r.sortie), /nonDecode 0/.test(r.sortie), await etat() === avant], [0, true, true, true]);
+        r = lancer('poser-reimpressions.js', ['--codes=PPP', '--forme-collee', '--ecrire']);
+        verifier('PPP --forme-collee --ecrire SANS --attendu → exit 2, rien d\'écrit', [r.code, /exige --attendu=CODE:N/.test(r.sortie), await etat() === avant], [2, true, true]);
+        r = lancer('poser-reimpressions.js', ['--codes=PPP', '--forme-collee', '--attendu=PPP:1', '--ecrire']);
+        verifier('PPP --forme-collee avec un attendu faux (1 pour 2) → exit 1, RIEN d\'écrit', [r.code, /2 résolus contre 1 attendus/.test(r.sortie), await etat() === avant], [1, true, true]);
+        r = lancer('poser-reimpressions.js', ['--codes=PPP', '--forme-collee', `--seulement=${tmpJson('c1.json', [43])}`, '--attendu=PPP:1', '--ecrire']);
+        verifier('PPP --forme-collee --seulement=[43] : exit 0, la ligne de Sonia SEULE (44, du plan, n\'est pas écrite), la carte reçoit son produit, relue', [r.code, await lignesPpp(), (await dbC.collection('cartes').findOne({ _id: 30004 })).liens.idProduct, /relu : 1 lignes posées/.test(r.sortie)], [0, ['30004|43:PPP'], [41, 43], true]);
+        r = lancer('poser-reimpressions.js', ['--codes=PPP', '--forme-collee', '--bidon']);
+        verifier('PPP : un argument inconnu avec --forme-collee → exit 2', [r.code, /argument inconnu/.test(r.sortie)], [2, true]);
         await cC.close(); await cP.close();
     } finally {
         for (const s of serveurs) { try { await s.stop({ doCleanup: false }); } catch { } }

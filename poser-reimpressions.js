@@ -26,7 +26,8 @@ const echapper = s => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
 
 // ── (PHASE 3a, D1 du 2026-10-24) la ligne de commande s'écrit par ce qu'elle AUTORISE ; `--ecrire` exige un `--attendu=CODE:N` par code (le nombre FINAL de lignes de ce code) et un attendu faux SORT en code 1 ;
 // `--seulement=<f>.json` : les SEULS idProduct à écrire (ceux que la règle des deux sources a confirmés) ; le reste du plan reste non écrit.
-const AUTORISES = [/^--codes=[\w.,/-]+$/, /^--attendu=[\w.:,/-]+$/, /^--plan=.+\.json$/, /^--seulement=.+\.json$/, /^--ecrire$/];
+// ➕ 2026-11-01 `--forme-collee` (OPT-IN, la forme S6 de set-partiel.js::decoderCollee, UNE seule définition) : « Sonia-RCL167 » sous le set PPP écrit le code d'origine collé au numéro, sans le code du set. Sans l'option, rien ne change.
+const AUTORISES = [/^--codes=[\w.,/-]+$/, /^--attendu=[\w.:,/-]+$/, /^--plan=.+\.json$/, /^--seulement=.+\.json$/, /^--ecrire$/, /^--forme-collee$/];
 const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
 if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')} — rien n'est écrit`); process.exit(2); }
 if (process.argv.includes('--ecrire')) {
@@ -56,7 +57,7 @@ const { verifierPose } = require('./collecte-cartes/verif-pose-lot');
         const causes = { resolu: [], nonDecode: [], codeInconnu: [], numeroAbsent: [], origineSansCarte: [], ambigu: [], deja: [], nomDiscordant: [] };
         // (R3, 2026-10-12) le décodage du slug et la résolution vivent dans collecte-cartes/set-partiel.js, UNE fois, pour cet outil et pour le set partiel Promos (§21 bis)
         for (const p of famille) {
-            const { cause, ...x } = resoudreProduit(p, CODE, { expsDuCode, parExpNum, cartesDe });
+            const { cause, ...x } = resoudreProduit(p, CODE, { expsDuCode, parExpNum, cartesDe, ...(process.argv.includes('--forme-collee') ? { formeCollee: true } : {}) });
             causes[cause].push(cause === 'resolu' ? { ...x, idExpansion: cat.get(p.idProduct)?.idExpansion, idMetacard: cat.get(p.idProduct)?.idMetacard } : x);
         }
         const cartes = new Map((await cx.db.collection('cartes').find({ _id: { $in: causes.resolu.map(x => x.carteId) } }, { projection: { nomEn: 1, attaques: 1, impressions: 1 } }).toArray()).map(c => [c._id, c]));
