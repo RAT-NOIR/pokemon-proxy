@@ -77,24 +77,44 @@ const alias = dir => {      // M1 : un nom court 8.3 réel si le système en fou
 const T = TMP;
 
 const arret = path.join(ARRETS, 'ARRET-HOTE-x.test.json');
-// PORTÉE (01/11 soir, décision de l'utilisateur) : la garde ne vaut que pour les sessions du catalogue (et leurs sous-agents, qui portent le session_id du parent).
-// Une autre session lancée depuis ce dépôt (l'agent API) passe ; une entrée SANS session_id lisible reste gardée (fermé par défaut).
-const SESSION_CAT = (() => { try { return require(HOOK).SESSIONS_CATALOGUE[0]; } catch { return 'absente'; } })();
-const avecSession = (sid, json) => JSON.stringify({ ...JSON.parse(json), session_id: sid });
-const AUTRE = '00000000-0000-4000-8000-0000000000a1';
+// PORTÉE PAR DOSSIER (décision de l'utilisateur, 01/11) : la garde s'applique à toute session ; seuls les dossiers de l'API (liste fermée DOSSIERS_LIBRES) en sont libres.
+const API = 'C:\\Users\\Yung\\Desktop\\pokemon-proxy-api-v2', DEPOT = 'C:\\Users\\Yung\\Desktop\\pokemon-proxy';
+const avecCwd = (json, cwd, extra) => JSON.stringify({ ...JSON.parse(json), ...(cwd === undefined ? {} : { cwd }), ...(extra || {}) });
+const SID = 'b6c3ed77-b76c-4e82-bea9-c3689df9e0e3';
 const CAS = [
     // [libellé, entrée, code attendu]
-    // ── portée : sessions du catalogue seulement ──
-    ['portée : session catalogue, WebFetch refusé', avecSession(SESSION_CAT, outil('WebFetch', { url: 'https://exemple.test' })), 2],
-    ['portée : session catalogue en MAJUSCULES, WebFetch refusé', avecSession(String(SESSION_CAT).toUpperCase(), outil('WebFetch', { url: 'https://exemple.test' })), 2],
-    ['portée : session catalogue, curl refusé', avecSession(SESSION_CAT, ps('curl https://exemple.test')), 2],
-    ['portée : autre session, WebFetch passe', avecSession(AUTRE, outil('WebFetch', { url: 'https://exemple.test' })), 0],
-    ['portée : autre session, curl passe', avecSession(AUTRE, ps('curl https://exemple.test')), 0],
-    ['portée : autre session, node -e passe (pas l\'affaire de la porte)', avecSession(AUTRE, ps('node -e "fetch(1)"')), 0],
-    ['portée : autre session, Write quelconque passe', avecSession(AUTRE, outil('Write', { file_path: path.join(T, 'x.txt'), content: 'x' })), 0],
-    ['portée : session_id vide = gardée', avecSession('', outil('WebFetch', { url: 'https://exemple.test' })), 2],
-    ['portée : session_id non textuel = gardée', JSON.stringify({ tool_name: 'WebFetch', tool_input: {}, session_id: 42 }), 2],
-    ['portée : sans session_id = gardée', outil('WebFetch', { url: 'https://exemple.test' }), 2],
+    // ── portée par dossier : tout est gardé sauf les dossiers de l'API ──
+    ['dossier : session dans le dépôt, WebFetch refusé', avecCwd(outil('WebFetch', { url: 'https://exemple.test' }), DEPOT, { session_id: SID }), 2],
+    ['dossier : cwd = dépôt, curl refusé', ps('curl https://exemple.test', DEPOT), 2],
+    ['dossier : cwd = api-v2, curl passe', ps('curl https://exemple.test', API), 0],
+    ['dossier : cwd = API en MAJUSCULES, curl passe', ps('curl https://exemple.test', API.toUpperCase()), 0],
+    ['dossier : cwd = api-v2, WebFetch passe', avecCwd(outil('WebFetch', { url: 'https://exemple.test' }), API), 0],
+    ['dossier : cwd = api-v2, node -e passe', ps('node -e "fetch(1)"', API), 0],
+    ['dossier : cwd = dépôt, cd api-v2 puis curl passe', ps(`cd ${API}; curl https://exemple.test`, DEPOT), 0],
+    ['dossier : cd api; curl; cd dépôt; curl = refus', ps(`cd ${API}; curl https://a.test; cd ${DEPOT}; curl https://b.test`, DEPOT), 2],
+    ['dossier : cwd = api, cd dépôt puis curl = refus', ps(`cd ${DEPOT}; curl https://exemple.test`, API), 2],
+    ['dossier : cwd = api, deux curl : deux instructions libres passent', ps('curl https://a.test; curl https://b.test', API), 0],
+    ['dossier : cwd = api, cd variable (incertain) = refus', ps('cd $x; curl https://exemple.test', API), 2],
+    ['dossier : cwd = dépôt, cd variable vers l\'API = refus', ps('cd $env:API; curl https://exemple.test', DEPOT), 2],
+    ['dossier : cwd = api-v2-bis (préfixe de chaîne) = refus', ps('curl https://exemple.test', API + '-bis'), 2],
+    ['dossier : cwd = apiX (préfixe de chaîne) = refus', ps('curl https://exemple.test', 'C:\\Users\\Yung\\rat-market-travail\\apiX'), 2],
+    ['dossier : cwd sous rat-market-travail\\api\\v2-integ passe', ps('curl https://exemple.test', 'C:\\Users\\Yung\\rat-market-travail\\api\\v2-integ'), 0],
+    ['dossier : cwd = rat-market-travail\\api passe', ps('curl https://exemple.test', 'C:\\Users\\Yung\\rat-market-travail\\api'), 0],
+    ['dossier : cwd sous catalogue\\worktrees\\x = refus', ps('curl https://exemple.test', 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\worktrees\\x'), 2],
+    ['dossier : cwd absent = refus', ps('curl https://exemple.test'), 2],
+    ['dossier : cwd vide = refus', ps('curl https://exemple.test', ''), 2],
+    ['dossier : cwd non textuel = refus', ps('curl https://exemple.test', 42), 2],
+    ['dossier : cwd relatif = refus', ps('curl https://exemple.test', 'pokemon-proxy-api-v2'), 2],
+    ['dossier : Bash, cwd = api-v2, curl passe', bash('curl https://exemple.test', API), 0],
+    ['dossier : Bash, cwd = dépôt, curl refusé', bash('curl https://exemple.test', DEPOT), 2],
+    ['dossier : Write d\'un fichier de l\'API passe', avecCwd(outil('Write', { file_path: path.join(API, 'x.txt'), content: 'x' }), DEPOT), 0],
+    ['dossier : Write relatif depuis cwd API passe', avecCwd(outil('Write', { file_path: 'x.txt', content: 'x' }), API), 0],
+    ['dossier : Write dans arrets-hotes depuis cwd API = refus', avecCwd(outil('Write', { file_path: arret, content: '{}' }), API), 2],
+    ['dossier : Write ARRET-HOTE relatif traversant (..) depuis cwd API = refus', avecCwd(outil('Write', { file_path: path.join(API, '..', '..', 'x', 'ARRET-HOTE-z.json'), content: '{}' }), API), 2],
+    ['dossier : Write quelconque hors API passe comme avant', avecCwd(outil('Write', { file_path: path.join(T, 'x.txt'), content: 'x' }), DEPOT), 0],
+    ['dossier : session_id inconnu n\'ouvre plus rien', avecCwd(ps('curl https://exemple.test', DEPOT), undefined, { session_id: '00000000-0000-4000-8000-0000000000a1' }), 2],
+    ['dossier : outil non prévu depuis cwd API passe', avecCwd(outil('WebSearch', { query: 'x' }), API), 0],
+    ['dossier : outil non prévu depuis cwd dépôt = refus', avecCwd(outil('WebSearch', { query: 'x' }), DEPOT), 2],
     // ── H6 : fermé par défaut ──
     ['WebFetch toujours refusé', outil('WebFetch', { url: 'https://exemple.test', prompt: 'x' }), 2],
     ['webfetch en minuscules', outil('webfetch', { url: 'https://exemple.test' }), 2],
