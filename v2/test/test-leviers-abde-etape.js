@@ -16,11 +16,11 @@ const VEC = Float32Array.from({ length: 256 }, () => 1 / 16);        // norme 1,
 // ── le monde : des produits d'un set, la lecture « n°86 / 115, UF », un index où chaque produit a son visuel (clé k<id>) et son cosinus
 const ligne = (id, o = {}) => ({ idProduct: id, nomCardmarket: o.nom || 'Mary\'s Request', nomFr: o.nomFr ?? null, set: { slug: 'ufo', nom: 'Unseen Forces', code: o.code ?? 'UF' }, numero: o.numero === undefined ? '86' : o.numero, total: o.total === undefined ? '115' : o.total,
     langue: 'FR', variante: null, rarete: 'Rare', setTcgdex: null, tirageSource: 'intl', prixGuide: o.sansPrix ? null : { trend: 5, low: 4, avg30: 4.5, guideDu: new Date('2026-10-04') }, visuel: { url: `https://pub.example/${id}.webp`, w: 255, h: 356 } });
-function monde({ cos, lignes, vivier = [], base = [], redressee = true, ext = '2.0.1', groupes = [], leviers = true, sansVisuel = [], metacartes = [], empruntes = [], marqueurs = {} } = {}) {
+function monde({ cos, lignes, vivier = [], base = [], redressee = true, ext = '2.0.1', groupes = [], leviers = true, sansVisuel = [] } = {}) {
     const ids = Object.keys(cos).map(Number).filter(i => !sansVisuel.includes(i));
     const cleDe = id => `k${(groupes.find(g => g.includes(id)) || [id])[0]}`;      // un groupe partage UN visuel
-    const entrees = new Map(ids.map(id => [id, { idProduct: id, grande: { cle: cleDe(id) }, vignette: { cle: cleDe(id) + 'v' }, idMetacard: groupes.some(g => g.includes(id)) ? 77 : (metacartes.findIndex(g => g.includes(id)) >= 0 ? 5000 + metacartes.findIndex(g => g.includes(id)) : id), variante: marqueurs[id] ?? null, numero: '86', setNom: 'Unseen Forces', mention: null }]));
-    const version = { entree: id => entrees.get(id) || null, identifiants: () => [...entrees.keys()], ...(empruntes.length ? { empruntDe: id => empruntes.includes(id) } : {}) };
+    const entrees = new Map(ids.map(id => [id, { idProduct: id, grande: { cle: cleDe(id) }, vignette: { cle: cleDe(id) + 'v' }, idMetacard: groupes.some(g => g.includes(id)) ? 77 : id, numero: '86', setNom: 'Unseen Forces', mention: null }]));
+    const version = { entree: id => entrees.get(id) || null, identifiants: () => [...entrees.keys()] };
     const parCle = {}; for (const id of ids) parCle[cleDe(id)] = Math.max(parCle[cleDe(id)] ?? -1, cos[id]);
     const index = { voisins: (q, n) => { const top = Object.entries(parCle).sort((a, b) => b[1] - a[1]).slice(0, n).map(([k, c]) => [k, c]); return { top, meilleur: top[0][1] }; }, similarites: (q, cles) => cles.map(k => parCle[k] ?? 0) };
     const etat = { courante: () => ({ index, meta: { modele: MODELE } }) };
@@ -142,25 +142,6 @@ const COS = { 1: 0.40, 2: 0.60, 3: 0.35, 4: 0.30 };
         H.v('I2 : le désigné n\'a pas de prix de guide => pas de probable, la question suit', [a.r && a.r.probable, a.r && ids(a.r.resultat).includes(1), a.diag.raison], [null, true, 'sans-prix']);
         const g = await lancer(monde({ cos: { ...COS, 4: 0.40 }, lignes: LIGNES, base: [2, 3], vivier: [1, 4], groupes: [[1, 4]] }));
         H.v('I3 : le désigné partage son visuel et sa fiche avec un autre des 3 (même dessin) => pas de probable', [g.r && g.r.probable, g.diag.raison], [null, 'groupe-donnees']);
-    }
-    // ── ordre n°22 : un rival de la MÊME carte (idMetacard) dans le POOL, tamponné / de marqueur différent ou au visuel emprunté, que le favori ne bat pas strictement par l'image : pas de probable, la question reste
-    {
-        const L5 = { ...LIGNES, 5: ligne(5, { numero: '12', total: '99' }) };
-        const rival = (o = {}) => monde({ cos: { ...COS, 5: 0.35 }, lignes: L5, base: [2, 3], vivier: [1, 5], metacartes: [[1, 5]], ...o });
-        const temoin = await lancer(rival({ marqueurs: {} }));
-        H.v('ordre 22 (témoin) : même carte, mêmes marqueurs, visuel propre, cosinus inférieur => le probable reste servi', temoin.r && temoin.r.probable && temoin.r.probable.idProduct, 1);
-        const emp = await lancer(rival({ empruntes: [5] }));
-        H.v('ordre 22 : un rival de la même carte au visuel EMPRUNTÉ (sans cosinus) dans le pool => pas de probable, la question suit', [emp.r && emp.r.probable, emp.r && ids(emp.r.resultat).includes(1), emp.diag.raison], [null, true, 'metacarte-rival']);
-        const marq = await lancer(monde({ cos: { ...COS, 5: 0.45 }, lignes: L5, base: [2, 3], vivier: [1, 5], metacartes: [[1, 5]], marqueurs: { 5: 'tamponnee' } }));
-        H.v('ordre 22 : un rival de la même carte de marqueur différent (tampon) au cosinus SUPÉRIEUR au favori => pas de probable',[marq.r && marq.r.probable, marq.diag.raison], [null, 'metacarte-rival']);
-        const egal = await lancer(monde({ cos: { ...COS, 1: 0.35, 5: 0.35 }, lignes: { ...L5, 1: ligne(1, { numero: '86', total: '115' }) }, base: [2, 3], vivier: [1, 5], metacartes: [[1, 5]], marqueurs: { 5: 'tamponnee' } }));
-        H.v('ordre 22 : cosinus égal au rival (pas STRICTEMENT supérieur) => pas de probable', egal.r && egal.r.probable, null);
-        const mieux = await lancer(monde({ cos: { ...COS, 1: 0.60, 5: 0.35 }, lignes: L5, base: [2, 3], vivier: [1, 5], metacartes: [[1, 5]], marqueurs: { 5: 'tamponnee' } }));
-        H.v('ordre 22 : le favori bat le rival tamponné par un cosinus strictement supérieur => le probable reste', mieux.r && mieux.r.probable && mieux.r.probable.idProduct, 1);
-        const autre = await lancer(monde({ cos: { ...COS, 5: 0.35 }, lignes: L5, base: [2, 3], vivier: [1, 5], marqueurs: { 5: 'tamponnee' } }));
-        H.v('ordre 22 : un rival tamponné d\'une AUTRE carte ne bloque pas', autre.r && autre.r.probable && autre.r.probable.idProduct, 1);
-        const horsPool = await lancer(rival({ empruntes: [5], vivier: [1], sansVisuel: [5] }));
-        H.v('ordre 22 : un rival de la même carte absent de l\'archive (donc du pool) ne bloque pas',horsPool.r && horsPool.r.probable && horsPool.r.probable.idProduct, 1);
     }
     // ── un seul candidat classable, ou une ligne manquante : la question d'avant, jamais une panne
     {

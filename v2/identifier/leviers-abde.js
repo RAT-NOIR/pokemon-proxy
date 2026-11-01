@@ -19,8 +19,6 @@ const PR = require('./prix-repli');
 const { preparerVecteur } = require('./voisins-empreinte');
 const { cosinusDesCandidats, dansUnGroupe, estGroupe } = require('./probable-route');
 const { questionParLaRoute } = require('./adaptateur');
-const { emprunteDe } = require('./sur-par-image-route');
-const { estMentionDAffichage } = require('./emprunt');
 
 const POIDS_OK = 0.05, POIDS_KO = 0.25;            // les poids de c3 (a priori, §8.1)
 const TAILLE_POOL = 10, VIVIER_LU = 80, VIVIER_RETENU = 10, VOISINS = 10, ALIAS_LONGUEUR_MIN = 4;
@@ -102,30 +100,6 @@ function produitsParCle(version) {
     return m;
 }
 
-/**
- * ORDRE N°22 (extension étroite d'I3, sous le drapeau) : le POOL entier (pas le top 3) contient-il un autre candidat de la MÊME carte (idProduct de même idMetacard) que le favori, de marqueur ou de tampon différent ou au visuel EMPRUNTÉ,
- * que le favori ne bat PAS strictement par l'image ? Deux produits du même texte de carte, séparés seulement par le tampon, ne se départagent pas par la lecture du numéro (la réimpression l'imprime à l'identique). Un rival sans cosinus
- * (visuel emprunté, exclu) bloque toujours. Défaut fermé : une entrée d'archive illisible pour le favori ne bloque pas (la règle ne devine pas une carte), une pour le rival non plus.
- */
-function rivalDeLaMemeCarte({ version, id, candidats, lignes }) {
-    try {
-        const ef = version.entree(id);
-        if (!ef || !Number.isInteger(ef.idMetacard)) return false;
-        const favori = candidats.find(c => c.id === id), empr = emprunteDe(version);
-        const marq = (e, i) => { const l = lignes.get(i); return JSON.stringify((l && l.marqueurs) || null) + '|' + (e.variante ?? ''); };
-        for (const r of candidats) {
-            if (r.id === id) continue;
-            const er = version.entree(r.id);
-            if (!er || er.idMetacard !== ef.idMetacard) continue;
-            const emprunte = (empr && empr(r.id) === true) || Boolean(er.mention && !estMentionDAffichage(er));
-            if (!emprunte && marq(er, r.id) === marq(ef, id)) continue;
-            if (Number.isFinite(r.cos) && favori && Number.isFinite(favori.cos) && favori.cos > r.cos) continue;
-            return true;
-        }
-        return false;
-    } catch { return false; }
-}
-
 const meme = (a, b) => a.length === b.length && a.every(x => b.includes(x));
 
 /**
@@ -189,7 +163,6 @@ async function appliquerLeviers({ cfg, entree, resultat, corpsChaine, produits, 
             const q = (nouveau || resultat).analyse.cartes[0];
             const c = q.candidats.find(x => x && x.idProduct === d.id);
             if (dansUnGroupe(version, d.id, d.top3)) { if (diag) diag.raison = 'groupe-donnees'; }                                  // I3 : le désigné est de MÊME DESSIN qu'un autre des 3
-            else if (rivalDeLaMemeCarte({ version, id: d.id, candidats, lignes })) { if (diag) diag.raison = 'metacarte-rival'; }   // ordre n°22 : I3 élargie au POOL entier
             else if (!c || PR.depuisGuide(c.prixGuide, 'tendance-seule') === null) { if (diag) diag.raison = 'sans-prix'; }         // I2 : un probable est affiché AVEC un prix de guide
             else probable = { idProduct: d.id, signal: SIGNAL, contredits: d.top3.filter(i => i !== d.id), detail: { ecart: d.gap, second: d.second, pool: T.length } };
         }
