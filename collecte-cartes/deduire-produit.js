@@ -78,18 +78,41 @@ const apprisDeLExpansion = (n, e, s) => (e != null && n.idExpansion === e) || (s
 function vignettesDuJournal(journal) {
     const pages = Array.isArray(journal?.journal) ? journal.journal : [];
     const vues = new Map(), comptes = { detailEcartees: 0, detailSansImage: 0, autresImages: 0, doublons: 0, sansLien: 0 };
-    const prendre = (e, origine) => {
+    const prendre = (e, origine, expPage) => {
         if (!e?.href) { comptes.sansLien++; return; }   // une vignette sans lien ne se déduit pas — mais elle se COMPTE
         if (origine === 'detailEcartees' && !(e.image || []).some(a => /cardImageNotAvailable/i.test(String(a)))) { comptes.autresImages++; return; }
-        if (vues.has(e.href)) { comptes.doublons++; return; }
+        // la même vignette vue sur plusieurs pages : les expansions de TOUTES ses pages sont gardées (null = une page sans preuve)
+        if (vues.has(e.href)) { comptes.doublons++; const ex = vues.get(e.href).expansionsDePage; if (!ex.includes(expPage)) ex.push(expPage); return; }
         comptes[origine]++;
-        vues.set(e.href, { ...lireVignette(e), sansImage: true, origine });
+        vues.set(e.href, { ...lireVignette(e), sansImage: true, origine, expansionsDePage: [expPage] });
     };
     for (const p of pages) {
-        for (const e of p.detailEcartees || []) prendre(e, 'detailEcartees');
-        for (const e of p.detailSansImage || []) prendre(e, 'detailSansImage');
+        const expPage = expansionDeLAdresse(p.url);
+        for (const e of p.detailEcartees || []) prendre(e, 'detailEcartees', expPage);
+        for (const e of p.detailSansImage || []) prendre(e, 'detailSansImage', expPage);
     }
     return { pages: pages.length, vignettes: [...vues.values()], comptes };
+}
+
+/** L'`idExpansion` que porte l'ADRESSE d'une page du journal — la clé `url` de l'userscript (`location.pathname + location.search`,
+ *  ex. « /en/Pokemon/Products/Singles?idCategory=51&idExpansion=6704&site=2 »). Un SEUL `idExpansion`, entier positif : tout le reste
+ *  (absent, doublé, non numérique, adresse illisible) rend null — la preuve s'écrit par ce qu'elle autorise. */
+function expansionDeLAdresse(url) {
+    if (typeof url !== 'string') return null;
+    const q = url.split('#')[0].split('?')[1];
+    if (q == null) return null;
+    const valeurs = new URLSearchParams(q).getAll('idExpansion');
+    return valeurs.length === 1 && /^[1-9]\d*$/.test(valeurs[0]) ? Number(valeurs[0]) : null;
+}
+/** L'expansion d'un slugSet que AUCUNE ligne apprise ne porte, prouvée par la page : TOUTES ses vignettes (`expansionsDePage`) viennent
+ *  de pages dont l'adresse porte le MÊME idExpansion. Sinon null. */
+function expansionParLaPage(cartes) {
+    const exps = new Set();
+    for (const c of cartes) {
+        if (!Array.isArray(c.expansionsDePage) || !c.expansionsDePage.length) return null;
+        for (const e of c.expansionsDePage) { if (!Number.isInteger(e) || e < 1) return null; exps.add(e); }
+    }
+    return exps.size === 1 ? [...exps][0] : null;
 }
 
 /**
@@ -170,8 +193,12 @@ async function deduireLot(cartes, deps) {
     const exclus = deps.exclus || new Set();
     const parSet = new Map(); for (const c of cartes) (parSet.get(c.slugSet) || parSet.set(c.slugSet, []).get(c.slugSet)).push(c);
     for (const [slugSet, cs] of parSet) {
-        const exps = [...new Set((await deps.expansionsDuSlugSet(slugSet)).filter(x => x != null))];
+        let exps = [...new Set((await deps.expansionsDuSlugSet(slugSet)).filter(x => x != null))];
         expansionsParSlugSet.set(slugSet, exps);
+        // UNE expansion NEUVE n'a aucune ligne apprise : l'adresse de la page (idExpansion=N) la prouve — et seulement dans ce cas
+        // (un slugSet déjà appris garde la règle d'avant ; les autres gardes ci-dessous s'appliquent toutes).
+        let parLaPage = false;
+        if (exps.length === 0) { const e = expansionParLaPage(cs); if (e != null) { exps = [e]; parLaPage = true; } }
         if (exps.length !== 1) { for (const c of cs) refus.push({ carte: c, raison: `slugSet « ${slugSet} » porté par ${exps.length} expansions apprises` }); continue; }
         const produits = (await deps.produitsDe(exps[0])).filter(p => !estCarteCode(p.name));
         const appris = await deps.apprisDe(produits.map(p => p.idProduct));
@@ -182,7 +209,7 @@ async function deduireLot(cartes, deps) {
         for (const c of cs) {
             const v = { slug: c.slug, slugSet: c.slugSet, code: c.codeSet ?? null, numero: c.numero ?? null };
             const d = deduireProduit(v, { produits, appris, exclus, slugsPortes, horsCatalogue });
-            if (d.idProduct) deduites.push({ carte: c, idProduct: d.idProduct, idExpansion: exps[0], exhaustion: d.exhaustion, numeroUrl: numeroDepuisSlug(c.slug, c.codeSet) });
+            if (d.idProduct) deduites.push({ carte: c, idProduct: d.idProduct, idExpansion: exps[0], exhaustion: d.exhaustion, numeroUrl: numeroDepuisSlug(c.slug, c.codeSet), ...(parLaPage ? { expansionLueDansLaPage: true } : {}) });
             else refus.push({ carte: c, raison: d.raison });
         }
     }
@@ -216,7 +243,7 @@ async function appliquerDeductions(deduites, collection, { origine = 'vignette s
         try {
             const c = d.carte, numero = c.numero != null ? String(c.numero) : null;
             const champs = { slug: c.slug, slugSet: c.slugSet, numeroUrl: d.numeroUrl != null ? String(d.numeroUrl) : null, nomFr: c.nomFr || null, variante: varianteDuSlug(c.slug) };
-            const preuveDeduction = `${origine} : lien …/${c.slugSet}/${c.slug}, titre n°${numero ?? '—'} ; idProduct DÉDUIT : seul produit non appris de l'expansion ${d.idExpansion} au nom du slug${d.exhaustion ? ', seule variante que ses frères appris ne portent pas' : ''} · collecte-cartes/deduire-produit.js`;
+            const preuveDeduction = `${origine} : lien …/${c.slugSet}/${c.slug}, titre n°${numero ?? '—'} ; idProduct DÉDUIT : seul produit non appris de l'expansion ${d.idExpansion}${d.expansionLueDansLaPage ? ' (expansion lue dans l\'adresse de la page : idExpansion=' + d.idExpansion + ', aucune ligne apprise)' : ''} au nom du slug${d.exhaustion ? ', seule variante que ses frères appris ne portent pas' : ''} · collecte-cartes/deduire-produit.js`;
             const existe = await collection.findOne({ idProduct: d.idProduct }, { projection: { slug: 1, numero: 1, numeroUrl: 1, nomFr: 1, variante: 1, slugSet: 1, codeSet: 1, certitude: 1 } });
             if (!existe) {
                 const ecrits = { numero, codeSet: c.codeSet || null, ...champs };
@@ -508,5 +535,5 @@ async function apprendreLot(cartesBrutes, { numeros, catalogue, decoderCodeSet, 
         deductionsContredites, deductionsRelues };
 }
 
-module.exports = { lireVignette, vignettesDuJournal, teteDuSlug, deduireProduit, deduireLot, appliquerDeductions, aReecrireParLecture, majLectureExacte, apprendreUneLecture,
+module.exports = { lireVignette, vignettesDuJournal, expansionDeLAdresse, expansionParLaPage, teteDuSlug, deduireProduit, deduireLot, appliquerDeductions, aReecrireParLecture, majLectureExacte, apprendreUneLecture,
     apprendreLot, normaliserCarte, lecteursMongo, couvertureDe, plat, varianteDuSlug, cleDuSlug, apprisDeLExpansion, CHAMPS_DU_LIEN };

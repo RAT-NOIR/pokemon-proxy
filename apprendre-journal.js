@@ -20,11 +20,13 @@ const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { lireMongo } = require('./collecte-cartes/lecture-sure');
 const { vignettesDuJournal, deduireLot, appliquerDeductions, cleDuSlug, apprisDeLExpansion } = require('./collecte-cartes/deduire-produit');
 
-const AUTORISES = [/^--journal=.+\.json$/, /^--base=test$/, /^--attendu=\d+$/, /^--ecrire$/, /^--export=.+\.json$/];
+const AUTORISES = [/^--journal=.+\.json$/, /^--base=test$/, /^--attendu=\d+$/, /^--ecrire$/, /^--export=.+\.json$/, /^--catalogue=base$/];
 const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
 if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')}`); process.exit(2); }
 const arg = n => process.argv.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3);
 const JOURNAL = arg('journal'), EXPORT = arg('export') || 'products_singles_24092026.json';
+const CATALOGUE_BASE = arg('catalogue') === 'base';   // --catalogue=base : les produits viennent de catalogue_produits (production, LECTURE), pas d'un export
+if (CATALOGUE_BASE && arg('export')) { console.error('❌ --catalogue=base et --export=… s\'excluent'); process.exit(2); }
 const ecrire = process.argv.includes('--ecrire'), ATTENDU = arg('attendu') != null ? Number(arg('attendu')) : null;
 if (!JOURNAL || !fs.existsSync(JOURNAL)) { console.error('❌ --journal=<fichier exporté par l\'userscript> requis'); process.exit(2); }
 // La lecture de la vignette, la déduction de l'idProduct ET son écriture vivent dans collecte-cartes/deduire-produit.js, que le
@@ -39,19 +41,22 @@ if (!JOURNAL || !fs.existsSync(JOURNAL)) { console.error('❌ --journal=<fichier
 (async () => {
     const j = JSON.parse(fs.readFileSync(JOURNAL, 'utf8'));
     const { pages, vignettes: ecartees, comptes } = vignettesDuJournal(j);
-    const { prod, fermer } = await ouvrirConnexions({ production: true, buckets: [] });
+    const { prod, fermer } = await ouvrirConnexions({ production: true, buckets: [], ...(CATALOGUE_BASE ? { lectureSeule: true } : {}) });
     const nc = await lireMongo(prod.db.collection('numeros_cartes'), {}, { nom: 'numeros_cartes', projection: { idProduct: 1, idExpansion: 1, slug: 1, slugSet: 1, numero: 1, source: 1, codeSet: 1 } });
     const parId = new Map(nc.map(n => [n.idProduct, n])), slugsConnus = new Set(nc.filter(n => n.slug).map(n => cleDuSlug(n.slugSet, n.slug)));
     const expDuSlugSet = new Map(); for (const n of nc) if (n.slugSet) (expDuSlugSet.get(n.slugSet) || expDuSlugSet.set(n.slugSet, new Set()).get(n.slugSet)).add(n.idExpansion);
     // L'export BRUT (cartes-code comprises) : le module retire les cartes-code des candidats, et la garde « catalogue en retard »
     // demande si un idProduct appris est au catalogue — une carte-code apprise y est.
-    const tous = JSON.parse(fs.readFileSync(path.join(__dirname, EXPORT), 'utf8')).products;
+    // --catalogue=base : le catalogue de PRODUCTION (collection catalogue_produits, lue), qui porte les expansions neuves ; sinon l'export.
+    const tous = CATALOGUE_BASE
+        ? await lireMongo(prod.db.collection('catalogue_produits'), {}, { nom: 'catalogue_produits', projection: { _id: 0, idProduct: 1, name: 1, idExpansion: 1 } })
+        : JSON.parse(fs.readFileSync(path.join(__dirname, EXPORT), 'utf8')).products;
     const auCatalogue = new Set(tous.map(p => p.idProduct));
     const parExp = new Map(); for (const p of tous) (parExp.get(p.idExpansion) || parExp.set(p.idExpansion, []).get(p.idExpansion)).push(p);
     const nomDe = new Map(tous.map(p => [p.idProduct, p.name]));
-    console.log(`DÉNOMINATEURS : journal ${pages} pages · sans image distinctes ${ecartees.length} — detailEcartees « cardImageNotAvailable » ${comptes.detailEcartees} (1.8), detailSansImage ${comptes.detailSansImage} (1.9), doublons ${comptes.doublons} (≤ 25 gardées par page ; ${comptes.autresImages} autre(s) image(s) illisible(s) laissée(s) de côté, ${comptes.sansLien ?? 0} sans lien) · avec numéro au titre ${ecartees.filter(e => e.numero).length} · numeros_cartes ${nc.length} · export ${tous.length}`);
+    console.log(`DÉNOMINATEURS : journal ${pages} pages · sans image distinctes ${ecartees.length} — detailEcartees « cardImageNotAvailable » ${comptes.detailEcartees} (1.8), detailSansImage ${comptes.detailSansImage} (1.9), doublons ${comptes.doublons} (≤ 25 gardées par page ; ${comptes.autresImages} autre(s) image(s) illisible(s) laissée(s) de côté, ${comptes.sansLien ?? 0} sans lien) · avec numéro au titre ${ecartees.filter(e => e.numero).length} · numeros_cartes ${nc.length} · ${CATALOGUE_BASE ? 'catalogue_produits (base)' : 'export'} ${tous.length} · vignettes dont les pages portent un idExpansion unique ${ecartees.filter(e => e.expansionsDePage.length === 1 && e.expansionsDePage[0] != null).length}`);
 
-    const aDeduire = ecartees.map(e => ({ idProduct: null, slug: e.slug, slugSet: e.slugSet, codeSet: e.code, numero: e.numero, nomFr: e.nomFr, href: e.href, sansImage: true }));
+    const aDeduire = ecartees.map(e => ({ idProduct: null, slug: e.slug, slugSet: e.slugSet, codeSet: e.code, numero: e.numero, nomFr: e.nomFr, href: e.href, sansImage: true, expansionsDePage: e.expansionsDePage }));
     const r = await deduireLot(aDeduire, {
         expansionsDuSlugSet: async s => [...(expDuSlugSet.get(s) || [])],
         produitsDe: async e => parExp.get(e) || [],
