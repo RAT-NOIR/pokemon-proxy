@@ -1,4 +1,5 @@
 'use strict';
+const DONNEES = 'C:\\Users\\Yung\\rat-market-travail\\api\\archives\\essais-repli';      // dossier des données de mesure (hors dépôt)
 // GUICHET (passage 8) — la preuve STRICTE refaite avec l'outil RÉPARÉ : les images manquantes sont lues sur le bucket PUBLIC R2 (v2/mesures/preuve-emprunt.js::lireImage, cache local propre à cet outil), la fenêtre ORB
 // est calculée pour CHAQUE paire (elle ne l'était que pour 3 paires sur 5 300 : les caches locaux ne contiennent que ~2 000 images), la 3e concordance (zone souple du catalogue) pour les seuls « hésitants ».
 // Entrée : t1-refuses.json, t2-preuve.json (cosinus de l'index du 24/10). Sorties : t8-preuve.json, tamponnees-empruntees-2026-11-01b.json (liste fermée). Lecture seule, aucune image Cardmarket.
@@ -8,11 +9,11 @@ const WT = 'C:\\Users\\Yung\\rat-market-travail\\api\\v2-guichet', ARCH = 'C:\\U
 const P = require(path.join(WT, 'v2', 'mesures', 'preuve-emprunt'));
 const D = require(path.join(API, 'departage-image.js'));
 const sharp = require(path.join(WT, 'node_modules', 'sharp'));
-const CACHE = path.join(__dirname, 'images-r2'); fs.mkdirSync(CACHE, { recursive: true });
+const CACHE = path.join(DONNEES, 'images-r2'); fs.mkdirSync(CACHE, { recursive: true });
 const nomCache = cle => path.join(CACHE, crypto.createHash('sha1').update(cle).digest('hex') + '.webp');
 const cache = { lire: async cle => { const p = nomCache(cle); return fs.existsSync(p) ? fs.readFileSync(p) : null; }, ecrire: async (cle, b) => fs.writeFileSync(nomCache(cle), b) };
 // images déjà dans les anciens caches locaux : lues d'abord (zéro requête)
-const ANCIENS = [path.join(__dirname, 'images'), 'C:\\Users\\Yung\\rat-market-travail\\api\\index-empreintes-essai\\images', 'C:\\Users\\Yung\\rat-market-travail\\api\\index-empreintes\\images'];
+const ANCIENS = [path.join(DONNEES, 'images'), 'C:\\Users\\Yung\\rat-market-travail\\api\\index-empreintes-essai\\images', 'C:\\Users\\Yung\\rat-market-travail\\api\\index-empreintes\\images'];
 const sha1 = s => crypto.createHash('sha1').update(s).digest('hex') + '.webp';
 let requetes = 0, depuisAnciens = 0, nuls = 0;
 const lire = async cle => {
@@ -38,8 +39,8 @@ const hashDe = async cle => { if (hashCache.has(cle)) return hashCache.get(cle);
 module.exports = { phash, ham, fenetre, lire };
 if (require.main === module) (async () => {
     const { cv } = await D.outils();
-    const refuses = new Map(JSON.parse(fs.readFileSync(path.join(__dirname, 't1-refuses.json'), 'utf8')).map(r => [r.idProduct, r]));
-    const t2 = JSON.parse(fs.readFileSync(path.join(__dirname, 't2-preuve.json'), 'utf8'));
+    const refuses = new Map(JSON.parse(fs.readFileSync(path.join(DONNEES, 't1-refuses.json'), 'utf8')).map(r => [r.idProduct, r]));
+    const t2 = JSON.parse(fs.readFileSync(path.join(DONNEES, 't2-preuve.json'), 'utf8'));
     const res = []; let n = 0;
     for (const r of t2) {
         const rf = refuses.get(r.idProduct); const cle = rf && rf.im && rf.im.cleR2;
@@ -63,7 +64,7 @@ if (require.main === module) (async () => {
         res.push({ idProduct: r.idProduct, refus: r.refus, set: r.set, ancien: r.classe, classe: out.classe, detail: out.detail, sous: out.sous, nRefs: mesures.length, mesures });
         if (++n % 25 === 0) console.log(n, 'requêtes', requetes, 'anciens', depuisAnciens, 'nuls', nuls);
     }
-    fs.writeFileSync(path.join(__dirname, 't8-preuve.json'), JSON.stringify(res));
+    fs.writeFileSync(path.join(DONNEES, 't8-preuve.json'), JSON.stringify(res));
     const T = {}; for (const x of res) { const k = x.refus + (/^Trick/.test(x.set) ? ' (ToT)' : '') + ' | ' + x.classe + ' / ' + x.detail; T[k] = (T[k] || 0) + 1; }
     console.log('dénominateur', res.length, 'requêtes R2', requetes, 'images nulles', nuls); console.log(JSON.stringify(Object.entries(T).sort(), null, 1));
     const admis = res.filter(x => x.classe === 'meme').map(x => ({ idProduct: x.idProduct, preuve: `${x.sous} (fenêtre >= 30 inliers ou cosinus >= 0,9 contre chacun ; preuve-emprunt.js)` })).sort((a, b) => a.idProduct - b.idProduct);

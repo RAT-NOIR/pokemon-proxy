@@ -1,15 +1,16 @@
 'use strict';
+const DONNEES = 'C:\\Users\\Yung\\rat-market-travail\\api\\archives\\essais-repli';      // dossier des données de mesure (hors dépôt)
 // GUICHET (passage 8) — CALIBRATION de la 3e concordance (zone SOUPLE du catalogue : pHash <= 6 ET ORB >= 30 ; catalogue collecte-cartes/concordance-image.js SEUIL_SOUPLE ; strict : pHash <= 2 ET ORB >= 40)
 // sur des paires dont la vérité est LUE À L'ŒIL (e12-calib.json : champ `eye` « same » / « differ »), paires prises dans ech-*.json ; images lues sur le bucket PUBLIC R2 (outil réparé). Elle doit savoir dire NON.
 const fs = require('fs'), path = require('path');
 const T8 = require('./t8-preuve2');
 const { API } = require('C:\\Users\\Yung\\rat-market-travail\\api\\atlas\\garde-secrets');
 const D = require(path.join(API, 'departage-image.js'));
-const calib = new Map(JSON.parse(fs.readFileSync(path.join(__dirname, 'e12-calib.json'), 'utf8')).map(x => [x.id, x]));
+const calib = new Map(JSON.parse(fs.readFileSync(path.join(DONNEES, 'e12-calib.json'), 'utf8')).map(x => [x.id, x]));
 (async () => {
     const { cv } = await D.outils();
     const paires = new Map();
-    for (const f of ['ech-meme.json', 'ech-different.json', 'ech-indec.json', 'ech-soeurMeme.json', 'ech-soeurDiff.json']) for (const x of JSON.parse(fs.readFileSync(path.join(__dirname, f), 'utf8'))) paires.set(x.a + '|' + x.b, x);
+    for (const f of ['ech-meme.json', 'ech-different.json', 'ech-indec.json', 'ech-soeurMeme.json', 'ech-soeurDiff.json']) for (const x of JSON.parse(fs.readFileSync(path.join(DONNEES, f), 'utf8'))) paires.set(x.a + '|' + x.b, x);
     const res = [];
     for (const x of paires.values()) {
         const c = calib.get(x.id); if (!c || !['same', 'differ'].includes(c.eye) || x.a === x.b) continue;
@@ -19,7 +20,7 @@ const calib = new Map(JSON.parse(fs.readFileSync(path.join(__dirname, 'e12-calib
         res.push({ id: x.id, tag: x.tag, eye: c.eye, ph, orbPlein: da && db ? D.inliers(cv, da, db) : null });
     }
     const mesures = res.filter(r => !r.manque && r.orbPlein !== null);
-    fs.writeFileSync(path.join(__dirname, 't6-calib3.json'), JSON.stringify(res));
+    fs.writeFileSync(path.join(DONNEES, 't6-calib3.json'), JSON.stringify(res));
     console.log('paires étiquetées à l\'œil', res.length, 'mesurées', mesures.length, 'manquantes', res.filter(r => r.manque).length);
     const same = mesures.filter(r => r.eye === 'same'), diff = mesures.filter(r => r.eye === 'differ');
     console.log('dont même dessin', same.length, 'dessin différent', diff.length);

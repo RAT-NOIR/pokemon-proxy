@@ -1,4 +1,5 @@
 'use strict';
+const DONNEES = 'C:\\Users\\Yung\\rat-market-travail\\api\\archives\\essais-repli';      // dossier des données de mesure (hors dépôt)
 // GUICHET 01/11 — TAMPONNÉES : la PREUVE À L'IMAGE, par la règle de e14-classes-orb.js (celle des emprunts déjà classés) appliquée aux produits refusés par le repli (t1-refuses.json).
 //   L'image refusée (la carte normale, ou l'emprunt du catalogue) est comparée à TOUS les autres scans de la même carte (hors langue japonaise pour un tirage non japonais) :
 //   cosinus d'empreinte (index du 24/10, modèle p8000) ET inliers ORB+RANSAC de la fenêtre d'illustration (departage-image.js, fenêtre calée à l'œil en e12).
@@ -24,7 +25,7 @@ const dot = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] 
     const src = await sourceCartes({ env }); if (!src.ok) { console.log('ARRÊT source :', src.raison); process.exit(1); }
     const tirDe = new Map(src.sets.map(s => [s._id, s.tirage ?? s.region]));
     const carteDe = new Map(src.docs.map(d => [d._id, d]));
-    const refuses = JSON.parse(fs.readFileSync(path.join(__dirname, 't1-refuses.json'), 'utf8'));
+    const refuses = JSON.parse(fs.readFileSync(path.join(DONNEES, 't1-refuses.json'), 'utf8'));
     const lignes = new Map(src.lignes.map(l => [l.idProduct, l]));
     const { cv } = await O.D.outils();
     const res = []; let n = 0;
@@ -54,7 +55,7 @@ const dot = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] 
         res.push({ idProduct: r.idProduct, refus: r.refus, set: r.set, visuel: r.visuel, imSet: r.im.set, imSource: r.im.source, emp: r.im.emp, niveau, classe, sous, nRefs: mesures.length, nConc: mesures.filter(conc).length, mesures });
         if (++n % 100 === 0) console.log(n);
     }
-    fs.writeFileSync(path.join(__dirname, 't2-preuve.json'), JSON.stringify(res));
+    fs.writeFileSync(path.join(DONNEES, 't2-preuve.json'), JSON.stringify(res));
     const T = {}; for (const r of res) { const k = r.refus + (r.set && /^Trick/.test(r.set) ? ' (ToT)' : '') + ' | ' + r.classe; T[k] = (T[k] || 0) + 1; }
     console.log('dénominateur', res.length); console.log(JSON.stringify(Object.entries(T).sort(), null, 1));
     const S = {}; for (const r of res) { const k = r.classe + ' / ' + String(r.sous).replace(/\(\d+\)/g, '(n)'); S[k] = (S[k] || 0) + 1; } console.log(JSON.stringify(Object.entries(S).sort((a, b) => b[1] - a[1]), null, 1));

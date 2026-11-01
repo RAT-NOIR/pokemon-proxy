@@ -1,11 +1,12 @@
 'use strict';
+const DONNEES = 'C:\\Users\\Yung\\rat-market-travail\\api\\archives\\essais-repli';      // dossier des données de mesure (hors dépôt)
 // GUICHET (tour 2, I3b) — la preuve DURCIE (cosinus non contraire) rejouée sur les mesures déjà prises (t8-preuve.json : fenêtre ORB + cosinus de chaque paire) avec le module du dépôt. Aucune image relue.
 // Sorties : la liste fermée durcie (tamponnees-empruntees-2026-11-01d.json), le détail des produits qui SORTENT, les totaux par famille.
 const fs = require('fs'), path = require('path');
 const P = require('C:\\Users\\Yung\\rat-market-travail\\api\\v2-guichet\\v2\\mesures\\preuve-emprunt');
 const ARCH = 'C:\\Users\\Yung\\rat-market-travail\\api\\archives\\';
-const t8 = JSON.parse(fs.readFileSync(path.join(__dirname, 't8-preuve.json'), 'utf8'));
-const t1 = new Map(JSON.parse(fs.readFileSync(path.join(__dirname, 't1-refuses.json'), 'utf8')).map(r => [r.idProduct, r]));
+const t8 = JSON.parse(fs.readFileSync(path.join(DONNEES, 't8-preuve.json'), 'utf8'));
+const t1 = new Map(JSON.parse(fs.readFileSync(path.join(DONNEES, 't1-refuses.json'), 'utf8')).map(r => [r.idProduct, r]));
 const avant = t8.filter(r => r.classe === 'meme'), res = t8.map(r => ({ ...r, nouveau: P.classerAvecTroisieme(r.mesures.map(m => ({ ...m }))) }));
 const apres = res.filter(r => r.nouveau.classe === 'meme');
 const fam = r => r.refus + (/^Trick/.test(r.set) ? ' (ToT)' : '');
@@ -21,5 +22,5 @@ const sansCos = apres.filter(r => r.mesures.some(m => m.cos === null)); console.
 console.log('ventilation', JSON.stringify(Object.entries(T).sort(), null, 0));
 const liste = apres.map(r => ({ idProduct: r.idProduct, preuve: `${r.nouveau.sous} (fenêtre >= 30 inliers ou cosinus >= 0,9, ET aucun cosinus < 0,7 ; preuve-emprunt.js)` })).sort((a, b) => a.idProduct - b.idProduct);
 fs.writeFileSync(ARCH + 'tamponnees-empruntees-2026-11-01d.json', JSON.stringify({ decision: 'GUICHET 01/11 tour 2 : tamponnées empruntées, preuve DURCIE (cosinus non contraire)', le: '2026-11-01', produits: liste }, null, 1));
-fs.writeFileSync(path.join(__dirname, 't14-sortants.json'), JSON.stringify(sortent.map(r => ({ idProduct: r.idProduct, set: r.set, famille: fam(r) }))));
+fs.writeFileSync(path.join(DONNEES, 't14-sortants.json'), JSON.stringify(sortent.map(r => ({ idProduct: r.idProduct, set: r.set, famille: fam(r) }))));
 console.log('liste fermée durcie :', liste.length);
