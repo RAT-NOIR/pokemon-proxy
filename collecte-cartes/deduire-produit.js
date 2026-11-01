@@ -99,10 +99,17 @@ function vignettesDuJournal(journal) {
  *  (absent, doublé, non numérique, adresse illisible) rend null — la preuve s'écrit par ce qu'elle autorise. */
 function expansionDeLAdresse(url) {
     if (typeof url !== 'string') return null;
-    const q = url.split('#')[0].split('?')[1];
-    if (q == null) return null;
-    const valeurs = new URLSearchParams(q).getAll('idExpansion');
-    return valeurs.length === 1 && /^[1-9]\d*$/.test(valeurs[0]) ? Number(valeurs[0]) : null;
+    const [chemin, q] = url.split('#')[0].split('?');
+    // TOUR 1 : l'adresse est bornée par ce qu'elle AUTORISE — la galerie des singles Pokémon, chemin RELATIF (aucun hôte, aucun « // »),
+    // et, si idCategory est là, la catégorie des singles (51) UNE seule fois. Magic, Search, Sealed, une URL absolue : null.
+    if (q == null || !/^\/[a-z]{2}\/Pokemon\/Products\/Singles$/.test(chemin)) return null;
+    const p = new URLSearchParams(q);
+    const cats = p.getAll('idCategory');
+    if (cats.length > 1 || (cats.length === 1 && cats[0] !== '51')) return null;
+    const valeurs = p.getAll('idExpansion');
+    if (valeurs.length !== 1 || !/^[1-9]\d*$/.test(valeurs[0])) return null;
+    const n = Number(valeurs[0]);
+    return Number.isSafeInteger(n) ? n : null;
 }
 /** L'expansion d'un slugSet que AUCUNE ligne apprise ne porte, prouvée par la page : TOUTES ses vignettes (`expansionsDePage`) viennent
  *  de pages dont l'adresse porte le MÊME idExpansion. Sinon null. */
@@ -110,7 +117,7 @@ function expansionParLaPage(cartes) {
     const exps = new Set();
     for (const c of cartes) {
         if (!Array.isArray(c.expansionsDePage) || !c.expansionsDePage.length) return null;
-        for (const e of c.expansionsDePage) { if (!Number.isInteger(e) || e < 1) return null; exps.add(e); }
+        for (const e of c.expansionsDePage) { if (!Number.isSafeInteger(e) || e < 1) return null; exps.add(e); }
     }
     return exps.size === 1 ? [...exps][0] : null;
 }
@@ -200,10 +207,13 @@ async function deduireLot(cartes, deps) {
         let parLaPage = false;
         if (exps.length === 0) { const e = expansionParLaPage(cs); if (e != null) { exps = [e]; parLaPage = true; } }
         if (exps.length !== 1) { for (const c of cs) refus.push({ carte: c, raison: `slugSet « ${slugSet} » porté par ${exps.length} expansions apprises` }); continue; }
+        const idsAppris = [...new Set(await deps.idsApprisDeLExpansion(exps[0], slugSet))];
+        // TOUR 1 : la page ne prouve qu'une expansion que NOS données ignorent — idExpansion sans aucune ligne apprise (par son id ni par ce
+        // slugSet). Une seule ligne apprise, et l'adresse contredit ou double ce que nous savons : on ne déduit rien.
+        if (parLaPage && idsAppris.length) { for (const c of cs) refus.push({ carte: c, raison: `l'adresse de la page dit idExpansion=${exps[0]}, mais ${idsAppris.length} ligne(s) apprise(s) existent déjà pour cet idExpansion ou ce slugSet « ${slugSet} » — la page ne prouve rien` }); continue; }
         const produits = (await deps.produitsDe(exps[0])).filter(p => !estCarteCode(p.name));
         const appris = await deps.apprisDe(produits.map(p => p.idProduct));
         const slugsPortes = await deps.slugsPortes(cs.map(c => [c.slugSet, c.slug]));
-        const idsAppris = [...new Set(await deps.idsApprisDeLExpansion(exps[0], slugSet))];
         const presents = idsAppris.length ? await deps.idsAuCatalogue(idsAppris) : new Set();
         const horsCatalogue = idsAppris.filter(id => !presents.has(id)).sort((a, b) => a - b);
         for (const c of cs) {

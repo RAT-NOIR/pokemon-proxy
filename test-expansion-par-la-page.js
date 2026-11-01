@@ -90,6 +90,46 @@ const SS = 'Dragon-Light-Rising';
     await appliquerDeductions(r5b.deduites, coll2);
     verifier('8b. sans preuve par la page, la preuve écrite ne le dit pas', docs2.some(d => /adresse de la page/.test(d.preuveDeduction)), false);
 
+    // 9. TOUR 1, constat 1 : l'idExpansion lu dans l'adresse est déjà appris sous un AUTRE slugSet → la page ne prouve rien, refusé.
+    //    La garde s'écrit par ce qu'elle autorise : idExpansion SANS aucune ligne apprise ET slugSet sans expansion apprise.
+    const r9 = await deduireLot(lotDe(j2), deps({ idsApprisDeLExpansion: async e => (e === 6704 ? [555, 556] : []), idsAuCatalogue: async ids => new Set(ids) }));
+    verifier('9. idExpansion de la page déjà appris (catalogue à jour) → rien de déduit', r9.deduites.length, 0);
+    verifier('9b. …et la raison le dit (déjà des lignes apprises pour l\'idExpansion de la page)', r9.refus.length === 3 && r9.refus.every(x => /idExpansion=6704.*ligne\(s\) apprise\(s\).*la page ne prouve rien/.test(x.raison)), true);
+    const r9c = await deduireLot(lotDe(j2), deps({ idsApprisDeLExpansion: async (e, s) => (s === SS ? [777] : []), idsAuCatalogue: async ids => new Set(ids) }));
+    verifier('9c. le slugSet a des lignes apprises sans idExpansion (idsApprisDeLExpansion non vide par le slugSet) → refusé', r9c.deduites.length, 0);
+    const r9d = await deduireLot(lotDe(j2), deps({ idsApprisDeLExpansion: async () => [], idsAuCatalogue: async ids => new Set(ids) }));
+    verifier('9d. ni l\'expansion ni le slugSet n\'ont de ligne apprise → déduit (le cas du testeur tient)', r9d.deduites.length, 3);
+
+    // 10. TOUR 1, constat 2 : l'adresse est bornée — « /<langue>/Pokemon/Products/Singles », chemin relatif, idCategory=51 s'il est présent
+    const { expansionDeLAdresse } = require('./collecte-cartes/deduire-produit');
+    const adr = [
+        ['/en/Pokemon/Products/Singles?idCategory=51&idExpansion=6704&site=2', 6704],
+        ['/fr/Pokemon/Products/Singles?idExpansion=6704', 6704],
+        ['/en/Magic/Products/Singles?idExpansion=6704', null],
+        ['/en/Pokemon/Products/Search?idExpansion=6704', null],
+        ['/en/Pokemon/Products/Sealed?idExpansion=6704', null],
+        ['/en/Pokemon/Products/Sealed?idCategory=99&idExpansion=6704', null],
+        ['https://evil.example/en/Pokemon/Products/Singles?idExpansion=6704', null],
+        ['//evil.example/en/Pokemon/Products/Singles?idExpansion=6704', null],
+        ['https://www.cardmarket.com/en/Pokemon/Products/Singles?idExpansion=6704', null],
+        ['/en/Pokemon/Products/Singles?idCategory=52&idExpansion=6704', null],
+        ['/en/Pokemon/Products/Singles?idCategory=51&idCategory=51&idExpansion=6704', null],
+        ['/en/Pokemon/Products/Singles?idCategory=&idExpansion=6704', null],
+        ['/en/Pokemon/Products/Singles/Dragon-Light-Rising?idExpansion=6704', null],
+        ['/english/Pokemon/Products/Singles?idExpansion=6704', null],
+        ['/en/pokemon/products/singles?idExpansion=6704', null]
+    ];
+    for (const [u, att] of adr) verifier(`10. adresse ${u} → ${att}`, expansionDeLAdresse(u), att);
+    const j10 = { journal: [{ url: '/en/Magic/Products/Singles?idCategory=51&idExpansion=6704', detailSansImage: [entree(SS, 'Pidgey-DLR1', 'Roucool (DLR 1)')] }] };
+    verifier('10b. une page Magic portant idExpansion=6704 → rien de déduit', (await deduireLot(lotDe(j10), deps())).deduites.length, 0);
+
+    // 11. TOUR 1, constat 4 : entier sûr seulement
+    verifier('11. idExpansion=99999999999999999999 → null', expansionDeLAdresse('/en/Pokemon/Products/Singles?idExpansion=99999999999999999999'), null);
+    verifier('11b. idExpansion=9007199254740993 (> MAX_SAFE_INTEGER) → null', expansionDeLAdresse('/en/Pokemon/Products/Singles?idExpansion=9007199254740993'), null);
+    verifier('11c. idExpansion=9007199254740991 (MAX_SAFE_INTEGER) → accepté', expansionDeLAdresse('/en/Pokemon/Products/Singles?idExpansion=9007199254740991'), 9007199254740991);
+    const { expansionParLaPage } = require('./collecte-cartes/deduire-produit');
+    verifier('11d. expansionParLaPage refuse un entier non sûr', expansionParLaPage([{ expansionsDePage: [1e21] }]), null);
+
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(2); });

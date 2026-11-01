@@ -28,6 +28,13 @@ const JOURNAL = arg('journal'), EXPORT = arg('export') || 'products_singles_2409
 const CATALOGUE_BASE = arg('catalogue') === 'base';   // --catalogue=base : les produits viennent de catalogue_produits (production, LECTURE), pas d'un export
 if (CATALOGUE_BASE && arg('export')) { console.error('❌ --catalogue=base et --export=… s\'excluent'); process.exit(2); }
 const ecrire = process.argv.includes('--ecrire'), ATTENDU = arg('attendu') != null ? Number(arg('attendu')) : null;
+// CE QUE `--catalogue=base` GARANTIT, ET RIEN DE PLUS : c'est un chemin de SIMULATION. Il lit numeros_cartes et catalogue_produits de la
+// production (find / countDocuments / findOne, via lireMongo) et REFUSE `--ecrire`, avant toute connexion. `lectureSeule: true`, passé à
+// ouvrirConnexions, ne rend PAS la connexion non écrivante : il saute seulement la garde de taille Atlas. La garantie « aucune écriture »
+// tient donc à ce refus et à ce que le chemin n'appelle aucune méthode d'écriture — prouvé par test-journal-catalogue-base.js, qui espionne
+// chaque appel de collection et le chargement de mongoose / mongo-connexion (les seuls chemins d'écriture du script). Pour écrire, on
+// relance avec `--export=<fichier>` (catalogue d'un export), comme avant.
+if (CATALOGUE_BASE && ecrire) { console.error('❌ --catalogue=base est une simulation (lecture de la production) : il refuse --ecrire. Écrire se fait avec --export=<fichier>.'); process.exit(2); }
 if (!JOURNAL || !fs.existsSync(JOURNAL)) { console.error('❌ --journal=<fichier exporté par l\'userscript> requis'); process.exit(2); }
 // La lecture de la vignette, la déduction de l'idProduct ET son écriture vivent dans collecte-cartes/deduire-produit.js, que le
 // serveur appelle aussi (/api/apprendre-lot, userscript 1.9) : une seule règle, une seule écriture, un seul marquage
