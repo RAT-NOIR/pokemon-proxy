@@ -26,7 +26,11 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const MESSAGE_WEBFETCH = 'accès réseau par la porte seulement : node collecte-cartes/porte-reseau.js lire <url> --texte --sortie=<fichier>';
+// PORTÉE (décision de l'utilisateur, 01/11 soir) : la garde protège les sessions du CATALOGUE et leurs sous-agents (qui portent le session_id du parent), rien d'autre.
+// Une autre session lancée depuis ce dépôt (l'agent API, ses tests, son verrou, ses essais) n'est pas de son ressort et passe. Écrite par ce qu'elle garde : une session
+// LISTÉE ici est examinée ; une entrée SANS session_id textuel non vide reste examinée (fermé par défaut). Une session du catalogue s'ajoute ici par une branche et une fusion.
+const SESSIONS_CATALOGUE = ['b6c3ed77-b76c-4e82-bea9-c3689df9e0e3'];
+const MESSAGE_WEBFETCH ='accès réseau par la porte seulement : node collecte-cartes/porte-reseau.js lire <url> --texte --sortie=<fichier>';
 const MAX_SCRIPT = 2 * 1024 * 1024;
 const DEPOT = path.resolve(__dirname, '..', '..');
 const PORTE_JS = path.join(DEPOT, 'collecte-cartes', 'porte-reseau.js').toLowerCase();
@@ -392,7 +396,9 @@ function verdictShell(cmd, cwd) {
 function verdict(entree) {
     let e;
     try { e = JSON.parse(entree); } catch { return { refus: 'entrée du hook illisible (JSON attendu) : refusé par prudence' }; }
-    if (!e || typeof e !== 'object' || Array.isArray(e) || typeof e.tool_name !== 'string') return { refus: 'entrée du hook sans tool_name lisible : refusé par prudence' };
+    if (!e || typeof e !== 'object' || Array.isArray(e)) return { refus: 'entrée du hook sans tool_name lisible : refusé par prudence' };
+    if (typeof e.session_id === 'string' && e.session_id && !SESSIONS_CATALOGUE.includes(e.session_id.toLowerCase())) return { refus: null };     // hors du catalogue : pas l'affaire de la porte
+    if (typeof e.tool_name !== 'string') return { refus: 'entrée du hook sans tool_name lisible : refusé par prudence' };
     const nom = e.tool_name.toLowerCase();
     if (nom === 'webfetch') return { refus: `WebFetch est fermé : ${MESSAGE_WEBFETCH}` };
     if (/^mcp__(claude-in-chrome|claude_browser|remote-devices)__/.test(nom)) return { refus: `outil de navigation « ${e.tool_name} » fermé : ${MESSAGE_WEBFETCH}` };
@@ -425,4 +431,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { verdict, OUTILS, PRIMITIVES, MESSAGE_WEBFETCH };
+module.exports = { verdict, OUTILS, PRIMITIVES, MESSAGE_WEBFETCH, SESSIONS_CATALOGUE };
