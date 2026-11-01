@@ -140,6 +140,19 @@ function constanteSure(chemin) {
     return cle(r) === cle(abs) ? r : null;
 }
 
+// `_mutants` n'est sûr que s'il est un vrai dossier, comme chacun de ses parents (sinon les enfants de sa cible seraient admis).
+const mutantsDe = (racine) => constanteSure(path.join(racine, '_mutants'));
+// La branche de PRODUCTION de resoudreRacine, sur des constantes passées en paramètre (le banc l'exerce sur des dossiers fabriqués ; resoudreRacine l'appelle
+// avec les vraies). Racine : la constante sans lien, sinon refus. Bureau : idem, sinon aucun cas (d). Originaux d'apports : TOUS rendus tels quels ; aucun n'est
+// écarté ici, leur validité (vrai dossier, lisible) est jugée à l'emploi, avec refus nommé.
+function resoudreProduction(c) {
+    const r = constanteSure(c.racine);
+    if (!r) throw new Refus(1, 'refus-entree', 'la racine permise est absente de ce poste, ou elle (ou un de ses parents) est un lien : refusé');
+    const b = constanteSure(c.bureau);   // null (aucun cas d) si le dossier d'archives est absent ou si un lien le détourne
+    let a = null; try { a = reel(c.ancienBureau); } catch { /* bureau absent : aucune copie déplacée admise */ }
+    return { racine: r, journal: c.journal, banc: false, depots: c.depots, bureau: b, ancienBureau: a, mutants: mutantsDe(r), originaux: c.originaux.slice() };
+}
+
 // La racine permise : la constante, ou (BANCS SEULEMENT) une racine STRICTEMENT sous le Temp écrit en dur, qui porte le marqueur du banc, avec un
 // journal à elle sous ce même Temp. Un journal de banc sans racine de banc, ou l'inverse, est refusé.
 // Le bureau (cas d) : la constante ; en banc, `opts.bureau` (strictement sous le Temp écrit en dur) ou aucun ; hors banc, `opts.bureau` est refusé.
@@ -150,11 +163,7 @@ function resoudreRacine(opts) {
     if (!banc) {
         if (opts.journal) throw new Refus(1, 'refus-entree', 'un journal de banc sans racine de banc est refusé');
         if (bureauDonne || ancienDonne) throw new Refus(1, 'refus-entree', 'un bureau de banc sans racine de banc est refusé');
-        const r = constanteSure(RACINE_PAR_DEFAUT);
-        if (!r) throw new Refus(1, 'refus-entree', 'la racine permise est absente de ce poste, ou elle (ou un de ses parents) est un lien : refusé');
-        const b = constanteSure(BUREAU_PAR_DEFAUT);   // null (aucun cas d) si le dossier d'archives est absent ou si un lien le détourne
-        let a = null; try { a = reel(ANCIEN_BUREAU_PAR_DEFAUT); } catch { /* bureau absent : aucune copie déplacée admise */ }
-        return { racine: r, journal: JOURNAL_PAR_DEFAUT, banc: false, depots: DEPOTS_PAR_DEFAUT, bureau: b, ancienBureau: a, mutants: constanteSure(path.join(r, '_mutants')), originaux: ORIGINAUX_PAR_DEFAUT.filter(o => lstatOuNull(o)) };
+        return resoudreProduction({ racine: RACINE_PAR_DEFAUT, journal: JOURNAL_PAR_DEFAUT, depots: DEPOTS_PAR_DEFAUT, bureau: BUREAU_PAR_DEFAUT, ancienBureau: ANCIEN_BUREAU_PAR_DEFAUT, originaux: ORIGINAUX_PAR_DEFAUT });
     }
     if (!opts.journal) throw new Refus(1, 'refus-entree', 'une racine de banc exige un journal de banc');
     let tmp; try { tmp = reel(TEMP_EN_DUR); } catch { throw new Refus(1, 'refus-entree', 'le dossier Temp écrit en dur est absent de ce poste : aucune racine de banc'); }
@@ -176,13 +185,13 @@ function resoudreRacine(opts) {
         if (!sousStrict(tmp, a)) throw new Refus(1, 'refus-entree', `ancien bureau de banc refusé : il doit être STRICTEMENT sous ${TEMP_EN_DUR}`);
         ancienBureau = a;
     }
-        let originaux = [];
+    const originaux = [];
     if (Array.isArray(opts.originaux)) for (const o of opts.originaux) {
-        let ro; try { ro = reel(o); } catch { throw new Refus(1, 'refus-entree', `original de banc absent : ${o}`); }
+        const ro = path.resolve(o);   // absent ou lien : jugé à l'emploi (refus nommé), comme en production
         if (!sousStrict(tmp, ro)) throw new Refus(1, 'refus-entree', `original de banc refusé : il doit être STRICTEMENT sous ${TEMP_EN_DUR}`);
         originaux.push(ro);
     }
-    return { racine: r, journal: j, banc: true, depots: Array.isArray(opts.depots) ? opts.depots : [], bureau, ancienBureau, mutants: constanteSure(path.join(r, '_mutants')), originaux };
+    return { racine: r, journal: j, banc: true, depots: Array.isArray(opts.depots) ? opts.depots : [], bureau, ancienBureau, mutants: mutantsDe(r), originaux };
 }
 
 // Refus d'entrée (le dossier est-il ce qu'il prétend être ?). Retourne { dossier (réel), zone, worktree: null | { repo, admin, commun } }.
@@ -253,7 +262,8 @@ function worktreesEnregistres(depots, git) {
     const res = new Set();
     for (const d of depots) {
         const r = spawnSync(git, ['-C', d, 'worktree', 'list', '--porcelain'], { encoding: 'utf8' });
-        if (r.error || r.status !== 0) continue;
+        // une garde ne conclut pas sur ce qu'elle n'a pas pu lire : git en échec sur un dépôt connu BLOQUE (jamais « aucun worktree »)
+        if (r.error || r.status !== 0) throw new Refus(1, 'refus-liste-git', `git worktree list a échoué sur le dépôt connu  () : je ne peux pas conclure sur les worktrees enregistrés, refusé`);
         String(r.stdout).replace(/\r/g, '').split('\n').filter(l => l.startsWith('worktree ')).map(l => l.slice(9)).slice(1)
             .forEach(n => res.add(cle(path.resolve(n))));
     }
@@ -594,6 +604,11 @@ function retirer(dossierBrut, opts = {}) {
             if (sale.length && executer) rec.jetes = sale;
             if (c.apportsDedans.length && executer) { for (const d of c.apportsDedans) rec.apportsDetruits.push(...listerFichiers(d).fichiers); }
             // 2. inventaire et comptes AVANT
+            if (typeof opts.avantInventaire === 'function') opts.avantInventaire(dossier);   // INJECTION DE BANC
+            // la racine est relue juste avant l'inventaire : elle doit être encore un vrai dossier, au même chemin réel (jonction posée entre-temps : refus)
+            const st0 = lstatOuNull(dossier);
+            if (!st0 || st0.isSymbolicLink() || !st0.isDirectory() || cle(reel(dossier)) !== cle(dossier))
+                throw new Refus(3, 'refus-dossier-change', `le dossier a changé entre l'admission et l'inventaire (lien, absent ou chemin réel différent) : ${dossier} ; rien n'est supprimé`);
             const liens = inventaire(dossier, lire);
             for (const l of liens) {
                 let apports = null;
@@ -618,6 +633,9 @@ function retirer(dossierBrut, opts = {}) {
                 // suppression par les mêmes comparaisons que les autres cibles : un écart est un refus (code 3) ou une ALERTE ROUGE (code 5). Aucun original connu : refus.
                 if (!ctx.originaux.length) throw new Refus(1, 'refus-originaux-inconnus', `cas (e) : la copie contient un dossier d'apports (${c.apportsDedans.map(q => path.relative(dossier, q)).join(', ')}) mais aucun ORIGINAL n'est connu pour être compté avant/après : refusé`);
                 for (const o of ctx.originaux) {
+                    // chaque original doit être un VRAI dossier (ni lien, ni parent lien), présent et lisible : sinon refus nommé, avant toute action
+                    if (!constanteSure(o)) throw new Refus(1, 'refus-original-invalide', `cas (e) : l'original ${o} est absent, n'est pas un dossier, ou est (ou est sous) un lien : refusé avant toute suppression`);
+                    try { fs.readdirSync(o); } catch (e) { throw new Refus(1, 'refus-original-illisible', `cas (e) : l'original ${o} est illisible (${e.code || e.message}) : refusé avant toute suppression`); }
                     if (cle(o) === cle(dossier) || sousStrict(dossier, o) || sousStrict(o, dossier))
                         throw new Refus(1, 'refus-originaux-inconnus', `cas (e) : l'original ${o} est dans la copie, ou la contient : impossible de vérifier qu'il reste intact`);
                     if (!cibles.has(cle(o))) cibles.set(cle(o), { cible: o, avant: instantane(o), apports: 'original' });
@@ -713,9 +731,14 @@ function retirer(dossierBrut, opts = {}) {
         }
         if (typeof opts.apresSuppression === 'function') opts.apresSuppression(contexte2);   // POINT D'INJECTION DE BANC (rien en production)
         // 10. recompte final
-        const finaux = compare();
-        rec.apres = [...cibles.values()].map(x => ({ cible: x.cible, ...instantane(x.cible) }));
-        notePourApports();
+        let finaux;
+        try {
+            finaux = compare();
+            rec.apres = [...cibles.values()].map(x => ({ cible: x.cible, ...instantane(x.cible) }));
+            notePourApports();
+        } catch (e) {   // le dossier est déjà supprimé : un recompte impossible n'est pas une simple erreur, c'est une cible dont on ne sait plus rien
+            return fin(5, 'ALERTE-recompte-impossible', `🚨🚨 ALERTE ROUGE : le recompte final des cibles a échoué après la suppression (${e && e.message || e}) : je ne peux pas dire qu'elles sont intactes`);
+        }
         if (finaux.length) return fin(5, 'ALERTE-cible-changee-apres', `🚨🚨 ALERTE ROUGE : une cible a changé APRÈS la suppression : ${finaux.join(' | ')}`);
         const tard = rapport.liens.length ? ` ; ⚠️ ${rapport.liens.length} lien(s) apparu(s) pendant la suppression, retiré(s) seuls et jamais parcourus : ${rapport.liens.join(', ')}` : '';
         return fin(0, 'ok', `✅ retiré : ${origine} (${rec.liens.length} lien(s) retiré(s) seuls, ${cibles.size} cible(s) recomptée(s) ; comptes identiques : fichiers, octets, dossiers, liens, dernière modification${tard}${reprise ? ' ; reprise d\'une quarantaine' : ''})`);
@@ -767,5 +790,5 @@ function main(argv, env) {
     return retirer(dossiers[0], opts).code;
 }
 
-module.exports = { constanteSure, listerMutants, retirer, trouverGit, inventaire, instantane, verifierEntree, retirerLien, reanalyse, estDossierApports, RACINE_PAR_DEFAUT, MARQUEUR_BANC, JETON_BANC };
+module.exports = { resoudreProduction, constanteSure, listerMutants, retirer, trouverGit, inventaire, instantane, verifierEntree, retirerLien, reanalyse, estDossierApports, RACINE_PAR_DEFAUT, MARQUEUR_BANC, JETON_BANC };
 if (require.main === module) process.exitCode = main(process.argv.slice(2), process.env);

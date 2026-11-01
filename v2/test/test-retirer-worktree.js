@@ -841,6 +841,32 @@ try {
                 res.originalChangeApres = r2.code === 5 && !existe(m2); fs.unlinkSync(path.join(orig2, 'intrus2.txt'));
                 res.originauxIntactsFin = originauxIntacts();
                 res.temoinFin = JSON.stringify(photo(temoin)) === JSON.stringify(avT);
+                // tour 2 : git en échec sur un dépôt connu BLOQUE ; originaux invalides refusés avant toute suppression ; racine relue ; recompte final impossible = alerte 5
+                const issueDe = (r) => String(r.issue);
+                const ge = mk('gitdep'); const rge = Tm.retirer(ge, o({ depots: [path.join(base, 'pas-un-depot')] })); res.gitEnEchec = rge.code !== 0 && issueDe(rge) === 'refus-liste-git' && existe(ge);
+                const mkAp = (nom) => { const d = mk(nom); fs.mkdirSync(path.join(d, 'Logo FR')); fs.writeFileSync(path.join(d, 'Logo FR', 'c.png'), 'c'); return d; };
+                const lo = path.join(base, 'orig-lien'); jonction(orig1, lo);
+                const a1 = mkAp('oli'); const ra1 = Tm.retirer(a1, o({ originaux: [lo, orig2] })); res.originalLien = ra1.code !== 0 && issueDe(ra1) === 'refus-original-invalide' && existe(a1);
+                const a2 = mkAp('oab'); const ra2 = Tm.retirer(a2, o({ originaux: [path.join(base, 'orig-absent'), orig2] })); res.originalAbsent = ra2.code !== 0 && issueDe(ra2) === 'refus-original-invalide' && existe(a2);
+                jonction(path.join(base, 'orig'), path.join(base, 'lien-parent'));
+                const a3 = mkAp('opl'); const ra3 = Tm.retirer(a3, o({ originaux: [path.join(base, 'lien-parent', 'Logo FR'), orig2] })); res.originalParentLien = ra3.code !== 0 && issueDe(ra3) === 'refus-original-invalide' && existe(a3);
+                res.originauxIntactsApresRefus = originauxIntacts();
+                const ch = mk('chg'); const rch = Tm.retirer(ch, o({ avantInventaire: (d) => { fs.renameSync(d, d + '-reel'); jonction(d + '-reel', d); } }));
+                res.racineRelue = rch.code === 3 && issueDe(rch) === 'refus-dossier-change' && existe(path.join(ch + '-reel', 'f.txt'));
+                try { fs.rmdirSync(ch); fs.renameSync(ch + '-reel', ch); } catch { /* rien */ }
+                const rc = mkAp('rci'); const lireOrig = fs.readdirSync;
+                let rrc; try { rrc = Tm.retirer(rc, o({ apresSuppression: () => { fs.readdirSync = (p, ...a) => { if (typeof p === 'string' && path.resolve(p).toLowerCase() === orig1.toLowerCase()) throw new Error('boom'); return lireOrig(p, ...a); }; } })); } finally { fs.readdirSync = lireOrig; }
+                res.recompteImpossible = rrc.code === 5 && issueDe(rrc) === 'ALERTE-recompte-impossible' && !existe(rc);
+                // _mutants lui-même est un lien (jonction) : aucun de ses enfants n'est admis, ni par le chemin du lien ni par le chemin réel de sa cible
+                const rac2 = fs.mkdtempSync(path.join(TMP, 'rm-retrait-e2-'));
+                try {
+                    fs.writeFileSync(path.join(rac2, '.rm-retrait-banc'), 'rm-retrait-banc-v1');
+                    const vrai = path.join(rac2, 'vrai'); fs.mkdirSync(path.join(vrai, 'c'), { recursive: true }); fs.writeFileSync(path.join(vrai, 'c', 'f'), 'f');
+                    jonction(vrai, path.join(rac2, '_mutants'));
+                    const o2 = { executer: true, racine: rac2, journal: path.join(rac2, 'j.jsonl'), depots: [], sortie: muet };
+                    const x1 = Tm.retirer(path.join(rac2, '_mutants', 'c'), o2), x2 = Tm.retirer(path.join(vrai, 'c'), o2);
+                    res.mutantsLien = x1.code !== 0 && x2.code !== 0 && existe(path.join(vrai, 'c', 'f'));
+                } finally { try { delier(rac2); fs.rmSync(rac2, { recursive: true, force: true }); } catch { /* rien */ } }
                 // le mode liste : lecture seule, un verdict par entrée
                 const avant = JSON.stringify(photo(mut)), jt = existe(jr) ? fs.statSync(jr).size : -1;
                 const L = Tm.listerMutants({ racine, journal: jr, depots: [], originaux: [orig1, orig2], sortie: muet });
@@ -854,7 +880,7 @@ try {
             }
             return res;
         };
-        const attenduE = ['orphelinAdminAbsent', 'orphelinDepotAbsent', 'copieSansGit', 'cloneJetable', 'copieDApports', 'originauxIntactsApresCopie', 'depotPrincipal', 'gitInterieurFichier', 'cloneAvecWorktrees', 'lienVersApports', 'fauxApportsIntacts', 'lienNommeApports', 'apportsSansOriginaux', 'petitEnfantMutants', 'enfantLien', 'horsMutants', 'originalChangeAvant', 'originalChangeApres', 'originauxIntactsFin', 'temoinFin', 'listeLectureSeule', 'listeComplete', 'listeVerdicts'];
+        const attenduE = ['orphelinAdminAbsent', 'orphelinDepotAbsent', 'copieSansGit', 'cloneJetable', 'copieDApports', 'originauxIntactsApresCopie', 'depotPrincipal', 'gitInterieurFichier', 'cloneAvecWorktrees', 'lienVersApports', 'fauxApportsIntacts', 'lienNommeApports', 'apportsSansOriginaux', 'petitEnfantMutants', 'enfantLien', 'horsMutants', 'originalChangeAvant', 'originalChangeApres', 'originauxIntactsFin', 'temoinFin', 'gitEnEchec', 'originalLien', 'originalAbsent', 'originalParentLien', 'originauxIntactsApresRefus', 'racineRelue', 'recompteImpossible', 'mutantsLien', 'listeLectureSeule', 'listeComplete', 'listeVerdicts'];
         const res = Object.assign(scenarioD(T), scenarioE(T));
         const attendu = ['accepte', 'cibles', 'apportsIntacts', 'gitNeListePlus', 'dossierNonEnregistre', 'enregistreIgnoreDesDepots', 'nomPokemonProxy', 'nomApiV2', 'sansSuffixe', 'suffixeVide', 'soulignement', 'point', 'labo', 'prefixeEtendu', 'petitEnfant', 'traversees', 'logoDirect', 'apportsDedans', 'sale', 'plan', 'voisinQuelconque', 'bureauLuiMeme', 'sansOptionBureau', 'bureauHorsTemp', 'bureauSansBanc', 'deplacePlan', 'deplaceAccepte', 'deplaceCibles', 'deplaceAutresInscriptions', 'deplaceNomDifferent', 'deplaceMauvaisParent', 'deplaceAncienExiste', 'deplaceAncienIntact', 'deplaceSansAncienOption', 'deplaceHorsBureau', 'ancienHorsTemp', 'repriseDeplacee1', 'repriseDeplacee2', 'ancienReapparu', 'temoinsFin'];
         for (const k of attendu) vrai(`7. (d) ${k}`, res[k] === true);
@@ -875,7 +901,27 @@ try {
             } finally { try { delier(cs); fs.rmSync(cs, { recursive: true, force: true }); } catch { /* rien */ } }
             return r;
         };
-        for (const [k, b] of Object.entries(unitCS(T))) vrai(`7 bis. constanteSure : ${k}`, b);
+        const unitProd = (Tm) => {   // la branche de PRODUCTION de resoudreRacine, sur des dossiers fabriqués
+            const r = {}; const d = fs.mkdtempSync(path.join(TMP, 'rm-retrait-prod-'));
+            try {
+                const root = path.join(d, 'racine'), arch = path.join(d, 'arch'), anc = path.join(d, 'anc'), o1 = path.join(d, 'o1');
+                for (const x of [path.join(root, '_mutants'), path.join(root, 'sub'), arch, anc, o1]) fs.mkdirSync(x, { recursive: true });
+                const c = (plus = {}) => ({ racine: root, journal: path.join(d, 'j'), depots: [], bureau: arch, ancienBureau: anc, originaux: [o1, path.join(d, 'o2-absent')], ...plus });
+                const eq = (a, b) => a !== null && a !== undefined && String(a).toLowerCase() === String(b).toLowerCase();
+                const bon = Tm.resoudreProduction(c());
+                r.prodChemins = eq(bon.racine, root) && eq(bon.bureau, arch) && eq(bon.ancienBureau, anc) && eq(bon.mutants, path.join(root, '_mutants'));
+                r.prodOriginauxTous = bon.originaux.length === 2;
+                jonction(root, path.join(d, 'lien'));
+                const refus = (plus) => { try { Tm.resoudreProduction(c(plus)); return false; } catch (e) { return e && e.code === 1; } };
+                r.prodRacineLien = refus({ racine: path.join(d, 'lien') }) && refus({ racine: path.join(d, 'lien', 'sub') });
+                jonction(arch, path.join(d, 'lien-arch'));
+                r.prodBureauLien = Tm.resoudreProduction(c({ bureau: path.join(d, 'lien-arch') })).bureau === null && Tm.resoudreProduction(c({ bureau: path.join(d, 'absent') })).bureau === null;
+                const r3 = path.join(d, 'racine3'); fs.mkdirSync(path.join(d, 'vrai-mut'), { recursive: true }); fs.mkdirSync(r3); jonction(path.join(d, 'vrai-mut'), path.join(r3, '_mutants'));
+                r.prodMutantsLien = Tm.resoudreProduction(c({ racine: r3 })).mutants === null;
+            } finally { try { delier(d); fs.rmSync(d, { recursive: true, force: true }); } catch { /* rien */ } }
+            return r;
+        };
+        for (const [k, b] of Object.entries(Object.assign(unitCS(T), unitProd(T)))) vrai(`7 bis. constanteSure : ${k}`, b);
         // 8. MUTANTS : chaque mutation de l'outil doit faire rougir au moins une vérification du scénario (d)
         const src = fs.readFileSync(require.resolve('../../outils/retirer-worktree'), 'utf8');
         const mutations = [
@@ -897,6 +943,14 @@ try {
             ['(e) les originaux ne sont plus comptés', "cibles.set(cle(o), { cible: o, avant: instantane(o), apports: 'original' })", "void 0"],
             ['(e) n\'importe quel dossier admis (plus « enfant direct de _mutants »)', "if (!ctx.mutants || cle(path.dirname(r)) !== cle(ctx.mutants))", "if (false)"],
 
+            ['tour 2 : git en échec lu comme « aucun worktree »', "if (r.error || r.status !== 0) throw new Refus(1, 'refus-liste-git', `git worktree list a échoué sur", "if (false) throw new Refus(1, 'refus-liste-git', `git worktree list a échoué sur"],
+            ['tour 2 : original lien/absent accepté', "if (!constanteSure(o)) throw", "if (false) throw"],
+            ['tour 2 : racine non relue avant l\'inventaire', "if (!st0 || st0.isSymbolicLink() || !st0.isDirectory() || cle(reel(dossier)) !== cle(dossier))", "if (false)"],
+            ['tour 2 : recompte impossible = code 2', "return fin(5, 'ALERTE-recompte-impossible'", "return fin(2, 'ALERTE-recompte-impossible'"],
+            ['tour 2 : _mutants lien résolu au lieu de refusé', "const mutantsDe = (racine) => constanteSure(path.join(racine, '_mutants'));", "const mutantsDe = (racine) => { try { return reel(path.join(racine, '_mutants')); } catch { return null; } };"],
+            ['tour 2 : racine de production résolue au lieu de refusée', "const r = constanteSure(c.racine);", "let r; try { r = reel(c.racine); } catch { r = null; }"],
+            ['tour 2 : bureau de production résolu au lieu de refusé', "const b = constanteSure(c.bureau);", "let b; try { b = reel(c.bureau); } catch { b = null; }"],
+            ['tour 2 : originaux écartés sans bruit', "originaux: c.originaux.slice() }", "originaux: c.originaux.filter(o => lstatOuNull(o)) }"],
             ['déplacement : admis hors du bureau', "if (zone !== 'bureau' || !ancien ||", "if (!ancien ||"],
             ['élargit le motif (préfixe seul)', "/^pokemon-proxy-v2-[a-z0-9-]+$/i", "/^pokemon-proxy-/i"],
             ['élargit le motif (sans ancre de fin)', "/^pokemon-proxy-v2-[a-z0-9-]+$/i", "/^pokemon-proxy-v2-[a-z0-9-]+/i"],
@@ -909,7 +963,7 @@ try {
             const f = path.join(ROOT, `mutant-${++n}.js`);
             fs.writeFileSync(f, src.replace(de, vers));
             let rouge = false, qui = '';
-            try { const mod = require(f); const rm = Object.assign(scenarioD(mod), scenarioE(mod)); const ucs = unitCS(mod); const ko2 = attendu.concat(attenduE).filter(k => rm[k] !== true).concat(Object.keys(ucs).filter(k => ucs[k] !== true)); rouge = ko2.length > 0; qui = ko2.join(','); } catch (e) { rouge = false; qui = 'EXCEPTION ' + e.message; }
+            try { const mod = require(f); const rm = Object.assign(scenarioD(mod), scenarioE(mod)); const ucs = Object.assign(unitCS(mod), unitProd(mod)); const ko2 = attendu.concat(attenduE).filter(k => rm[k] !== true).concat(Object.keys(ucs).filter(k => ucs[k] !== true)); rouge = ko2.length > 0; qui = ko2.join(','); } catch (e) { rouge = false; qui = 'EXCEPTION ' + e.message; }
             vrai(`8. mutant « ${nom} » : le banc rougit sur une vérification précise (${qui})`, rouge);
         }
     }
