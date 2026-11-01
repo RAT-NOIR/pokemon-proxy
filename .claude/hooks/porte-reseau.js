@@ -15,6 +15,10 @@
 //     COMMANDE (& 'curl.exe', ."wget") ou donnée à -Command / -c / /c reste lue.
 // Code 2 = refus : le message part sur stderr et revient à l'agent. Toute panne, toute entrée illisible REFUSE (une garde qui ne peut pas conclure bloque et le dit).
 //
+// TOUR 3 : (B2) dossiers de la porte et des arrêts FIXES — le hook ne lit aucune variable d'environnement, le banc passe --banc=<json> en argument ; une commande qui pose ARRETS_HOTES_DOSSIER,
+// PORTE_RESEAU_DOSSIER, PORTE_RESEAU_BANC ou NODE_OPTIONS est refusée. (B3) un agent ne lève ni ne supprime un arrêt : `porte-reseau.js lever`, toute écriture / suppression / déplacement / renommage
+// visant arrets-hotes\ (JOURNAL-HOTES.md excepté), `-Recurse` sur ce dossier ou un parent, et un flux « nom:flux » sont refusés ; la levée est une action de l'utilisateur, à la main dans son terminal.
+// (I3, limite ACCEPTÉE par le coordinateur) la détection des primitives réseau est une liste de motifs de texte : elle vise l'erreur d'un agent, pas un adversaire qui obscurcit son code.
 // LIMITE ÉCRITE (16) : ce hook est une liste de motifs pour le shell ; il arrête les erreurs d'un agent de bonne foi (le cas réel : WebFetch, curl), pas un agent qui cherche à le contourner
 // (un binaire renommé, un langage non listé, un script suivi qui en appelle un autre — pas suivi transitivement ; un worktree d'agent dont le script a été commité). WebFetch, lui, est refusé
 // sans exception. Faux refus connus et acceptés : `rg curl`, `Select-String "curl"` (utiliser l'outil Grep).
