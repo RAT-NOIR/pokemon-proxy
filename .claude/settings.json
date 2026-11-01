@@ -19,6 +19,16 @@
             "args": ["C:/Users/Yung/Desktop/pokemon-proxy/.claude/hooks/refuser-commandes.js"]
           }
         ]
+      },
+      {
+        "matcher": "WebFetch|PowerShell|Bash|Write|Edit|NotebookEdit|mcp__claude-in-chrome__.*|mcp__Claude_Browser__.*|mcp__remote-devices__.*|mcp__claude_ai_Higgsfield__media_import_url",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:/Program Files/nodejs/node.exe",
+            "args": ["C:/Users/Yung/Desktop/pokemon-proxy/.claude/hooks/porte-reseau.js"]
+          }
+        ]
       }
     ]
   }
