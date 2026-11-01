@@ -23,6 +23,11 @@ const MUTATIONS = [
     { nom: 'd : les alias ne sont plus lus', fichier: LV, de: 'aliasDe(await catalogue.indexAliasFr(), [carte.name ?? carte.nom, carte.nomBrut])', vers: '[]' },
     { nom: 'd : un alias de 1 caractère suffit', fichier: LV, de: 'ALIAS_LONGUEUR_MIN = 4', vers: 'ALIAS_LONGUEUR_MIN = 1' },
     // ── les portes de l'étape (un sûr ne change jamais, rien d'autre qu'une question)
+    { nom: 'ordre 22 : la règle du rival de la même carte est retirée', fichier: LV, de: 'else if (rivalDeLaMemeCarte({ version, id: d.id, candidats, lignes }))', vers: 'else if (false)' },
+    { nom: 'ordre 22 : un rival sans cosinus ne bloque plus', fichier: LV, de: 'if (Number.isFinite(r.cos) && favori && Number.isFinite(favori.cos) && favori.cos > r.cos) continue;', vers: 'if (!Number.isFinite(r.cos) || (favori && favori.cos > r.cos)) continue;' },
+    { nom: 'ordre 22 : l\'égalité de cosinus suffit au favori (>= au lieu de >)', fichier: LV, de: 'favori.cos > r.cos) continue;', vers: 'favori.cos >= r.cos) continue;' },
+    { nom: 'ordre 22 : le rival emprunté n\'est plus reconnu', fichier: LV, de: "const emprunte = (empr && empr(r.id) === true) || Boolean(er.mention && !estMentionDAffichage(er));", vers: 'const emprunte = false;' },
+    { nom: 'ordre 22 : une autre carte (idMetacard) bloque aussi', fichier: LV, de: 'if (!er || er.idMetacard !== ef.idMetacard) continue;', vers: 'if (!er) continue;' },
     { nom: 'porte : une question de GROUPE (marqueurs) est travaillée', fichier: LV, de: "if (estGroupe(traceMarqueurs)) return note('groupe-marqueurs');", vers: '' },
     { nom: 'porte I3 : un désigné de même dessin est servi probable', fichier: LV, de: 'if (dansUnGroupe(version, d.id, d.top3))', vers: 'if (false)' },
     { nom: 'porte I2 : un désigné sans prix de guide est servi probable', fichier: LV, de: "PR.depuisGuide(c.prixGuide, 'tendance-seule') === null", vers: 'false' },
