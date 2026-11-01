@@ -19,7 +19,7 @@ const VB = require('./_visuels-banc');
 const archive = avecColonne => { const b = creerConstructeur(); b.entree(VB.doc(9100001)); if (avecColonne) b.jumeau({ idProduct: 9100001, idMetacard: 990101, idExpansion: 1, numero: '001', tirage: 'jp' }); return b.finir(); };
 const COMPLETE = archive(true), SANS_COLONNE = archive(false);
 const DE_L_ARCHIVE = ['langue-impression', 'marques'];
-const SANS_EMPREINTE = j => j !== 'empreinte' && j !== 'mesures-client' && j !== 'probable';         // CALCUL-CLIENT : `mesures-client` exige le jeton `empreinte` (et deux drapeaux) : sans index chargé, il tombe avec lui
+const SANS_EMPREINTE = j => j !== 'empreinte' && j !== 'mesures-client' && j !== 'probable' && j !== 'leviers-abde';         // CALCUL-CLIENT : `mesures-client` exige le jeton `empreinte` (et deux drapeaux) : sans index chargé, il tombe avec lui
 
 const ENV = { RM_API_V2: '1', MONGODB_BASE: 'test_scratch' };
 // Le contrat de l'EXTENSION (DEMANDE-SERVEUR-EXTENSION.md, « EXTENSION — 24/10 (soir) ») : cinq jetons, dans cet ordre. Le dire ici une fois, à la main, est voulu : changer la liste est une décision
@@ -36,7 +36,7 @@ H.vrai('v2/capacites.js existe et exporte CAPACITES et capacitesServies', C !== 
 const LISTE = C && Array.isArray(C.CAPACITES) ? C.CAPACITES : [];
 
 // ── 1. la liste fermée : un seul endroit, figée, sans doublon, celle de l'extension ──
-H.v('la liste fermée est celle du contrat de l\'extension (cinq jetons) puis `empreinte`, `mesures-client` et `probable` (le dernier) en fin de liste', [...LISTE], [...CONTRAT_LISTE, 'probable']);
+H.v('la liste fermée est celle du contrat de l\'extension (cinq jetons) puis `empreinte`, `mesures-client` et `probable` (le dernier) en fin de liste', [...LISTE], [...CONTRAT_LISTE, 'probable', 'leviers-abde']);
 H.vrai('   elle est gelée (un bout de code ne la rallonge pas)', C !== null && Object.isFrozen(C.CAPACITES));
 H.v('   sans doublon', new Set(LISTE).size, LISTE.length);
 H.vrai('   que des jetons minuscules à tirets', LISTE.every(j => /^[a-z]+(-[a-z]+)*$/.test(j)));
@@ -103,7 +103,7 @@ if (C) {
         V2_COMPTE_HEURE: ENT, V2_SOLDE_HEURE: ENT, V2_REPONSE_HEURE: ENT, V2_RETOUR_LIVE_HEURE: ENT, V2_ETIQUETTE_HEURE: ENT, V2_VERSION_MODELE: 'banc-1',
         V2_URL_VERIFICATION: 'https://exemple.org/verification', V2_URL_REINIT: 'https://exemple.org/reinit', V2_EMPREINTE_JOURS: ENT, V2_COURRIELS_JOUR: ENT, V2_AVERTISSEMENTS_INACTIFS: BOOL, V2_COURRIEL_DE: 'banc@exemple.org', V2_COURRIEL_REPONSE: 'reponse@exemple.org', V2_ORIGINE_EXTENSION_DEV: 'chrome-extension://abcdefghijklmnop',
         V2_VISUELS_HMAC: 'valeur-de-banc', V2_VISUELS_SOURCE: 'calcul', V2_VISUELS_BANC_FICHIER: 'fichier-fictif.rmv', V2_PHOTO_ADMIN_DELAI_S: '5', V2_PHOTO_ADMIN_INTERVALLE_S: '5', V2_PHOTO_ADMIN_MAX_JOUR: '5',
-        V2_DESCRIPTION_CONSERVEE: BOOL, V2_DESCRIPTION_AU_MODELE: BOOL, V2_MARCHES: 'vinted.fr', V2_VERSION_MIN_EXTENSION: '2.5.0', V2_REGLE_G: BOOL, V2_SECONDE_LECTURE: BOOL, V2_LECTURE_TAMPON: BOOL, V2_SUR_PAR_IMAGE: BOOL, V2_VIVIER_IMAGE: BOOL, V2_SPI_COMPARATEUR: BOOL, V2_GARDE_MARQUEURS: BOOL, V2_JUMBO_TITRE: BOOL, V2_PROBABLE: BOOL, V2_PROBABLE_COSINUS_MIN: '0.5', V2_PROBABLE_VECTEUR_EXIGE: BOOL,
+        V2_DESCRIPTION_CONSERVEE: BOOL, V2_DESCRIPTION_AU_MODELE: BOOL, V2_MARCHES: 'vinted.fr', V2_VERSION_MIN_EXTENSION: '2.5.0', V2_REGLE_G: BOOL, V2_SECONDE_LECTURE: BOOL, V2_LECTURE_TAMPON: BOOL, V2_SUR_PAR_IMAGE: BOOL, V2_VIVIER_IMAGE: BOOL, V2_SPI_COMPARATEUR: BOOL, V2_GARDE_MARQUEURS: BOOL, V2_JUMBO_TITRE: BOOL, V2_PROBABLE: BOOL, V2_PROBABLE_COSINUS_MIN: '0.5', V2_PROBABLE_VECTEUR_EXIGE: BOOL, V2_LEVIERS_ABDE: BOOL, V2_LEVIERS_ECART: '0.2',
         V2_TE_VOISINS_UNE_FOIS: BOOL, V2_TE_EMPREINTE_TOT: BOOL, V2_TE_FIN_PARALLELE: BOOL, V2_TE_ORB_UTILE: BOOL, V2_MESURES_CLIENT: BOOL, V2_ORB_SERVEUR: BOOL, V2_G_GROUPE: BOOL, V2_G_GROUPE_ECART: '50',
         V2_CONFIRMATION_NOMBREUX: BOOL, V2_TAUX_BCE: BOOL, V2_RESOLUTION_CARDMARKET: BOOL, V2_PHOTOS_MULTIPLES: BOOL, V2_PHOTOS_MULTIPLES_TOUS: BOOL, V2_ABONNEMENTS: BOOL,
         // abonnements/config.js (lu par config.js) : des valeurs fictives, jamais une forme de clé
@@ -120,9 +120,10 @@ if (C) {
     const resultats = Object.entries(ESSAIS).map(([nom, val]) => { try { return [nom, C.capacitesServies(lireConfig({ ...ENV, [nom]: val }), undefined, () => COMPLETE, () => null).join(',')]; } catch (x) { return [nom, `invalide : ${x.message}`]; } });
     const invalides = resultats.filter(([, s]) => s.startsWith('invalide'));
     // PROBABLE : V2_PROBABLE=1 est la SEULE variable qui change la liste (elle ajoute `probable`, et rien d'autre) ; tout autre essai laisse la liste inchangée
-    H.v(`aucune des ${resultats.length - 1} autres variables V2_* ne change la liste servie (archive complète en mémoire, AUCUN index d'empreintes chargé : un drapeau seul n'annonce jamais \`empreinte\`)`, resultats.filter(([n, s]) => n !== 'V2_PROBABLE' && !s.startsWith('invalide') && s !== LISTE.filter(SANS_EMPREINTE).join(',')).map(([n]) => n), []);
+    H.v(`aucune des ${resultats.length - 1} autres variables V2_* ne change la liste servie (archive complète en mémoire, AUCUN index d'empreintes chargé : un drapeau seul n'annonce jamais \`empreinte\`)`, resultats.filter(([n, s]) => n !== 'V2_PROBABLE' && n !== 'V2_LEVIERS_ABDE' && !s.startsWith('invalide') && s !== LISTE.filter(SANS_EMPREINTE).join(',')).map(([n]) => n), []);
     const servi = (extra) => C.capacitesServies(lireConfig({ ...ENV, ...extra }), undefined, () => COMPLETE, () => null);
     H.v('PROBABLE : V2_PROBABLE=1 ajoute `probable` en DERNIER, rien d\'autre ne bouge', servi({ V2_PROBABLE: '1' }), [...LISTE.filter(SANS_EMPREINTE), 'probable']);
+    H.v('LEVIERS-ABDE : V2_LEVIERS_ABDE=1 ajoute leviers-abde en DERNIER (V2_LEVIERS_ECART ne change rien), éteint ou invalide : pas de jeton', [servi({ V2_LEVIERS_ABDE: '1' }), servi({ V2_LEVIERS_ABDE: '1', V2_LEVIERS_ECART: '0.3' }), servi({ V2_LEVIERS_ABDE: '0' }), servi({})].map(l => l.includes('leviers-abde') ? l[l.length - 1] : null), ['leviers-abde', 'leviers-abde', null, null]);
     H.v('   éteint (défaut), « 0 » ou valeur invalide (« 2 », « oui ») : pas de jeton', [{}, { V2_PROBABLE: '0' }, { V2_PROBABLE: '2' }, { V2_PROBABLE: 'oui' }].map(e => { try { return servi(e).includes('probable'); } catch { return false; } }), [false, false, false, false]);       // « 2 » et « oui » : la configuration est invalide (elle lève), jamais de jeton
     H.v('   la condition exige une version minimale lisible (configuration valide)', [C.CONDITIONS.probable({ probable: true, versionMinProbable: '2.0.1' }), C.CONDITIONS.probable({ probable: true, versionMinProbable: 'x' }), C.CONDITIONS.probable({ probable: true }), C.CONDITIONS.probable({ probable: 1, versionMinProbable: '2.0.1' })], [true, false, false, false]);
     console.log(`   (${resultats.length - invalides.length} essais valides ; ${invalides.length} valeurs d'essai refusées par la configuration — le ping y est vide, donc aucun jeton : ${invalides.map(([n]) => n).join(', ') || 'aucune'})`);
@@ -138,7 +139,7 @@ if (C) {
     const CHARGE = Object.freeze({ index: Object.freeze({}), meta: Object.freeze({ n: 1 }) });
     const sert = (cfg, lecteur) => { try { return C.capacitesServies(cfg, undefined, () => COMPLETE, lecteur).includes('empreinte'); } catch (e) { return `exception ${e.message}`; } };
     const silence = f => { const w = console.warn; console.warn = () => { }; try { return f(); } finally { console.warn = w; } };
-    H.vrai('empreinte : la condition du code existe, et le jeton est l\'AVANT-DERNIER de la liste fermée (le dernier, `mesures-client`, en dépend)', typeof C.CONDITIONS.empreinte === 'function' && LISTE[LISTE.length - 3] === 'empreinte');
+    H.vrai('empreinte : la condition du code existe, et le jeton est le QUATRIÈME avant la fin de la liste fermée (`mesures-client` en dépend)', typeof C.CONDITIONS.empreinte === 'function' && LISTE[LISTE.length - 4] === 'empreinte');
     H.v('empreinte : drapeau allumé + modèle valide + index CHARGÉ : le jeton est annoncé, en fin de liste, et seul', [sert(cfgDe({}), () => CHARGE), C.capacitesServies(cfgDe({}), undefined, () => COMPLETE, () => CHARGE).slice(-1)[0]], [true, 'empreinte']);
     H.v('   les cinq autres jetons ne changent pas (index chargé ou non)', C.capacitesServies(cfgDe({}), undefined, () => COMPLETE, () => CHARGE).slice(0, -1), C.capacitesServies(cfgDe({}), undefined, () => COMPLETE, () => null));
     // une condition après l'autre : chacune seule fait tomber le jeton

@@ -246,6 +246,14 @@ function lireConfig(env = process.env) {
         probableCosinusMin: decimal01('V2_PROBABLE_COSINUS_MIN', env.V2_PROBABLE_COSINUS_MIN, 0.38),     // GARDE RETENUE (tour 2) : choisie sur le RÉGLAGE seul, 0 probable faux sur les trois bancs
         // TOUR 2 : « vecteur exigé » — un probable demande un cosinus MESURÉ pour le 1er candidat (vecteur de l'extension, photo redressée, visuel propre) ; sinon la question reste réservée.
         probableVecteurExige: booleen('V2_PROBABLE_VECTEUR_EXIGE', env.V2_PROBABLE_VECTEUR_EXIGE, true),
+        // LEVIERS-ABDE (ordre n°17, 01/11/2026) : quatre leviers de la reconnaissance, derrière UN drapeau RÉSERVÉ À L'ESSAI, ÉTEINT par défaut (0), « 0 » ou « 1 » seulement : la réponse est celle d'avant, octet pour octet.
+        //   a : un pool de 10 candidats (choix d'avant + vivier de la lecture non contredit + produits du top 10 de l'empreinte), trié par le score c3 ;
+        //   b : l'admission du probable par l'écart c3 >= leviersEcart ET aucun champ lu ne contredit (remplace θ 0,38 / vecteur exigé / « tous les autres contredits ») ;
+        //   d : les alias français (nomFr normalisé = le nom lu) entrent au pool ;
+        //   e : « jumeaux-trop-nombreux » devient une question aux 3 premiers, au lieu d'un introuvable (identifier/adaptateur.js).
+        // N'agit que sur une QUESTION, avec V2_PROBABLE allumé et une extension >= 2.0.1 portant un vecteur ; ne change jamais un sûr (identifier/leviers-abde.js). leviersEcart (V2_LEVIERS_ECART) : l'écart minimal du score c3, 0,1 par défaut.
+        leviersAbde: booleen('V2_LEVIERS_ABDE', env.V2_LEVIERS_ABDE, false),
+        leviersEcart: decimal01('V2_LEVIERS_ECART', env.V2_LEVIERS_ECART, 0.1),
         // TEMPS-ETAPES (identifier/temps-etapes.js) : quatre coupes de TEMPS qui ne changent aucune décision, chacune ÉTEINTE par défaut (0) : la route est alors celle d'avant, octet pour octet.
         // voisinsUneFois : la recherche des voisins une fois par requête ; empreinteTot : la recherche et la garde des zones partent pendant l'attente du modèle ; finParallele : les lectures/écritures annexes de la fin de requête partent ensemble.
         // orbUtile : la règle G (recherche des voisins + garde des zones, donc l'ORB) n'est pas consultée quand la chaîne a rendu un INTROUVABLE — elle ne peut rien y changer (arbitrage-g.js, promotion-g.js) ; la réponse dit alors `empreinte: { utilisee: false, code: 'muette' }`.

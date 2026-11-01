@@ -89,6 +89,27 @@ function creerCatalogue(opts = {}) {
         return famPret;
     }
 
+    // LEVIERS-ABDE (d) : l'index des ALIAS français du catalogue entier (numeros_cartes.nomFr normalisé -> idProduct[]), construit UNE fois puis gardé 6 h, lu par curseur ligne à ligne (jamais un tableau de 73 756 documents).
+    // Même discipline que les deux index d'au-dessus : compte AVANT, moins de documents LUS que COMPTÉS = lecture tronquée, refusée ; plancher de taille ; un échec LÈVE et n'est pas gardé. Jamais lu tant que
+    // V2_LEVIERS_ABDE est éteint (seule la route sous drapeau l'appelle).
+    let aliasEnCours = null, aliasLe = 0;
+    async function indexAliasFr() {
+        if (aliasEnCours && Date.now() - aliasLe < INDEX_DUREE_MS) return aliasEnCours;
+        const p = (async () => {
+            const LV = require('./leviers-abde');
+            const col = colLue('numeros_cartes');
+            const attendu = await col.countDocuments({});
+            const index = new Map(); let lus = 0;
+            for await (const d of col.find({}, { projection: { idProduct: 1, nomFr: 1 } })) { lus++; LV.ajouterAlias(index, d); }
+            if (lus < attendu) throw new Error(`index des alias tronqué (${lus} lus sur ${attendu})`);
+            if (lus < INDEX_CODE_NUMERO_MIN) throw new Error(`index des alias sous le plancher (${INDEX_CODE_NUMERO_MIN})`);
+            return index;
+        })();
+        aliasEnCours = p; aliasLe = Date.now();
+        p.catch(() => { if (aliasEnCours === p) { aliasEnCours = null; aliasLe = 0; } });
+        return p;
+    }
+
     /**
      * PERF-SCAN P2 — construit les deux index MAINTENANT (au démarrage, avant le trafic) au lieu de les laisser naître pendant les premiers scans : leur construction (≈ 150 000 lignes lues, du CALCUL étiré ~7 fois sur
      * 0,15 vCPU) sortait des premiers scans, qui portaient le p95. Attend la connexion à la base (au plus `delaiMs`), puis construit le code × numéro et, si une règle de désignation est allumée, les familles ; une
@@ -180,6 +201,6 @@ function creerCatalogue(opts = {}) {
                 return Object.freeze(d ? { ...i, version: versionDe(d.variante), prixMelangeTampon: d.prixMelangeTampon === true || i.prixMelangeTampon === true, nonLu: false } : { ...i, version: null, prixMelangeTampon: i.prixMelangeTampon === true, nonLu: true });
             });
     }
-    return { lire, plusRecentDansMetacarte, indexCodeNumero, indexSansAttente, indexFamilles, indexFamillesSansAttente, prechauffer, prechaufferSiDemande };
+    return { lire, plusRecentDansMetacarte, indexCodeNumero, indexSansAttente, indexFamilles, indexFamillesSansAttente, indexAliasFr, prechauffer, prechaufferSiDemande };
 }
 module.exports = { creerCatalogue, COLLECTIONS_LUES, colLue, IMPRESSIONS_MAX_TIME_MS, IMPRESSIONS_DELAI_MS };
