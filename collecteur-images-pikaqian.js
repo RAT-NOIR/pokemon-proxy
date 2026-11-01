@@ -165,8 +165,26 @@ async function joindreAdditif(db, M, slug, nom = slug) {
  * @param {object} M      les modèles de la base `cartes`
  * @param {object} o      `verrou` : le verrou global, LIÉ au client. Les autres options n'existent que pour le banc : `client`, `deposer` (R2), `fabriquerVerrouSet`,
  *                        `stopOctets`, `ligneDe`, `vignetter`.
+ *                        `pageApprise` ({ fichier, tuiles, origines (Map), titre }) : ➕ 2026-10-31, l'hôte d'IMAGES rouvert par le testeur — la page du set n'est JAMAIS
+ *                        redemandée (l'hôte des pages porte un défi depuis le 12/10) : elle se lit dans la fiche apprise (plan-pikaqian-appris.js, lireApprises), jugée par
+ *                        la même règle de page ; seules les images manquantes partent, vers l'hôte d'images.
  */
-async function collecterSet(unite, M, { verrou, client: clientInjecte = null, deposer = (b, c, d, t) => r2.deposerBinaire(b, c, d, t), fabriquerVerrouSet = fabriquerVerrou, stopOctets = STOP_OCTETS, ligneDe = lignePikaqian, vignetter = vignetterApresJointure } = {}) {
+/** La page APPRISE d'un set : la fiche de SON code parmi celles que `lireApprises` (plan-pikaqian-appris.js) a gardées et jugées, ou null (le set ne part pas). */
+function pageAppriseDe(fiches, L) {
+    const f = (fiches ?? []).find(x => x?.fiche?.code === L?.codePk);
+    return f ? { fichier: f.fichier, tuiles: f.fiche.tuiles, origines: new Map(f.fiche.origines ?? []), titre: f.fiche.titre } : null;
+}
+/**
+ * L'alerte active ne porte-t-elle QUE sur l'hôte des PAGES ? Elle passe SEULEMENT si chaque blocage porte une adresse lisible de l'hôte des pages, si le motif en porte au moins une
+ * et que toutes y sont. Un blocage sans adresse (Crawl-delay, erreur répétée…) ou un motif muet : on ne sait pas sur quel hôte, elle bloque (relecture 31/10).
+ */
+function alerteDesSeulesPages(alerte) {
+    const desPages = u => { try { return new URL(u).hostname === P.HOTE_PAGES; } catch { return false; } };
+    const blocages = Array.isArray(alerte?.blocages) ? alerte.blocages : [];
+    const duMotif = String(alerte?.motif ?? '').match(/https:\/\/\S+/g) ?? [];
+    return duMotif.length > 0 && duMotif.every(desPages) && blocages.every(b => typeof b?.url === 'string' && desPages(b.url));
+}
+async function collecterSet(unite, M, { verrou, client: clientInjecte = null, deposer = (b, c, d, t) => r2.deposerBinaire(b, c, d, t), fabriquerVerrouSet = fabriquerVerrou, stopOctets = STOP_OCTETS, ligneDe = lignePikaqian, vignetter = vignetterApresJointure, pageApprise = null } = {}) {
     const refus = (etat, erreur) => { console.error(`❌ ${unite?._id} : ${erreur}.`); return { code: unite?._id, etat, erreur, sansJointure: true }; };
     // ➖ 2026-10-13 : SOURCE PASSIVE (décision du testeur). Sans client injecté — c'est la voie du worker et celle de la ligne de commande — rien ne part :
     // ni lecture de base, ni requête. Seul un banc injecte un client (faux transport) ; le client réel est de toute façon fermé (pikaqian.js, transportFetch).
@@ -179,7 +197,8 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
     const slug = L.slug;
     // la source a-t-elle déjà bloqué (ou été retirée) ? on ne lui redemande rien (« si une source bloque, on s'arrête »)
     const bloquee = await E.findOne({ _id: P.ID_ALERTE, active: true });
-    if (bloquee) return refus('refuse-source-bloquee', `${P.SOURCE} a bloqué le ${new Date(bloquee.depuis).toISOString()} (${bloquee.motif}) — aucune requête`);
+    // ➕ 2026-10-31 : avec une page APPRISE (aucune requête vers les pages), une alerte qui ne porte QUE sur l'hôte des pages ne ferme pas l'hôte d'images ; toute autre alerte ferme
+    if (bloquee && !(pageApprise && alerteDesSeulesPages(bloquee))) return refus('refuse-source-bloquee', `${P.SOURCE} a bloqué le ${new Date(bloquee.depuis).toISOString()} (${bloquee.motif}) — aucune requête`);
     const set = await M.Set.findById(slug).select('tirage region').lean();
     const gT = gardeTirage(set, L, slug);
     if (!gT.ok) return refus(gT.etat, gT.motif);
@@ -206,7 +225,8 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
     try {
         // ---- 1. LA PAGE du set ------------------------------------------------------------------------------------------
         let html;
-        try { html = await client.page(P.urlSet(L.codePk)); }
+        if (pageApprise) html = null;
+        else try { html = await client.page(P.urlSet(L.codePk)); }
         catch (e) {
             if (e.bloque || (e.arret && !e.plafond)) { bloque = e; return await conclureBloque(E, unite, bloque, client); }   // défi, ou erreur répétée entre unités : l'alerte
             // REPONSE-HOTE : une pause de l'hôte (persistante) arrête l'unité AVANT toute requête de plus — pas un arrêt définitif, aucune alerte
@@ -215,11 +235,11 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
             console.error(`🔴 ${unite._id} : page illisible — ${e.message}`);
             return { code: unite._id, etat: echecTransitoire(e) ? 'incomplet-transitoire' : 'erreur', erreur: e.message, sansJointure: true };
         }
-        if (html == null) return refus('refuse-liste', `la page /sets/${L.codePk} n'existe plus chez pikaqian (404) : la table du 2026-10-10 la listait`);
-        const tuiles = P.lireTuiles(html);
-        const V = P.verdictDePage({ tuiles, code: L.codePk, titre: P.titreLu(html) });
+        if (!pageApprise && html == null) return refus('refuse-liste', `la page /sets/${L.codePk} n'existe plus chez pikaqian (404) : la table du 2026-10-10 la listait`);
+        const tuiles = pageApprise ? pageApprise.tuiles : P.lireTuiles(html);
+        const V = P.verdictDePage({ tuiles, code: L.codePk, titre: pageApprise ? pageApprise.titre : P.titreLu(html) });
         if (!V.ok) { await E.updateOne({ _id: idEtat }, { $set: { phase: 'refuse-liste', motif: V.motif } }, { upsert: true }); return refus('refuse-liste', V.motif); }
-        const origines = P.lireOrigines(html);
+        const origines = pageApprise ? pageApprise.origines : P.lireOrigines(html);
         if (arretDemande || !verrou.tenu) return { code: unite._id, etat: 'interrompu', sansJointure: true };
         const Pl = await planifier(db, slug, L, tuiles);
         const motifs = {}; for (const r of Pl.restes) motifs[r.motif] = (motifs[r.motif] || 0) + 1;
@@ -274,7 +294,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
         const vignettesOk = !W.vg.erreur && !W.vg.echecs && !W.vg.interrompu;
         const complet = {
             source: P.SOURCE, langue: P.LANGUE, code: L.code, codePk: L.codePk, mention: P.MENTION, lot: P.LOT, provenance: P.PROVENANCE_PAR_DEFAUT,
-            page: { tuiles: V.tuiles, auCodeDuSet: V.bonnes }, vignettes: W.vg,
+            page: { tuiles: V.tuiles, auCodeDuSet: V.bonnes }, vignettes: W.vg, ...(pageApprise ? { pageApprise: pageApprise.fichier } : {}),
             produits: Pl.produits, trous: Pl.trous, prouves: Pl.plan.length, restes: motifs, suffixesInconnus: Pl.suffixesInconnus.length, exemplesSuffixesInconnus: Pl.suffixesInconnus.slice(0, 5).map(s => s.nom),
             telecharges, sautes, absents, echecs, echecsTransitoires, tropPetits, retires, joints, dejaParAutre, cartesAbsentes, sansUrlOriginal,
             garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: avant.autres === apres.autres || garde, basseDefRemplacees, siennesApres: apres.siennes, ok: garde },
@@ -317,7 +337,7 @@ async function conclureBloque(E, unite, err, client, { seulementAlerte = false }
  * LE LANCEMENT de l'écriture locale (le set test), rejoué par le banc. 🔴 `verifierBucket` d'abord : le bucket vit en juridiction UE et le point d'accès
  * générique répond AccessDenied (r2.js) ; on ne télécharge rien — pas une requête vers pikaqian, pas un dépôt — si le bucket ne répond pas.
  */
-async function lancerEcriture(slugs, M, { verrou, client, R2 = r2, bucket = process.env.R2_BUCKET_IMAGES, vignetter, fabriquerVerrouSet } = {}) {
+async function lancerEcriture(slugs, M, { verrou, client, R2 = r2, bucket = process.env.R2_BUCKET_IMAGES, vignetter, fabriquerVerrouSet, apprises = null } = {}) {
     if (!bucket) throw new Error('R2_BUCKET_IMAGES : nom de bucket absent — aucune requête, aucune écriture');
     await R2.verifierBucket(bucket);
     const resultats = [];
@@ -326,7 +346,10 @@ async function lancerEcriture(slugs, M, { verrou, client, R2 = r2, bucket = proc
         if (arretDemande) break;
         const L = lignePikaqian(slug);
         if (!L) { console.error(`❌ ${slug} : absent de collecte-cartes/pikaqian-sets.js`); code = 1; continue; }
-        const r = await collecterSet(require('./collecte-cartes/pikaqian-sets').uniteDeLaLigne(L), M, { verrou, client, vignetter, fabriquerVerrouSet, deposer: (b, c, d, t) => R2.deposerBinaire(b, c, d, t) });
+        // --depuis-appris : la page vient de la fiche apprise ; sans fiche pour ce code, le set ne part pas (aucune requête de page, jamais)
+        const pageApprise = apprises ? pageAppriseDe(apprises, L) : null;
+        if (apprises && !pageApprise) { console.error(`❌ ${slug} : aucune page apprise pour ${L.codePk} — rien ne part`); code = 1; continue; }
+        const r = await collecterSet(require('./collecte-cartes/pikaqian-sets').uniteDeLaLigne(L), M, { verrou, client, vignetter, fabriquerVerrouSet, deposer: (b, c, d, t) => R2.deposerBinaire(b, c, d, t), pageApprise });
         resultats.push(r);
         console.log(`SET ${slug} → ${r.etat}`);
         if (r.etat !== 'verifie') code = 1;
@@ -335,21 +358,28 @@ async function lancerEcriture(slugs, M, { verrou, client, R2 = r2, bucket = proc
     return { code, resultats };
 }
 
-module.exports = { collecterSet, releve, gardeTirage, gardeProduits, planifier, lancerEcriture, provenanceDe, poserOriginal, joindreAdditif, compterEntrees, sha, cleNum, STOP_OCTETS, TABLE_PIKAQIAN, SOURCE: P.SOURCE, VERROU_GLOBAL: P.VERROU_GLOBAL };
+// La ligne de commande s'écrit par ce qu'elle AUTORISE (§54) : un argument inconnu refuse avant toute connexion ; --plan et --ecrire exigent --sets=.
+// Relecture 31/10 : --ecrire exige --depuis-appris — les pages sont fermées (défi), un --ecrire sans fiche apprise ne ferait que salir l'alerte.
+const AUTORISES = [/^--plan$/, /^--verrou$/, /^--ecrire$/, /^--depuis-appris$/, /^--sets=[A-Za-z0-9][A-Za-z0-9-]*(,[A-Za-z0-9][A-Za-z0-9-]*)*$/, /^--html=.+\.html$/];
+/** Le refus des arguments (une phrase), ou null. Pure : jugée avant toute connexion. */
+function refusArguments(args) {
+    const inconnus = args.filter(a => !AUTORISES.some(r => r.test(a)));
+    const modes = ['--plan', '--verrou', '--ecrire'].filter(m => args.includes(m));
+    const voulus = args.find(a => a.startsWith('--sets='))?.slice(7).split(',');
+    const ok = !inconnus.length && modes.length === 1 && (modes[0] === '--verrou' || voulus) && !(modes[0] === '--plan' && voulus.length > 3)
+        && !(args.some(a => a.startsWith('--html=')) && modes[0] !== '--plan') && (args.includes('--depuis-appris') === (modes[0] === '--ecrire'));
+    return ok ? null : `${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}un seul mode parmi --plan, --verrou, --ecrire ; --plan et --ecrire exigent --sets=<slug>,… (jamais « tous » ; --plan : 3 sets au plus) ; --ecrire exige --depuis-appris (et --depuis-appris n'existe qu'avec --ecrire) ; --html=<fichier>.html (avec --plan) garde la page lue. Ex. : --ecrire --depuis-appris --sets=Dynamax-Clash-Flame`;
+}
+
+module.exports = { collecterSet, pageAppriseDe, alerteDesSeulesPages, refusArguments, releve, gardeTirage, gardeProduits, planifier, lancerEcriture, provenanceDe, poserOriginal, joindreAdditif, compterEntrees, sha, cleNum, STOP_OCTETS, TABLE_PIKAQIAN, SOURCE: P.SOURCE, VERROU_GLOBAL: P.VERROU_GLOBAL };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE : le worker importe `collecterSet`.
 if (require.main !== module) return;
 
-// La ligne de commande s'écrit par ce qu'elle AUTORISE (§54) : un argument inconnu refuse avant toute connexion ; --plan et --ecrire exigent --sets=.
-const AUTORISES = [/^--plan$/, /^--verrou$/, /^--ecrire$/, /^--sets=[A-Za-z0-9][A-Za-z0-9-]*(,[A-Za-z0-9][A-Za-z0-9-]*)*$/, /^--html=.+\.html$/];
 const args = process.argv.slice(2);
-const inconnus = args.filter(a => !AUTORISES.some(r => r.test(a)));
-const modes = ['--plan', '--verrou', '--ecrire'].filter(m => args.includes(m));
 const voulus = args.find(a => a.startsWith('--sets='))?.slice(7).split(',');
-if (inconnus.length || modes.length !== 1 || (modes[0] !== '--verrou' && !voulus) || (modes[0] === '--plan' && voulus.length > 3) || (args.some(a => a.startsWith('--html=')) && modes[0] !== '--plan')) {
-    console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}un seul mode parmi --plan, --verrou, --ecrire ; --plan et --ecrire exigent --sets=<slug>,… (jamais « tous » ; --plan : 3 sets au plus) ; --html=<fichier>.html (avec --plan) garde la page lue. Ex. : --plan --sets=Dynamax-Clash-Flame`);
-    process.exit(2);
-}
+const refus = refusArguments(args);
+if (refus) { console.error(`❌ ${refus}`); process.exit(2); }
 (async () => {
     const { ouvrirConnexions } = require('./collecte-cartes/garde');
     const { modeles } = require('./collecte-cartes/schemas');
@@ -399,7 +429,15 @@ if (inconnus.length || modes.length !== 1 || (modes[0] !== '--verrou' && !voulus
     if (tenuPar) { console.error(`❌ ${P.VERROU_GLOBAL} tenu par pid ${tenuPar.pid} sur ${tenuPar.hote}`); await fermer(); process.exit(1); }
     const client = P.fabriquerClientPikaqian({ verrou });
     let code = 0;
-    try { code = (await lancerEcriture(voulus, M, { verrou, client })).code; }
+    // --depuis-appris (2026-10-31) : les pages viennent des fiches apprises (le dossier du récepteur), jugées par lireApprises — aucune page demandée
+    let apprises = null;
+    if (args.includes('--depuis-appris')) {
+        const { lireApprises } = require('./plan-pikaqian-appris');
+        const A = lireApprises(require('./recepteur-pikaqian').DOSSIER_DEFAUT);
+        apprises = A.fiches;
+        console.log(`pages apprises : ${A.fichiers} fichier(s), ${A.fiches.length} set(s) retenu(s), ${A.illisibles.length} non retenu(s)`);
+    }
+    try { code = (await lancerEcriture(voulus, M, { verrou, client, apprises })).code; }
     catch (e) { console.error('❌', e.message); code = 1; }
     finally { await verrou.rendre(); await fermer(); }
     console.log(`REQUÊTES : ${JSON.stringify(client.requetesParHote())}`);

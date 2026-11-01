@@ -17,7 +17,7 @@
 // numéro est un AUTRE produit ; deux tuiles sans foil au même numéro ne désignent rien ; un nom qui diverge est un trou. Un doute est un trou.
 const T = require('./tpc');
 const { cleNumero } = require('./jointure');
-const { estPassive, motifPassif } = require('./source-passive');
+const { estPassive, motifPassif, imagesRouvertes } = require('./source-passive');
 const { TABLE_PIKAQIAN, declarationsDeCode, CODE_PK, codeDesTuilesPromo } = require('./pikaqian-sets');   // les fonctions UNIQUES (déclarations d'une ligne, code des tuiles d'une page promo) et le motif de code : jamais recopiés
 
 const SOURCE = 'pikaqian';
@@ -379,7 +379,9 @@ const CHEMINS = {
 const transportFetch = {
     async get(url, { binaire = false } = {}) {
         // ➖ 2026-10-13 : le SEUL appel réseau réel vers PikaQian est fermé — la source est passive (source-passive.js). Les bancs injectent leur propre transport.
-        if (estPassive(SOURCE)) throw Object.assign(new Error(`${SOURCE} : ${motifPassif(SOURCE)} — aucune requête partie (${url})`), { passive: true, arret: true });
+        // ➕ 2026-10-31 : SEUL l'hôte d'IMAGES est rouvert (source-passive.js, IMAGES_ROUVERTES) ; une page reste fermée, sans un fetch
+        let hoteVise = null; try { hoteVise = new URL(url).hostname; } catch { /* adresse illisible : passive */ }
+        if (estPassive(SOURCE) && !imagesRouvertes(SOURCE, hoteVise)) throw Object.assign(new Error(`${SOURCE} : ${motifPassif(SOURCE)} — aucune requête partie (${url})`), { passive: true, arret: true });
         let r;
         // `manual` : une redirection n'est JAMAIS suivie par fetch — le client la juge (même hôte, robots.txt, trois sauts au plus)
         try { r = await fetch(url, { headers: { 'User-Agent': UA, Accept: binaire ? 'image/webp,image/*;q=0.8' : 'text/html,*/*;q=0.5' }, redirect: 'manual', signal: AbortSignal.timeout(45000) }); }
@@ -413,6 +415,15 @@ const RH = require('./reponse-hote');
 /** Une réponse est-elle un BLOCAGE (401, 403, 410, 429, `cf-mitigated`, marqueur technique de défi) ? `r` = { status, cfMitigated, texte }. Définition unique : celle du module commun, pour le client ET le réessai espacé. */
 const defi = r => RH.detecterDefi(RH.entreeDepuisClient(r, { borne: 5000 })) !== null;
 // robots.txt d'un hôte de fichiers (S3) : « AccessDenied » d'un S3 sans cette clé veut dire « pas de robots.txt » — pas un défi (aucune marque Cloudflare)
+// ➕ 2026-10-31 (décision du testeur) : RFC 9309 § 2.3.1.3 — le robots.txt de l'HÔTE D'IMAGES en 4xx (hors 429) est « indisponible » : aucune règle. Pas s'il porte une marque de défi
+// (cf-mitigated, serveur ou via Cloudflare, corps HTML) : celui-là reste un blocage. L'hôte des PAGES garde sa règle.
+// Relecture 31/10 : la garde s'écrit par ce qu'elle AUTORISE — les seuls statuts admis sont ceux d'une absence (400, 403, 405, 406 ; 404 et 410 sont lus plus haut) ; 401, 407, 451 et 429
+// restent des refus. Les marqueurs de défi de la règle commune (reponse-hote.js, MARQUEURS) sont appliqués au corps, même en texte brut. ⚠️ RISQUE ACCEPTÉ : un 403 au corps vide, sans
+// en-tête de défi, est indistinguable d'un défi muet ; il vaut « indisponible » (le cas mesuré du 31/10) — l'IMAGE, elle, reste jugée par la règle commune (premier 403 : arrêt définitif).
+const ROBOTS_IMAGES_ABSENCE = Object.freeze([400, 403, 405, 406]);
+const robotsImagesIndisponible = (r, hote) => hote === HOTE_IMAGES && ROBOTS_IMAGES_ABSENCE.includes(r.status) && !r.cfMitigated
+    && !/cloudflare/i.test(`${r.server ?? ''} ${r.via ?? ''}`) && !/<\s*(!doctype|html|head|body)\b/i.test(String(r.texte ?? '').slice(0, 5000))
+    && !defi({ ...r, status: 200 });
 const robotsAbsentS3 = r => r.status === 403 && !r.cfMitigated && !/cloudflare/i.test(`${r.server ?? ''} ${r.via ?? ''}`) && /AmazonS3|CloudFront/i.test(`${r.server ?? ''} ${r.via ?? ''}`) && /<Code>AccessDenied<\/Code>/.test(String(r.texte ?? '').slice(0, 2000));
 
 /**
@@ -449,8 +460,14 @@ function fabriquerClientPikaqian({ transport = transportFetch, cadenceMs = CADEN
         }
         throw erreur;
     }
+    // 🔑 RÈGLE DU TESTEUR (31/10) : au PREMIER 403 ou 429 sur une image ou une page, fermeture DÉFINITIVE — l'arrêt s'ÉCRIT (ARRET-HOTE, reponse-hote.js), relu par garderHote
+    // avant toute requête de tout client suivant ; une écriture qui échoue n'ouvre rien (le client s'arrête quand même, et le dit)
     const bloquer = (r, url) => {
-        bloque = arret = Object.assign(new Error(`${SOURCE} BLOQUÉ (HTTP ${r.status}${r.cfMitigated ? `, cf-mitigated ${r.cfMitigated}` : ''}) sur ${url} — on s'arrête, plus aucune requête`), { bloque: true, arret: true, status: r.status });
+        const motif = `${SOURCE} BLOQUÉ (HTTP ${r.status}${r.cfMitigated ? `, cf-mitigated ${r.cfMitigated}` : ''}) sur ${url}`;
+        let fichier = null, ecriture = null;
+        try { fichier = RH.arretHote(new URL(url).hostname, motif, { dossier: dossierPauses, url }); } catch (e) { ecriture = e.message; }
+        bloque = arret = Object.assign(new Error(`${motif} — on s'arrête, plus aucune requête${fichier ? ` ; arrêt définitif écrit (${fichier})` : ` ; ÉCRITURE DE L'ARRÊT IMPOSSIBLE (${ecriture})`}`),
+            { bloque: true, arret: true, arretDefinitif: true, status: r.status, fichier, ...(ecriture ? { ecritureEchouee: true } : {}) });
         throw arret;
     };
     /** Une requête de la FILE : cadence, comptes, transport. Une coupure réseau compte comme un échec. */
@@ -476,7 +493,7 @@ function fabriquerClientPikaqian({ transport = transportFetch, cadenceMs = CADEN
             if (u.hostname !== hote || u.pathname !== '/robots.txt') break;      // un robots.txt redirigé ailleurs : on ne peut pas conclure
             url = u.href;
         }
-        if (r.status === 404 || r.status === 410 || robotsAbsentS3(r)) { robots.set(hote, null); return; }   // (robots.txt réussi ne remet PAS le compteur d'échecs à zéro : seul un contenu le fait)
+        if (r.status === 404 || r.status === 410 || robotsAbsentS3(r) || robotsImagesIndisponible(r, hote)) { robots.set(hote, null); return; }   // (robots.txt réussi ne remet PAS le compteur d'échecs à zéro : seul un contenu le fait)
         if (defi(r)) bloquer(r, url);
         if (r.status !== 200) { try { echec(Object.assign(new Error(`${r.status} ${url} : robots.txt illisible — on ne peut pas conclure, aucune page`), { robots: true, status: r.status })); } catch (e) { e.robots = true; throw e; } }
         const texte = r.texte ?? '';
@@ -556,7 +573,7 @@ function planRetraitPikaqian(cartes) {
 module.exports = {
     SOURCE, HOTE_PAGES, HOTE_IMAGES, LOT, MENTION, CADENCE_MS, UA, VERROU_GLOBAL, VERROU_GLOBAL_MS, ID_ALERTE, LANGUE, PROVENANCE_PAR_DEFAUT, ECHECS_DE_SUITE_MAX, ID_SUITE, lireBorne, PAGE_MAX_OCTETS, IMAGE_MAX_OCTETS, CODE_PK, compterAncresCartes,
     lireTitre, titreLu, diagnostiquerPage, lignesDeDiagnostic, imageAcceptee, decrireAncresSansTuile, lireAncres, ancresSansNumero, compterSansNumero, jugerCompletude, totalAnnonce, totalDeFichier,
-    lireTuiles, lireOrigines, estFoil, verdictDePage, planifierPikaqian, urlSet, urlImage, fabriquerClientPikaqian, idImagePikaqian, planRetraitPikaqian,
+    lireTuiles, lireOrigines, estFoil, verdictDePage, planifierPikaqian, urlSet, urlImage, fabriquerClientPikaqian, idImagePikaqian, planRetraitPikaqian, transportFetch,
     // le jugement « défi / blocage » d'une réponse : UNE définition, relue par le réessai espacé (collecte-cartes/reessai-pikaqian.js), jamais recopiée
     defi
 };

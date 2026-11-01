@@ -367,6 +367,308 @@
     "planche": "couverture/S8/AUDIT-31/LOGOS2/PLANCHE-02.png",
     "note": "marqué « suspect » par la mesure (corr < 0.95 ou proportion > 8 %) : regardé, même dessin"
    }
+  },
+  {
+   "set": "Beat-of-the-Frontier",
+   "code": "Pt3",
+   "tirage": "jp",
+   "fichier": "Logo JP/PT3.png",
+   "depot": {
+    "w": 646,
+    "h": 174,
+    "sha256": "4036e56427e86bc05006ca676ee277cd832918be326e21358813d22cb37db2d1"
+   },
+   "concordance": {
+    "hote": "www.serebii.net",
+    "url": "https://www.serebii.net/card/logo/pulseofthefrontier.png",
+    "page": "https://www.serebii.net/card/pulseofthefrontier",
+    "appariement": "nom/code (Pulse of the Frontier)",
+    "w": 149,
+    "h": 40,
+    "sha256": "db019427b35c01f9dff650a6ef85165950a4691e84e556b51904efffa62b991a",
+    "mesure": "LOGOS3 ORB+RANSAC : 88/98 inliers, couverture 0.78×0.36, échelle 0.98, au moins ×2 les inliers du deuxième meilleur dépôt sur 276 (seuils : ≥60, ≥0,75, ×2) ; calibrée 15/15 positifs, 0 faux sur 7 416 négatifs",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS3/PLANCHE-01.png"
+   }
+  },
+  {
+   "set": "Paradise-Dragona",
+   "code": "sv7a",
+   "tirage": "jp",
+   "fichier": "Logo JP/SV7A.png",
+   "depot": {
+    "w": 885,
+    "h": 203,
+    "sha256": "990c3c9e898a92f8c56c0226e6c957a5e993bf9a5c41514732bb23b9e2f80d3a"
+   },
+   "concordance": {
+    "hote": "www.serebii.net",
+    "url": "https://www.serebii.net/card/logo/paradisedragona.png",
+    "page": "https://www.serebii.net/card/paradisedragona",
+    "appariement": "nom/code (Paradise Dragona)",
+    "w": 300,
+    "h": 73,
+    "sha256": "cd96d7a7c3422202bb8882c9b0ba5b77124c573bcc976f110fad0d544979819f",
+    "mesure": "LOGOS3 ORB+RANSAC : 165/175 inliers, couverture 0.86×0.43, échelle 0.98, au moins ×2 les inliers du deuxième meilleur dépôt sur 276 (seuils : ≥60, ≥0,75, ×2) ; calibrée 15/15 positifs, 0 faux sur 7 416 négatifs",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS3/PLANCHE-01.png",
+    "autresSources": [
+     "den-media.pokellector.com"
+    ]
+   }
+  },
+  {
+   "set": "Clash-at-the-Summit",
+   "code": "L3",
+   "tirage": "jp",
+   "fichier": "Logo JP/L3.png",
+   "depot": {
+    "w": 534,
+    "h": 177,
+    "sha256": "7c59dcd16731875b3bffcca48448b46e6e1fdf848863a52d3c4f942b90406ec6"
+   },
+   "concordance": {
+    "hote": "www.serebii.net",
+    "url": "https://www.serebii.net/card/logo/bigsummitclash.png",
+    "page": "https://www.serebii.net/card/bigsummitclash",
+    "appariement": "nom/code (Big Summit Clash)",
+    "w": 143,
+    "h": 55,
+    "sha256": "30d897d7baa786008a204f23ca7040ab7ed118bbcb3ec44135369ed432e14c9b",
+    "mesure": "LOGOS3 ORB+RANSAC : 87/99 inliers, couverture 0.80×0.36, échelle 1.02, au moins ×2 les inliers du deuxième meilleur dépôt sur 276 (seuils : ≥60, ≥0,75, ×2) ; calibrée 15/15 positifs, 0 faux sur 7 416 négatifs",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS3/PLANCHE-01.png",
+    "autresSources": [
+     "den-media.pokellector.com"
+    ]
+   }
+  },
+  {
+   "set": "Reviving-Legends",
+   "code": "L2",
+   "tirage": "jp",
+   "fichier": "Logo JP/L2.png",
+   "depot": {
+    "w": 149,
+    "h": 47,
+    "sha256": "b40887d61ca3e044cf16d813e258df2d0b7848b6ddfda99b6deb800af9449541"
+   },
+   "concordance": {
+    "hote": "den-media.pokellector.com",
+    "url": "https://den-media.pokellector.com/logos/Reviving-Legends.logo.249.png",
+    "page": "https://jp.pokellector.com/Reviving-Legends-Expansion/",
+    "appariement": "nom/code (Reviving Legends)",
+    "w": 210,
+    "h": 80,
+    "sha256": "b3564205960f690bf3d65558248e8f7f706388e3d0bc07905cb7fd755f1821d8",
+    "mesure": "LOGOS3 ORB+RANSAC : 155/165 inliers, couverture 0.83×0.52, échelle 1, au moins ×2 les inliers du deuxième meilleur dépôt sur 276 (seuils : ≥60, ≥0,75, ×2) ; calibrée 15/15 positifs, 0 faux sur 7 416 négatifs",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS3/PLANCHE-01.png"
+   }
+  },
+  {
+   "set": "HeartGold-Collection",
+   "code": "L1HG",
+   "tirage": "jp",
+   "fichier": "Logo JP/L1HG.png",
+   "depot": {
+    "w": 153,
+    "h": 52,
+    "sha256": "61ff5af096e7e4e477baa966bc6776d8c10faf9cf8beac051000b9157420f429"
+   },
+   "concordance": {
+    "hote": "den-media.pokellector.com",
+    "url": "https://den-media.pokellector.com/logos/HeartGold-Collection.logo.247.png",
+    "page": "https://jp.pokellector.com/HeartGold-Collection-Expansion/",
+    "appariement": "nom/code (HeartGold Collection)",
+    "w": 210,
+    "h": 80,
+    "sha256": "4c5d94fc4bce3b5ef547ebfefddf2d9d5b396f021ae9ee2fe9e8aadeab68ebec",
+    "mesure": "LOGOS3 ORB+RANSAC : 145/156 inliers, couverture 0.77×0.55, échelle 1, au moins ×2 les inliers du deuxième meilleur dépôt sur 276 (seuils : ≥60, ≥0,75, ×2) ; calibrée 15/15 positifs, 0 faux sur 7 416 négatifs",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS3/PLANCHE-01.png"
+   }
+  },
+  {
+   "set": "SoulSilver-Collection",
+   "code": "L1SS",
+   "tirage": "jp",
+   "fichier": "Logo JP/L1SS.png",
+   "depot": {
+    "w": 144,
+    "h": 52,
+    "sha256": "ca81e77b6e10d6bc2980c4e48fc17f45a854671782118da8d8cc6bfcb9f5c305"
+   },
+   "concordance": {
+    "hote": "den-media.pokellector.com",
+    "url": "https://den-media.pokellector.com/logos/SoulSilver-Collection.logo.248.png",
+    "page": "https://jp.pokellector.com/SoulSilver-Collection-Expansion/",
+    "appariement": "nom/code (SoulSilver Collection)",
+    "w": 210,
+    "h": 80,
+    "sha256": "70bd592f1e7364d8326a9e858f3ba7c936a5713473a15d4483bd35c6cf5736aa",
+    "mesure": "LOGOS3 ORB+RANSAC : 181/192 inliers, couverture 0.83×0.57, échelle 1, au moins ×2 les inliers du deuxième meilleur dépôt sur 276 (seuils : ≥60, ≥0,75, ×2) ; calibrée 15/15 positifs, 0 faux sur 7 416 négatifs",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS3/PLANCHE-02.png"
+   }
+  },
+  {
+   "set": "Team-Plasmas-Powered-Half-Deck",
+   "code": "PPD",
+   "tirage": "jp",
+   "fichier": "apport-manuel/Deck JP/PPD.png",
+   "depot": {
+    "w": 341,
+    "h": 153,
+    "sha256": "f45ab3edbc6e317ebf24d1d2de6a4ca38e6d50ad07a5f66b8c6c0a90f129011d"
+   },
+   "concordance": {
+    "hote": "www.serebii.net",
+    "url": "https://www.serebii.net/card/logo/teamplasmapowerdeck.png",
+    "page": "https://www.serebii.net/card/teamplasmapowerdeck",
+    "appariement": "nom/code (Team Plasma Power Deck)",
+    "w": 129,
+    "h": 62,
+    "sha256": "d552c6239056ca19c37a190969a6e66ec8281d3dc742f1f49f984d508b6e023e",
+    "mesure": "LOGOS3 ORB+RANSAC : 187/208 inliers, couverture 0.82×0.51, échelle 1.06, au moins ×2 les inliers du deuxième meilleur dépôt sur 276 (seuils : ≥60, ≥0,75, ×2) ; calibrée 15/15 positifs, 0 faux sur 7 416 négatifs",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS3/PLANCHE-02.png"
+   }
+  },
+  {
+   "set": "Hydreigon-Half-Deck",
+   "code": "SZD",
+   "tirage": "jp",
+   "fichier": "apport-manuel/Deck JP/SZD.png",
+   "depot": {
+    "w": 163,
+    "h": 28,
+    "sha256": "402a31db8e5a48d3d5bed19ef828a1f6fa4dcc2023d8ed2221f47ed665de2672"
+   },
+   "concordance": {
+    "hote": "www.serebii.net",
+    "url": "https://www.serebii.net/card/logo/hydreigondeck.png",
+    "page": "https://www.serebii.net/card/hydreigondeck",
+    "appariement": "nom/code (Hydreigon Deck)",
+    "w": 240,
+    "h": 45,
+    "sha256": "359090ea3caaf269c29ddd776b27aedeaadbfdd61bd244d1311ce3762a07d738",
+    "mesure": "LOGOS3 rognée : corr 0.915 (seuil 0.90) ; ORB 90/101",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS3/PLANCHE-02.png"
+   }
+  },
+  {
+   "set": "Garchomp-Half-Deck",
+   "code": "GBR",
+   "tirage": "jp",
+   "fichier": "apport-manuel/Deck JP/GBR.png",
+   "depot": {
+    "w": 162,
+    "h": 32,
+    "sha256": "13fbc03533e29ffbf25d8106977432eac49fe2bc80903a5b2b2de14e2c46ac62"
+   },
+   "concordance": {
+    "hote": "www.serebii.net",
+    "url": "https://www.serebii.net/card/logo/garchompdeck.png",
+    "page": "https://www.serebii.net/card/garchompdeck",
+    "appariement": "nom/code (Garchomp Deck)",
+    "w": 240,
+    "h": 45,
+    "sha256": "d5cedc15d695c184a949cc2b3b59473af1f5dd105c26057b851ce4bb42482cc1",
+    "mesure": "LOGOS3 rognée : corr 0.921 (seuil 0.90) ; ORB 103/111",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS3/PLANCHE-02.png",
+    "autresSources": [
+     "den-media.pokellector.com"
+    ]
+   }
+  },
+  {
+   "set": "Xerneas-Half-Deck",
+   "code": "X30",
+   "tirage": "jp",
+   "fichier": "apport-manuel/Deck JP/X30.png",
+   "depot": {
+    "w": 558,
+    "h": 180,
+    "sha256": "cbef6bfea51f81cf938bda1ad3cbe347dabcfe0ee8c9a12381ea267556c59dab"
+   },
+   "concordance": {
+    "hote": "den-media.pokellector.com",
+    "url": "https://den-media.pokellector.com/logos/Xerneas-Half-Deck.logo.154.png",
+    "page": "https://jp.pokellector.com/Xerneas-Half-Deck-Expansion/",
+    "appariement": "nom/code (Xerneas Half Deck)",
+    "w": 210,
+    "h": 80,
+    "sha256": "53fa022bbe22404d91897447ad21d871b67da50b221a5f70e44d7aaa3a00cfa6",
+    "mesure": "LOGOS3 ORB+RANSAC : 160/172 inliers, couverture 0.84×0.58, échelle 1.03, au moins ×2 les inliers du deuxième meilleur dépôt sur 276 (seuils : ≥60, ≥0,75, ×2) ; calibrée 15/15 positifs, 0 faux sur 7 416 négatifs",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS3/PLANCHE-03.png"
+   }
+  },
+  {
+   "set": "Yveltal-Half-Deck",
+   "code": "Y30",
+   "tirage": "jp",
+   "fichier": "apport-manuel/Deck JP/Y30.png",
+   "depot": {
+    "w": 542,
+    "h": 178,
+    "sha256": "e33eea84c0663a4e531dfcb13809b6f2411acd3b487f406de39e5d4f91e0f58d"
+   },
+   "concordance": {
+    "hote": "den-media.pokellector.com",
+    "url": "https://den-media.pokellector.com/logos/Yveltal-Half-Deck.logo.153.png",
+    "page": "https://jp.pokellector.com/Yveltal-Half-Deck-Expansion/",
+    "appariement": "nom/code (Yveltal Half Deck)",
+    "w": 210,
+    "h": 80,
+    "sha256": "780a32f1056851b4da073e7b3245f11dac7c241ac9ec85da5a51c617d306abeb",
+    "mesure": "LOGOS3 ORB+RANSAC : 135/160 inliers, couverture 0.82×0.60, échelle 1.05, au moins ×2 les inliers du deuxième meilleur dépôt sur 276 (seuils : ≥60, ≥0,75, ×2) ; calibrée 15/15 positifs, 0 faux sur 7 416 négatifs",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS3/PLANCHE-03.png"
+   }
+  },
+  {
+   "set": "Mewtwo-vs-Genesect-Deck-Kit",
+   "code": "MG",
+   "tirage": "jp",
+   "fichier": "apport-manuel/Deck JP/MGG.png",
+   "depot": {
+    "w": 300,
+    "h": 105,
+    "sha256": "c4407f070940b20284722bf5bccfee52874ac54b7eb8c02cbc6d586da362b7d7"
+   },
+   "concordance": {
+    "hote": "den-media.pokellector.com",
+    "url": "https://den-media.pokellector.com/logos/Mewtwo-Vs-Genesect-Genesect.logo.145.png",
+    "page": "https://jp.pokellector.com/Mewtwo-Vs-Genesect-Genesect-Expansion/",
+    "appariement": "nom/code (Mewtwo Vs Genesect: Genesect)",
+    "w": 210,
+    "h": 80,
+    "sha256": "241a37e21b98c2a7ffb13733ccac7b03f945d4fec906b5d496fe87253e813520",
+    "mesure": "LOGOS3 ORB+RANSAC : 181/188 inliers, couverture 0.83×0.43, échelle 1.03, au moins ×2 les inliers du deuxième meilleur dépôt sur 276 (seuils : ≥60, ≥0,75, ×2) ; calibrée 15/15 positifs, 0 faux sur 7 416 négatifs",
+    "le": "2026-10-31",
+    "regardee": true,
+    "planche": "couverture/S8/AUDIT-31/LOGOS3/PLANCHE-03.png",
+    "autresSources": [
+     "den-media.pokellector.com",
+     "www.serebii.net",
+     "www.serebii.net"
+    ]
+   }
   }
  ]
 }
