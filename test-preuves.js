@@ -147,6 +147,18 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.match(r5000.join(), /nom-langue-non-anglaise/, 'produit NON français : le nom français n\'est jamais comparé, même si nomFr existe');
         assert.match(lue(entree(), produit({ idExpansion: 2361 })).motifs.join(), /langue-differente/, 'le produit EST français : un scan anglais n\'est pas son tirage');
     });
+    await test('a-reste (japonais) : un nom lu en japonais se compare au nom JAPONAIS de la carte (produit.nomJa), SEULEMENT pour un tirage japonais ; jamais au nom anglais', () => {
+        const ja = entree({ lu: { ...entree().lu, langue: 'ja', nom: 'すごいつりざお', numero: '018', total: '032' }, attendu: { ...entree().attendu, numero: '018' } });
+        const pj = produit({ tirage: 'jp', numero: '018', nomEn: 'Super Rod', nomJa: 'すごいつりざお' });
+        assert.deepStrictEqual(lue(ja, pj), { ok: true, motifs: [] });
+        assert.deepStrictEqual(lue({ ...ja, lu: { ...ja.lu, nom: ' すごい つりざお ' } }, pj), { ok: true, motifs: [] }, 'espaces ignorés');
+        assert.deepStrictEqual(lue({ ...ja, lu: { ...ja.lu, nom: 'ハイパーボール' } }, pj).motifs, ['nom-different'], 'autre nom japonais');
+        assert.deepStrictEqual(lue(ja, produit({ tirage: 'jp', numero: '018', nomEn: 'Super Rod' })).motifs, ['nom-different'], 'carte sans nom japonais : rien à comparer = refus');
+        assert.deepStrictEqual(lue(ja, produit({ tirage: 'jp', numero: '018', nomEn: 'すごいつりざお', nomJa: null })).motifs, ['nom-different'], 'un nom japonais ne se compare JAMAIS au nom anglais');
+        assert.deepStrictEqual(lue({ ...ja, lu: { ...ja.lu, nom: '' } }, pj).motifs, ['nom-different'], 'nom lu vide');
+        const surIntl = lue(ja, produit({ tirage: 'intl', numero: '018', nomEn: 'Super Rod', nomJa: 'すごいつりざお' })).motifs.join();
+        assert.match(surIntl, /langue-differente/); assert.match(surIntl, /nom-langue-non-anglaise/, 'produit NON japonais : le nom japonais n\'est jamais comparé, même si nomJa existe');
+    });
     await test('tour 1 (1) : produit SANS numéro : lu.nom comparé au nom du produit (avant « [ », normalisation de la jointure), sinon nom-different ; avec numéro rien ne change', () => {
         const sans = produit({ numero: null, nomEn: 'Psyduck [Confusion Wave]' }), base = entree({ attendu: { ...entree().attendu, numero: null }, lu: { ...entree().lu, numero: null, total: null, nom: 'Psyduck' } });
         assert.strictEqual(lue(base, sans).ok, true);
