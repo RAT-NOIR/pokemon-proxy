@@ -32,6 +32,7 @@ const muet = f => { const w = console.warn; console.warn = () => { }; try { retu
 const NOMS = Object.keys(DES.REGLES_DESIGNATION), TOUTES = Object.fromEntries(NOMS.map(k => [k, true]));
 const DRAPEAUX_MARQUEURS = { jumboTitre: true, gardeMarqueurs: true };
 
+let RESULTAT_COUT = null;
 (async () => {
     const SIM = new Map(JSON.parse(fs.readFileSync(argv('simulateur'), 'utf8')).map(x => [x.cle, x]));
     const V = F.deserialiser(await F.decompresser(S.ouvrir(fs.readFileSync(ARCHIVE), process.env.V2_VISUELS_HMAC)));
@@ -45,7 +46,7 @@ const DRAPEAUX_MARQUEURS = { jumboTitre: true, gardeMarqueurs: true };
     const cfgOn = { ...cfgOff, leviersAbde: true, leviersEcart: 0.1 };
     const cat = creerCatalogue({ cfg: cfg0, visuels: { entree: id => V.entree(id), tirage: id => V.tirageJumeaux(id), resoudre: async () => null, impressions: async () => [] } });
     await cat.indexCodeNumero(); await cat.indexFamilles();
-    const t0 = Date.now(); const alias = await cat.indexAliasFr(); console.log(`index d'alias : ${alias.size} noms en ${Date.now() - t0} ms`);
+    const t0 = Date.now(); const alias = await cat.indexAliasFr(); const stats = cat.statsIndexAlias(); console.log(`index d'alias : ${alias.size} noms en ${Date.now() - t0} ms`);
     const A = await db.collection('analyses').find({}).toArray();
     const JN = new Map((await db.collection('journal_scans').find({}).toArray()).map(j => [String(j._id), j]));
     const Aid = new Set(A.map(a => String(a._id)));
@@ -62,6 +63,7 @@ const DRAPEAUX_MARQUEURS = { jumboTitre: true, gardeMarqueurs: true };
 
     // ── la route, rejouée une fois par configuration (éteinte, allumée) sur chaque carte dont la chaîne a un journal
     const sorties = [];
+    const COUT = [];                                                    // un relevé par appel de l'étape : temps mur (base d'essai comprise) et CPU
     let nLignes = 0, nSansJournal = 0;
     for (const a of A) for (const [i] of a.cartes.entries()) {
         const cle = `${String(a._id)}:${i}`, j = jDe(a);
@@ -85,14 +87,18 @@ const DRAPEAUX_MARQUEURS = { jumboTitre: true, gardeMarqueurs: true };
         const pr = await preparer({ corpsListe: [corps], produits: produits0, jumeaux: jum0, catalogue: cat, version: V, designation: TOUTES });
         const run = async (cfg, avecLeviers) => {
             const ctx = ctxRoute(pr.produits, pr.jumeaux, pr.codeNumeroExiste, cfg);
-            let res = muet(() => adapter({ statutHttp: 200, corps }, ctx)), trace = null;
-            const gm = muet(() => GM.consulterMarqueurs({ cfg: DRAPEAUX_MARQUEURS, titre: null, resultat: res, derniereQuestion: null, corpsChaine: corps, produits: ctx.produits, version: V,
-                affirmer: (id, sur, crit) => affirmerParLaRoute(corps, id, { ...ctx, produits: sur || ctx.produits }, crit), marqueursDe: marqueursDeCtx(ctx), questionDeGroupe: ids => questionDeGroupe(corps, ids, ctx), journal: () => { } }));
+            // la route pose `leviersE` seulement sous V2_LEVIERS_ABDE ET le niveau probable servi (routes.js) ; les marqueurs passent par la MÊME fonction que la route (appliquerMarqueurs)
+            const ctxE = avecLeviers ? { ...ctx, leviersE: true } : ctx;
+            let res = muet(() => adapter({ statutHttp: 200, corps }, ctxE)), trace = null;
+            const gm = muet(() => GM.appliquerMarqueurs({ cfg: DRAPEAUX_MARQUEURS, titre: null, resultat: res, derniereQuestion: null, c: corps, desaccordG: null, empreinteInfo: null, produits: ctx.produits, version: V, langueInterface: 'fr', jumeaux: ctx.jumeaux, lot: false, journal: () => { } }));
             if (gm) { trace = gm.trace; if (gm.resultat) res = gm.resultat; }
             const avant = issueDe(res), resAvant = res;                 // resAvant : la question de la chaîne AVANT l'étape (la contre-épreuve repart d'elle, jamais de la question déjà refaite)
             let lv = null; const diag = {};
             if (avecLeviers && res.issue === 'question') {
+                const t0 = process.hrtime.bigint(), c0 = process.cpuUsage();
                 lv = await muet(() => LV.appliquerLeviers({ cfg, entree: entreeDe(cle.split(':')[0]), resultat: res, corpsChaine: corps, produits: ctx.produits, version: V, traceMarqueurs: trace, catalogue: cat, ctxQuestion: { langueInterface: 'fr', cfg, ficheServie: false, jumeaux: ctx.jumeaux }, etat, diag }));
+                const c1 = process.cpuUsage(c0);
+                COUT.push({ ms: Number(process.hrtime.bigint() - t0) / 1e6, cpuMs: (c1.user + c1.system) / 1000 });
                 if (lv && lv.resultat) res = lv.resultat;
             }
             return { res, resAvant, avant, apres: issueDe(res), probable: lv ? lv.probable : null, diag, lv, trace, ctx };
@@ -102,6 +108,39 @@ const DRAPEAUX_MARQUEURS = { jumboTitre: true, gardeMarqueurs: true };
     }
     console.log(`cartes parcourues ${nLignes} · sans journal ${nSansJournal} · rejouées ${sorties.length} · décisions du simulateur ${SIM.size}`);
 
+    // ═════ (0c) ÉCART AVEC L'ANCIEN SIMULATEUR (--ancien=<decisions-simulateur.json d'avant le tour 1>) : pour chaque probable de l'ancien simulateur que la route NE sert PLUS, la cause. Le but : ne plus régler sur un chiffre que la route ne rend pas.
+    if (argv('ancien')) {
+        const ANC = JSON.parse(fs.readFileSync(argv('ancien'), 'utf8')), parCause = {};
+        const route = new Map(sorties.map(s => [s.cle, s]));
+        let total = 0, justes = 0;
+        for (const x of ANC) {
+            if (x.C3.kind !== 'prob') continue;
+            const s = route.get(x.cle), juste = x.C3.id === x.verite;
+            const sert = s && s.on.probable && s.on.probable.idProduct === x.C3.id;
+            if (sert) continue;
+            let cause;
+            if (!s) cause = 'ligne non rejouée (question lue du journal)';
+            else if (s.on.probable) cause = 'la route désigne un AUTRE produit';
+            else if (s.on.resAvant && s.on.resAvant.issue !== 'question') { const b = s.on.resAvant; cause = `la chaîne rend ${b.issue}${b.motif ? ' ' + b.motif : ''}${b.erreur && b.erreur.code ? ' ' + b.erreur.code : ''} (la route ne désigne jamais sur autre chose qu'une question)`; }
+            else cause = `garde de la route : ${s.on.diag.raison || 'inconnue'}`;
+            const k = parCause[cause] = parCause[cause] || { justes: 0, faux: 0 };
+            if (juste) { k.justes++; justes++; } else k.faux++;
+            total++;
+        }
+        console.log(`(0c) ÉCART AVEC L'ANCIEN SIMULATEUR : ${total} probables de l'ancien simulateur ne sont plus servis (dont ${justes} justes) ; par cause : ${JSON.stringify(parCause)}`);
+    }
+    // ═════ (0b) COÛT : l'index d'alias (construit hors scan) et l'étape par question ; estimation pour 0,15 vCPU = CPU / 0,15 (le temps d'attente de la base ne se divise pas)
+    {
+        const trie = a => a.slice().sort((x, y) => x - y), q = (a, p) => (a.length ? trie(a)[Math.min(a.length - 1, Math.floor(p * a.length))] : null);
+        const ms = COUT.map(x => x.ms), cpu = COUT.map(x => x.cpuMs);
+        const moy = a => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : null);
+        const r1 = x => (x === null ? null : Math.round(x * 10) / 10);
+        const t1 = process.hrtime.bigint(); const pc = rq('v2/identifier/leviers-abde').produitsParCle({ identifiants: () => V.identifiants(), entree: id => V.entree(id) }); const msPC = Math.round(Number(process.hrtime.bigint() - t1) / 1e5) / 10;          // un objet NEUF : le cache par version est contourné, on mesure la vraie construction
+        console.log(`(0b) COÛT : index d'alias ${JSON.stringify(stats)} → à 0,15 vCPU ~${stats ? Math.round(stats.msCpu / 0.15) : '?'} ms de CPU étiré (hors scan, au démarrage puis toutes les 6 h)`);
+        console.log(`     produitsParCle (première fois par version, ${pc.size} visuels) : ${msPC} ms mur ici → ~${Math.round(msPC / 0.15)} ms à 0,15 vCPU, par version chargée (à préchauffer avec l'archive)`);
+        console.log(`     étape par question (${COUT.length} appels, base d'essai distante comprise) : mur moyen ${r1(moy(ms))} ms, p95 ${r1(q(ms, 0.95))} ms, max ${r1(Math.max(...ms))} ms ; CPU moyen ${r1(moy(cpu))} ms, p95 ${r1(q(cpu, 0.95))} ms → CPU à 0,15 vCPU ~${r1(moy(cpu) / 0.15)} ms en moyenne, p95 ~${r1(q(cpu, 0.95) / 0.15)} ms (+ l'attente de la base)`);
+        RESULTAT_COUT = { indexAlias: stats, produitsParCleMs: msPC, appels: COUT.length, murMoyenMs: r1(moy(ms)), murP95Ms: r1(q(ms, 0.95)), cpuMoyenMs: r1(moy(cpu)), cpuP95Ms: r1(q(cpu, 0.95)) };
+    }
     // ═════ (00) EXAMEN (--examiner=cle1,cle2) : ce que la route sert sur des lignes nommées, et la garde qui a décidé (I3 : même dessin ; marqueurs)
     for (const cle of (argv('examiner') || '').split(',').filter(Boolean)) {
         const s = sorties.find(x => x.cle.startsWith(cle)); if (!s) { console.log(`(00) ${cle} : ligne absente`); continue; }
@@ -111,13 +150,6 @@ const DRAPEAUX_MARQUEURS = { jumboTitre: true, gardeMarqueurs: true };
         const ent = x => { const e = V.entree(x); return e ? { grandeCle: e.grande && e.grande.cle, vignetteCle: e.vignette && e.vignette.cle, idMetacard: e.idMetacard, numero: e.numero, setNom: e.setNom, mention: e.mention ?? null, empruntDe: typeof V.empruntDe === 'function' ? V.empruntDe(x) : 'n/a' } : null; };
         console.log(`(00) ${s.cle} : issue route « ${s.on.probable ? 'probable ' + s.on.probable.idProduct : s.on.apres.issue} » · décision de l'étape ${JSON.stringify(d.decision)} · raison ${d.raison} · trace marqueurs ${JSON.stringify(s.on.trace)} · estGroupe(trace) ${PRT.estGroupe(s.on.trace)} · memeDessin par paire du top3 (avecEmprunt) ${paires.join(' ')} · dansUnGroupe(désigné) ${id ? PRT.dansUnGroupe(V, id, top3) : 'n/a'}`);
         for (const x of top3.concat(s.sim && s.sim.verite ? [s.sim.verite] : [])) console.log(`     ${x} ${JSON.stringify(ent(x))}${x === (s.sim && s.sim.verite) ? ' <- vérité' : ''}`);
-    }
-    // ═════ (000) ORDRE N°22 : les probables RETIRÉS par la règle du rival de la même carte (diag.raison 'metacarte-rival'), ligne à ligne, par banc : justes perdus / faux évités
-    {
-        const retires = sorties.filter(s => s.on.diag.raison === 'metacarte-rival' && s.on.diag.decision && s.on.diag.decision.kind === 'prob');
-        const par = {};
-        for (const s of retires) { const sim = s.sim, id = s.on.diag.decision.id; const pop = sim ? sim.pop : 'hors-banc'; const juste = sim && id === sim.verite; for (const p of (sim && sim.enSerie ? [pop, 'serie'] : [pop])) { par[p] = par[p] || { justesPerdus: 0, fauxEvites: 0, sansVerite: 0 }; if (!sim || !Number.isInteger(sim.verite)) par[p].sansVerite++; else if (juste) par[p].justesPerdus++; else par[p].fauxEvites++; } console.log(`(000) retiré ${s.cle} ${sim ? sim.pop + (sim.enSerie ? '+série' : '') : 'hors banc'} : désigné ${id} ${sim ? (id === sim.verite ? 'JUSTE perdu' : 'FAUX évité (vérité ' + sim.verite + ')') : '?'}`); }
-        console.log(`(000) ORDRE 22 : probables retirés ${retires.length} · par banc ${JSON.stringify(par)}`);
     }
     // ═════ (0) INFORMATION : le nom lu (confiance haute) contredit-il le probable désigné par la route ? (le filtre de nom de CONFIRMATION-SURE n'est pas dans l'étape : mesuré ici, jamais corrigé)
     {
@@ -171,11 +203,12 @@ const DRAPEAUX_MARQUEURS = { jumboTitre: true, gardeMarqueurs: true };
         const memeDecision = egaleADuSimulateur(decRoute);
         let cause = null, contreEpreuve = null;
         const ligneE = Boolean(sim.guide);                                    // une ligne « jumeaux-trop-nombreux » de la chaîne : le simulateur part des choix STOCKÉS (aucun), la route des 3 premiers jumeaux
-        if (R.apres.issue !== 'question' && R.avant.issue !== 'question') cause = ligneE ? 'e : la route ne pose pas la question (lignes du groupe incomplètes)' : 'introuvable de la chaîne hors jumeaux (la route ne désigne jamais sur un introuvable)';
+        const brut = R.resAvant || {}, quoi = `${brut.issue}${brut.motif ? ' ' + brut.motif : ''}${brut.erreur && brut.erreur.code ? ' ' + brut.erreur.code : ''}`;
+        if (R.apres.issue !== 'question' && R.avant.issue !== 'question') cause = brut.issue === 'panne' ? `panne du rejeu : la chaîne rend ${quoi} (colonne des jumeaux de l'archive)` : `la chaîne rend ${quoi} : la route ne désigne jamais sur un introuvable`;
         else if (R.diag.raison === 'groupe-marqueurs') cause = 'garde des marqueurs : question de GROUPE (jumbo / même dessin)';
         else if (memeDecision && R.diag.raison === 'groupe-donnees') cause = 'I3 : le désigné est de même dessin qu\'un autre des 3';
         else if (memeDecision && R.diag.raison === 'sans-prix') cause = 'I2 : le désigné n\'a pas de prix de guide';
-        else if (memeDecision && R.diag.raison === 'sans-ligne') cause = 'candidat sans ligne de catalogue (non servable)';
+        else if (memeDecision && R.diag.raison === 'sans-ligne') cause = 'garde de repli : un candidat du top 3 sans ligne';
         else if (['non-redressee', 'sans-vecteur'].includes(R.diag.raison) || /^vecteur-/.test(R.diag.raison || '')) cause = `vecteur : ${R.diag.raison} (la route exige un vecteur admis, plausible et redressé)`;
         else if (['catalogue-en-panne', 'sans-catalogue', 'erreur', 'question-impossible'].includes(R.diag.raison)) cause = `panne : ${R.diag.raison}`;
         else if (ligneE) cause = 'e : candidats de base = les 3 premiers jumeaux (la route) contre aucun (le simulateur : choix stockés)';
@@ -216,8 +249,9 @@ const DRAPEAUX_MARQUEURS = { jumboTitre: true, gardeMarqueurs: true };
     console.log('    par banc :', JSON.stringify(parBanc));
     console.log('    ÉCARTS PAR CAUSE :', JSON.stringify(causes));
     for (const e of ecartsDetail) console.log(`    - ${e.pop}${e.serie ? '+série' : ''} ${e.cle} simulateur « ${e.simulateur} » route « ${e.route} » : ${e.cause}`);
+    console.log('\n(R) RELEVÉ HORS REJEU (non rejoué, ni par la route ici ni par le simulateur) : la règle G (V2_REGLE_G / vecteur), SUR-PAR-IMAGE, la seconde lecture, la lecture du tampon, le titre jumbo (0 annonce en base), le second envoi G-GROUPE. Éteints ou sans fournisseur dans l\'état livré ; ils ne peuvent que PROMOUVOIR un sûr ou réduire une question avant le levier, jamais l\'inverse. Leur effet se lit sur la SÉRIE RÉELLE de l\'essai (déjà mesuré : 1 probable juste par G-GROUPE sur 6ad09190, serie-P2-1101.json).');
     console.log(`\n(3) ÉCARTS NON EXPLIQUÉS : ${nonExpliques.length}`, nonExpliques.length ? JSON.stringify(nonExpliques) : '');
-    if (argv('sortie')) fs.writeFileSync(argv('sortie'), JSON.stringify({ le: new Date().toISOString(), surs: { surs, surChange, surNeuf, detailSurs }, comptes, parBanc, causes, tableauRoute, nonRejouees: { n: nonRejoueesCles.length, probables: nrProb.length, probablesJustes: nrProbJustes.length }, ecartsDetail, nonExpliques }, null, 1));
+    if (argv('sortie')) fs.writeFileSync(argv('sortie'), JSON.stringify({ le: new Date().toISOString(), indexAlias: stats, cout: RESULTAT_COUT, surs: { surs, surChange, surNeuf, detailSurs }, comptes, parBanc, causes, tableauRoute, nonRejouees: { n: nonRejoueesCles.length, probables: nrProb.length, probablesJustes: nrProbJustes.length }, ecartsDetail, nonExpliques }, null, 1));
     await c.close();
     process.exit(surChange || surNeuf || nonExpliques.length ? 1 : 0);
 })().catch(e => { console.log('ERREUR', e.code || e.name, String(e.message || '').slice(0, 300), String(e.stack || '').split('\n').slice(1, 4).join(' | ')); process.exit(1); });
