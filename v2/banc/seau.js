@@ -353,6 +353,12 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
         if (id === undefined) { const c = await col('seaux').findOne({ etat: 'ouvert' }) || (await col('seaux').find({}).sort({ declareLe: -1 }).limit(1).toArray())[0]; id = c && c._id; }
         if (typeof id !== 'string' || !FORME_SEAU.test(id)) throw erreur('ENTREE', 'seau-id');
         const lignes = await col('scans').find({ seauId: id, porteur }).sort({ rang: 1 }).toArray();
+        // JUGE EN UN CLIC (tour 1) : le filtre par porteur reste une GARDE (isolation des comptes : un administrateur ne lit ni ne saisit les scans d'un autre). La liste dit seulement COMBIEN de scans du seau sont d'un autre compte (un nombre,
+        // jamais un identifiant, un rang ni un porteur) et décrit le seau (nom, type, état, n, cible) : la page peut ainsi expliquer une liste vide.
+        const autresComptes = await col('scans').countDocuments({ seauId: id, porteur: { $ne: porteur } });
+        const sd = await col('seaux').findOne({ _id: id });
+        const vs = sd ? await vue(sd) : null;
+        const seau = vs ? { id: vs.id, nom: vs.nom, type: vs.type, etat: vs.etat, n: vs.n, cible: vs.cible } : null;
         const ids = lignes.map(l => oid(l.scanId));
         const ans = ids.length ? await analyses().find({ _id: { $in: ids } }, { projection: { cartes: 1 } }).toArray() : [];
         const nCartes = new Map(ans.map(a => [String(a._id), Array.isArray(a.cartes) ? a.cartes.length : 0]));
@@ -360,7 +366,7 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
         const nVerites = new Map((await col('verites').aggregate([{ $match: { seauId: id } }, { $group: { _id: '$scanId', n: { $sum: 1 } } }]).toArray()).map(x => [x._id, x.n]));
         const scans = lignes.map(l => ({ scanId: l.scanId, rang: l.rang, photos: nPhotos.get(l.scanId) || 0, cartes: nCartes.get(l.scanId) || 0, etiquetees: nVerites.get(l.scanId) || 0 }));
         const prochain = scans.find(s => s.cartes > 0 && s.etiquetees < s.cartes);
-        return { seauId: id, scans, prochain: prochain ? prochain.scanId : null };
+        return { seauId: id, seau, autresComptes, scans, prochain: prochain ? prochain.scanId : null };
     }
 
     async function lirePhoto({ scanId, index, porteur }) {

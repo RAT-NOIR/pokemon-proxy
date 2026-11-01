@@ -220,6 +220,11 @@ const blocs = async (w = 400, h = 560) => {
         H.v('4. la photo se relit (octets identiques, type d\'origine)', [brut.status, brut.headers.get('content-type'), Buffer.compare(oc, photos.b) === 0], [200, 'image/jpeg', true]);
         H.v('4. une photo absente : 404', (await get(sv, ADM, `/api/banc/seau/photo?scanId=${s1}&photo=7`)).statut, 404);
         H.v('4. la photo d\'un autre administrateur : 404', (await fetch(sv.url + `/api/banc/seau/photo?scanId=${s1}&photo=1`, { headers: auth(ADM2) })).status, 404);
+        // JUGE EN UN CLIC, tour 1 : le filtre par porteur est une GARDE (isolation des comptes, testée ci-dessus) — on ne l'affaiblit pas ; la liste DIT seulement COMBIEN de scans du seau sont d'un autre compte, sans rien révéler d'autre
+        const autres = await get(sv, ADM2, `/api/banc/seau/a-etiqueter?seau=${juge.id}`);
+        H.v('4. 🔑 un AUTRE administrateur ne voit aucun scan (garde intacte) mais sait COMBIEN sont d\'un autre compte (4)', [autres.statut, autres.json.scans, autres.json.prochain, autres.json.autresComptes], [200, [], null, 4]);
+        H.v('4. ce compte compté ne révèle ni identifiant de scan, ni porteur, ni rang', [autres.texte.includes(s1), autres.texte.includes('compte:'), autres.texte.includes(ADM.porteur)], [false, false, false]);
+        H.v('4. le porteur de la liste a 0 scan d\'un autre compte, et la réponse décrit le seau (état, n, cible)', [r.json.autresComptes, r.json.seau && r.json.seau.etat, r.json.seau && r.json.seau.n, r.json.seau && r.json.seau.cible, r.json.seau && r.json.seau.nom], [0, 'ouvert', 4, 4, 'juge-200']);
 
         // 4a. une vérité par idProduct nu, SANS avoir vu les candidats
         r = await post(sv, ADM, '/api/banc/seau/verite', { scanId: s1, idProduct: 2005, via: 'idProduct' });
