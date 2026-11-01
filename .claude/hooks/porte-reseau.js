@@ -44,6 +44,13 @@ const OUTILS = [
     { re: /(^|[^\w.-])pip3?(\.exe)?\s+(install|download)\b/i, nom: 'pip install/download' },
     { re: /(^|[^\w.-])docker(\.exe)?\s+(pull|run|build|compose)\b/i, nom: 'docker pull/run/build' },
     { re: mot('gh'), nom: 'gh', sauf: /(^|[^\w.-])gh(\.exe)?\s+--version\s*$/i },
+    // tour 3 (I1, M-a) : outils hors des premières listes
+    ...['aria2c', 'lynx', 'w3m', 'rsync', 'mshta', 'Install-Module', 'Update-Help', 'Test-Connection'].map(n => ({ re: mot(n), nom: n })),
+    { re: /(^|[^\w.-])openssl(\.exe)?\s+s_client\b/i, nom: 'openssl s_client' },
+    { re: /\/dev\/(tcp|udp)\//i, nom: '/dev/tcp' },
+    { re: /\[scriptblock\]::Create/i, nom: '[scriptblock]::Create (commande construite)' },
+    { re: /(^|[^\w.-])msiexec(\.exe)?[^\n]*https?:\/\//i, nom: 'msiexec vers une adresse' },
+    { re: /\bWebClient\b/i, nom: 'WebClient' },
 ];
 const PRIMITIVES = [
     { re: /\bfetch\s*\(/, nom: 'fetch(' },
@@ -63,20 +70,33 @@ const G_DEFINITION = /\$g\s*=\s*\(Get-ChildItem\s+"\$env:LOCALAPPDATA\\GitHubDes
 const GIT_SENSIBLES = new Set(['clone', 'fetch', 'pull', 'push', 'ls-remote', 'archive', 'submodule', 'remote', 'config']);
 const GIT_HOTES_PERMIS = new Set(['github.com', 'www.github.com']);
 const MODIFIE = /(^|[^\w-])(remove-item|del|erase|rm|rmdir|rd|set-content|add-content|clear-content|out-file|copy-item|cp|copy|move-item|mv|move|rename-item|ren|new-item|ni|tee|tee-object|sc|ac|ri|mi|ci|cpi)(?![\w-])|>/i;
+const MODIFIE_VERBE = /(^|[^\w-])(remove-item|del|erase|rm|rmdir|rd|set-content|add-content|clear-content|out-file|copy-item|cp|copy|move-item|mv|move|rename-item|ren|new-item|ni|tee|tee-object|sc|ac|ri|mi|ci|cpi)(?![\w-])/i;
 const ECRIT_SCRIPT = /(?:>>?|(?:^|[^\w-])(?:set-content|add-content|out-file|new-item|copy-item|move-item|rename-item|tee|tee-object|sc|ac|ni|cp|mv|copy|move)(?![\w-]))[^\n;|&]{0,160}?\.(?:c?m?js|py|ps1)\b/i;
 const LANCE_SCRIPT = /(^|[^\w.-])(node|python3?|py|powershell|pwsh)(\.exe)?(?![\w-])|\.ps1\b/i;
 const CD_TETE = /^\s*(?:cd|chdir|sl|set-location|pushd|push-location)(?![\w-])\s*(.*?)\s*$/i;
 const CD_PARTOUT = /(^|[^\w-])(cd|chdir|sl|set-location|pushd|push-location|popd|pop-location)(?![\w-])/i;
-const OUVRE_ADRESSE = /(^|[^\w.-])(start-process|invoke-item|saps|ii)(?![\w-])[^\n]*https?:\/\//i;
+const OUVRE_ADRESSE = /(^|[^\w.-])(start-process|invoke-item|saps|ii|start|explorer)(\.exe)?(?![\w-])[^\n]*https?:\/\//i;
 const POSITION_COMMANDE = /(^|[;|&\r\n{(]|\.)\s*$/;
-const ARGUMENT_DE_SHELL = /(^|\s)(-c|-command|\/c|\/k|-lc)\s*$/i;
+const ARGUMENT_DE_SHELL = /(^|\s)(-c(?:o\w*)?|-command|\/c|\/k|-lc|-ec|-ic)\b:?\s*$/i;        // PowerShell accepte tout préfixe de -Command (-Com), et -Command:"…"
+const LANCEUR_DE_SHELL = /(^|[\s&(])(powershell|pwsh|cmd|bash|sh|zsh|dash)(\.exe)?(?=\s|$)/i;     // I1 : toute chaîne d'une instruction qui lance un autre shell reste lue
+const REFUS_NODE_PRECHARGE = new Set(['--import', '--loader', '--experimental-loader']);
+const VARIABLES_FIXES = /(ARRETS_HOTES_DOSSIER|PORTE_RESEAU_DOSSIER|PORTE_RESEAU_BANC|PORTE_HOOK_BANC)/gi;
+const VERBES_SUPPR = /^(remove-item|ri|del|erase|rm|rmdir|rd)$/i;
+const VERBES_DEPL = /^(move-item|mi|mv|move|rename-item|ren|rni)$/i;
+const DRAPEAU_RECURSIF = /^(-r|-rf|-fr|-rec\w*|\/s)$/i;
 
 const DEFAUT_PORTE = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\porte-reseau';
 const DEFAUT_ARRETS = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\arrets-hotes';
 const DEFAUT_PRINCIPALE = 'C:\\Users\\Yung\\Desktop\\pokemon-proxy';
-const dossierPorte = () => (process.env.PORTE_RESEAU_DOSSIER || DEFAUT_PORTE);
-const dossierArrets = () => (process.env.ARRETS_HOTES_DOSSIER || DEFAUT_ARRETS);
-const copiePrincipale = () => (process.env.COPIE_PRINCIPALE || DEFAUT_PRINCIPALE);
+// B2 : les dossiers sont FIXES. Aucune variable d'environnement ne les change ; le banc les passe par l'ARGUMENT --banc=<json> de la commande du hook, que seule la configuration du hook peut poser.
+const BANC = (() => {
+    const a = process.argv.slice(2).find(x => x.startsWith('--banc='));
+    if (!a) return null;
+    try { const j = JSON.parse(a.slice(7)); return j && typeof j === 'object' && !Array.isArray(j) ? j : null; } catch { return null; }
+})();
+const dossierPorte = () => (BANC && typeof BANC.porte === 'string' && BANC.porte ? BANC.porte : DEFAUT_PORTE);
+const dossierArrets = () => (BANC && typeof BANC.arrets === 'string' && BANC.arrets ? BANC.arrets : DEFAUT_ARRETS);
+const copiePrincipale = () => (BANC && typeof BANC.principale === 'string' && BANC.principale ? BANC.principale : DEFAUT_PRINCIPALE);
 const bas = p => path.resolve(p).toLowerCase();
 const sous = (a, d) => { const x = bas(d); return a === x || a.startsWith(x.endsWith(path.sep) ? x : x + path.sep); };
 /** M1 : le chemin RÉEL natif du parent existant le plus proche (développe les noms courts 8.3 et les jonctions), le reste du chemin recollé. */
@@ -128,8 +148,8 @@ function lireScript(fichier) {
 function sansChaines(cmd) {
     const s = cmd.replace(/@'[\s\S]*?'@/g, '""').replace(/@"[\s\S]*?"@/g, '""');
     return s.replace(/"(?:[^"`]|`[\s\S])*"|'(?:[^']|'')*'/g, (m, idx) => {
-        const avant = s.slice(0, idx);
-        return POSITION_COMMANDE.test(avant) || ARGUMENT_DE_SHELL.test(avant) ? m : '""';
+        const avant = s.slice(0, idx), dernier = avant.split(/[;|&\r\n]/).pop();
+        return POSITION_COMMANDE.test(avant) || ARGUMENT_DE_SHELL.test(avant) || LANCEUR_DE_SHELL.test(dernier) ? m : '""';
     });
 }
 
@@ -160,26 +180,43 @@ function verdictScriptNode(ins, ctx) {
     const i = t.findIndex(x => /^node(\.exe)?$/i.test(path.basename(x)));
     if (i < 0) return null;
     let script = null;
+    const precharges = [];
     for (let j = i + 1; j < t.length; j++) {
         const o = t[j];
         if (o === '-') return 'node lit son programme sur stdin';
         if (o.startsWith('-')) {
             if (NODE_EVAL.test(o)) return `node ${o} : code en ligne`;
             if (/^(-v|--version|-h|--help)$/.test(o)) return null;
-            if (NODE_VALEURS.has(o) && !o.includes('=')) j++;
+            const eq = o.indexOf('='), nom = eq < 0 ? o : o.slice(0, eq), val = eq < 0 ? null : o.slice(eq + 1);
+            if (REFUS_NODE_PRECHARGE.has(nom)) return `node ${nom} : chargeur de code préalable refusé`;      // I2
+            if (nom === '-r' || nom === '--require') { precharges.push(val !== null ? val : (t[++j] ?? '')); continue; }
+            if (NODE_VALEURS.has(nom) && val === null) j++;
             continue;
         }
         script = o; break;
     }
+    // I2 : un module préchargé (-r / --require) est du code qui s'exécute avant le script : même règle de contenu ; seul un module de PAQUET (dotenv/config) est admis sans lecture
+    for (const v of precharges) {
+        if (!v || nonResolu(v)) return `node -r « ${v} » non résolu : refusé`;
+        if (/^(?![.\/\\])(?![a-z]:)[@\w][\w@./-]*$/i.test(v) && !/\.[cm]?js$/i.test(v)) continue;
+        const r = jugerFichierNode(v, ctx, `module préchargé « ${v} »`);
+        if (r) return r;
+    }
     if (script === null) return 'node sans script lisible (stdin ?)';
     if (nonResolu(script) || !/\.[cm]?js$/i.test(script)) return `script node « ${script} » non résolu (variable, sans extension .js) : refusé`;
-    const abs = path.resolve(ctx.cwd, script), s = lireScript(abs);
-    if (!s) return `script node « ${script} » introuvable : non résolu, refusé`;
+    return jugerFichierNode(script, ctx, `script node « ${script} »`);
+}
+/** La règle de contenu d'un fichier node qui va s'exécuter : lisible ; sans primitive réseau ; sinon suivi par git ET identique à HEAD. */
+function jugerFichierNode(fichier, ctx, etiquette) {
+    let abs = path.resolve(ctx.cwd, fichier);
+    let s = lireScript(abs);
+    if (!s && !/\.[cm]?js$/i.test(fichier)) { s = lireScript(abs + '.js'); if (s) abs += '.js'; }
+    if (!s) return `${etiquette} introuvable : non résolu, refusé`;
     if (abs.toLowerCase() === PORTE_JS) ctx.estPorte = true;
     const prim = s.trop ? ['fichier trop gros pour être lu'] : PRIMITIVES.filter(m => m.re.test(s.texte)).map(m => m.nom);
     if (!prim.length) return null;
-    if (ctx.incertain && !path.isAbsolute(script)) return `script node « ${script} » avec accès réseau (${prim.join(', ')}) lu depuis un dossier incertain (cd non résolu) : refusé`;
-    return identiqueAHead(abs) ? null : `script node « ${script} » avec accès réseau (${prim.join(', ')}) qui n'est pas suivi par git dans ce dépôt (ou un de ses worktrees) ET identique à HEAD`;
+    if (ctx.incertain && !path.isAbsolute(fichier)) return `${etiquette} avec accès réseau (${prim.join(', ')}) lu depuis un dossier incertain (cd non résolu) : refusé`;
+    return identiqueAHead(abs) ? null : `${etiquette} avec accès réseau (${prim.join(', ')}) qui n'est pas suivi par git dans ce dépôt (ou un de ses worktrees) ET identique à HEAD`;
 }
 function verdictScriptPython(ins, ctx) {
     const t = jetons(ins);
@@ -220,14 +257,25 @@ function verdictScriptPs1(ins, ctx) {
 /** D4/C1/I3 : refus d'écrire vers le dossier de la porte (robots\, cadence\, journal), un ARRET/LEVEE/PAUSE-HOTE, ou — copie principale seulement — le hook et les deux modules de la porte. */
 function cibleProtegee(abs) {
     const porte = path.resolve(dossierPorte()), porteR = reel(porte), princ = path.resolve(copiePrincipale()), princR = reel(princ);
+    const arrets = path.resolve(dossierArrets()), arretsR = reel(arrets);
+    if (abs.slice(2).includes(':')) return 'flux alternatif NTFS (« nom:flux ») : refusé';
     for (const a of [bas(abs), bas(reel(abs))]) {
-        if (/^(arret|levee|pause)-hote-.*\.json$/i.test(path.basename(a))) return 'fichier ARRET-HOTE / LEVEE-HOTE / PAUSE-HOTE (fermer et lever passent par porte-reseau.js)';
+        if (/^(arret|levee|pause)-hote-.*\.json$/i.test(path.basename(a))) return 'fichier ARRET-HOTE / LEVEE-HOTE / PAUSE-HOTE : un agent ne ferme, ne lève ni ne supprime un arrêt (la levée est une action de l\'utilisateur, à la main dans son terminal)';
+        // B3 : le dossier des arrêts n'est écrit par aucun agent — seul JOURNAL-HOTES.md (un journal, il n'ouvre ni ne ferme aucun hôte) s'écrit
+        if ((a.split(path.sep).includes('arrets-hotes') || sous(a, arrets) || sous(a, arretsR)) && path.basename(a) !== 'journal-hotes.md') return 'dossier des arrêts (arrets-hotes\\) : un agent n\'y écrit rien ; la levée d\'un arrêt est une action de l\'utilisateur, à la main dans son terminal';
         for (const p of [porte, porteR]) if (sous(a, path.join(p, 'robots')) || sous(a, path.join(p, 'cadence')) || a === bas(path.join(p, 'journal.jsonl'))) return 'dossier de la porte (robots\\, cadence\\, journal.jsonl)';
         for (const p of [princ, princR]) {
             if (sous(a, path.join(p, '.claude', 'hooks')) || a === bas(path.join(p, 'collecte-cartes', 'porte-reseau.js')) || a === bas(path.join(p, 'collecte-cartes', 'reponse-hote.js'))) return 'hook ou module de la porte dans la copie principale (ils changent par une branche et une fusion)';
         }
     }
     return null;
+}
+/** Les chemins du dossier des arrêts (le fixe, son chemin réel, le nom littéral arrets-hotes) ; les mentions de JOURNAL-HOTES.md seul en sont retirées (il s'écrit). */
+function mentionneArrets(cmd) {
+    let t = cmd.toLowerCase().replace(/\//g, '\\');
+    const noms = [bas(dossierArrets()), bas(reel(path.resolve(dossierArrets()))), 'arrets-hotes'];
+    for (const n of noms) t = t.split(`${n}\\journal-hotes.md`).join('');
+    return noms.some(n => t.includes(n));
 }
 function mentionneProtege(cmd) {
     const t = cmd.toLowerCase().replace(/\//g, '\\');
@@ -236,9 +284,56 @@ function mentionneProtege(cmd) {
         || /porte-reseau\\(robots|cadence|journal\.jsonl)/.test(t);
 }
 
+/** B3 : suppression ou déplacement qui TOUCHE le dossier des arrêts (lui, un de ses fichiers, ou — si récursif ou déplacé — un de ses parents), jugé sur les chemins RÉSOLUS (cwd compris). */
+function verdictArrets(ins, ctx) {
+    const t = jetons(ins.replace(/^\s*(&|\.)\s*/, ''));
+    if (!t.length) return null;
+    const verbe = path.basename(t[0]).replace(/\.exe$/i, '');
+    const suppr = VERBES_SUPPR.test(verbe), depl = VERBES_DEPL.test(verbe);
+    if (!suppr && !depl) return null;
+    const arrets = bas(dossierArrets()), arretsR = bas(reel(path.resolve(dossierArrets())));
+    const rec = t.slice(1).some(x => DRAPEAU_RECURSIF.test(x));
+    const lieu = 'la levée ou la suppression d\'un arrêt est une action de l\'utilisateur, à la main dans son terminal';
+    let nChemins = 0;
+    for (const x of t.slice(1)) {
+        if (/^-/.test(x) || /^\/[a-z]$/i.test(x)) continue;
+        for (const part of x.split(',')) {
+            if (!part) continue;
+            nChemins++;
+            if (nonResolu(part)) { if (rec || depl) return `${verbe} sur « ${part} » (cible non résolue) : refusé ; ${lieu}`; continue; }
+            const a = bas(path.resolve(ctx.cwd, part)), ar = bas(reel(path.resolve(ctx.cwd, part)));
+            for (const c of [a, ar]) for (const d of [arrets, arretsR]) {
+                if (sous(c, d)) return `${verbe} ${part} vise le dossier des arrêts ou l'un de ses fichiers ; ${lieu}`;
+                if ((rec || depl) && sous(d, c)) return `${verbe} ${part} vise un PARENT du dossier des arrêts (${rec ? 'récursif' : 'déplacement'}) ; ${lieu}`;
+            }
+        }
+    }
+    if (suppr && rec && nChemins === 0) return `${verbe} récursif sans chemin lisible (entrée de pipeline) : refusé, on ne sait pas ce qui est visé ; ${lieu}`;
+    if (suppr || depl) { const c = bas(path.resolve(ctx.cwd)); if (sous(c, arrets) || sous(c, arretsR)) return `${verbe} depuis le dossier des arrêts ; ${lieu}`; }
+    return null;
+}
+/** I1 : le contenu de chaque groupe ( ) / $( ) — une sous-expression s'exécute même dans la commande git qui l'enveloppe. */
+function sousExpressions(texte) {
+    const pile = [], res = [];
+    for (let i = 0; i < texte.length; i++) {
+        if (texte[i] === '(') pile.push(i);
+        else if (texte[i] === ')' && pile.length) res.push(texte.slice(pile.pop() + 1, i));
+    }
+    return res;
+}
+
 function verdictShell(cmd, cwd) {
+    cmd = cmd.replace(/`(?=[A-Za-z0-9_])/g, '');        // I1 : l'accent grave PowerShell (Invoke-Web`Request) ne cache rien
     const raisons = [];
-    if (mentionneProtege(cmd) && MODIFIE.test(cmd)) raisons.push('modification du dossier de la porte ou d\'un ARRET/LEVEE/PAUSE-HOTE (robots\\, cadence\\, journal ; lever passe par porte-reseau.js lever)');
+    // B2 : une commande ne pose ni le dossier des arrêts, ni celui de la porte, ni le module de banc ; I2 : NODE_OPTIONS précharge du code
+    for (const m of cmd.matchAll(VARIABLES_FIXES)) {
+        const avant = cmd.slice(Math.max(0, m.index - 40), m.index), apres = cmd.slice(m.index + m[0].length, m.index + m[0].length + 10);
+        if (/^["'`\]\)]*\s*[=,]/.test(apres) || /(env:|\bset|\bexport|\bsetx|environment\w*\(?|\benv)\s*["'(]?\s*$/i.test(avant)) raisons.push(`${m[0]} : les dossiers des arrêts et de la porte sont FIXES, une commande ne les change pas`);
+    }
+    if (/NODE_OPTIONS/i.test(cmd)) raisons.push('NODE_OPTIONS précharge du code node : refusé');
+    // I1 : dot-source d'une variable ou d'une expression (équivalent de &)
+    if (/(^|[;|&\r\n{(])\s*\.\s+[$(]/.test(cmd)) raisons.push('dot-source (. $x, . (…)) : cible non résolue');
+    if (mentionneProtege(cmd) && MODIFIE.test(cmd)) raisons.push('modification du dossier de la porte ou des arrêts (robots\\, cadence\\, journal, arrets-hotes\\, ARRET/LEVEE/PAUSE-HOTE) : la levée ou la suppression d\'un arrêt est une action de l\'utilisateur, à la main dans son terminal');
     // H1/H3 : l'opérateur d'appel & sur une cible non résolue ; seule la forme $g du CLAUDE.md §3 (définie dans la même commande, une seule fois) est admise
     if (/&\s*\(/.test(cmd)) raisons.push('opérateur & sur une expression (cible non résolue)');
     const gOk = G_DEFINITION.test(cmd) && (cmd.match(/\$g\s*=/gi) || []).length === 1;
@@ -261,6 +356,11 @@ function verdictShell(cmd, cwd) {
         if (CD_PARTOUT.test(ins)) ctx.incertain = true;
         if (/^\s*(&\s*)?(["'][^"']*git(\.exe)?["']|\$g\b|git(\.exe)?(?![\w-]))/i.test(ins)) { const g = verdictGit(ins); if (g) raisons.push(g); continue; }
         hors.push(ins);
+        const tl = jetons(ins.replace(/^\s*&\s*/, '')), ip = tl.findIndex(x => /^porte-reseau(\.js)?$/i.test(path.basename(x)));       // B3 : `lever` est une action de l'utilisateur
+        if (ip >= 0 && tl.slice(ip + 1).some(x => x.toLowerCase() === 'lever')) raisons.push('porte-reseau.js lever : un agent ne lève pas un arrêt ; la levée est une action de l\'utilisateur, à la main dans son terminal');
+        const ar = verdictArrets(ins, ctx); if (ar) raisons.push(ar);
+        // B3 : un verbe d'écriture sur le dossier des arrêts, ou une redirection dont la CIBLE y est (lister vers un autre fichier reste permis)
+        if (mentionneArrets(ins) && (MODIFIE_VERBE.test(ins) || [...ins.matchAll(/>>?\s*("[^"]*"|'[^']*'|[^\s"'>]+)/g)].some(r => mentionneArrets(r[1])))) raisons.push('écriture dans le dossier des arrêts (arrets-hotes\\) : un agent n\'y écrit rien ; la levée ou la suppression d\'un arrêt est une action de l\'utilisateur, à la main dans son terminal');
         if (OUVRE_ADRESSE.test(ins)) raisons.push('Start-Process / Invoke-Item / saps / ii avec une adresse http(s)');
         if (/(^|[^\w.-])(start-process|saps)(?![\w-])/i.test(ins)) { const t = OUTILS.filter(m => m.re.test(ins) && !(m.sauf && m.sauf.test(ins))).map(m => m.nom); if (t.length) raisons.push(`Start-Process vers un outil réseau (${t.join(', ')})`); }
         const n = verdictScriptNode(ins, ctx); if (n) raisons.push(n);
@@ -268,9 +368,14 @@ function verdictShell(cmd, cwd) {
         const s = verdictScriptPs1(ins, ctx); if (s) raisons.push(s);
     }
     // boucle B : outils réseau, cherchés sur le texte SANS les chaînes-arguments (I1)
-    for (const ins of sansChaines(cmd).split(/[;|&\r\n]+/)) {
+    const sans = sansChaines(cmd);
+    for (const inner of sousExpressions(sans)) {            // I1 : une sous-expression s'exécute même enveloppée par une commande git
+        const touches = OUTILS.filter(m => m.re.test(inner) && !(m.sauf && m.sauf.test(inner))).map(m => m.nom);
+        if (touches.length) raisons.push(`outil réseau dans une sous-expression (${touches.join(', ')})`);
+    }
+    for (const ins of sans.split(/[;|&\r\n]+/)) {
         if (!ins.trim()) continue;
-        if (/^\s*(&\s*)?(["'][^"']*git(\.exe)?["']|\$g\b|git(\.exe)?(?![\w-]))/i.test(ins)) continue;
+        if (/^\s*(&\s*)?(["'][^"']*git(\.exe)?["']|\$g\b(?!\s*=)|git(\.exe)?(?![\w-]))/i.test(ins)) continue;
         if (/(^|[^\w.-])node(\.exe)?\s[^\n]*porte-reseau\.js(\s|$)/i.test(ins) && ctx.estPorte) continue;        // la porte elle-même : l'adresse qu'on lui donne n'est pas un outil
         const touches = OUTILS.filter(m => m.re.test(ins) && !(m.sauf && m.sauf.test(ins))).map(m => m.nom);
         if (touches.length) raisons.push(`outil réseau (${touches.join(', ')})`);
