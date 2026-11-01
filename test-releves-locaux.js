@@ -42,6 +42,14 @@ verifier('juger : le même nom à un AUTRE numéro, ou dans un autre set, ne con
 verifier('juger : une source « bulbapedia » est REFUSÉE par son nom, même si tout concorde', juger(produit, [{ source: 'bulbapedia', set: 'Set-Bon', numero: '3', nom: 'Mon2' }]).ok, false);
 verifier('juger : type-null, pdt, ctr, pkc, pokellector, pokemon-com sont des sources admises ; « setlist » et « bulbapedia-r2 » ne le sont pas', [['type-null', 'pdt', 'ctr', 'pkc', 'pokellector', 'pokemon-com'].every(s => SOURCES_ADMISES.includes(s)), ['setlist', 'bulbapedia-r2', 'bulbapedia'].some(s => SOURCES_ADMISES.includes(s))], [true, false]);
 
+// ── 2026-11-01 : énergies Intro Pack Neo — deux sources de FAITS admises sous un code NEUTRE (aucun nom de site dans un champ posé) ; packmagik est ÉCARTÉE (conditions : accord requis) ──
+const en = { set: 'Intro-Pack-Neo-Totodile', numero: '5', nom: 'Water Energy' };
+const rp = { source: 'ppd', set: en.set, numero: '5', nom: 'Water Energy', ref: 'n°5' }, rt = { source: 'tcs', set: en.set, numero: '5', nom: 'Water Energy', ref: 'n°5' };
+verifier('énergies Neo : deux relevés concordants (ppd + tcs) sont admis, sources = cardmarket + ppd + tcs', (j => [j.ok, j.sources])(juger(en, [rp, rt])), [true, ['cardmarket', 'ppd', 'tcs']]);
+verifier('énergies Neo : chacun des deux codes admet à lui seul (Cardmarket + une source indépendante)', [juger(en, [rp]).ok, juger(en, [rt]).ok], [true, true]);
+verifier('énergies Neo : un type discordant au même numéro (Fire Energy) est refusé pour les deux', [juger(en, [{ ...rp, nom: 'Fire Energy' }]).ok, juger(en, [{ ...rt, nom: 'Fire Energy' }]).ok], [false, false]);
+verifier('énergies Neo : packmagik (« packmagik » / « pmk ») reste hors de la liste admise', juger(en, [{ ...rp, source: 'packmagik' }, { ...rp, source: 'pmk' }]).ok, false);
+
 // ── D4 (2026-10-24) : le repli par le Pokédex ne vaut que pour un nom ILLISIBLE (absent ou non latin), jamais pour un nom lisible et discordant ──
 const { rejouer, nomLisible } = require(path.join(DIR, 'collecte-cartes', 'deux-sources.js'));
 const pk = { set: 'Set-Bon', numero: '3', nom: 'Pikachu' };
