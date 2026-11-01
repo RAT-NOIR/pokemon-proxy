@@ -41,6 +41,15 @@ const DECISIONS = {
         { idProduct: 449883, carteId: 225372, code: 'UPR', idExpansion: 2065, slugSet: 'Ultra-Prism', voie: 'impression-numero', tirage: 'intl', metacarteAbsenteDeLaCarte: true, numeroFiche: '153a', ajoutSet: false,
             preuve: { sources: ['Cardmarket (n°153a, slug Lusamine-V4-CIN153a)', 'pkmncards en_US-SM5-153a-lusamine (sitemap en cache pkmn_card-sitemap8.xml l.2650-2653, lastmod 2024-03-23)'], references: ['page /card/lusamine-ultra-prism-upr-153a/ (sitemap pkmn_card-sitemap8.xml, en cache)', 'image /wp-content/uploads/en_US-SM5-153a-lusamine_1st-yaa.jpg (même entrée du sitemap)'] } },
     ],
+    // lot a-ebauches (chasseur phase 2, 2026-11-01) : Wartortle S19 et Bayleef S07 d'EC1. Les cartes EXISTENT (41112, 30518 : pages réelles) et déclarent elles-mêmes « Pokémon-e Starter Deck » 019/029 et 007/029 — la voie
+    // de Bulbasaur S01 et de Chikorita S05 (decision 2026-10-17). Deux lignes manquaient, pas deux fiches simples (une fiche simple ferait doublon avec la vraie carte). Nom + attaques et métacarte (212828, 212807) = ceux du produit.
+    // La seconde source lue (pages 019/029 et 007/029, attaques et numéros égaux à Cardmarket) est une corroboration écrite ici ; la voie, elle, n'en dépend pas.
+    '2026-11-01-a-ebauches': [
+        { idProduct: 654781, carteId: 41112, code: 'EC1', idExpansion: 5021, slugSet: 'Base-Expansion-Pack', voie: 'impression-equivalente', tirage: 'jp', expansionImpression: 'Pokémon-e Starter Deck', prefixe: 'S', total: '029', numeroFiche: null, ajoutSet: true,
+            preuve: { sources: ['Cardmarket (n°S19, slug Wartortle-EC1S19, métacarte 212828, attaques Doubleslap | Giant Wave)', 'la carte 41112 déclare jp « Pokémon-e Starter Deck » 019/029 ; page de carte japonaise 019/029 (おうふくビンタ + おおなみ), lue le 2026-11-01, corrobore'], references: ['chasse\\porte-sorties\\a\\pcg-e0019.txt (page lue par la porte le 2026-11-01)'] } },
+        { idProduct: 654769, carteId: 30518, code: 'EC1', idExpansion: 5021, slugSet: 'Base-Expansion-Pack', voie: 'impression-equivalente', tirage: 'jp', expansionImpression: 'Pokémon-e Starter Deck', prefixe: 'S', total: '029', numeroFiche: null, ajoutSet: true,
+            preuve: { sources: ['Cardmarket (n°S07, slug Bayleef-EC1S07, métacarte 212807, attaques Mysterious Powder | Razor Leaf)', 'la carte 30518 déclare jp « Pokémon-e Starter Deck » 007/029 ; page de carte japonaise 007/029 (ふしぎなこな + はっぱカッター), lue le 2026-11-01, corrobore'], references: ['chasse\\porte-sorties\\a\\pcg-e0007.txt (page lue par la porte le 2026-11-01)'] } },
+    ],
 };
 
 /** lecture : { cartes, produits: Map(idExpansion → produits), existants: Map(_id → ligne), lignesDuProduit?: Map(idProduct → [_id]), etats?: Map(slugSet → collecte_etat) } */
