@@ -116,7 +116,7 @@ async function ecrire({ db, plan, retenus, log = console.log, err = console.erro
         const m = await db.collection('cartes').updateOne({ _id: r.carteId, impressions: { $not: { $elemMatch: { tirage: i.tirage, expansion: i.expansion, numero: i.numero } } } }, { $push: { impressions: i } });
         impressions += m.modifiedCount || 0;
         if (r.ligne) {
-            await db.collection('cartes_produits').updateOne({ _id: r.ligne._id }, { $set: r.ligne }, { upsert: true });
+            await db.collection('cartes_produits').updateOne({ _id: r.ligne._id }, { $setOnInsert: r.ligne }, { upsert: true });
             await db.collection('cartes').updateOne({ _id: r.carteId }, { $addToSet: { 'liens.idProduct': r.idProduct } });
             lignes++;
         }
@@ -125,7 +125,18 @@ async function ecrire({ db, plan, retenus, log = console.log, err = console.erro
     return { lignes, impressions, traites: attendues };
 }
 
-module.exports = { planifier, entreesDeTitres, ecrire };
+/** Le clone TCGdex est une SECONDE SOURCE : sans lui la liste se régénère plus courte. Absent, illisible ou vide, il LÈVE (jamais un avertissement). */
+function chargerClone(chemin, charger = require) {
+    if (!chemin) throw new Error('--clone=<clone.js> est obligatoire (la seconde source TCGdex des Énergies) : sans lui la liste serait plus courte');
+    let m;
+    try { m = charger(chemin); } catch (x) { throw new Error(`--clone illisible (${x.message})`); }
+    if (!m || typeof m.lireClone !== 'function') throw new Error('--clone : le module n\'exporte pas lireClone');
+    const c = m.lireClone();
+    if (!c || !Array.isArray(c.cartes) || !c.cartes.length) throw new Error('--clone vide : 0 carte lue (clone absent ou mal placé)');
+    return c;
+}
+
+module.exports = { planifier, entreesDeTitres, ecrire, chargerClone };
 
 // ───────────────────────── ligne de commande ─────────────────────────
 async function principal() {
@@ -151,8 +162,7 @@ async function principal() {
     try {
         const nc = await b.prod.collection('catalogue_produits').find({ idProduct: { $in: cibles } }, { projection: { idProduct: 1, idExpansion: 1 } }).toArray();
         const parExp = new Map(); for (const x of nc) (parExp.get(x.idExpansion) || parExp.set(x.idExpansion, []).get(x.idExpansion)).push(x.idProduct);
-        let clone = null;
-        if (arg('clone')) { try { clone = require(arg('clone')).lireClone(); } catch (x) { console.error(`⚠️ clone TCGdex illisible (${x.message}) : sans relevé TCGdex`); } }
+        const clone = chargerClone(arg('clone'));
         for (const [exp, ids] of parExp) {
             const L = [...TABLE, ...TABLE_AUTO, ...TABLE_SANS_PAGE].find(l => l.exp === exp && l.slugSet && l.bulba);
             if (!L) { for (const id of ids) plan.push({ idProduct: id, statut: 'set-sans-ligne', raison: `aucune ligne de table pour l'expansion ${exp}` }); continue; }
@@ -167,7 +177,7 @@ async function principal() {
             const lignes = await b.cartes.collection('cartes_produits').find({ idExpansion: L.exp }, { projection: { carteId: 1, idProduct: 1 } }).toArray();
             const existantes = new Map(); for (const l of lignes) (existantes.get(l.idProduct) || existantes.set(l.idProduct, []).get(l.idProduct)).push(l.carteId);
             const relevesTcgdex = new Map();
-            if (clone) for (const id of ids) {
+            for (const id of ids) {
                 const hits = clone.cartes.filter(x => x.cardmarket.includes(id));
                 relevesTcgdex.set(id, hits.map(x => ({ source: 'tcgdex', set: slugSet, numero: x.localId, nom: x.noms.en ?? null, ref: `${x.famille}/${x.setId}/${x.localId}`, ja: x.noms.ja ?? null })));
             }

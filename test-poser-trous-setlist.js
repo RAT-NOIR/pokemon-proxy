@@ -2,7 +2,7 @@
 // Banc de poser-trous-setlist.js — fonctions PURES (aucune base). Les fixtures reprennent les formes RÉELLES lues en base le 2026-11-01
 // (Double Blaze 089/090, HeartGold & SoulSilver 121 : Énergie jointe par le nom, sans impression).
 const assert = require('assert');
-const { planifier, entreesDeTitres, ecrire } = require('./poser-trous-setlist');
+const { planifier, entreesDeTitres, ecrire, chargerClone } = require('./poser-trous-setlist');
 
 let ok = 0, ko = 0;
 const t = (nom, f) => { try { f(); ok++; console.log('  ok  ' + nom); } catch (e) { ko++; console.log('  KO  ' + nom + '\n      ' + String(e.message).split('\n').join('\n      ')); } };
@@ -130,6 +130,13 @@ t('un set dont la carte porte DÉJÀ le numéro (anomalie) n\'est pas réécrit'
     assert.notStrictEqual(un(e, 557448).statut, 'joignable');
 });
 
+console.log('chargerClone (LÈVE : un clone absent ferait régénérer une liste plus courte)');
+t('--clone absent → lève', () => assert.throws(() => chargerClone(undefined, () => ({})), /--clone/));
+t('--clone illisible → lève', () => assert.throws(() => chargerClone('x.js', () => { throw new Error('introuvable'); }), /illisible/));
+t('--clone sans lireClone → lève', () => assert.throws(() => chargerClone('x.js', () => ({})), /lireClone/));
+t('--clone vide (0 carte) → lève', () => assert.throws(() => chargerClone('x.js', () => ({ lireClone: () => ({ cartes: [], sets: [] }) })), /vide/));
+t('--clone lisible → rendu', () => assert.strictEqual(chargerClone('x.js', () => ({ lireClone: () => ({ cartes: [{}], sets: [] }) })).cartes.length, 1));
+
 console.log('ecrire (fausse base, additif)');
 const fauxDb = () => {
     const cols = { cartes: [], cartes_produits: [] }; const journal = [];
@@ -152,6 +159,11 @@ const fauxDb = () => {
     try {
         assert.strictEqual(interdit.length, 0, 'opérateurs destructifs : ' + interdit.join(' ; '));
         assert.ok(db.journal.some(j => j[0] === 'cartes_produits' && j[3].upsert), 'la ligne est posée par upsert');
+        const lig = db.journal.find(j => j[0] === 'cartes_produits');
+        assert.deepStrictEqual(Object.keys(lig[2]), ['$setOnInsert'], 'la ligne est posée par $setOnInsert SEUL (strictement additif, jamais $set)');
+        const imp = db.journal.find(j => j[0] === 'cartes' && j[2].$push);
+        assert.ok(imp[1].impressions && imp[1].impressions.$not && imp[1].impressions.$not.$elemMatch, 'le filtre $not/$elemMatch protège l\'impression');
+        assert.deepStrictEqual(Object.keys(imp[1].impressions.$not.$elemMatch).sort(), ['expansion', 'numero', 'tirage'], 'le filtre porte tirage, expansion, numero');
         assert.ok(db.journal.some(j => j[0] === 'cartes' && j[2].$push), 'l\'impression est poussée');
         assert.strictEqual(R.lignes, 1);
         ok++; console.log('  ok  écriture additive (opérateurs relevés)');
