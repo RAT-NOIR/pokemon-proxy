@@ -10,23 +10,23 @@ const produitsParExp = new Map([[5062, [prod(1, 'Water Energy', 5), prod(2, 'Lig
 const carte = (id, nomEn, extra = {}) => ({ _id: id, nomEn, sets: [SET], ...extra });
 const cartes = () => new Map([[SET, [carte(13683, 'Water Energy'), carte(13684, 'Basic Lightning Energy'), carte(13685, 'Psychic Energy'), carte(13685.5, 'Basic Psychic Energy'), carte(888, 'Dark Energy'),carte(777, 'Water Energy', { ficheSimple: { le: 1 } })]]]);
 const rel = (s, numero, nom) => ({ source: s, ref: `n°${numero}`, set: SET, numero: String(numero), nom });
-const entree = (numero, nom, rels) => ({ ok: true, sources: ['cardmarket'], concordantes: rels ?? [rel('ppd', numero, nom), rel('tcs', numero, nom)], set: SET, numero: String(numero), nom, exp: 5062 });
+const entree = (numero, nom, rels) => ({ ok: true, sources: ['cardmarket'], concordantes: rels ?? [rel('ppd', numero, nom), rel('btq-ok2', numero, nom)], set: SET, numero: String(numero), nom, exp: 5062 });
 const P = (liste, o = {}) => planifier({ liste, Ls, produitsParExp, cartesDuSet: cartes(), ...o });
 
 // 1. la concordance des deux sources → une ligne, sur la carte unique du type, additive et neutre
 const a = P({ 1: entree(5, 'Water Energy'), 2: entree(6, 'Lightning Energy') });
-verifier('concordance ppd + tcs → 2 lignes, aucune refusée', [a.lignes.length, a.refus.length], [2, 0]);
+verifier('concordance ppd + btq-ok2 → 2 lignes, aucune refusée', [a.lignes.length, a.refus.length], [2, 0]);
 verifier('la ligne : _id carte|produit, carte du type (« Basic » accepté), numeroFiche = le numéro, preuve neutre', [a.lignes[0]._id, a.lignes[1]._id, a.lignes[0].numeroFiche, a.lignes[0].preuve, a.lignes[0].slug], ['13683|1', '13684|2', '5', 'deux-sources:faits+numero', null]);
 verifier('aucun nom de site dans la ligne posée (ni packmagik, ni pokepedia, ni tcgsync)', /packmagik|pokepedia|tcgsync|tradingcard/i.test(JSON.stringify(a.lignes)), false);
 verifier('la fiche simple homonyme (777) n\'est jamais choisie : 13683 reste l\'unique carte « Water Energy »', a.lignes[0].carteId, 13683);
 // 2. type discordant
-verifier('type discordant chez tcs (Fire au lieu de Water) → refus', (r => [r.lignes.length, r.refus.length])(P({ 1: entree(5, 'Water Energy', [rel('ppd', 5, 'Water Energy'), rel('tcs', 5, 'Fire Energy')]) })), [0, 1]);
-verifier('numéro discordant chez ppd (n°6 pour le produit n°5) → refus', P({ 1: entree(5, 'Water Energy', [rel('ppd', 6, 'Water Energy'), rel('tcs', 5, 'Water Energy')]) }).lignes.length, 0);
+verifier('type discordant chez btq-ok2 (Fire au lieu de Water) → refus', (r => [r.lignes.length, r.refus.length])(P({ 1: entree(5, 'Water Energy', [rel('ppd', 5, 'Water Energy'), rel('btq-ok2', 5, 'Fire Energy')]) })), [0, 1]);
+verifier('numéro discordant chez ppd (n°6 pour le produit n°5) → refus', P({ 1: entree(5, 'Water Energy', [rel('ppd', 6, 'Water Energy'), rel('btq-ok2', 5, 'Water Energy')]) }).lignes.length, 0);
 // 3. une seule source
 verifier('une seule source (ppd seule) → refus', (r => [r.lignes.length, r.refus.length])(P({ 1: entree(5, 'Water Energy', [rel('ppd', 5, 'Water Energy')]) })), [0, 1]);
-verifier('une seule source (tcs seule) → refus', P({ 1: entree(5, 'Water Energy', [rel('tcs', 5, 'Water Energy')]) }).lignes.length, 0);
+verifier('une seule source (btq-ok2 seule) → refus', P({ 1: entree(5, 'Water Energy', [rel('btq-ok2', 5, 'Water Energy')]) }).lignes.length, 0);
 verifier('deux relevés de la MÊME source ne font pas les deux', P({ 1: entree(5, 'Water Energy', [rel('ppd', 5, 'Water Energy'), rel('ppd', 5, 'Water Energy')]) }).lignes.length, 0);
-verifier('une source exclue ou inconnue (packmagik) ne remplace pas tcs → refus', P({ 1: entree(5, 'Water Energy', [rel('ppd', 5, 'Water Energy'), rel('packmagik', 5, 'Water Energy')]) }).lignes.length, 0);
+verifier('une source exclue ou inconnue (packmagik) ne remplace pas btq-ok2 → refus', P({ 1: entree(5, 'Water Energy', [rel('ppd', 5, 'Water Energy'), rel('packmagik', 5, 'Water Energy')]) }).lignes.length, 0);
 // 4. ligne existante
 const e = P({ 1: entree(5, 'Water Energy') }, { existants: new Set([1]) });
 verifier('ligne existante → « déjà », jamais réécrite', [e.lignes.length, e.deja.length, e.refus.length], [0, 1, 0]);

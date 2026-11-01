@@ -6,9 +6,9 @@
 //
 // POURQUOI : une énergie d'un Intro Pack (« Water Energy » n°5) est une IMPRESSION d'une carte d'énergie de base qui existe déjà dans le set : fiche simple = doublon (la garde de
 // poser-fiches-deux-sources.js le refuse à juste titre), ce qui manque est la LIGNE produit → carte. La liste d'entrée est celle de scanner-deux-sources : par produit, les relevés des
-// deux sources de faits (codes neutres `ppd`, `tcs`) sur le numéro et le type.
+// deux sources de faits (codes neutres `ppd`, `btq-ok2`) sur le numéro et le type.
 // Ce que l'outil AUTORISE (une garde s'écrit par ce qu'elle autorise ; tout le reste est un refus nommé) : un produit du catalogue de l'expansion du set, de nom « <Type> Energy » (table fermée),
-// sans ligne ; jugé par collecte-cartes/deux-sources.js (importé) : set, numéro et type concordent avec LES DEUX sources `ppd` ET `tcs` ; le type désigne UNE seule carte d'énergie de base du set
+// sans ligne ; jugé par collecte-cartes/deux-sources.js (importé) : set, numéro et type concordent avec LES DEUX sources `ppd` ET `btq-ok2` ; le type désigne UNE seule carte d'énergie de base du set
 // (lue en base par son nom exact, jamais en dur) ; la ligne n'est pas détachée (lireInterdits).
 // Ce qui s'écrit (ADDITIF, `$setOnInsert`, via ecrireLignes de poser-lignes-ciblees.js) : la ligne (preuve neutre, numeroFiche = le numéro lu) et `liens` de la carte. `cartes.sets` N'EST PAS touché.
 // `detail` est interne (aucun contrat site/API ne le lit) ; il ne porte que les codes neutres.
@@ -18,7 +18,7 @@ const { decomposerNomCardmarket } = require('./collecte-cartes/jointure');
 const { lireInterdits } = require('./collecte-cartes/lignes-detachees');
 const { ecrireLignes } = require('./poser-lignes-ciblees');
 
-const SOURCES_REQUISES = Object.freeze(['ppd', 'tcs']);
+const SOURCES_REQUISES = Object.freeze(['ppd', 'btq-ok2']);
 const TYPES = Object.freeze(['Grass', 'Fire', 'Water', 'Lightning', 'Psychic', 'Fighting']);
 const PREUVE = 'deux-sources:faits+numero';
 const ARGUMENTS_AUTORISES = [/^--liste=.+\.json$/, /^--attendu=\d+$/, /^--ecrire$/];
