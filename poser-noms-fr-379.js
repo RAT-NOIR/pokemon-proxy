@@ -12,7 +12,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const AUTORISES = [/^--ecrire$/, /^--clone=.+/, /^--lecteur-clone=.+\.js$/, /^--pages=.+/, /^--sortie=.+/, /^--attendu=\d+$/, /^--exemples=\d{1,3}$/];
+const AUTORISES = [/^--ecrire$/, /^--clone=.+/, /^--lecteur-clone=.+\.js$/, /^--pages=.+/, /^--sortie=.+/, /^--attendu=\d+$/, /^--exemples=\d{1,3}$/, /^--niveaux=(cles|espece)(,(cles|espece))?$/];
 const masquer = e => String(e && e.stack || e).replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>');
 const compter = (liste, f) => { const o = {}; for (const x of liste) { const k = f(x); o[k] = (o[k] || 0) + 1; } return o; };
 
@@ -34,6 +34,7 @@ async function principal(argv, deps = {}) {
     const PAGES = path.resolve(val('pages') || 'C:/Users/Yung/rat-market-travail/catalogue/chasse/porte-sorties/noms-fr-379');
     const SORTIE = path.resolve(val('sortie') || 'C:/Users/Yung/rat-market-travail/catalogue/fiches-riches/noms-fr');
     const NB_EXEMPLES = Number(val('exemples') || 15);
+    const niveaux = val('niveaux') ? val('niveaux').split(',') : [];             // lot des 210 : 'cles' (lien par cles A/B/C), 'espece' (nom d'espece)
     try {
         const ouvrirLecture = deps.ouvrirLecture || require('./audit-catalogue/lecture-audit').ouvrirLecture;
         const M = require('./collecte-cartes/plan-noms-fr-379');
@@ -44,12 +45,13 @@ async function principal(argv, deps = {}) {
         const b = await ouvrirLecture();
         let cartes, liens;
         try {
-            cartes = await b.cartes.collection('cartes').find({ _id: { $gt: 0 }, nomFr: { $exists: false } }, { projection: { nomEn: 1, nomFr: 1, ndex: 1 } }).toArray();
-            liens = await b.cartes.collection('cartes_produits').find({ carteId: { $in: cartes.map(c => c._id) } }, { projection: { carteId: 1, idProduct: 1, idExpansion: 1, numeroFiche: 1 } }).toArray();
+            cartes = await b.cartes.collection('cartes').find({ _id: { $gt: 0 }, nomFr: { $exists: false } }, { projection: { nomEn: 1, nomFr: 1, ndex: 1, categorie: 1, impressions: 1 } }).toArray();
+            liens = await b.cartes.collection('cartes_produits').find({ carteId: { $in: cartes.map(c => c._id) } }, { projection: { carteId: 1, idProduct: 1, idExpansion: 1, numeroFiche: 1, slugSet: 1 } }).toArray();
         } finally { await b.fermer(); }
         if (!cartes.length) throw new Error('aucune carte positive sans champ nomFr : rien à faire (ou une lecture fausse, §41)');
 
-        const P = M.planifierCandidats({ cartes, liens, clone });
+        const P = M.planifierCandidats({ cartes, liens, clone, niveaux });
+        log(`   niveaux : ${niveaux.length ? niveaux.join(' + ') : 'aucun (identifiant produit seul, comme le lot 379)'}`);
         const especes = M.especesAChercher(P.candidats);
         log(`\n════ DÉNOMINATEUR : ${P.population} cartes positives sans champ nomFr · ${liens.length} lignes produit · clone TCGdex ${clone.cartes.length} cartes ════`);
         log(`   candidats (lien prouvé + fr TCGdex) : ${P.candidats.length} · sans nom dès la source 1 : ${P.sansNom.length} ${JSON.stringify(compter(P.sansNom, x => x.raison))}`);

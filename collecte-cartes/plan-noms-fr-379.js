@@ -12,6 +12,7 @@
 // côtés (anglais et français), et sont recopiés du nom TCGdex. Un propriétaire (« Erika's … » / « … d'Erika ») n'a pas de page : non vérifiable.
 const { prouverLien, indexClone } = require('./plan-noms-fr-fiches');
 const { cle, accents } = require('./nom-fr-cardmarket');
+const lienParCles = require('./lien-par-cles-210');
 
 const REGIONS_EN = { alolan: 'alola', galarian: 'galar', hisuian: 'hisui', paldean: 'paldea' };
 const REGIONS_FR = { 'd\'alola': 'alola', 'de galar': 'galar', 'de hisui': 'hisui', 'de paldea': 'paldea' };
@@ -81,12 +82,49 @@ function confirmer(cand, page) {
         const sep = /-[A-Za-z]+$/.test(String(cand.nomEn).trim()) ? '-' : ' ';
         nomFr = nomFr.replace(SUFFIXE, (_m, s) => sep + s);
     }
-    return { carteId: cand.carteId, decision: 'nommer', nomFr, paire: 'tcgdex+pokepedia', identiqueAnglais: cle(nomFr) === cle(cand.nomEn), temoin: cand.temoin, nomTcgdex: cand.nomTcgdex, titrePage: page.titre, anglaisPage: page.anglais };
+    return { carteId: cand.carteId, decision: 'nommer', nomFr, paire: 'tcgdex+pokepedia', ...(cand.lien ? { lien: cand.lien } : {}), identiqueAnglais: cle(nomFr) === cle(cand.nomEn), temoin: cand.temoin, nomTcgdex: cand.nomTcgdex, titrePage: page.titre, anglaisPage: page.anglais };
+}
+
+// ---------- NIVEAUX du lot des 210 (option `niveaux`, absente = comportement du lot 379) ----------
+// 'cles'   : lien carte <-> carte TCGdex par les cles A/B/C (lien-par-cles-210.js), quand l'identifiant produit ne prouve rien.
+// 'espece' : le nom de l'ESPÈCE vient des AUTRES cartes TCGdex de même nom anglais (une seule forme française aux accents près), puis la page
+//            Poképédia le confirme comme pour les autres. Le suffixe (ex, GX, V…) et « Méga- » se composent depuis NOTRE nom anglais ; une forme
+//            régionale ou un propriétaire ne se composent pas.
+// Les deux niveaux ne valent que pour une carte de catégorie « pokemon » (un Dresseur n'a pas d'espèce).
+const NIVEAUX = ['cles', 'espece'];
+const SUFFIXE_FR = { ex: 'ex', gx: 'GX', vmax: 'VMAX', vstar: 'VSTAR', v: 'V' };
+const refCarte = t => `${t.famille}|${t.setId}|${t.localId}`;
+
+/** nom anglais nu (clé `cle`) -> Map(clé du nom français nu -> sa forme la plus accentuée), sur les cartes TCGdex dont suffixe/Méga/région concordent. */
+function indexEspeces(clone, exclure = new Set()) {
+    const m = new Map();
+    for (const t of clone.cartes) {
+        if (!t.noms || !t.noms.en || !t.noms.fr || exclure.has(refCarte(t))) continue;
+        const e = decomposerEn(t.noms.en), f = decomposerFr(t.noms.fr);
+        if (e.proprietaire || f.proprietaire || e.region || f.region || e.suffixe !== f.suffixe || e.mega !== f.mega || !e.base || !f.base) continue;
+        const k = cle(e.base), g = m.get(k) || m.set(k, new Map()).get(k), kf = cle(f.base);
+        if (!g.has(kf) || accents(f.base) > accents(g.get(kf))) g.set(kf, f.base);
+    }
+    return m;
+}
+/** -> { ok:true, nomTcgdex } | { ok:false, raison, detail? } */
+function nomParEspece(carte, especes) {
+    if (!carte.nomEn || !String(carte.nomEn).trim()) return { ok: false, raison: 'nom-en-absent' };
+    const e = decomposerEn(carte.nomEn);
+    if (e.proprietaire) return { ok: false, raison: 'espece-proprietaire' };
+    if (e.region) return { ok: false, raison: 'espece-forme-regionale' };
+    const g = especes.get(cle(e.base));
+    if (!g || !g.size) return { ok: false, raison: 'espece-inconnue' };
+    if (g.size > 1) return { ok: false, raison: 'espece-ambigue', detail: [...g.values()].join(' / ') };
+    return { ok: true, nomTcgdex: (e.mega ? 'Méga-' : '') + [...g.values()][0] + (e.suffixe ? ' ' + SUFFIXE_FR[e.suffixe] : '') };
 }
 
 /** Les candidats : positives SANS champ nomFr, lien prouvé avec UNE carte TCGdex (ou plusieurs qui donnent le même fr) portant un fr. */
-function planifierCandidats({ cartes, liens, clone }) {
+function planifierCandidats({ cartes, liens, clone, niveaux = [] }) {
+    for (const n of niveaux) if (!NIVEAUX.includes(n)) throw new Error(`niveau inconnu : ${n} (autorisés : ${NIVEAUX.join(', ')})`);
     const ix = indexClone(clone);
+    const ixCles = niveaux.includes('cles') ? lienParCles.indexCles(clone) : null;
+    const especes = niveaux.includes('espece') ? indexEspeces(clone) : null;
     const lignesDe = new Map();
     for (const l of liens) (lignesDe.get(l.carteId) || lignesDe.set(l.carteId, []).get(l.carteId)).push(l);
     const candidats = [], sansNom = [];
@@ -94,18 +132,38 @@ function planifierCandidats({ cartes, liens, clone }) {
     for (const c of cartes) {
         if (!(c._id > 0) || c.nomFr !== undefined) continue;                     // la population, et elle seule : positives sans champ
         population++;
+        const non = (raison, detail) => sansNom.push({ carteId: c._id, nomEn: c.nomEn ?? null, raison, ...(detail !== undefined ? { detail } : {}) });
+        const eligible = c.categorie === 'pokemon';
+        // dernier recours : le nom de l'espèce ; échoue en nommant sa raison (et rappelle pourquoi le lien carte à carte n'a pas conclu)
+        const parEspece = (raison, detail) => {
+            if (!(eligible && especes) || raison === 'cles-contredisent-l-id' || /dex-contredit/.test(detail || '')) return non(raison, detail);   // une contradiction d'identité n'est pas contournée par l'espèce
+            const r = nomParEspece(c, especes);
+            if (r.ok) return candidats.push({ carteId: c._id, nomEn: c.nomEn ?? null, nomTcgdex: r.nomTcgdex, temoin: 'espece', lien: 'espece', refsTcgdex: [] });
+            return non(r.raison, r.detail ?? `${raison}${detail ? ' : ' + detail : ''}`);
+        };
         const lignes = lignesDe.get(c._id) || [];
-        if (!lignes.length) { sansNom.push({ carteId: c._id, nomEn: c.nomEn ?? null, raison: 'sans-ligne-produit' }); continue; }
         const preuves = lignes.map(l => prouverLien(c, l, ix));
-        const valides = preuves.filter(p => p.ok);
-        if (!valides.length) { sansNom.push({ carteId: c._id, nomEn: c.nomEn ?? null, raison: 'lien-non-prouve', detail: [...new Set(preuves.map(p => p.raison))].sort().join('+') }); continue; }
+        let valides = preuves.filter(p => p.ok), lien;
+        let raison = lignes.length ? 'lien-non-prouve' : 'sans-ligne-produit';
+        let detail = lignes.length ? [...new Set(preuves.map(p => p.raison))].sort().join('+') : undefined;
+        if (!valides.length && eligible && ixCles && !preuves.some(p => p.raison === 'dex-contredit')) {
+            const r = lienParCles.lierParCles(c, lignes, ixCles);
+            if (!r.ok) detail = `${detail ? detail + ' ; ' : ''}cles : ${r.raison}${r.detail ? ' (' + r.detail + ')' : ''}`;
+            else {
+                const t = r.preuves[0].carteTcgdex;
+                // l'identifiant produit, quand le clone le connaît, ne doit pas désigner une AUTRE carte que les clés
+                if (lignes.some(l => { const cs = ix.parCm.get(l.idProduct); return cs && cs.length && !cs.some(x => refCarte(x) === t); })) { raison = 'cles-contredisent-l-id'; detail = t; }
+                else { lien = `cles:${r.cles.join('')}`; valides = r.preuves.map(p => ({ ...p, temoin: lien })); }
+            }
+        }
+        if (!valides.length) { parEspece(raison, detail); continue; }
         const uniques = new Map(valides.map(p => [p.carteTcgdex, p.tcgdex]));
         const frs = new Map();
         for (const t of uniques.values()) if (t.noms.fr && String(t.noms.fr).trim()) frs.set(cle(t.noms.fr), t.noms.fr);
         const temoin = [...new Set(valides.map(p => p.temoin))].sort().join('+');
-        if (!frs.size) { sansNom.push({ carteId: c._id, nomEn: c.nomEn ?? null, raison: 'tcgdex-sans-fr', detail: temoin }); continue; }
-        if (frs.size > 1) { sansNom.push({ carteId: c._id, nomEn: c.nomEn ?? null, raison: 'tcgdex-contradictoire', detail: [...frs.values()].join(' / ') }); continue; }
-        candidats.push({ carteId: c._id, nomEn: c.nomEn ?? null, nomTcgdex: [...frs.values()][0], temoin, refsTcgdex: [...uniques.keys()] });
+        if (!frs.size) { parEspece('tcgdex-sans-fr', temoin); continue; }
+        if (frs.size > 1) { non('tcgdex-contradictoire', [...frs.values()].join(' / ')); continue; }
+        candidats.push({ carteId: c._id, nomEn: c.nomEn ?? null, nomTcgdex: [...frs.values()][0], temoin, ...(lien ? { lien } : {}), refsTcgdex: [...uniques.keys()] });
     }
     return { candidats, sansNom, population };
 }
@@ -131,8 +189,8 @@ function construireOps({ nommer, le }) {
         if (!(Number.isInteger(x.carteId) && x.carteId > 0)) throw new Error(`construireOps : _id ${x.carteId} non positif (hors du lot)`);
         if (typeof x.nomFr !== 'string' || !x.nomFr.trim()) throw new Error(`construireOps : nom vide pour ${x.carteId}`);
         if (x.paire !== 'tcgdex+pokepedia') throw new Error(`construireOps : ${x.carteId} sans deux sources concordantes (${x.paire})`);
-        return { updateOne: { filter: { _id: x.carteId, nomFr: { $exists: false } }, update: { $set: { nomFr: x.nomFr, nomFrSource: x.paire, nomFrLe: le } } } };
+        return { updateOne: { filter: { _id: x.carteId, nomFr: { $exists: false } }, update: { $set: { nomFr: x.nomFr, nomFrSource: x.paire, nomFrLe: le, ...(x.lien ? { nomFrLien: x.lien } : {}) } } } };
     });
 }
 
-module.exports = { decomposerEn, decomposerFr, lirePage, fichierPage, urlPage, confirmer, planifierCandidats, especesAChercher, construireOps };
+module.exports = { NIVEAUX, indexEspeces, nomParEspece, decomposerEn, decomposerFr, lirePage, fichierPage, urlPage, confirmer, planifierCandidats, especesAChercher, construireOps };
