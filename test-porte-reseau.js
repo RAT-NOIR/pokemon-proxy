@@ -416,6 +416,75 @@ async function lever(f) { try { await f(); return null; } catch (e) { return e; 
         srv.closeAllConnections(); srv.close();
     }
 
+    // ═══ TOUR 2 DE CORRECTION (relecture 2) ═══════════════════════════════════════════════════════════════════════════════════════════════════
+    // ── M3 : suffixes PARTAGÉS : un arrêt sur alice.github.io ne ferme pas bob.github.io ──────────────────────────────────────────────────
+    {
+        const b = banc();
+        b.reponses['https://alice.github.io/robots.txt'] = ROBOTS(''); b.reponses['https://alice.github.io/d'] = { status: 403, type: 'text/html', texte: 'non' };
+        const e = await lever(() => P.lire('https://alice.github.io/d', { ...b.o, sortie: path.join(b.sorties, 'd') }));
+        verifier(e && e.arret === true && fs.existsSync(path.join(b.arrets, 'ARRET-HOTE-alice.github.io.json')) && !fs.existsSync(path.join(b.arrets, 'ARRET-HOTE-github.io.json')), 'M3 : l\'arrêt écrit est celui de alice.github.io, jamais de github.io');
+        b.reponses['https://bob.github.io/robots.txt'] = ROBOTS('');
+        const v = await P.verdict('https://bob.github.io/x', b.o);
+        verifier(v.ok === true, `M3 : bob.github.io n'est pas fermé (${v.motif})`);
+        for (const s of ['github.io', 'gitlab.io', 'netlify.app', 'vercel.app', 'pages.dev', 'web.app', 'firebaseapp.com', 'herokuapp.com', 'b-cdn.net', 'cloudfront.net', 'azureedge.net', 'digitaloceanspaces.com', 'amazonaws.com', 'blogspot.com', 'wordpress.com', 'myshopify.com', 'wixsite.com', 'squarespace.com']) {
+            verifier(P.racineDe(`x.y.${s}`) === `y.${s}` && P.SUFFIXES2.has(s), `M3 : ${s} est un suffixe partagé (racine à trois labels)`);
+        }
+    }
+    // ── M2 : un ARRET illisible ferme tout mais NOMME le fichier ; le champ `hote` est normalisé ───────────────────────────────────────────
+    {
+        const b = banc(); fs.writeFileSync(path.join(b.arrets, 'ARRET-HOTE-tronque.test.json'), '{tronque');
+        const v = await P.verdict('https://autre.test/x', b.o);
+        verifier(v.ok === false && v.motif.includes('ARRET-HOTE-tronque.test.json') && b.appels.length === 0, `M2 : le message nomme le fichier fautif (${v.motif})`);
+        const b2 = banc(); fs.writeFileSync(path.join(b2.arrets, 'ARRET-HOTE-nom-logique.json'), JSON.stringify({ hote: '  WWW.Logique.Test. ' }));
+        const v2 = await P.verdict('https://logique.test/x', b2.o);
+        verifier(v2.ok === false && /ferm/i.test(v2.motif), 'M2 : le champ `hote` est normalisé (espaces, casse, point final)');
+    }
+    // ── I2 : lever un arrêt = renommer en LEVEE-HOTE (la trace reste) ──────────────────────────────────────────────────────────────────────
+    {
+        const b = banc(); fermer(b, 'www.exemple.test');
+        verifier(await lever(() => P.lever('www.exemple.test', '', b.o)) !== null, 'I2 : lever sans motif est refusé');
+        const r = await P.lever('WWW.exemple.test.', 'décision du testeur', b.o);
+        const noms = fs.readdirSync(b.arrets);
+        const levee = noms.find(n => /^LEVEE-HOTE-www\.exemple\.test-.+\.json$/.test(n));
+        verifier(r.ok === true && !noms.includes('ARRET-HOTE-www.exemple.test.json') && levee, `I2 : l'ARRET disparaît, une LEVEE-HOTE-<hôte>-<date> apparaît (${noms.join(',')})`);
+        const j = levee ? JSON.parse(fs.readFileSync(path.join(b.arrets, levee), 'utf8')) : {};
+        verifier(j.hote === 'www.exemple.test' && j.motifLevee === 'décision du testeur' && j.leveeLe && j.motif === 'banc', 'I2 : la LEVEE garde le contenu de l\'arrêt et ajoute leveeLe, motifLevee');
+        const v = await P.verdict('https://exemple.test/x', b.o);
+        verifier(!/ferm/i.test(v.motif), 'I2 : l\'hôte n\'est plus fermé après la levée');
+        const e = await lever(() => P.lever('www.exemple.test', 'x', b.o));
+        verifier(e !== null && /n'existe pas|introuvable|aucun arrêt/i.test(e.message), 'I2 : lever un arrêt inexistant est refusé');
+        const b2 = banc(); fs.writeFileSync(path.join(b2.arrets, 'ARRET-HOTE-tronque.test.json'), '{tronque');
+        const r2 = await P.lever('tronque.test', 'à la main', b2.o);
+        verifier(r2.ok === true && fs.readdirSync(b2.arrets).some(n => /^LEVEE-HOTE-tronque\.test-/.test(n)), 'I2 : un arrêt illisible se lève aussi (contenu original gardé)');
+        const { spawnSync } = require('child_process');
+        const env = { ...process.env, ARRETS_HOTES_DOSSIER: path.join(TMP_RACINE, 'cli2-arrets'), PORTE_RESEAU_DOSSIER: path.join(TMP_RACINE, 'cli2-porte') };
+        const cli = (...a) => spawnSync(process.execPath, [path.join(__dirname, 'collecte-cartes', 'porte-reseau.js'), ...a], { encoding: 'utf8', env });
+        verifier(cli('fermer', 'www.cli.test', '--motif=banc').status === 0 && cli('lever', 'www.cli.test', '--motif=levée').status === 0 && cli('verifier', 'https://cli.test/x').status !== 0 && !fs.existsSync(path.join(TMP_RACINE, 'cli2-arrets', 'ARRET-HOTE-www.cli.test.json')), 'I2 : CLI lever');
+        verifier(cli('lever', 'www.cli.test', '--motif=x').status === 3 && cli('lever', 'www.cli.test').status === 2, 'I2 : CLI lever : arrêt absent -> 3, sans motif -> 2');
+    }
+    // ── M1 : noms courts 8.3 / jonction : --sortie jugée sur le chemin RÉEL natif ───────────────────────────────────────────────────────────
+    {
+        const { spawnSync } = require('child_process');
+        const base = fs.mkdtempSync(path.join(TMP_RACINE, 'cat-')), porteLong = path.join(base, 'porte-reseau-nom-long-123'), arretsLong = path.join(base, 'arrets-hotes-nom-long-123');
+        fs.mkdirSync(porteLong); fs.mkdirSync(arretsLong);
+        const alias = dir => {
+            const r = spawnSync('cmd', ['/d', '/c', `for %I in ("${dir}") do @echo %~sI`], { encoding: 'utf8', windowsVerbatimArguments: true });
+            const court = (r.stdout || '').trim();
+            if (court && court.toLowerCase() !== dir.toLowerCase() && court.includes('~')) return { chemin: court, nettoyer() {} };
+            const lien = `${dir}-lien`; spawnSync('cmd', ['/d', '/c', 'mklink', '/J', lien, dir], { encoding: 'utf8' });
+            return { chemin: lien, nettoyer() { spawnSync('cmd', ['/d', '/c', 'rmdir', lien]); } };       // rmdir NON récursif : retire le lien seul
+        };
+        const c = { dossierPorte: porteLong, dossierArrets: arretsLong };
+        const ap = alias(porteLong), aa = alias(arretsLong);
+        try {
+            verifier(P.sortiePermise(path.join(ap.chemin, 'robots', 'h.json'), c, [base]) !== null, `M1 : robots\\ par un nom court/lien (${ap.chemin}) refusé`);
+            verifier(P.sortiePermise(path.join(ap.chemin, 'cadence', 'h.json'), c, [base]) !== null, 'M1 : cadence\\ par un nom court/lien refusé');
+            verifier(P.sortiePermise(path.join(ap.chemin, 'journal.jsonl'), c, [base]) !== null, 'M1 : journal par un nom court/lien refusé');
+            verifier(P.sortiePermise(path.join(aa.chemin, 'x.txt'), c, [base]) !== null, 'M1 : dossier des arrêts par un nom court/lien refusé');
+            verifier(P.sortiePermise(path.join(base, 'notes', 'a.txt'), c, [base]) === null, 'M1 : un chemin ordinaire sous la racine reste permis');
+        } finally { ap.nettoyer(); aa.nettoyer(); }
+    }
+
     console.log(`\n${ok}/${ok + ko} assertions justes${ko ? ` — ${ko} en échec` : ''}`);
     process.exit(ko ? 1 : 0);
 })().catch(e => { console.log(`🔴 le banc a planté : ${e.stack}`); process.exit(1); });

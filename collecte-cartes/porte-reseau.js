@@ -37,7 +37,9 @@ const VERROU_PERIME_MS = 2 * 60 * 1000;
 const DOSSIER_PORTE_DEFAUT = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\porte-reseau';
 const RACINES_SORTIE_DEFAUT = Object.freeze(['C:\\Users\\Yung\\rat-market-travail\\catalogue']);
 /** D6 : suffixes à deux niveaux (liste fermée) : la racine d'un hôte qui les porte a TROIS labels. */
-const SUFFIXES2 = Object.freeze(new Set(['co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'com.au', 'net.au', 'org.au', 'co.jp', 'ne.jp', 'or.jp', 'com.br', 'com.cn', 'com.tw', 'com.hk', 'co.kr', 'co.nz', 'com.mx', 'com.sg', 'co.id', 'co.th', 'in.th']));
+const SUFFIXES2 = Object.freeze(new Set(['co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'com.au', 'net.au', 'org.au', 'co.jp', 'ne.jp', 'or.jp', 'com.br', 'com.cn', 'com.tw', 'com.hk', 'co.kr', 'co.nz', 'com.mx', 'com.sg', 'co.id', 'co.th', 'in.th',
+    // M3 : suffixes PARTAGÉS (hébergeurs, CDN) : chaque sous-domaine est un site distinct, un arrêt ne doit pas fermer les autres
+    'github.io', 'gitlab.io', 'netlify.app', 'vercel.app', 'pages.dev', 'web.app', 'firebaseapp.com', 'herokuapp.com', 'b-cdn.net', 'cloudfront.net', 'azureedge.net', 'digitaloceanspaces.com', 'amazonaws.com', 'blogspot.com', 'wordpress.com', 'myshopify.com', 'wixsite.com', 'squarespace.com']));
 
 function racineDe(hote) {
     const l = String(hote).split('.');
@@ -136,7 +138,7 @@ function exclusion(hote, mode) {
     }
     return null;
 }
-const normNom = s => String(s || '').toLowerCase().replace(/\.+$/, '');
+const normNom = s => String(s || '').trim().toLowerCase().replace(/\.+$/, '');
 /** D7 : un ARRET-HOTE ferme son nom de fichier et son champ `hote` (chacun avec sa racine), ET l'hôte EXACT de son champ `url`. */
 function hoteFerme(hote, dossier) {
     let noms;
@@ -328,7 +330,7 @@ const sous = (a, dossier) => { const d = bas(dossier); return a === d || a.start
 function reel(abs) {
     let reste = '', cur = abs;
     for (;;) {
-        try { return path.join(fs.realpathSync(cur), reste); } catch { /* inexistant : on remonte */ }
+        try { return path.join(fs.realpathSync.native(cur), reste); } catch { /* inexistant : on remonte */ }      // M1 : .native développe aussi les noms courts 8.3
         const parent = path.dirname(cur);
         if (parent === cur) return abs;
         reste = path.join(path.basename(cur), reste); cur = parent;
@@ -343,11 +345,12 @@ function sortiePermise(sortie, c, racines = RACINES_SORTIE_DEFAUT) {
     for (const a of candidats) {
         for (const s of a.split(path.sep)) if (SEGMENTS_INTERDITS.includes(s) || s.startsWith('pokemon-proxy')) return `sortie sous « ${s} » : jamais écrite par la porte`;
         if (/\\desktop\\logo(\\|$)/i.test(a)) return 'sortie sous Desktop\\LOGO : dossier d\'apports manuels';
-        if (sous(a, c.dossierArrets)) return 'sortie sous le dossier des arrêts';
+        if (sous(a, bas(reel(path.resolve(c.dossierArrets))))) return 'sortie sous le dossier des arrêts';
     }
-    const porte = c.dossierPorte;
-    const dansSorties = candidats.every(a => sous(a, path.join(porte, 'sorties')));
-    const dansRacine = candidats.every(a => racines.some(r => sous(a, r)) && !sous(a, path.join(porte, 'robots')) && !sous(a, path.join(porte, 'cadence')) && a !== bas(path.join(porte, 'journal.jsonl')));
+    const porte = path.resolve(c.dossierPorte), porteR = reel(porte);
+    const sousPorte = (a, sub) => sous(a, path.join(porte, sub)) || sous(a, path.join(porteR, sub));
+    const dansSorties = candidats.every(a => sousPorte(a, 'sorties'));
+    const dansRacine = candidats.every(a => racines.some(r => sous(a, r) || sous(a, reel(path.resolve(r)))) && !sousPorte(a, 'robots') && !sousPorte(a, 'cadence') && a !== bas(path.join(porte, 'journal.jsonl')) && a !== bas(path.join(porteR, 'journal.jsonl')));
     const dansScratch = candidats.every(a => SCRATCHPAD.test(a));
     if (!(dansSorties || dansRacine || dansScratch)) return 'sortie hors des dossiers de travail permis (sorties\\ de la porte, catalogue\\, scratchpad)';
     if (fs.existsSync(abs)) return 'sortie : le fichier existe déjà (jamais écrasé)';
@@ -404,9 +407,29 @@ async function lire(url, o = {}) {
     return { ok: true, status: r.status, octets: corps.length, sortie: o.sortie };
 }
 
+// ── I2 : lever un arrêt = le RENOMMER en LEVEE-HOTE-<hôte>-<date>.json (la trace reste) ; la seule voie (le hook refuse Remove-Item sur un ARRET) ──────
+/** @returns {{ok: true, de: string, vers: string}} — LÈVE si le motif manque ou si l'arrêt n'existe pas. */
+async function lever(hote, motif, o = {}) {
+    const c = configurer(o);
+    if (typeof motif !== 'string' || !motif.trim()) throw erreurRefus('lever : un motif est obligatoire');
+    const h = normNom(hote);
+    if (!h || /[\\/:*?"<>|]/.test(h)) throw erreurRefus(`lever : nom d'hôte illisible (${String(hote).slice(0, 80)})`);
+    const de = path.join(c.dossierArrets, `ARRET-HOTE-${h}.json`);
+    if (!fs.existsSync(de)) throw erreurRefus(`lever : l'arrêt de ${h} n'existe pas (${de})`);
+    const brut = fs.readFileSync(de, 'utf8');
+    let contenu;
+    try { const x = JSON.parse(brut); contenu = x && typeof x === 'object' && !Array.isArray(x) ? x : { contenuOriginal: brut }; } catch { contenu = { illisible: true, contenuOriginal: brut }; }
+    const maintenant = new Date(c.maintenant()), iso = maintenant.toISOString();
+    const vers = path.join(c.dossierArrets, `LEVEE-HOTE-${h}-${iso.slice(0, 10).replace(/-/g, '')}-${iso.slice(11, 19).replace(/:/g, '')}.json`);
+    if (fs.existsSync(vers)) throw erreurRefus(`lever : ${vers} existe déjà`);
+    fs.writeFileSync(vers, JSON.stringify({ ...contenu, hote: contenu.hote ?? h, leveeLe: iso, motifLevee: motif.trim() }, null, 1), { flag: 'wx' });
+    fs.unlinkSync(de);
+    return { ok: true, de, vers };
+}
+
 // ── CLI ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 async function cli(argv) {
-    const usage = () => { console.error('usage : porte-reseau.js verifier <url> [--image] | lire <url> --sortie=<fichier> [--texte] [--image] | fermer <hôte> --motif="…"'); return 2; };
+    const usage = () => { console.error('usage : porte-reseau.js verifier <url> [--image] | lire <url> --sortie=<fichier> [--texte] [--image] | fermer <hôte> --motif="…" | lever <hôte> --motif="…"'); return 2; };
     const [cmd, cible, ...opts] = argv;
     const drapeaux = {};
     for (const a of opts) {
@@ -414,8 +437,8 @@ async function cli(argv) {
         if (!m) { console.error(`option inconnue : ${a}`); return usage(); }
         drapeaux[m[1]] = m[2] === undefined ? true : m[2];
     }
-    if (!cible || !['verifier', 'lire', 'fermer'].includes(cmd)) return usage();
-    const permis = { verifier: ['image'], lire: ['image', 'texte', 'sortie'], fermer: ['motif'] }[cmd];
+    if (!cible || !['verifier', 'lire', 'fermer', 'lever'].includes(cmd)) return usage();
+    const permis = { verifier: ['image'], lire: ['image', 'texte', 'sortie'], fermer: ['motif'], lever: ['motif'] }[cmd];
     for (const k of Object.keys(drapeaux)) if (!permis.includes(k)) { console.error(`option --${k} non admise pour « ${cmd} »`); return usage(); }
     const mode = drapeaux.image ? 'image' : 'page';
     if (cmd === 'fermer') {
@@ -423,6 +446,11 @@ async function cli(argv) {
         const f = RH.arretHote(normNom(cible), drapeaux.motif, { dossier: configurer().dossierArrets });
         console.log(`fermé : ${cible} (${f})`);
         return 0;
+    }
+    if (cmd === 'lever') {
+        if (typeof drapeaux.motif !== 'string' || !drapeaux.motif.trim()) { console.error('--motif="…" est obligatoire'); return usage(); }
+        try { const r = await lever(cible, drapeaux.motif); console.log(`levé : ${cible} (${r.de} -> ${r.vers})`); return 0; }
+        catch (e) { console.error(`REFUSÉ : ${e.message}`); return 3; }
     }
     if (cmd === 'verifier') {
         const v = await verdict(cible, { mode });
@@ -444,4 +472,4 @@ if (require.main === module) {
     cli(process.argv.slice(2)).then(code => process.exit(code), e => { console.error(`porte-reseau en panne, refusé par prudence : ${e && e.message}`); process.exit(3); });
 }
 
-module.exports = { verdict, lire, htmlEnTexte, gardeSimple, exclusion, hoteFerme, racineDe, normaliser, formesDuChemin, sortiePermise, fabriquerTransportReel, AGENTS, SUFFIXES2, ROBOTS_MAX_MS, CADENCE_MIN_MS, CRAWL_MAX_S, SAUTS_MAX, BORNE_OCTETS, UA };
+module.exports = { verdict, lire, lever, htmlEnTexte, gardeSimple, exclusion, hoteFerme, racineDe, normaliser, formesDuChemin, sortiePermise, fabriquerTransportReel, AGENTS, SUFFIXES2, ROBOTS_MAX_MS, CADENCE_MIN_MS, CRAWL_MAX_S, SAUTS_MAX, BORNE_OCTETS, UA };
