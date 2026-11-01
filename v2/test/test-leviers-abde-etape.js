@@ -16,7 +16,7 @@ const VEC = Float32Array.from({ length: 256 }, () => 1 / 16);        // norme 1,
 // ── le monde : des produits d'un set, la lecture « n°86 / 115, UF », un index où chaque produit a son visuel (clé k<id>) et son cosinus
 const ligne = (id, o = {}) => ({ idProduct: id, nomCardmarket: o.nom || 'Mary\'s Request', nomFr: o.nomFr ?? null, set: { slug: 'ufo', nom: 'Unseen Forces', code: o.code ?? 'UF' }, numero: o.numero === undefined ? '86' : o.numero, total: o.total === undefined ? '115' : o.total,
     langue: 'FR', variante: null, rarete: 'Rare', setTcgdex: null, tirageSource: 'intl', prixGuide: o.sansPrix ? null : { trend: 5, low: 4, avg30: 4.5, guideDu: new Date('2026-10-04') }, visuel: { url: `https://pub.example/${id}.webp`, w: 255, h: 356 } });
-function monde({ cos, lignes, vivier = [], base = [], redressee = true, ext = '2.0.1', groupes = [], leviers = true, sansVisuel = [] } = {}) {
+function monde({ cos, lignes, vivier = [], base = [], redressee = true, ext = '2.0.1', groupes = [], leviers = true, sansVisuel = [], unCandidat = false, probable = true } = {}) {
     const ids = Object.keys(cos).map(Number).filter(i => !sansVisuel.includes(i));
     const cleDe = id => `k${(groupes.find(g => g.includes(id)) || [id])[0]}`;      // un groupe partage UN visuel
     const entrees = new Map(ids.map(id => [id, { idProduct: id, grande: { cle: cleDe(id) }, vignette: { cle: cleDe(id) + 'v' }, idMetacard: groupes.some(g => g.includes(id)) ? 77 : id, numero: '86', setNom: 'Unseen Forces', mention: null }]));
@@ -25,7 +25,7 @@ function monde({ cos, lignes, vivier = [], base = [], redressee = true, ext = '2
     const index = { voisins: (q, n) => { const top = Object.entries(parCle).sort((a, b) => b[1] - a[1]).slice(0, n).map(([k, c]) => [k, c]); return { top, meilleur: top[0][1] }; }, similarites: (q, cles) => cles.map(k => parCle[k] ?? 0) };
     const etat = { courante: () => ({ index, meta: { modele: MODELE } }) };
     const produits = new Map(Object.entries(lignes).map(([id, l]) => [Number(id), l]));
-    const cfg = { ...cfgBase, leviersAbde: leviers };
+    const cfg = { ...cfgBase, leviersAbde: leviers, probable, ...(unCandidat ? { leviersUnCandidat: true } : {}) };
     const corps = { success: true, carte: { idProduct: base[0], ambigu: true, nom: 'Mary\'s Request', nomBrut: 'Mary\'s Request', nomConfiance: 'haute', numero: '86', total: '115', setCode: 'UF', langue: 'FR' }, lectureGarde: { numero: '86', total: '115', setCode: 'UF', vivierIds: vivier },
         etat: { estimeIA: 'EX', confianceIA: 'haute', defautsVus: [], declareVendeur: null, retenu: 'GD' }, candidats: base.map(idProduct => ({ idProduct })), classement: [], reverse: { attendue: false, strategie: null }, codeLangue: 2 };
     const ctxQuestion = { langueInterface: 'fr', cfg, ficheServie: false, jumeaux: () => ({ conclu: true, ids: [] }) };
@@ -129,6 +129,12 @@ const COS = { 1: 0.40, 2: 0.60, 3: 0.35, 4: 0.30 };
         const mg = monde({ cos: loin, lignes: lg2, base: [2, 3], vivier: [] }); mg.corps.carte.nom = 'Etiquette d Erika'; mg.corps.carte.nomBrut = null; mg.catalogue.indexAliasFrSansAttente = () => gros;
         const cg = await lancer(mg);
         H.v('d : l\'éventail d\'alias est plafonné à 20 par nom lu, et ce qui est coupé est ÉCRIT', [cg.diag.aliasIds.length, cg.diag.aliasCoupes && cg.diag.aliasCoupes[0].total, cg.diag.aliasCoupes && cg.diag.aliasCoupes[0].gardes], [20, 30, 20]);
+        // tour 2 (re-relecture, 1) : un éventail COUPÉ ne peut pas fabriquer une marge : aucun probable (échec fermé, compté), la question d'avant reste
+        H.v('d : un éventail coupé par le plafond => AUCUN probable (échec fermé), la question d\'avant reste, la cause est dite', [cg.r, cg.diag.raison], [null, 'alias-coupe']);
+        const av3 = L.echecs();
+        const mg2 = monde({ cos: loin, lignes: lg2, base: [2, 3], vivier: [] }); mg2.corps.carte.nom = 'Etiquette d Erika'; mg2.corps.carte.nomBrut = 'Etiquette d Erika bis'; mg2.catalogue.indexAliasFrSansAttente = () => L.construireIndexAlias([...Array.from({ length: 12 }, (_, i) => ({ idProduct: 3000 + i, nomFr: 'Etiquette d Erika' })), ...Array.from({ length: 12 }, (_, i) => ({ idProduct: 3012 + i, nomFr: 'Etiquette d Erika bis' }))]);
+        const cg2 = await lancer(mg2);
+        H.v('d : le plafond vaut pour l\'ENSEMBLE des formes lues : 12 + 12 produits = 24 > 20 => coupé => aucun probable, 20 alias au total', [cg2.r, cg2.diag.raison, cg2.diag.aliasIds.length, (L.echecs()['alias-coupe'] || 0) - (av3['alias-coupe'] || 0)], [null, 'alias-coupe', 20, 1]);
     }
     // ── les portes : tout le reste rend null et le DIT
     {
@@ -166,6 +172,39 @@ const COS = { 1: 0.40, 2: 0.60, 3: 0.35, 4: 0.30 };
         const g = await lancer(monde({ cos: { ...COS, 4: 0.40 }, lignes: LIGNES, base: [2, 3], vivier: [1, 4], groupes: [[1, 4]] }));
         H.v('I3 : le désigné partage son visuel et sa fiche avec un autre des 3 (même dessin) => pas de probable', [g.r && g.r.probable, g.diag.raison], [null, 'groupe-donnees']);
     }
+    // ── TOUR 2 : V2_LEVIERS_UN_CANDIDAT — une question à UN candidat devient un probable sous TOUTES les gardes de b, jamais un sûr
+    {
+        const un = (o = {}) => monde({ cos: { 1: 0.4, 2: 0.6 }, lignes: LIGNES, base: [2], vivier: [], unCandidat: true, ...o });
+        const off = await lancer(monde({ cos: { 1: 0.4, 2: 0.6 }, lignes: LIGNES, base: [2], vivier: [] }));
+        H.v('un candidat, drapeau UN_CANDIDAT absent : comme avant (jamais un probable)', [off.r && off.r.probable, off.diag.raison], [null, 'un-candidat']);
+        const on = await lancer(un());
+        H.v('un candidat, drapeau allumé : le probable est servi (la vérité 1 du pool, écart c3 0,4)', [on.r && on.r.probable && on.r.probable.idProduct, on.r && on.r.probable && on.r.probable.levier], [1, 'abde']);
+        H.v('   la question refaite porte plusieurs choix (celle qui est réservée puis débitée) et jamais un sûr', [on.r.resultat.issue, on.r.resultat.analyse.cartes[0].statut, on.r.resultat.analyse.cartes[0].candidats.length >= 2, on.r.resultat.question.choix.length >= 2], ['question', 'a-trancher', true, true]);
+        const niv = avecNiveau(on.r.resultat.analyse, on.r.probable);
+        H.v('   servi « probable, à confirmer » avec son prix', [niv.cartes[0].niveau, niv.cartes[0].probable, niv.cartes[0].candidats.find(c => c.idProduct === 1).prixGuide !== null], ['probable', { idProduct: 1, aConfirmer: true }, true]);
+        const sansAbde = await lancer(un({ leviers: false }));
+        H.v('   sans V2_LEVIERS_ABDE : rien (le drapeau ne suffit pas)', [sansAbde.r, sansAbde.diag.raison], [null, 'inactif']);
+        const sansProb = await lancer(un({ probable: false }));
+        H.v('   sans V2_PROBABLE : rien', [sansProb.r, sansProb.diag.raison], [null, 'inactif']);
+        const sp = await lancer(un({ lignes: { ...LIGNES, 1: ligne(1, { sansPrix: true }) } }));
+        H.v('   I2 : le désigné sans prix de guide n\'est pas probable (la question suit)', [sp.r && sp.r.probable, sp.diag.raison], [null, 'sans-prix']);
+        const gr = await lancer(un({ cos: { 1: 0.4, 2: 0.6, 4: 0.4 }, vivier: [1, 4], groupes: [[1, 4]] }));
+        H.v('   I3 : le désigné de même dessin qu\'un autre des 3 n\'est pas probable', [gr.r && gr.r.probable, gr.diag.raison], [null, 'groupe-donnees']);
+        const mt = un(); mt.resultat = { ...mt.resultat, motif: 'jumeaux-trop-nombreux' };
+        const ct = un(); ct.resultat = { ...ct.resultat, contradiction: 'contredit par numero' };
+        H.v('   motif ou contradiction : rien', [(await lancer(mt)).r, (await lancer(ct)).r], [null, null]);
+        const gm = await lancer(un(), { traceMarqueurs: { garde: { issue: 'question' } } });
+        H.v('   question de GROUPE (marqueurs) : rien', [gm.r, gm.diag.raison], [null, 'groupe-marqueurs']);
+        const al = un(); al.catalogue.indexAliasFrSansAttente = () => null;
+        const alr = await lancer(al);
+        H.v('   index d\'alias pas prêt : échec fermé (aucun probable, la question reste)', [alr.r, alr.diag.raison], [null, 'alias-non-pret']);
+        const ctr = await lancer(un({ lignes: { ...LIGNES, 1: ligne(1, { numero: '86', total: '99' }) } }));
+        H.v('   le premier CONTREDIT par un champ lu (total) : jamais un probable', ctr.r === null || ctr.r.probable === null, true);
+        const faible = await lancer(un({ cos: { 1: 0.35, 2: 0.36, 5: 0.34 }, lignes: { ...LIGNES, 5: ligne(5) } }));
+        H.v('   écart c3 insuffisant : pas de probable', faible.r === null || faible.r.probable === null, true);
+        const deux = await lancer(monde({ cos: COS, lignes: LIGNES, base: [2, 3], vivier: [1], unCandidat: true }));
+        H.v('   deux candidats ou plus : le comportement est celui d\'avant, drapeau ou non', deux.r && deux.r.probable && deux.r.probable.idProduct, 1);
+    }
     // ── un seul candidat classable, ou une ligne manquante : la question d'avant, jamais une panne
     {
         const seul = await lancer(monde({ cos: { 2: 0.6, 9: 0.5 }, lignes: { ...LIGNES, 9: ligne(9) }, base: [2, 9], vivier: [], sansVisuel: [9] }));
@@ -201,6 +240,17 @@ const COS = { 1: 0.40, 2: 0.60, 3: 0.35, 4: 0.30 };
     {
         const sorties = []; for (const issue of ['affirmee', 'introuvable', 'panne']) { const m = monde({ cos: COS, lignes: LIGNES, base: [2, 3], vivier: [1] }); m.resultat = { issue, analyse: m.resultat.analyse }; sorties.push((await lancer(m)).r); }
         H.v('affirmee / introuvable / panne : rien', sorties, [null, null, null]);
+    }
+    // ── TOUR 2, réserve 5 : un probable né d'une question à UN candidat ne change RIEN à ce que la facturation lit. Lecture statique du code de production (le banc HTTP ne tourne pas ici).
+    {
+        const fs = require('fs'), path = require('path');
+        const lire = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8').replace(/\r\n/g, '\n');
+        const q = lire('argent/questions.js'), routes = lire('identifier/routes.js'), lot = lire('identifier/lot.js');
+        const dReg = q.indexOf('async function regler('), fReg = q.indexOf('\n}\n', dReg), regler = q.slice(dReg, fReg);
+        H.v('réserve 5 : `regler` (le règlement d\'un probable ou d\'une question) ne lit JAMAIS `choix.length` ni `candidats` : un probable né d\'une réservation à 1 candidat se règle comme les autres', [/choix\.length/.test(regler), /\.candidats/.test(regler)], [false, false]);
+        const lectures = q.split('\n').filter(l => /choix\.length/.test(l));
+        H.v('réserve 5 : l\'UNIQUE lecture de `choix.length` du grand livre est le jugement d\'un LOT (jugerLot, `!== 1`)', [lectures.length, /!== 1/.test(lectures[0] || '')], [1, true]);
+        H.v('réserve 5 : un probable ne naît ni d\'un lot (lot.js n\'appelle pas le levier) ni sans la ligne `questions_v2` en attente (passerEnProbable)', [/appliquerLeviers/.test(lot), /passerEnProbable\(porteur, \{ scanId, carte: 0 \}\)/.test(routes), /\$set: \{ choix: resultat\.question\.choix\.map/.test(routes)], [false, true, true]);
     }
     H.bilan();
 })().catch(e => { console.log('ERREUR', e && e.stack || e); process.exit(1); });

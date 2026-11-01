@@ -95,7 +95,8 @@ function creerCatalogue(opts = {}) {
     // TOUR 1 (D) : l'index n'est JAMAIS construit dans le chemin d'un scan. `indexAliasFrSansAttente()` rend l'index PRÊT (même un peu périmé pendant sa reconstruction) ou null, et lance la construction en ARRIÈRE-PLAN ; le levier échoue fermé tant
     // qu'il est null. Il est PRÉCHAUFFÉ au démarrage (prechaufferSiDemande, dès que V2_LEVIERS_ABDE est allumé) et rafraîchi toutes les 6 h par la première demande qui le trouve périmé, sans que cette demande l'attende.
     // Le temps (mur et CPU) et la mémoire de chaque construction sont gardés (`statsIndexAlias`) et écrits au journal.
-    let aliasEnCours = null, aliasLe = 0, aliasPret = null, aliasStats = null;
+    const ALIAS_ATTENTE_MS = 60 * 1000;
+    let aliasEnCours = null, aliasLe = 0, aliasPret = null, aliasStats = null, aliasEchecLe = -Infinity;
     async function indexAliasFr() {
         if (aliasEnCours && Date.now() - aliasLe < INDEX_DUREE_MS) return aliasEnCours;
         const p = (async () => {
@@ -113,11 +114,12 @@ function creerCatalogue(opts = {}) {
             return index;
         })();
         aliasEnCours = p; aliasLe = Date.now();
-        p.then(idx => { if (aliasEnCours === p) aliasPret = idx; }, () => { if (aliasEnCours === p) { aliasEnCours = null; aliasLe = 0; } });
+        p.then(idx => { if (aliasEnCours === p) aliasPret = idx; }, () => { if (aliasEnCours === p) { aliasEnCours = null; aliasLe = 0; aliasEchecLe = Date.now(); } });
         return p;
     }
+    // TOUR 2 : après un ÉCHEC de reconstruction, aucune nouvelle lecture des lignes avant ALIAS_ATTENTE_MS (60 s) : un scan ne relance pas 73 756 lignes à chaque passage ; pendant l'attente le levier reste fermé (null, ou l'ancien index prêt)
     function indexAliasFrSansAttente() {
-        if (!aliasEnCours || Date.now() - aliasLe >= INDEX_DUREE_MS) indexAliasFr().catch(() => { });
+        if ((!aliasEnCours || Date.now() - aliasLe >= INDEX_DUREE_MS) && Date.now() - aliasEchecLe >= ALIAS_ATTENTE_MS) indexAliasFr().catch(() => { });
         return aliasPret;
     }
     const statsIndexAlias = () => (aliasStats ? { ...aliasStats } : null);

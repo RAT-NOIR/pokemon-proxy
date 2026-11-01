@@ -24,6 +24,7 @@ const lance = (env) => { try { return { cfg: lireConfig(env) }; } catch (e) { re
     H.vrai('config : une valeur ni 0 ni 1 est une configuration invalide (jamais un drapeau allumé par accident)', Boolean(lance({ V2_LEVIERS_ABDE: 'oui' }).erreur) && Boolean(lance({ V2_LEVIERS_ABDE: 'true' }).erreur));
     H.v('config : V2_LEVIERS_ECART règle l\'écart entre 0,05 et 0,5, bornes comprises', [lireConfig({ V2_LEVIERS_ECART: '0.05' }).leviersEcart, lireConfig({ V2_LEVIERS_ECART: '0.15' }).leviersEcart, lireConfig({ V2_LEVIERS_ECART: '0.5' }).leviersEcart], [0.05, 0.15, 0.5]);
     H.v('config : un écart SOUS 0,05 (0 = chaque ex aequo débité) ou AU-DESSUS de 0,5 (probable éteint sans le dire) est une configuration invalide', ['0', '0.04', '0.0499', '0.51', '1', '1.5', 'abc', '-0.1'].map(v => Boolean(lance({ V2_LEVIERS_ECART: v }).erreur)), [true, true, true, true, true, true, true, true]);
+    H.v('config : V2_LEVIERS_UN_CANDIDAT éteint par défaut ; seul « 1 » exactement l\'allume, toute autre valeur l\'éteint SANS rendre la configuration invalide', [lireConfig({}).leviersUnCandidat, lireConfig({ V2_LEVIERS_UN_CANDIDAT: '1' }).leviersUnCandidat, ...['0', 'true', '2', 'oui', ' 1', ''].map(v => { try { return lireConfig({ V2_LEVIERS_UN_CANDIDAT: v }).leviersUnCandidat; } catch { return 'invalide'; } })], [false, true, false, false, false, false, false, false]);
     H.vrai('config : l\'écart invalide est refusé même drapeau éteint (une faute de frappe se voit tout de suite)', Boolean(lance({ V2_LEVIERS_ABDE: '0', V2_LEVIERS_ECART: '0' }).erreur));
 }
 
@@ -35,6 +36,7 @@ const lance = (env) => { try { return { cfg: lireConfig(env) }; } catch (e) { re
     H.v('/ping : V2_LEVIERS_ABDE ET V2_PROBABLE allumés => le jeton est annoncé, en dernier', [on.includes('leviers-abde'), on[on.length - 1]], [true, 'leviers-abde']);
     H.v('/ping : V2_LEVIERS_ABDE seul (V2_PROBABLE éteint : a, b, d, e ne font rien) => pas de jeton ; V2_PROBABLE seul non plus', [seul.includes('leviers-abde'), probableSeul.includes('leviers-abde')], [false, false]);
     H.v('/ping : les autres jetons ne changent pas quand le drapeau s\'allume (hors le nouveau)', on.filter(x => x !== 'leviers-abde'), probableSeul);
+    H.v('/ping : V2_LEVIERS_UN_CANDIDAT n\'ajoute AUCUN jeton (le jeton `leviers-abde` couvre la famille ; la forme de la réponse ne change pas)', capacitesServies(lireConfig({ V2_LEVIERS_ABDE: '1', V2_PROBABLE: '1', V2_LEVIERS_UN_CANDIDAT: '1' })), on);
     H.vrai('/ping : une condition qui rend autre chose que true laisse tomber le jeton', !capacitesServies(lireConfig({ V2_LEVIERS_ABDE: '1', V2_PROBABLE: '1' }), { ...CONDITIONS, 'leviers-abde': () => 'oui' }).includes('leviers-abde'));
 }
 
@@ -94,7 +96,13 @@ if (L) {
     {
         const gros = new Map([['good manners', Array.from({ length: 35 }, (_, i) => 5000 + i)]]), coupes = [];
         const ids = L.aliasDe(gros, ['Good Manners', 'good manners'], coupes);
-        H.v('d : un nom porté par 35 produits n\'en envoie que 20, et la coupe est ÉCRITE', [ids.length, coupes.length, coupes[0] && coupes[0].total, coupes[0] && coupes[0].gardes], [20, 2, 35, 20]);
+        H.v('d : un nom porté par 35 produits n\'en envoie que 20, et la coupe est ÉCRITE', [ids.length, coupes.length, coupes[0] && coupes[0].total, coupes[0] && coupes[0].gardes], [20, 1, 35, 20]);
+        // tour 2 (re-relecture, 1) : le plafond de 20 vaut pour l'ENSEMBLE des formes lues (nom et nom brut), pas 20 par forme
+        const deux = new Map([['good manners', Array.from({ length: 15 }, (_, i) => 6000 + i)], ['mewtwo', Array.from({ length: 15 }, (_, i) => 7000 + i)]]), coupes2 = [];
+        const ids2 = L.aliasDe(deux, ['Good Manners', 'Mewtwo'], coupes2);
+        H.v('d : deux formes de 15 produits : 20 au TOTAL (pas 30), la coupe est ÉCRITE avec le total de l\'union', [ids2.length, coupes2.length, coupes2[0] && coupes2[0].total, coupes2[0] && coupes2[0].gardes], [20, 1, 30, 20]);
+        const coupes3 = [];
+        H.v('d : 20 produits au total, répartis sur deux formes : rien n\'est coupé', [L.aliasDe(new Map([['good manners', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]], ['mewtwo', [11, 12, 13, 14, 15, 16, 17, 18, 19, 20]]]), ['Good Manners', 'Mewtwo'], coupes3).length, coupes3.length], [20, 0]);
         const long = 'a'.repeat(5000) + ' fin';
         H.v('d : le nom lu est borné AVANT la normalisation (120 caractères)', [L.normaliserAlias(long).length, L.NOM_LU_MAX], [120, 120]);
         const ex = L.composerPool({ baseIds: [5], vivier: [900, 901, 1000, 1001], ko: () => 0, produitsDesVoisins: [[900, 9000]], alias: [901, 7777], existe: id => id >= 1000 || id === 5 || id === 9000 || id === 7777 });
@@ -261,7 +269,24 @@ if (L) {
         H.v('alias : le temps et la mémoire de la construction sont gardés (noms, lignes, ms mur, ms CPU, tas)', [stats.noms, stats.lignes, typeof stats.msMur, typeof stats.msCpu, typeof stats.tasMo], [10049, 10050, 'number', 'number', 'number']);
         const cats = fs.readFileSync(path.join(__dirname, '..', 'identifier', 'catalogue.js'), 'utf8');
         H.vrai('alias : préchauffé au démarrage sous le drapeau (prechauffer ET prechaufferSiDemande), jamais drapeau éteint', cats.includes('if (cfg.leviersAbde === true) r.alias = await prechaufferAlias();') && cats.includes('if (cfg.leviersAbde === true) return (async () =>'));
-        H.vrai('alias : la reconstruction périmée part en arrière-plan sans être attendue par la demande', cats.includes('if (!aliasEnCours || Date.now() - aliasLe >= INDEX_DUREE_MS) indexAliasFr().catch(() => { });\n        return aliasPret;') || cats.includes('if (!aliasEnCours || Date.now() - aliasLe >= INDEX_DUREE_MS) indexAliasFr().catch(() => { });\r\n        return aliasPret;'));
+        H.vrai('alias : la reconstruction périmée part en arrière-plan sans être attendue par la demande', /indexAliasFr\(\)\.catch\(\(\) => \{ \}\);\r?\n\s*return aliasPret;/.test(cats));
+        // tour 2 (re-relecture, 2) : après un ÉCHEC de reconstruction, on attend au moins 60 s avant de relire les lignes ; pendant l'attente l'échec reste fermé (null)
+        {
+            let lectures = 0;
+            dbMod.col = nom => ({ countDocuments: async () => { lectures++; return 20000; }, find: () => (async function* () { for (const d of gros) yield d; })() });
+            const catF = creerCatalogue({ cfg: lireConfig({}), visuels: { entree: () => null } });
+            const dateOrig = Date.now; let t = dateOrig(); Date.now = () => t;
+            const attendre = () => new Promise(r => setImmediate(() => setTimeout(r, 30)));
+            const w2 = console.warn; console.warn = () => { };
+            let rs = [];
+            try {
+                rs.push(catF.indexAliasFrSansAttente()); await attendre();
+                for (let i = 0; i < 5; i++) { t += 11800; rs.push(catF.indexAliasFrSansAttente()); await attendre(); }
+                const pendant = lectures;
+                t += 61000; rs.push(catF.indexAliasFrSansAttente()); await attendre();
+                H.v('alias : un ÉCHEC de reconstruction n\'est pas relancé à chaque scan : une seule lecture jusqu\'à 59 s, null (fermé) tout du long, puis une nouvelle tentative après 60 s', [pendant, rs.every(x => x === null), lectures], [1, true, 2]);
+            } finally { console.warn = w2; Date.now = dateOrig; }
+        }
     } finally { dbMod.col = colorig; }
     H.bilan();
 })().catch(e => { console.log('ERREUR', e && e.stack || e); process.exit(1); });

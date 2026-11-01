@@ -86,14 +86,15 @@ function cleAlias(nom) { const k = normaliserAlias(nom); return k.length >= ALIA
 /** Les produits dont le nomFr normalisé est l'une des formes lues (nom, nom brut) ; `index` : Map<clé, idProduct[]> (catalogue.indexAliasFr). Sans index : []. */
 function aliasDe(index, formes, coupes = null) {
     if (!(index instanceof Map)) return [];
-    const sortie = [];
+    const sortie = [], cles = [];
     for (const f of (Array.isArray(formes) ? formes : [])) {
-        const k = cleAlias(f); if (!k || !index.has(k)) continue;
-        const ids = index.get(k);
-        if (ids.length > ALIAS_MAX && Array.isArray(coupes)) coupes.push({ cle: k, total: ids.length, gardes: ALIAS_MAX });          // ce qui est coupé est ÉCRIT
-        for (const id of ids.slice(0, ALIAS_MAX)) if (!sortie.includes(id)) sortie.push(id);
+        const k = cleAlias(f); if (!k || !index.has(k) || cles.includes(k)) continue;
+        cles.push(k);
+        for (const id of index.get(k)) if (!sortie.includes(id)) sortie.push(id);
     }
-    return sortie;
+    // TOUR 2 : le plafond vaut pour l'ENSEMBLE des formes lues (20 au total, pas 20 par forme) ; ce qui est coupé est ÉCRIT, et l'appelant n'en tire AUCUN probable (un éventail coupé fabrique une marge)
+    if (sortie.length > ALIAS_MAX && Array.isArray(coupes)) coupes.push({ cle: cles.join(' | '), total: sortie.length, gardes: ALIAS_MAX });
+    return sortie.slice(0, ALIAS_MAX);
 }
 /** Ajoute une ligne { idProduct, nomFr } à l'index d'alias Map<clé normalisée (>= 4 caractères), idProduct[]> (les lignes sans nom français ou à nom trop court n'y entrent pas). */
 function ajouterAlias(index, d) {
@@ -159,7 +160,7 @@ async function appliquerLeviers({ cfg, entree, resultat, corpsChaine, produits, 
         if (!(indexAlias instanceof Map)) return echec('alias-non-pret');
         const coupes = [];
         const alias = aliasDe(indexAlias, [carte.name ?? carte.nom, carte.nomBrut], coupes);
-        if (coupes.length) { signaler('alias-tronque', JSON.stringify(coupes)); if (diag) diag.aliasCoupes = coupes; }
+        if (coupes.length) { if (diag) { diag.aliasCoupes = coupes; diag.aliasIds = alias; } return echec('alias-coupe', JSON.stringify(coupes)); }       // échec FERMÉ : un éventail coupé ne fabrique pas de marge (tour 2)
         // les lignes de catalogue du pool : celles que la route a déjà lues, plus le reste (une seule lecture) ; une lecture qui échoue laisse la question d'avant
         const lignes = new Map(produits);
         const visés = [...new Set([...baseIds, ...lu.vivierIds.slice(0, VIVIER_LU), ...produitsDesVoisins.flat(), ...alias])];
@@ -189,7 +190,7 @@ async function appliquerLeviers({ cfg, entree, resultat, corpsChaine, produits, 
         if (d.kind === 'prob') {
             const q = (nouveau || resultat).analyse.cartes[0];
             const c = q.candidats.find(x => x && x.idProduct === d.id);
-            if (baseIds.length < 2) note('un-candidat');                                                                              // consulterProbable (:95) : une confirmation à UN candidat n'est jamais un probable ; la question, elle, suit le classement
+            if (baseIds.length < 2 && cfg.leviersUnCandidat !== true) note('un-candidat');                                                                            // consulterProbable (:95) : une confirmation à UN candidat n'est jamais un probable ; la question, elle, suit le classement
             else if (dansUnGroupe(version, d.id, d.top3)) note('groupe-donnees');                                                     // I3 : le désigné est de MÊME DESSIN qu'un autre des 3
             else if (!c || PR.depuisGuide(c.prixGuide, 'tendance-seule') === null) note('sans-prix');                                 // I2 : un probable est affiché AVEC un prix de guide
             else probable = { idProduct: d.id, signal: SIGNAL, levier: LEVIER, contredits: d.top3.filter(i => i !== d.id), detail: { ecart: d.gap, second: d.second, pool: T.length } };

@@ -43,7 +43,9 @@ let RESULTAT_COUT = null;
     dbV2.brancher(db);
     const cfg0 = lireConfig({});
     const cfgOff = { ...cfg0, probable: true, empreinteExtension: true, modeleEmpreinte: MODELE };
-    const cfgOn = { ...cfgOff, leviersAbde: true, leviersEcart: 0.1 };
+    const UN_CANDIDAT = argv('un-candidat') === '1';                 // tour 2 : V2_LEVIERS_UN_CANDIDAT=1 (--un-candidat=1) ; le simulateur doit être lancé avec UNC=1 (même sémantique)
+    const cfgOn = { ...cfgOff, leviersAbde: true, leviersEcart: 0.1, ...(UN_CANDIDAT ? { leviersUnCandidat: true } : {}) };
+    console.log(`V2_LEVIERS_UN_CANDIDAT ${UN_CANDIDAT ? 'ALLUMÉ' : 'éteint'}`);
     const cat = creerCatalogue({ cfg: cfg0, visuels: { entree: id => V.entree(id), tirage: id => V.tirageJumeaux(id), resoudre: async () => null, impressions: async () => [] } });
     await cat.indexCodeNumero(); await cat.indexFamilles();
     const t0 = Date.now(); const alias = await cat.indexAliasFr(); const stats = cat.statsIndexAlias(); console.log(`index d'alias : ${alias.size} noms en ${Date.now() - t0} ms`);
@@ -231,6 +233,12 @@ let RESULTAT_COUT = null;
     comptes.nonRejouees = nonRejoueesCles.length;
     const nrProb = nonRejoueesCles.filter(k => SIM.get(k).C3.kind === 'prob'), nrProbJustes = nrProb.filter(k => SIM.get(k).C3.id === SIM.get(k).verite);
     // ── le tableau « route » : les mêmes dénominateurs que le §8.1 ; les sûrs sont ceux du simulateur (identiques, voir (1)) ; les probables sont ceux de la ROUTE rejouée, et, pour les lignes non rejouées, ceux du simulateur
+    // tour 2 : le relevé PAR LIGNE de ce que la route sert (probables), pour recalculer le tableau sur n'importe quelle sous-population (« réglage sans les 137 »)
+    const probablesRoute = [];
+    for (const s of sorties) { const sim = s.sim; if (!sim || sim.etStocke) continue; if (s.on.probable) probablesRoute.push({ cle: s.cle, pop: sim.pop, serie: sim.enSerie, id: s.on.probable.idProduct, verite: sim.verite, base: (s.on.diag.base || []).length }); }
+    for (const k of nonRejoueesCles) { const sim = SIM.get(k); if (sim.C3.kind === 'prob') probablesRoute.push({ cle: k, pop: sim.pop, serie: sim.enSerie, id: sim.C3.id, verite: sim.verite, base: null, nonRejouee: true }); }
+    const aliasCoupes = sorties.filter(s => s.on.diag && s.on.diag.raison === 'alias-coupe').map(s => s.cle);
+    console.log(`(A) éventails d'alias COUPÉS par le plafond (20 au total, échec fermé) : ${aliasCoupes.length} ligne(s) rejouée(s)`);
     let tableauRoute = null;
     try {
         const PA = JSON.parse(fs.readFileSync(argv('partieA') || path.join(path.dirname(argv('simulateur')), 'partieA-sortie.json'), 'utf8')).tab['variante (tri c3)'];
@@ -251,7 +259,7 @@ let RESULTAT_COUT = null;
     for (const e of ecartsDetail) console.log(`    - ${e.pop}${e.serie ? '+série' : ''} ${e.cle} simulateur « ${e.simulateur} » route « ${e.route} » : ${e.cause}`);
     console.log('\n(R) RELEVÉ HORS REJEU (non rejoué, ni par la route ici ni par le simulateur) : la règle G (V2_REGLE_G / vecteur), SUR-PAR-IMAGE, la seconde lecture, la lecture du tampon, le titre jumbo (0 annonce en base), le second envoi G-GROUPE. Éteints ou sans fournisseur dans l\'état livré ; ils ne peuvent que PROMOUVOIR un sûr ou réduire une question avant le levier, jamais l\'inverse. Leur effet se lit sur la SÉRIE RÉELLE de l\'essai (déjà mesuré : 1 probable juste par G-GROUPE sur 6ad09190, serie-P2-1101.json).');
     console.log(`\n(3) ÉCARTS NON EXPLIQUÉS : ${nonExpliques.length}`, nonExpliques.length ? JSON.stringify(nonExpliques) : '');
-    if (argv('sortie')) fs.writeFileSync(argv('sortie'), JSON.stringify({ le: new Date().toISOString(), indexAlias: stats, cout: RESULTAT_COUT, surs: { surs, surChange, surNeuf, detailSurs }, comptes, parBanc, causes, tableauRoute, nonRejouees: { n: nonRejoueesCles.length, probables: nrProb.length, probablesJustes: nrProbJustes.length }, ecartsDetail, nonExpliques }, null, 1));
+    if (argv('sortie')) fs.writeFileSync(argv('sortie'), JSON.stringify({ le: new Date().toISOString(), indexAlias: stats, cout: RESULTAT_COUT, surs: { surs, surChange, surNeuf, detailSurs }, comptes, parBanc, causes, tableauRoute, probablesRoute, aliasCoupes, unCandidat: UN_CANDIDAT, nonRejouees: { n: nonRejoueesCles.length, probables: nrProb.length, probablesJustes: nrProbJustes.length }, ecartsDetail, nonExpliques }, null, 1));
     await c.close();
     process.exit(surChange || surNeuf || nonExpliques.length ? 1 : 0);
 })().catch(e => { console.log('ERREUR', e.code || e.name, String(e.message || '').slice(0, 300), String(e.stack || '').split('\n').slice(1, 4).join(' | ')); process.exit(1); });
