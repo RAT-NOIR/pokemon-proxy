@@ -742,12 +742,12 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.strictEqual(sans.unites.length, 0); assert.match(JSON.stringify(sans.resume.refus), /nom-different/);
     });
     await test('plan (nom traduit) : fiche simple japonaise sans carte : Pokédex + PV + règle + code lus ; le code vient du slug OU de codes_set ; la table officielle sert un Dresseur ; un désaccord refuse', async () => {
-        const base = o => ({ etat: [{ idProduct: 1001, idExpansion: 5000, langue: 'jp', tamponnee: null, name: o.name ?? 'Mareep' }], sets: [{ _id: SLUG, tirage: 'jp' }], cartes: o.cartes ?? [],
+        const base = o => ({ etat: [{ idProduct: 1001, idExpansion: 5000, langue: o.tirage ?? 'jp', tamponnee: null, name: o.name ?? 'Mareep' }], sets: [{ _id: SLUG, tirage: o.tirage ?? 'jp' }], cartes: o.cartes ?? [], luLangue: o.luLangue ?? 'ja',
             lignes: [{ idProduct: 1001, carteId: -1, slugSet: SLUG, numeroFiche: '13', slug: o.slug ?? 'Mareep-svAL013', idExpansion: 5000 }], codesSet: o.codesSet ?? [], luPlus: o.lu ?? {} });
         const monter = async (o) => {
             const w = await mondeSimple(o);
             const man = JSON.parse(fs.readFileSync(path.join(w.racine, 'MCD', 'preuves.json'), 'utf8'));
-            man.entrees[0].lu = { ...man.entrees[0].lu, langue: 'ja', nom: 'メリープ', total: '21', codeSet: 'svAL', dex: 179, pv: 60, ...o.luPlus };
+            man.entrees[0].lu = { ...man.entrees[0].lu, langue: o.luLangue, nom: o.luLangue === 'ja' ? 'メリープ' : '咩利羊', total: '21', codeSet: 'svAL', dex: 179, pv: 60, ...o.luPlus };
             fs.writeFileSync(path.join(w.racine, 'MCD', 'preuves.json'), JSON.stringify(man));
             return K.construirePlanAvec({ dossier: w.racine, cache: w.cache, lire: w.lire, etat: w.etat, lecteur: RC.lecteurNatif(w.db), fichiers: w.F });
         };
@@ -766,6 +766,18 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.strictEqual((await monter(avecCarte(carte(60)))).unites.length, 1);
         const pvFaux = await monter(avecCarte(carte(70)));
         assert.strictEqual(pvFaux.unites.length, 0); assert.match(JSON.stringify(pvFaux.resume.refus), /pv-different/);
+        // chinois : la carte est lue aussi (PV de la carte contre PV lu), pas seulement pour le japonais
+        const zhCarte = pv => avecCarte(base({ tirage: 'zh-hans', luLangue: 'zh-hans', cartes: [{ _id: 77, nomEn: 'Mareep', pv, ndex: 179, categorie: 'pokemon', images: [] }] }));
+        assert.strictEqual((await monter(zhCarte(60))).unites.length, 1);
+        const zhFaux = await monter(zhCarte(70));
+        assert.strictEqual(zhFaux.unites.length, 0); assert.match(JSON.stringify(zhFaux.resume.refus), /pv-different/);
+        // le n° de Pokédex et la catégorie de la CARTE sont lus aussi ; son nomEn passe avant le nom Cardmarket du produit
+        const ndexFaux = await monter(avecCarte(base({ cartes: [{ _id: 77, nomEn: 'Mareep', pv: 60, ndex: 180, categorie: 'pokemon', images: [] }] })));
+        assert.strictEqual(ndexFaux.unites.length, 0); assert.match(JSON.stringify(ndexFaux.resume.refus), /pokedex-ambigu/);
+        const dresseurCarte = await monter(avecCarte(base({ cartes: [{ _id: 77, nomEn: 'Mareep', pv: 60, ndex: 179, categorie: 'dresseur', images: [] }] })));
+        assert.strictEqual(dresseurCarte.unites.length, 0); assert.match(JSON.stringify(dresseurCarte.resume.refus), /nom-traduit-sans-temoin/);
+        const nomDeLaCarte = await monter(avecCarte(base({ name: 'Mareep Holo', cartes: [{ _id: 77, nomEn: 'Mareep', pv: 60, ndex: 179, categorie: 'pokemon', images: [] }] })));
+        assert.deepStrictEqual([nomDeLaCarte.resume.refus, nomDeLaCarte.unites.length], [[], 1], 'le nomEn de la carte fait foi, pas le libellé du produit');
         // un Dresseur au nom traduit : refusé, sauf table officielle (le nomJa d'autres cartes à page de même nomEn)
         const dr = (o = {}) => base({ name: 'Nemona', slug: 'Nemona-svAL013', lu: { nom: 'ネモ', dex: null, pv: null }, ...o });
         const sans = await monter(dr());
@@ -1061,9 +1073,12 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.strictEqual(lue(trad({ regle: 'V', nom: 'ピカチュウV', dex: 25 }), ptrad({ nomEn: 'Pikachu V' })).ok, true, 'règle saisie et nom lu d\'accord');
         assert.match(mt(trad({ nom: '' }), ptrad()), /nom-different/, 'nom lu vide');
         assert.match(mt(trad({ langue: 'zh-hans' }), ptrad()), /langue-differente/);
-        assert.match(mt(trad(), ptrad({ numero: null, slug: 'Mareep-svAL' })), /nom-traduit-numero-absent|numero-attendu/, 'produit sans numéro : le numéro est une des deux clés');
+        assert.match(mt(trad(), ptrad({ numero: null, slug: 'Mareep-svAL' })), /nom-traduit-numero-absent/, 'produit sans numéro : le numéro est une des deux clés');
         assert.match(mt(trad({ nom: 'ガラルファイヤーV', dex: 146, pv: 220 }), ptrad({ nomEn: 'Galarian Moltres V', slug: 'Galarian-Moltres-V-svAL005' })), /forme-regionale/, 'forme régionale : le Pokédex ne la distingue pas');
         assert.match(mt(trad({ nom: 'ガラルファイヤーV', dex: 146, pv: 220 }), ptrad({ nomEn: 'Moltres V', slug: 'Moltres-V-svAL005' })), /forme-regionale/, 'forme régionale lue sur un produit qui n\'en nomme pas');
+        assert.match(mt(trad({ nom: 'ファイヤーV', dex: 146, pv: 220 }), ptrad({ nomEn: 'Galarian Moltres V', slug: 'Galarian-Moltres-V-svAL005' })), /forme-regionale/, 'produit de forme régionale, nom lu qui ne la marque pas');
+        assert.strictEqual(lue(trad({ nom: 'ファイヤーV', dex: 146, pv: 220 }), ptrad({ nomEn: 'Moltres V', slug: 'Moltres-V-svAL005' })).ok, true, 'la forme de base passe');
+        assert.match(mt(trad({ langue: 'zh-hans' }), ptrad()), /nom-langue-non-anglaise/, 'langue lue ≠ langue du tirage : la règle du nom traduit ne s\'ouvre pas');
         assert.match(mt(trad({ nom: '洗翠' + 'V' }), ptrad({ nomEn: 'Mareep V' })), /forme-regionale/, 'marque régionale chinoise lue');
     });
     await test('nom traduit : un Dresseur ou une Énergie au nom traduit reste refusé, sauf table de traduction OFFICIELLE (nomJa d\'autres cartes de même nomEn)', () => {
