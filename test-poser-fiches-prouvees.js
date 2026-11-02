@@ -173,6 +173,10 @@ verifier('planifier : un produit qui a DÉJÀ une ligne (autre carte) → refus 
 verifier('planifier : un produit absent du catalogue de l\'expansion → refus', (() => { const p = planifier({ entrees: [{ ...E1, idProduct: 404, idExpansion: 9, slugSet: 'Le-Set', numeroFiche: null }], lecture }); return [p.lignes.length, p.refus.length]; })(), [0, 1]);
 verifier('--attendu : le bon nombre passe, un autre ou l\'absence refuse', [verifierAttendu(p1, 1).ok, verifierAttendu(p1, 2).ok, verifierAttendu(p1, undefined).ok], [true, false, false]);
 verifier('la décision du jour est une liste fermée de 8 produits distincts', (() => { const d = DECISIONS['2026-10-17']; return [d.length, new Set(d.map(x => x.idProduct)).size]; })(), [8, 8]);
+// (décision de l'utilisateur, 2026-11-02) les 4 « a » posés avant la garde d'expansion DÉCLARENT l'impression « Yellow A Alternate cards » que leur carte porte (numéro suffixé « a »)
+verifier('les 4 Yellow A Alternate (Togepi 143a, Karen XY177a, Lusamine 153a ×2) déclarent expansionImpression « Yellow A Alternate cards »',
+    [582672, 311408, 449878, 449883].map(id => Object.values(DECISIONS).flat().find(x => x.idProduct === id)?.expansionImpression ?? null),
+    ['Yellow A Alternate cards', 'Yellow A Alternate cards', 'Yellow A Alternate cards', 'Yellow A Alternate cards']);
 
 // ── API-52 L3 (décision 2026-10-25) : seulement les produits à DEUX sources concordantes ; Jirachi 877355 et Sonia 653505 (Cardmarket seul) en sont EXCLUS
 verifier('décision 2026-10-25 : liste fermée de 3 produits exactement (Karen, 2 Lusamine) ; Jirachi, Sonia (une seule source) et Entei (les deux sources ne concordent pas sur le SET) exclus', (() => { const d = DECISIONS['2026-10-25'] || []; return [d.map(x => [x.idProduct, x.carteId]), new Set(d.map(x => x.idProduct)).size]; })(), [[[311408, 214539], [449878, 225372], [449883, 225372]], 3]);
