@@ -42,6 +42,8 @@ const GROUPES = [
         ['décision 5 : code imprimé non comparé', "if (lu?.codeSet !== CODES_SANS_TOTAL[slugSet]) return false;", ""],
         ['décision 5 : numéros non numériques admis', "if (!/^\\d+$/.test(String(lu.numero ?? '').trim()) || !/^\\d+$/.test(String(np ?? '').trim())) return false;", ""],
         ['décision 5 : slug du produit non confronté', "return motifDeCode(lu, produit, np) === null;", "return true;"],
+        ['décision 5 : slug facultatif quand codeSet concorde', "if (!new RegExp(`(^|-)${echapper(CODES_SANS_TOTAL[slugSet])}-?0*${echapper(chiffres)}$`, 'i').test(slug)) return false;", ""],
+        ['décision 5 : slug sans frontière avant le code', "`(^|-)${echapper(CODES_SANS_TOTAL[slugSet])}-?0*", "`${echapper(CODES_SANS_TOTAL[slugSet])}-?0*"],
         ['décision 5 : première lecture non jugée', "if (Object.hasOwn(CODES_SANS_TOTAL, produit?.slugSet) && sansTotal(entree.lu)) {", "if (false) {"],
         ['décision 5 : seconde lecture sans l\'exception', "{ lu: s.lu, attendu: entree.attendu, contradictions: entree.contradictions }, produit, langueProduit, sansTotalAutorise: true });", "{ lu: s.lu, attendu: entree.attendu, contradictions: entree.contradictions }, produit, langueProduit });"],
         ['tour 2 : position acceptée hors liste', "if (!setAdmisPourPosition(produit?.slugSet)) motifs.push('position-hors-liste');", "if (false) motifs.push('position-hors-liste');"],

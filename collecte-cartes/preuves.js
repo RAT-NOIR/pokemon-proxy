@@ -174,6 +174,10 @@ function sansTotalAdmis(lu, produit, np) {
     if (typeof slugSet !== 'string' || !Object.hasOwn(CODES_SANS_TOTAL, slugSet)) return false;
     if (lu?.codeSet !== CODES_SANS_TOTAL[slugSet]) return false;
     if (!/^\d+$/.test(String(lu.numero ?? '').trim()) || !/^\d+$/.test(String(np ?? '').trim())) return false;
+    // le slug du produit est un témoin OBLIGATOIRE, indépendant de la ligne codes_set (relecture) : il finit par ce code et ce numéro, frontière avant le code
+    const chiffres = String(np).trim().replace(/^0+(?=\d)/, '');
+    const slug = typeof produit.slug === 'string' ? produit.slug.trim() : '';
+    if (!new RegExp(`(^|-)${echapper(CODES_SANS_TOTAL[slugSet])}-?0*${echapper(chiffres)}$`, 'i').test(slug)) return false;
     return motifDeCode(lu, produit, np) === null;
 }
 /** La clé de témoin d'un nom : Pokédex unique + règle. null si le nom n'a pas de Pokédex unique (rien ne permet alors de dire que deux produits se ressemblent). */
