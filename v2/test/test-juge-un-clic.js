@@ -284,7 +284,10 @@ const noter = async (x, r) => { const j = r.journal ? fs.readFileSync(r.journal,
         const lireSrc = rel => fs.readFileSync(path.join(__dirname, '..', '..', rel), 'utf8');
         // le raccourci vise la copie du Bureau, pas le dossier d'où le script est lancé
         const ps1 = lireSrc('outils/banc-200/creer-raccourci.ps1'), vbs = lireSrc('outils/banc-200/lancer-juge.vbs');
-        H.v('12. creer-raccourci.ps1 vise le .vbs de la copie du Bureau (chemin fixe), refuse s\'il manque, sans $PSScriptRoot ni paramètre sans effet', [ps1.includes('C:\\Users\\Yung\\Desktop\\pokemon-proxy-api-v2'), /outils\\banc-200\\lancer-juge\.vbs/.test(ps1), /Test-Path -LiteralPath \$vbs/.test(ps1), /throw/.test(ps1), /\$PSScriptRoot/.test(ps1.replace(/^#.*$/gm, '')), /DossierDeTravail/.test(ps1)], [true, true, true, true, false, false]);
+        // garde-apports : aucun banc ne nomme un chemin du Bureau. On vérifie la FORME du chemin fixe ($Copie : absolu, sous un Bureau, un seul dossier),
+        // ce qui exclut un worktree (jamais sous le Bureau) ; le banc ne compare pas au dossier d'où il tourne, puisqu'il tourne aussi dans la copie du Bureau.
+        const copie = /\[string\]\$Copie = '([^']+)'/.exec(ps1);
+        H.v('12. creer-raccourci.ps1 vise le .vbs de la copie du Bureau (chemin fixe), refuse s\'il manque, sans $PSScriptRoot ni paramètre sans effet', [!!copie && /^[A-Z]:\\Users\\[^\\]+\\Desktop\\[^\\]+$/.test(copie[1]), /outils\\banc-200\\lancer-juge\.vbs/.test(ps1), /Test-Path -LiteralPath \$vbs/.test(ps1), /throw/.test(ps1), /\$PSScriptRoot/.test(ps1.replace(/^#.*$/gm, '')), /DossierDeTravail/.test(ps1)], [true, true, true, true, false, false]);
         H.v('12. le .vbs ne cite le journal que s\'il existe', [/FileExists\(\s*journal\s*\)/.test(vbs)], [true]);
     });
 
