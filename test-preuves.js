@@ -425,6 +425,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.strictEqual(PV.sansTotalAdmis(lu, SVP({ codeSet: 'SVP', slug: 'Pawmot-V2-SVP007' }), '006'), false, 'codeSet SVP, slug d\'un autre numéro');
         assert.strictEqual(PV.sansTotalAdmis(lu, SVP({ codeSet: 'SVP', slug: 'Pawmot-V2-SVE006' }), '006'), false, 'slug d\'un autre code');
         assert.strictEqual(PV.sansTotalAdmis(lu, SVP({ codeSet: 'SVP', slug: 'Pawmot-V2-XSVP006' }), '006'), false, 'frontière : le code n\'est pas un suffixe de mot');
+        assert.strictEqual(PV.sansTotalAdmis(lu, SVP({ codeSet: 'PAR' }), '006'), false, 'la ligne codes_set contredit le code lu : refus même avec le bon slug');
     });
     await test('evaluerEntree : aiguille par règle ; une règle inconnue est refusée', async () => {
         const a = await PV.evaluerEntree({ entree: entree(), produit: produit(), octets: {} });

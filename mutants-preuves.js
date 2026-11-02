@@ -41,7 +41,7 @@ const GROUPES = [
         ['décision 5 : liste des sets élargie', "Object.freeze({ 'SV-Black-Star-Promos': 'SVP' })", "Object.freeze({ 'SV-Black-Star-Promos': 'SVP', 'Set-A': 'SVP' })"],
         ['décision 5 : code imprimé non comparé', "if (lu?.codeSet !== CODES_SANS_TOTAL[slugSet]) return false;", ""],
         ['décision 5 : numéros non numériques admis', "if (!/^\\d+$/.test(String(lu.numero ?? '').trim()) || !/^\\d+$/.test(String(np ?? '').trim())) return false;", ""],
-        ['décision 5 : slug du produit non confronté', "return motifDeCode(lu, produit, np) === null;", "return true;"],
+        ['décision 5 : ligne codes_set contredisante non confrontée', "return motifDeCode(lu, produit, np) === null;", "return true;"],
         ['décision 5 : slug facultatif quand codeSet concorde', "if (!new RegExp(`(^|-)${echapper(CODES_SANS_TOTAL[slugSet])}-?0*${echapper(chiffres)}$`, 'i').test(slug)) return false;", ""],
         ['décision 5 : slug sans frontière avant le code', "`(^|-)${echapper(CODES_SANS_TOTAL[slugSet])}-?0*", "`${echapper(CODES_SANS_TOTAL[slugSet])}-?0*"],
         ['décision 5 : première lecture non jugée', "if (Object.hasOwn(CODES_SANS_TOTAL, produit?.slugSet) && sansTotal(entree.lu)) {", "if (false) {"],
