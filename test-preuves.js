@@ -802,6 +802,9 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.strictEqual(sans.unites.length, 0); assert.match(JSON.stringify(sans.resume.refus), /nom-traduit-sans-temoin/);
         const table = await monter(dr({ cartes: [{ _id: 301, nomEn: 'Nemona', nomJa: 'ネモ', images: [] }, { _id: 302, nomEn: 'Nemona', nomJa: 'ネモ', images: [] }] }));
         assert.deepStrictEqual([table.resume.refus, table.unites.length], [[], 1], 'table officielle : deux cartes à page, même nomJa');
+        // la table se cherche sous le nomEn de la CARTE (pas le libellé du produit)
+        const tableCarte = await monter({ ...dr({ name: 'Nemona Holo', cartes: [{ _id: 77, nomEn: 'Nemona', categorie: 'dresseur', images: [] }, { _id: 301, nomEn: 'Nemona', nomJa: 'ネモ', images: [] }, { _id: 302, nomEn: 'Nemona', nomJa: 'ネモ', images: [] }] }), lignes: [{ idProduct: 1001, carteId: 77, slugSet: SLUG, numeroFiche: '13', slug: 'Nemona-svAL013', idExpansion: 5000 }] });
+        assert.deepStrictEqual([tableCarte.resume.refus, tableCarte.unites.length], [[], 1], 'table trouvée sous le nom de la carte');
         const diverge = await monter(dr({ cartes: [{ _id: 301, nomEn: 'Nemona', nomJa: 'ネモ', images: [] }, { _id: 302, nomEn: 'Nemona', nomJa: 'ボタン', images: [] }] }));
         assert.strictEqual(diverge.unites.length, 0); assert.match(JSON.stringify(diverge.resume.refus), /nom-traduit-sans-temoin/);
     });
@@ -1164,6 +1167,10 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         // lu sans aucun témoin : motifs d\'avant
         const nu = o => entree({ lu: { nom: 'メリープ', numero: '005', total: '021', langue: 'ja', tampon: null, finition: 'normale', marques: ['x'], ...o }, attendu: { ...entree().attendu, numero: '005' } });
         assert.deepStrictEqual(lue(nu(), ptrad()).motifs, ['nom-different']);
+        assert.deepStrictEqual(lue(nu({ codeSet: '', regle: '' }), ptrad()).motifs, ['nom-different'], 'un témoin vide n\'est pas un témoin saisi');
+        // toutes les marques régionales (japonais, chinois, thaï, latin) sont lues dans le nom
+        for (const m of ['アローラ', 'ガラル', 'ヒスイ', 'パルデア', '阿羅拉', '阿罗拉', '伽勒爾', '伽勒尔', '洗翠', '帕底亞', '帕底亚', 'อโลลา', 'กาลาร์', 'ฮิซุย', 'ปัลเดีย', 'Alola', 'Galar', 'Hisui', 'Paldea'])
+            assert.match(mt(trad({ nom: `${m}ピカチュウ`, dex: 25, pv: 60 }), ptrad({ nomEn: 'Pikachu', slug: 'X-svAL005' })), /forme-regionale/, m);
         assert.deepStrictEqual(lue(nu({ langue: 'zh-hans', nom: '皮卡丘' }), ptrad({ tirage: 'zh-hans' })).motifs, ['nom-langue-non-anglaise']);
         // les champs-témoin n\'ouvrent rien pour l\'anglais ni le français : le nom se compare comme avant
         assert.match(mt(entree({ lu: { ...entree().lu, nom: 'Squirtle', dex: 7, pv: 40, codeSet: 'AA' } }), produit()), /nom-different/);

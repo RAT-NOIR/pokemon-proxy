@@ -122,7 +122,7 @@ const MOTS_DE_REGLE = /^(VMAX|VSTAR|V-?UNION|GX|BREAK|LV\.?X|ex|EX|V|Mega|X|Y)$/
 function nomQualifie(nom) {
     if (!nom || nomEstEspeceEtRegle(nom)) return false;
     const { normaliserNomPourComparaison } = require('../scoring');
-    return String(nom).split('[')[0].split(/[\s&]+/).filter(w => w && !MOTS_DE_REGLE.test(w)).some(w => ESPECES.has(normaliserNomPourComparaison(w.replace(/['’]s$/, ''))));
+    return String(nom).split('[')[0].split(/[\s&]+/).filter(w => w && !MOTS_DE_REGLE.test(w)).some(w => ESPECES.has(normaliserNomPourComparaison(w)));
 }
 function nomEstEspeceEtRegle(nom) {
     if (!nom) return false;
