@@ -92,21 +92,94 @@ function idsAffirmes(corps) {
 }
 
 /**
+ * JUMEAUX-VERDICTS (drapeau V2_JUMEAUX_PREPARER_TOUS, cfg.jumeauxPreparerTous, éteint par défaut) : les produits dont un VERDICT doit être préparé avant l'adaptation. L'adaptateur retire d'abord les candidats que le nom lu
+ * contredit, puis passe par `garde()` le candidat resté seul (candidatUnique) — un candidat que `idsAffirmes` (calculé sur le corps BRUT : 2 candidats = aucun id) n'avait pas préparé, donc « la colonne ne conclut pas » :
+ * une panne INDISPONIBLE à tort (3 scans sur 50, essai e833578c).
+ * Écrit par ce qu'il AUTORISE : le produit affirmé / candidat unique d'abord (jamais coupé par la borne), puis les candidats d'une réponse que l'adaptateur sait lire (une réussite, ou une égalité délibérée :
+ * `extra` = ctx.candidatsDeRefus), et rien d'autre — un refus technique ou une réponse inconnue ne prépare que ce que `idsAffirmes` prépare. BORNES : MAX_PREPARES (10, le pool de la chaîne) ids par RÉPONSE ;
+ * pour un LOT, MAX_PREPARES_LOT (40) ids AU TOTAL, toutes cartes confondues (`idsAPreparerLot`) : d'abord l'affirmé de chaque carte, puis les autres candidats carte par carte, à tour de rôle. Un id au-delà de la borne
+ * n'est pas préparé : il reste « ne conclut pas » (la panne d'avant), jamais un « ok ».
+ */
+const MAX_PREPARES = 10;
+const MAX_PREPARES_LOT = 40;
+const CONCURRENCE_VERDICTS = 4;                  // requêtes de verdict en vol à la fois
+const MAX_TIME_MS_VERDICT = 1500;                // côté base, par requête (même valeur que la requête des impressions)
+const DELAI_VERDICTS_MS = 3000;                  // côté serveur, pour TOUTE la préparation (même valeur que DELAI_PREPARATION_MS de langue-decisive.js) : au-delà, les ids restants ne concluent pas
+function idsAPreparer(corps, extra = []) {
+    const base = idsAffirmes(corps);
+    if (!corps || typeof corps !== 'object') return base;
+    const lisible = corps.success === true || (corps.success === false && corps.natureRefus === 'refus-delibere' && MOTIFS_EGALITE_EN_QUESTION.includes(corps.motifRefus));
+    if (!lisible) return base;
+    return [...new Set([...base, ...idsDe(corps.candidats), ...(corps.success === false ? idsDe(extra) : [])])].slice(0, MAX_PREPARES);
+}
+/** Le budget d'un LOT : au plus `budget` ids au total. Ordre : l'affirmé de chaque carte, puis les autres candidats carte par carte à tour de rôle (le 1er de chaque carte, puis le 2e de chaque carte…). */
+function idsAPreparerLot(corpsListe, budget = MAX_PREPARES_LOT) {
+    const liste = Array.isArray(corpsListe) ? corpsListe : [];
+    const bases = liste.map(c => idsAffirmes(c));
+    const restes = liste.map((c, i) => idsAPreparer(c).filter(id => !bases[i].includes(id)));
+    const sortie = new Set();
+    for (const b of bases) for (const id of b) if (sortie.size < budget) sortie.add(id);
+    for (let rang = 0; sortie.size < budget && restes.some(r => rang < r.length); rang++) {
+        for (const r of restes) if (rang < r.length && sortie.size < budget) sortie.add(r[rang]);
+    }
+    return [...sortie];
+}
+const codeSur = e => String((e && (e.code || e.name)) || 'ERREUR').toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 40) || 'ERREUR';
+
+/**
  * Le fournisseur de PRODUCTION : la version EN PLACE, et, pour chacun des produits que la chaîne AFFIRME, UNE requête indexée dans le catalogue de la route — « existe-t-il un produit PLUS RÉCENT que
  * l'archive (idProduct > maxArchive) de la même métacarte ? ». Oui → ce produit-là seul ne conclut pas (`jumeaux-perimes`) ; non → la colonne s'applique ; la requête échoue, la méthode manque, la
  * métacarte du produit est inconnue → il ne conclut pas non plus (on échoue fermé). Sans colonne, le catalogue n'est même pas interrogé.
+ * opts.tous (drapeau allumé) : requêtes en parallèle (CONCURRENCE_VERDICTS), chacune sous maxTimeMS, le tout sous DELAI_VERDICTS_MS (opts.delaiMs) ; un délai dépassé = « indisponible », jamais « ok » ; UN avertissement
+ * agrégé par appel ; opts.deja (Map de verdicts déjà établis pour cette requête) : ces ids ne sont pas redemandés. Éteint (opts absent) : la boucle en série d'avant, sans journal.
  */
-async function fournisseurParDefaut(catalogue, version, idsAffirmes) {
+async function fournisseurParDefaut(catalogue, version, idsAffirmes, opts = {}) {
     if (!version || version.colonneJumeaux !== true || typeof version.empreinteJumeaux !== 'function' || typeof version.metacarteJumeaux !== 'function') return NE_CONCLUT_PAS('jumeaux-indisponibles');
     const verdicts = new Map();
-    const e = version.empreinteJumeaux();
-    for (const id of [...new Set(Array.isArray(idsAffirmes) ? idsAffirmes : [])]) {
+    const emp = version.empreinteJumeaux();
+    const ids = [...new Set(Array.isArray(idsAffirmes) ? idsAffirmes : [])];
+    if (opts && opts.tous === true) return fournisseurParallele(catalogue, version, ids, emp, verdicts, opts);
+    for (const id of ids) {
         const meta = version.metacarteJumeaux(id);
-        if (!empreinteValide(e) || meta === null || !catalogue || typeof catalogue.plusRecentDansMetacarte !== 'function') { verdicts.set(id, 'indisponible'); continue; }
-        try { const r = await catalogue.plusRecentDansMetacarte(e.max, meta); verdicts.set(id, r === false ? 'ok' : r === true ? 'perime' : 'indisponible'); }   // « ok » seulement sur un FAUX franc
+        if (!empreinteValide(emp) || meta === null || !catalogue || typeof catalogue.plusRecentDansMetacarte !== 'function') { verdicts.set(id, 'indisponible'); continue; }
+        try { const r = await catalogue.plusRecentDansMetacarte(emp.max, meta); verdicts.set(id, r === false ? 'ok' : r === true ? 'perime' : 'indisponible'); }   // « ok » seulement sur un FAUX franc
         catch { verdicts.set(id, 'indisponible'); }
     }
     return fournisseurDe(version, verdicts);
+}
+async function fournisseurParallele(catalogue, version, ids, emp, verdicts, opts) {
+    const deja = opts.deja instanceof Map ? opts.deja : new Map();
+    const delai = Number.isInteger(opts.delaiMs) && opts.delaiMs > 0 ? opts.delaiMs : DELAI_VERDICTS_MS;
+    const concurrence = Number.isInteger(opts.concurrence) && opts.concurrence > 0 ? opts.concurrence : CONCURRENCE_VERDICTS;
+    const reste = [];
+    for (const [k, v] of deja) verdicts.set(k, v);                                                // TOUS les verdicts déjà établis pour cette requête sont reportés (ceux des candidats comme ceux de l'affirmé)
+    for (const id of ids) {
+        if (deja.has(id)) continue;                                                               // déjà établi : jamais redemandé (un « indisponible » reste fermé)
+        const meta = version.metacarteJumeaux(id);
+        if (!empreinteValide(emp) || meta === null || !catalogue || typeof catalogue.plusRecentDansMetacarte !== 'function') { verdicts.set(id, 'indisponible'); continue; }
+        reste.push({ id, meta });
+    }
+    const echecs = []; let clos = false, minuterie = null, suivant = 0;
+    const travailleur = async () => {
+        while (!clos && suivant < reste.length) {
+            const { id, meta } = reste[suivant++];
+            let v = 'indisponible';
+            try { const r = await catalogue.plusRecentDansMetacarte(emp.max, meta, { maxTimeMS: MAX_TIME_MS_VERDICT }); v = r === false ? 'ok' : r === true ? 'perime' : 'indisponible'; }
+            catch (err) { echecs.push(codeSur(err)); }
+            if (!clos) verdicts.set(id, v);                                                       // un résultat arrivé APRÈS le délai est ignoré : l'id reste « indisponible »
+        }
+    };
+    if (reste.length) {
+        const delaiGlobal = new Promise(res => { minuterie = setTimeout(() => res('delai'), delai); });
+        const fini = Promise.all(Array.from({ length: Math.min(concurrence, reste.length) }, travailleur)).then(() => 'fini');
+        const issue = await Promise.race([fini, delaiGlobal]);
+        clos = true; if (minuterie) clearTimeout(minuterie);
+        for (const { id } of reste) if (!verdicts.has(id)) { verdicts.set(id, 'indisponible'); if (issue === 'delai') echecs.push('DELAI'); }
+    }
+    if (echecs.length) console.warn(`⚠️ [jumeaux-v2] verdicts impossibles : ${echecs.length} sur ${ids.length} (codes : ${[...new Set(echecs)].slice(0, 5).join(',')})`);
+    const f = fournisseurDe(version, verdicts);
+    f.verdicts = verdicts;                                                                          // pour que la préparation de LANGUE-DECISIVE réutilise ces verdicts au lieu de refaire les requêtes
+    return f;
 }
 
 /** Les produits à charger EN PLUS pour que l'adaptateur puisse poser la question d'une affirmation : ses jumeaux (au plus MAX_CHARGE) — au plus 2 tiennent dans la question, au-delà le choix des 3 a besoin de leurs lignes. */
@@ -153,4 +226,4 @@ function garde(ctx, idProduct, sonde = false) {                       // sonde :
     return { action: 'question', ids: [idProduct, ...jumeaux], partages };
 }
 
-module.exports = { garde, fournisseurDe, partagesDeLaVersion, partagesDuFournisseur, fournisseurParDefaut, idsAffirmes, idsACharger, candidatUniqueDe, compteurs, noter, MOTIFS, MOTIFS_PANNE, MAX_PRODUITS, MAX_CHARGE };
+module.exports = { garde, fournisseurDe, partagesDeLaVersion, partagesDuFournisseur, fournisseurParDefaut, idsAffirmes, idsAPreparer, idsAPreparerLot, idsACharger, candidatUniqueDe, compteurs, noter, MOTIFS, MOTIFS_PANNE, MAX_PRODUITS, MAX_CHARGE, MAX_PREPARES, MAX_PREPARES_LOT, CONCURRENCE_VERDICTS, MAX_TIME_MS_VERDICT, DELAI_VERDICTS_MS };

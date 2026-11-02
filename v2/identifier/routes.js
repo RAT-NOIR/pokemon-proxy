@@ -168,7 +168,7 @@ const ML = e => (e && e.mentionLangues === true ? { mentionLangues: true } : {})
 const { consulterProbable, avecNiveau, actif: niveauServi, cosinusDesCandidats, estGroupe } = require('./probable-route');   // PROBABLE : le niveau « probable » (V2_PROBABLE, éteint : jamais appelée), et `niveau` servi aux extensions >= 2.0.1
 const { etapeLeviers } = require('./promotion-surs-route');       // DECISION-SURS (V2_PROMOTION_SURS, éteint par défaut : jamais appelée)
 const { appliquerMarqueurs } = require('./garde-marqueurs');       // MARQUEURS : le jumbo par le titre et la garde des groupes, derrière V2_JUMBO_TITRE et V2_GARDE_MARQUEURS (éteints : jamais appelée)
-const { fournisseurParDefaut, idsAffirmes, idsACharger } = require('./jumeaux');
+const { fournisseurParDefaut, idsAffirmes, idsAPreparer, idsACharger } = require('./jumeaux');
 const { idsDeLaGarde } = require('./garde-contradiction');
 const { preparer: preparerLD } = require('./langue-decisive-charge');
 const etatChargeur = require('../chargeur/etat');
@@ -571,12 +571,12 @@ function traiterIdentifier(cfg, deps = {}) {
                     // JUMEAU-V2 : UNE version de la colonne des jumeaux pour toute la requête (jamais deux versions mêlées) ; un jumeau qui tient dans une question est chargé avec la carte affirmée
                     // (le produit affirmé est vérifié contre le catalogue d'aujourd'hui : un produit plus récent que l'archive sous SA métacarte le rend indisponible pour ce scan seul)
                     const version0 = etatChargeur.version();                  // UNE lecture de la version pour toute la requête (m-1) : passée au premier appel ET à preparer
-                    const jumeaux0 = deps.jumeaux || await T.mesurer('base', () => fournisseurParDefaut(catalogue, version0, idsAffirmes(c)));
+                    const jumeaux0 = deps.jumeaux || await T.mesurer('base', () => fournisseurParDefaut(catalogue, version0, cfg.jumeauxPreparerTous === true ? idsAPreparer(c) : idsAffirmes(c), cfg.jumeauxPreparerTous === true ? { tous: true } : undefined));      // JUMEAUX-VERDICTS (V2_JUMEAUX_PREPARER_TOUS) : éteint, l'appel d'e833578c
                     const ids = [...entiers(c.candidats), ...(c.carte && Number.isInteger(c.carte.idProduct) ? [c.carte.idProduct] : []), ...idsACharger(c, jumeaux0), ...idsDeLaGarde(c)];     // GARDE-CONTRADICTION : le vivier lu par la chaîne, pour juger les champs lus contre les autres candidats
                     try { produits = await T.mesurer('base', () => catalogue.lire(ids)); } catch (e) { journalErreur('catalogue', e); }
                     // LANGUE-DECISIVE (B1, M2) : les jumeaux des candidats que la photo pourrait laisser seuls, et l'index code × numéro du catalogue entier (R4)
                     let jumeaux = jumeaux0, ctxLD = {};
-                    if (produits !== null) { const pr = await T.mesurer('base', () => preparerLD({ corpsListe: [c], produits, jumeaux: jumeaux0, catalogue, version: version0, deps })); produits = pr.produits; jumeaux = pr.jumeaux; if (pr.codeNumeroExiste) ctxLD = { codeNumeroExiste: pr.codeNumeroExiste }; }
+                    if (produits !== null) { const pr = await T.mesurer('base', () => preparerLD({ corpsListe: [c], produits, jumeaux: jumeaux0, catalogue, version: version0, deps, tous: cfg.jumeauxPreparerTous === true })); produits = pr.produits; jumeaux = pr.jumeaux; if (pr.codeNumeroExiste) ctxLD = { codeNumeroExiste: pr.codeNumeroExiste }; }
                     resultat = produits === null ? { issue: 'panne', analyse: null, erreur: { code: 'INDISPONIBLE' } }
                         : (deps.adapter || adapter)({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, ...ML(entree), jumeaux, ...ctxLD, ...(cfg.leviersAbde === true && niveauServi(cfg, entree) ? { leviersE: true } : {}) });
                     noterQuestion();
