@@ -50,7 +50,7 @@ const DECISIONS = {
         { idProduct: 654769, carteId: 30518, code: 'EC1', idExpansion: 5021, slugSet: 'Base-Expansion-Pack', voie: 'impression-equivalente', tirage: 'jp', expansionImpression: 'Pokémon-e Starter Deck', prefixe: 'S', total: '029', numeroFiche: null, ajoutSet: true,
             preuve: { sources: ['Cardmarket (n°S07, slug Bayleef-EC1S07, métacarte 212807, attaques Mysterious Powder | Razor Leaf)', 'la carte 30518 déclare jp « Pokémon-e Starter Deck » 007/029 ; page de carte japonaise 007/029 (ふしぎなこな + はっぱカッター), lue le 2026-11-01, corrobore'], references: ['chasse\\porte-sorties\\a\\pcg-e0007.txt (page lue par la porte le 2026-11-01)'] } },
     ],
-    // lot b-lignes (chasseur phase 2, 2026-11-02) : 53 produits SANS ligne dont UNE carte (nom + attaques + métacarte, témoin du nom) déclare elle-même l'impression du set. Les entrées vivent dans un fichier de données
+    // lot b-lignes (chasseur phase 2, 2026-11-02) : 51 produits SANS ligne dont UNE carte (nom + attaques + métacarte, témoin du nom) déclare elle-même l'impression du set. Les entrées vivent dans un fichier de données
     // (collecte-cartes/decisions-b-lignes-2026-11-02.json) : produit par produit, `planifier()` rejoue la preuve à l'écriture ; une seule qui ne tient plus est REFUSÉE et `--attendu` arrête.
     // voie impression-numero : le numéro du produit a été vérifié à la main contre une impression de l'EXPANSION du set (la voie ne compare que le tirage : Mareep svB, Poké Ball s8a-G, Energy Switch SV-P/CS et Ogerpon ex CSV9.5C en ont été écartés).
     '2026-11-02-b-lignes': require('./collecte-cartes/decisions-b-lignes-2026-11-02.json'),

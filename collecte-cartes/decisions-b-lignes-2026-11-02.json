@@ -749,48 +749,6 @@
   }
  },
  {
-  "idProduct": 580161,
-  "carteId": 263368,
-  "code": "CEL",
-  "idExpansion": 4347,
-  "slugSet": "Celebrations",
-  "voie": "impression-du-tirage",
-  "tirage": "intl",
-  "expansionImpression": "Celebrations",
-  "numeroFiche": null,
-  "ajoutSet": false,
-  "preuve": {
-   "sources": [
-    "Cardmarket (produit 580161 « Pikachu [Gnaw | Thunder Jolt] », CEL, sans numéro, métacarte lue)",
-    "la carte 263368 déclare elle-même une impression du tirage dans « Celebrations » (base cartes, lue le 2026-11-02)"
-   ],
-   "references": [
-    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
-   ]
-  }
- },
- {
-  "idProduct": 605985,
-  "carteId": 263368,
-  "code": "CEL",
-  "idExpansion": 4347,
-  "slugSet": "Celebrations",
-  "voie": "impression-du-tirage",
-  "tirage": "intl",
-  "expansionImpression": "Celebrations",
-  "numeroFiche": null,
-  "ajoutSet": false,
-  "preuve": {
-   "sources": [
-    "Cardmarket (produit 605985 « Pikachu [Gnaw | Thunder Jolt] », CEL, sans numéro, métacarte lue)",
-    "la carte 263368 déclare elle-même une impression du tirage dans « Celebrations » (base cartes, lue le 2026-11-02)"
-   ],
-   "references": [
-    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
-   ]
-  }
- },
- {
   "idProduct": 920175,
   "carteId": 345369,
   "code": "xASC",

@@ -173,15 +173,15 @@ verifier('décision 2026-11-01-a-ebauches : chaque entrée porte sa preuve écri
     verifier('décision 2026-11-01-a-ebauches : le numéro S19 contre la carte 007 (ou l\'autre total) est refusé — la voie ne se laisse pas tromper', planifier({ entrees: [{ ...D11[0], carteId: 30518 }], lecture: lec }).lignes.length, 0);
 }
 
-// ── lot b-lignes (2026-11-02) : 53 produits SANS LIGNE dont UNE carte, désignée par nom + attaques + métacarte, déclare elle-même l'impression du set (voie impression-du-tirage pour un produit
+// ── lot b-lignes (2026-11-02) : 51 produits SANS LIGNE dont UNE carte, désignée par nom + attaques + métacarte, déclare elle-même l'impression du set (voie impression-du-tirage pour un produit
 //    sans numéro, voie impression-numero pour un produit numéroté DONT LE NUMÉRO est celui d'une impression de l'expansion du set — vérifié à la main, la voie ne regarde que le tirage)
 {
     const D12 = DECISIONS['2026-11-02-b-lignes'] || [];
-    verifier('décision 2026-11-02-b-lignes : liste fermée de 53 produits distincts', [D12.length, new Set(D12.map(x => x.idProduct)).size], [53, 53]);
+    verifier('décision 2026-11-02-b-lignes : liste fermée de 51 produits distincts', [D12.length, new Set(D12.map(x => x.idProduct)).size], [51, 51]);
     verifier('décision 2026-11-02-b-lignes : chaque entrée porte sa preuve écrite (≥ 2 sources, références) et aucune appartenance de set n\'est demandée', D12.length > 0 && D12.every(x => Array.isArray(x.preuve?.sources) && x.preuve.sources.length >= 2 && Array.isArray(x.preuve?.references) && x.preuve.references.length >= 1 && x.ajoutSet === false), true);
     verifier('décision 2026-11-02-b-lignes : seulement les deux voies par l\'impression que la carte déclare, jamais la Setlist ni une seconde source tierce', [...new Set(D12.map(x => x.voie))].sort(), ['impression-du-tirage', 'impression-numero']);
     verifier('décision 2026-11-02-b-lignes : une voie « impression-du-tirage » nomme l\'extension de l\'impression (sans elle la voie ne compare rien)', D12.length > 0 && D12.filter(x => x.voie === 'impression-du-tirage').every(x => typeof x.expansionImpression === 'string' && x.expansionImpression !== ''), true);
-    verifier('décision 2026-11-02-b-lignes : les 7 Énergies de base de M-P (quatre séries de numéros possibles, ambiguës) et les 3 produits de Paldean Fates (route des réimpressions) sont absents', D12.length > 0 && !D12.some(x => [912735, 912736, 912737, 912738, 912740, 912741, 912742, 866035, 866036, 866037].includes(x.idProduct)), true);
+    verifier('décision 2026-11-02-b-lignes : les 7 Énergies de base de M-P (quatre séries de numéros possibles, ambiguës) et les 5 produits dont le slug porte un code d'origine (Paldean Fates SVP 072/073, Pikachu CELBS-58 : route des réimpressions, la carte du slug n'est pas celle du set) sont absents', D12.length > 0 && !D12.some(x => [912735, 912736, 912737, 912738, 912740, 912741, 912742, 866035, 866036, 866037, 580161, 605985].includes(x.idProduct)), true);
 }
 
 // l'argument --decision accepte le nom d'une décision à lettres (« 2026-11-01-a-ebauches ») : l'ancien motif ([\d-]+) la refusait comme « argument inconnu » AVANT de la chercher
