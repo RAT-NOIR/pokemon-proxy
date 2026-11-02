@@ -776,7 +776,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.strictEqual(ndexFaux.unites.length, 0); assert.match(JSON.stringify(ndexFaux.resume.refus), /pokedex-ambigu/);
         const dresseurCarte = await monter(avecCarte(base({ cartes: [{ _id: 77, nomEn: 'Mareep', pv: 60, ndex: 179, categorie: 'dresseur', images: [] }] })));
         assert.strictEqual(dresseurCarte.unites.length, 0); assert.match(JSON.stringify(dresseurCarte.resume.refus), /nom-traduit-sans-temoin/);
-        const nomDeLaCarte = await monter(avecCarte(base({ name: 'Mareep Holo', cartes: [{ _id: 77, nomEn: 'Mareep', pv: 60, ndex: 179, categorie: 'pokemon', images: [] }] })));
+        const nomDeLaCarte = await monter(avecCarte(base({ name: 'Mareep Holo', cartes: [{ _id: 77, nomEn: 'Mareep', pv: 60, categorie: 'pokemon', images: [] }] })));
         assert.deepStrictEqual([nomDeLaCarte.resume.refus, nomDeLaCarte.unites.length], [[], 1], 'le nomEn de la carte fait foi, pas le libellé du produit');
         // un Dresseur au nom traduit : refusé, sauf table officielle (le nomJa d'autres cartes à page de même nomEn)
         const dr = (o = {}) => base({ name: 'Nemona', slug: 'Nemona-svAL013', lu: { nom: 'ネモ', dex: null, pv: null }, ...o });
