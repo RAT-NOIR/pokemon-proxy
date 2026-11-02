@@ -663,7 +663,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
 
     // ───────── le plan, sur une FAUSSE base ─────────
     const K = require('./collecteur-images-preuves');
-    function monde({ entrees, validations, produits = {}, etat, lignes, sets = [{ _id: SLUG, tirage: 'intl' }], cartes, famille = 'MCD', trous = [], positions = [], impressionsDe = {} }) {
+    function monde({ entrees, validations, produits = {}, etat, lignes, sets = [{ _id: SLUG, tirage: 'intl' }], cartes, famille = 'MCD', trous = [], positions = [], impressionsDe = {}, codesSet = [] }) {
         const racine = tmp(), cache = path.join(racine, 'CACHE');
         fs.mkdirSync(path.join(racine, famille), { recursive: true }); fs.mkdirSync(path.join(racine, 'VALIDATIONS'), { recursive: true }); fs.mkdirSync(cache, { recursive: true });
         fs.writeFileSync(path.join(racine, famille, 'preuves.json'), JSON.stringify({ famille, le: '2026-10-26T00:00:00.000Z', entrees, trous }));
@@ -673,7 +673,9 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
             fiches: async (carteIds, slugs) => lignes.filter(l => carteIds.includes(l.carteId) && slugs.includes(l.slugSet)),
             numeros: async ids => ids.map(i => ({ idProduct: i, numero: produits[i]?.numeroNumeros ?? null, slug: produits[i]?.slugNumeros ?? null, nomFr: produits[i]?.nomFrNumeros ?? null })).filter(x => x.numero != null || x.nomFr != null),
             sets: async slugs => sets.filter(s => slugs.includes(s._id)),
-            nomsJa: async ids => cartes.filter(c => ids.includes(c._id)).map(c => ({ _id: c._id, nomJa: c.nomJa ?? null })),
+            nomsJa: async ids => cartes.filter(c => ids.includes(c._id)).map(c => ({ _id: c._id, nomJa: c.nomJa ?? null, nomEn: c.nomEn, ndex: c.ndex, pv: c.pv, categorie: c.categorie })),
+            codesSet: async ids => codesSet.filter(c => ids.includes(c.idExpansion)),
+            cartesDeNomEn: async noms => cartes.filter(c => noms.includes(c.nomEn) && c.nomJa && c._id > 0).map(c => ({ _id: c._id, nomEn: c.nomEn, nomJa: c.nomJa })),
             positions: async () => positions,
             impressions: async ids => ids.map(i => ({ _id: i, impressions: impressionsDe[i] ?? [] }))
         };
@@ -738,6 +740,40 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.strictEqual(autre.unites.length, 0); assert.match(JSON.stringify(autre.resume.refus), /nom-different/);
         const sans = await monter(jp(undefined, 'フシギダネ'));
         assert.strictEqual(sans.unites.length, 0); assert.match(JSON.stringify(sans.resume.refus), /nom-different/);
+    });
+    await test('plan (nom traduit) : fiche simple japonaise sans carte : Pokédex + PV + règle + code lus ; le code vient du slug OU de codes_set ; la table officielle sert un Dresseur ; un désaccord refuse', async () => {
+        const base = o => ({ etat: [{ idProduct: 1001, idExpansion: 5000, langue: 'jp', tamponnee: null, name: o.name ?? 'Mareep' }], sets: [{ _id: SLUG, tirage: 'jp' }], cartes: o.cartes ?? [],
+            lignes: [{ idProduct: 1001, carteId: -1, slugSet: SLUG, numeroFiche: '13', slug: o.slug ?? 'Mareep-svAL013', idExpansion: 5000 }], codesSet: o.codesSet ?? [], luPlus: o.lu ?? {} });
+        const monter = async (o) => {
+            const w = await mondeSimple(o);
+            const man = JSON.parse(fs.readFileSync(path.join(w.racine, 'MCD', 'preuves.json'), 'utf8'));
+            man.entrees[0].lu = { ...man.entrees[0].lu, langue: 'ja', nom: 'メリープ', total: '21', codeSet: 'svAL', dex: 179, pv: 60, ...o.luPlus };
+            fs.writeFileSync(path.join(w.racine, 'MCD', 'preuves.json'), JSON.stringify(man));
+            return K.construirePlanAvec({ dossier: w.racine, cache: w.cache, lire: w.lire, etat: w.etat, lecteur: RC.lecteurNatif(w.db), fichiers: w.F });
+        };
+        const bon = await monter(base({}));
+        assert.deepStrictEqual(bon.resume.refus, []); assert.deepStrictEqual([bon.unites.length, bon.unites[0].langue], [1, 'ja']);
+        const pl = bon.unites[0].champsEntree.preuveLue.lu;
+        assert.deepStrictEqual([pl.dex, pl.pv, pl.codeSet], [179, 60, 'svAL'], 'ce qui a été lu est écrit dans la preuve');
+        for (const [nom, o, motif] of [['Pokédex faux', { lu: { dex: 180 } }, /pokedex-different/], ['PV absent', { lu: { pv: null } }, /pv-non-lu/], ['règle de plus', { lu: { nom: 'メリープex' } }, /regle-differente/],
+            ['code du set faux', { lu: { codeSet: 'svOD' } }, /code-set-different/], ['code absent du slug et de la ligne', { slug: 'Mareep' }, /code-set-non-verifiable/]])
+            { const p = await monter(base(o)); assert.strictEqual(p.unites.length, 0, nom); assert.match(JSON.stringify(p.resume.refus), motif, nom); }
+        const ligne = await monter(base({ slug: 'Mareep', codesSet: [{ idExpansion: 5000, codeSet: 'svAL' }] }));
+        assert.deepStrictEqual([ligne.resume.refus, ligne.unites.length], [[], 1], 'le code vient de codes_set (la ligne)');
+        // le PV de la carte, quand elle existe : il doit être celui qui est lu
+        const carte = pv => base({ cartes: [{ _id: 77, nomEn: 'Mareep', pv, ndex: 179, categorie: 'pokemon', images: [] }] });
+        const avecCarte = o => ({ ...o, lignes: [{ ...o.lignes[0], carteId: 77 }] });
+        assert.strictEqual((await monter(avecCarte(carte(60)))).unites.length, 1);
+        const pvFaux = await monter(avecCarte(carte(70)));
+        assert.strictEqual(pvFaux.unites.length, 0); assert.match(JSON.stringify(pvFaux.resume.refus), /pv-different/);
+        // un Dresseur au nom traduit : refusé, sauf table officielle (le nomJa d'autres cartes à page de même nomEn)
+        const dr = (o = {}) => base({ name: 'Nemona', slug: 'Nemona-svAL013', lu: { nom: 'ネモ', dex: null, pv: null }, ...o });
+        const sans = await monter(dr());
+        assert.strictEqual(sans.unites.length, 0); assert.match(JSON.stringify(sans.resume.refus), /nom-traduit-sans-temoin/);
+        const table = await monter(dr({ cartes: [{ _id: 301, nomEn: 'Nemona', nomJa: 'ネモ', images: [] }, { _id: 302, nomEn: 'Nemona', nomJa: 'ネモ', images: [] }] }));
+        assert.deepStrictEqual([table.resume.refus, table.unites.length], [[], 1], 'table officielle : deux cartes à page, même nomJa');
+        const diverge = await monter(dr({ cartes: [{ _id: 301, nomEn: 'Nemona', nomJa: 'ネモ', images: [] }, { _id: 302, nomEn: 'Nemona', nomJa: 'ボタン', images: [] }] }));
+        assert.strictEqual(diverge.unites.length, 0); assert.match(JSON.stringify(diverge.resume.refus), /nom-traduit-sans-temoin/);
     });
     await test('plan : sans validation = refus nommé, rien dans l\'index ni dans les unités', async () => {
         const w = await mondeSimple({ validations: [] });
