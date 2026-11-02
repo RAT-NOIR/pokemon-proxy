@@ -1083,7 +1083,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.match(mt(trad(), ptrad({ nomEn: 'Nemona', ndex: 179, slug: 'Nemona-svAL005' })), /ndex-non-confirme/, 'un ndex que la table ne peut pas confirmer (nom absent) est refusé');
         assert.match(mt(trad(), ptrad({ nomEn: 'Mareep', ndex: '179' })), /^$/, 'ndex numérique en texte : lu comme nombre');
         assert.match(mt(trad(), ptrad({ nomEn: 'Mareep', ndex: 'x' })), /ndex-non-confirme/, 'ndex illisible : jamais un témoin');
-        assert.strictEqual(lue(trad(), ptrad({ nomEn: 'Caterpie', ndex: 10 })).ok, true, 'ndex contenu dans les Pokédex du nom : confirmé');
+        assert.strictEqual(lue(trad({ dex: 10 }), ptrad({ nomEn: 'Caterpie', nomEnCarte: 'Caterpie', ndex: 10 })).ok, true, 'ndex contenu dans les Pokédex du nom : confirmé');
         // le nom du PRODUIT et celui de la CARTE disent la même chose, sinon refus : forme régionale ou règle
         assert.match(mt(trad({ nom: 'ファイヤーV', dex: 146, pv: 220 }), ptrad({ nomEnCarte: 'Moltres V', nomEn: 'Galarian Moltres V', slug: 'Moltres-V-svAL005' })), /nom-produit-carte-divergent/, 'carte « Moltres V », produit « Galarian Moltres V »');
         assert.match(mt(trad({ nom: 'ピカチュウ', dex: 25, pv: 60 }), ptrad({ nomEnCarte: 'Pikachu', nomEn: 'Pikachu ex', slug: 'Pikachu-svAL005' })), /nom-produit-carte-divergent/, 'règle différente entre carte et produit');
