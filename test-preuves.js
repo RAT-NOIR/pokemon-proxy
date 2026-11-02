@@ -1077,7 +1077,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.match(mt(trad({ nom: 'ガラルファイヤーV', dex: 146, pv: 220 }), ptrad({ nomEn: 'Galarian Moltres V', slug: 'Galarian-Moltres-V-svAL005' })), /forme-regionale/, 'forme régionale : le Pokédex ne la distingue pas');
         assert.match(mt(trad({ nom: 'ガラルファイヤーV', dex: 146, pv: 220 }), ptrad({ nomEn: 'Moltres V', slug: 'Moltres-V-svAL005' })), /forme-regionale/, 'forme régionale lue sur un produit qui n\'en nomme pas');
         assert.match(mt(trad({ nom: 'ファイヤーV', dex: 146, pv: 220 }), ptrad({ nomEn: 'Galarian Moltres V', slug: 'Galarian-Moltres-V-svAL005' })), /forme-regionale/, 'produit de forme régionale, nom lu qui ne la marque pas');
-        assert.strictEqual(lue(trad({ nom: 'ファイヤーV', dex: 146, pv: 220 }), ptrad({ nomEn: 'Moltres V', slug: 'Moltres-V-svAL005' })).ok, true, 'la forme de base passe');
+        assert.strictEqual(lue(trad({ nom: 'ファイヤーex', dex: 146, pv: 220 }), ptrad({ nomEn: 'Moltres ex', slug: 'Moltres-ex-svAL005' })).ok, true, 'la forme de base passe');
         assert.match(mt(trad({ langue: 'zh-hans' }), ptrad()), /nom-langue-non-anglaise/, 'langue lue ≠ langue du tirage : la règle du nom traduit ne s\'ouvre pas');
         assert.match(mt(trad({ nom: '洗翠' + 'V' }), ptrad({ nomEn: 'Mareep V' })), /forme-regionale/, 'marque régionale chinoise lue');
     });
