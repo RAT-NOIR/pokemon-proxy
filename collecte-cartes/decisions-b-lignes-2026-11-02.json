@@ -1,0 +1,1105 @@
+[
+ {
+  "idProduct": 783443,
+  "carteId": 294172,
+  "code": "SV-P",
+  "idExpansion": 5212,
+  "slugSet": "Scarlet-Violet-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "SV-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 783443 « Paradise Resort », SV-P, sans numéro, métacarte lue)",
+    "la carte 294172 déclare elle-même une impression du tirage dans « SV-P Promotional cards » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 844368,
+  "carteId": 294172,
+  "code": "SV-P",
+  "idExpansion": 5212,
+  "slugSet": "Scarlet-Violet-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "SV-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 844368 « Paradise Resort », SV-P, sans numéro, métacarte lue)",
+    "la carte 294172 déclare elle-même une impression du tirage dans « SV-P Promotional cards » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 727974,
+  "carteId": 294172,
+  "code": "SV-P",
+  "idExpansion": 5212,
+  "slugSet": "Scarlet-Violet-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "SV-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 727974 « Paradise Resort », SV-P, sans numéro, métacarte lue)",
+    "la carte 294172 déclare elle-même une impression du tirage dans « SV-P Promotional cards » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 765992,
+  "carteId": 306527,
+  "code": "SV-P",
+  "idExpansion": 5212,
+  "slugSet": "Scarlet-Violet-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "SV-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 765992 « Teal Mask Ogerpon [Mountain Stroll | Ogre Comeback] », SV-P, sans numéro, métacarte lue)",
+    "la carte 306527 déclare elle-même une impression du tirage dans « SV-P Promotional cards » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 909512,
+  "carteId": 358696,
+  "code": "m6a",
+  "idExpansion": 6602,
+  "slugSet": "30th-Celebration-JP",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "30th Celebration",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 909512 « Mew [Psychic | 30C] », m6a, sans numéro, métacarte lue)",
+    "la carte 358696 déclare elle-même une impression du tirage dans « 30th Celebration » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 909513,
+  "carteId": 358696,
+  "code": "m6a",
+  "idExpansion": 6602,
+  "slugSet": "30th-Celebration-JP",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "30th Celebration",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 909513 « Mew [Psychic | 30C] », m6a, sans numéro, métacarte lue)",
+    "la carte 358696 déclare elle-même une impression du tirage dans « 30th Celebration » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 909514,
+  "carteId": 358696,
+  "code": "m6a",
+  "idExpansion": 6602,
+  "slugSet": "30th-Celebration-JP",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "30th Celebration",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 909514 « Mew [Psychic | 30C] », m6a, sans numéro, métacarte lue)",
+    "la carte 358696 déclare elle-même une impression du tirage dans « 30th Celebration » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 696062,
+  "carteId": 264094,
+  "code": "S-P",
+  "idExpansion": 3214,
+  "slugSet": "Sword-Shield-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "S-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 696062 « Latias [Red Assist | Dyna Barrier] », S-P, sans numéro, métacarte lue)",
+    "la carte 264094 déclare elle-même une impression du tirage dans « S-P Promotional cards » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 696056,
+  "carteId": 267486,
+  "code": "S-P",
+  "idExpansion": 3214,
+  "slugSet": "Sword-Shield-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "S-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 696056 « Lapras [Raging Freeze] », S-P, sans numéro, métacarte lue)",
+    "la carte 267486 déclare elle-même une impression du tirage dans « S-P Promotional cards » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 696060,
+  "carteId": 263491,
+  "code": "S-P",
+  "idExpansion": 3214,
+  "slugSet": "Sword-Shield-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "S-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 696060 « Oricorio [Lesson in Zeal | Glistening Droplets] », S-P, sans numéro, métacarte lue)",
+    "la carte 263491 déclare elle-même une impression du tirage dans « S-P Promotional cards » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 912734,
+  "carteId": 335807,
+  "code": "M-P",
+  "idExpansion": 6230,
+  "slugSet": "M-P-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "M-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 912734 « Riolu [Accelerating Stab] », M-P, sans numéro, métacarte lue)",
+    "la carte 335807 déclare elle-même une impression du tirage dans « M-P Promotional cards » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 912731,
+  "carteId": 358653,
+  "code": "M-P",
+  "idExpansion": 6230,
+  "slugSet": "M-P-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "M-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 912731 « Zapdos [Flash-Pop Flapping | Thundering Lightning] », M-P, sans numéro, métacarte lue)",
+    "la carte 358653 déclare elle-même une impression du tirage dans « M-P Promotional cards » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 912727,
+  "carteId": 358643,
+  "code": "M-P",
+  "idExpansion": 6230,
+  "slugSet": "M-P-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "M-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 912727 « Alolan Exeggutor [Scale Up | Mega Drain] », M-P, sans numéro, métacarte lue)",
+    "la carte 358643 déclare elle-même une impression du tirage dans « M-P Promotional cards » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 912729,
+  "carteId": 358652,
+  "code": "M-P",
+  "idExpansion": 6230,
+  "slugSet": "M-P-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "M-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 912729 « Articuno [Frosty Flapping | Hail] », M-P, sans numéro, métacarte lue)",
+    "la carte 358652 déclare elle-même une impression du tirage dans « M-P Promotional cards » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 912732,
+  "carteId": 357035,
+  "code": "M-P",
+  "idExpansion": 6230,
+  "slugSet": "M-P-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "M-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 912732 « Sylveon ex [Colorful Harmony] », M-P, sans numéro, métacarte lue)",
+    "la carte 357035 déclare elle-même une impression du tirage dans « M-P Promotional cards » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 692805,
+  "carteId": 267492,
+  "code": "svB",
+  "idExpansion": 5221,
+  "slugSet": "Premium-Trainer-Box-ex",
+  "voie": "impression-numero",
+  "tirage": "jp",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 692805 « Lumineon V [Luminous Sign | Aqua Return] », svB n°008, métacarte lue)",
+    "la carte 267492 déclare elle-même une impression de ce numéro dans « Premium-Trainer-Box-ex » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-numero de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 916654,
+  "carteId": 357053,
+  "code": "MA6",
+  "idExpansion": 6604,
+  "slugSet": "30th-Celebration-IDTH",
+  "voie": "impression-du-tirage",
+  "tirage": "idth",
+  "expansionImpression": "30th Celebration",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 916654 « Mew ex [Memory Helix | Teleportation Burst] », MA6, sans numéro, métacarte lue)",
+    "la carte 357053 déclare elle-même une impression du tirage dans « 30th Celebration » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 909515,
+  "carteId": 358696,
+  "code": "MA6",
+  "idExpansion": 6604,
+  "slugSet": "30th-Celebration-IDTH",
+  "voie": "impression-du-tirage",
+  "tirage": "idth",
+  "expansionImpression": "30th Celebration",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 909515 « Mew [Psychic | 30C] », MA6, sans numéro, métacarte lue)",
+    "la carte 358696 déclare elle-même une impression du tirage dans « 30th Celebration » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 909516,
+  "carteId": 358696,
+  "code": "MA6",
+  "idExpansion": 6604,
+  "slugSet": "30th-Celebration-IDTH",
+  "voie": "impression-du-tirage",
+  "tirage": "idth",
+  "expansionImpression": "30th Celebration",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 909516 « Mew [Psychic | 30C] », MA6, sans numéro, métacarte lue)",
+    "la carte 358696 déclare elle-même une impression du tirage dans « 30th Celebration » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 909517,
+  "carteId": 358696,
+  "code": "MA6",
+  "idExpansion": 6604,
+  "slugSet": "30th-Celebration-IDTH",
+  "voie": "impression-du-tirage",
+  "tirage": "idth",
+  "expansionImpression": "30th Celebration",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 909517 « Mew [Psychic | 30C] », MA6, sans numéro, métacarte lue)",
+    "la carte 358696 déclare elle-même une impression du tirage dans « 30th Celebration » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 916646,
+  "carteId": 342054,
+  "code": "M-P/ID",
+  "idExpansion": 6393,
+  "slugSet": "M-P-Indonesian-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "id",
+  "expansionImpression": "M-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 916646 « Battle Cage », M-P/ID, sans numéro, métacarte lue)",
+    "la carte 342054 déclare elle-même une impression du tirage dans « M-P Promotional cards » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 916648,
+  "carteId": 263485,
+  "code": "M-P/ID",
+  "idExpansion": 6393,
+  "slugSet": "M-P-Indonesian-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "id",
+  "expansionImpression": "M-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 916648 « Celebratory Fanfare », M-P/ID, sans numéro, métacarte lue)",
+    "la carte 263485 déclare elle-même une impression du tirage dans « M-P Promotional cards » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 916649,
+  "carteId": 328923,
+  "code": "M-P/ID",
+  "idExpansion": 6393,
+  "slugSet": "M-P-Indonesian-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "id",
+  "expansionImpression": "M-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 916649 « Shaymin [Flower Curtain | Smash Kick] », M-P/ID, sans numéro, métacarte lue)",
+    "la carte 328923 déclare elle-même une impression du tirage dans « M-P Promotional cards » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 914674,
+  "carteId": 345375,
+  "code": "M-P/TH",
+  "idExpansion": 6392,
+  "slugSet": "M-P-Thai-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "th",
+  "expansionImpression": "M-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 914674 « Poké Pad », M-P/TH, sans numéro, métacarte lue)",
+    "la carte 345375 déclare elle-même une impression du tirage dans « M-P Promotional cards » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 914693,
+  "carteId": 342054,
+  "code": "M-P/TH",
+  "idExpansion": 6392,
+  "slugSet": "M-P-Thai-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "th",
+  "expansionImpression": "M-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 914693 « Battle Cage », M-P/TH, sans numéro, métacarte lue)",
+    "la carte 342054 déclare elle-même une impression du tirage dans « M-P Promotional cards » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 914695,
+  "carteId": 263485,
+  "code": "M-P/TH",
+  "idExpansion": 6392,
+  "slugSet": "M-P-Thai-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "th",
+  "expansionImpression": "M-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 914695 « Celebratory Fanfare », M-P/TH, sans numéro, métacarte lue)",
+    "la carte 263485 déclare elle-même une impression du tirage dans « M-P Promotional cards » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 899814,
+  "carteId": 240831,
+  "code": "S-P/ID",
+  "idExpansion": 6673,
+  "slugSet": "Sword-Shield-Indonesian-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "id",
+  "expansionImpression": "S-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 899814 « Scorbunny [Tackle | Flare] », S-P/ID, sans numéro, métacarte lue)",
+    "la carte 240831 déclare elle-même une impression du tirage dans « S-P Promotional cards » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 899841,
+  "carteId": 244741,
+  "code": "S-P/ID",
+  "idExpansion": 6673,
+  "slugSet": "Sword-Shield-Indonesian-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "id",
+  "expansionImpression": "S-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 899841 « Yamper [Bite | Zap Kick] », S-P/ID, sans numéro, métacarte lue)",
+    "la carte 244741 déclare elle-même une impression du tirage dans « S-P Promotional cards » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 899844,
+  "carteId": 244743,
+  "code": "S-P/ID",
+  "idExpansion": 6673,
+  "slugSet": "Sword-Shield-Indonesian-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "id",
+  "expansionImpression": "S-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 899844 « Morpeko [Attack the Wound] », S-P/ID, sans numéro, métacarte lue)",
+    "la carte 244743 déclare elle-même une impression du tirage dans « S-P Promotional cards » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 914473,
+  "carteId": 293140,
+  "code": "MEP",
+  "idExpansion": 6232,
+  "slugSet": "MEP-Black-Star-Promos",
+  "voie": "impression-numero",
+  "tirage": "intl",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 914473 « Pikachu [Scrappy Spark] », MEP n°093, métacarte lue)",
+    "la carte 293140 déclare elle-même une impression de ce numéro dans « MEP-Black-Star-Promos » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-numero de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 859012,
+  "carteId": 335801,
+  "code": "MEP",
+  "idExpansion": 6232,
+  "slugSet": "MEP-Black-Star-Promos",
+  "voie": "impression-numero",
+  "tirage": "intl",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 859012 « Mega Venusaur ex [Solar Transfer | Jungle Dump] », MEP n°013, métacarte lue)",
+    "la carte 335801 déclare elle-même une impression de ce numéro dans « MEP-Black-Star-Promos » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-numero de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 873722,
+  "carteId": 347575,
+  "code": "MEP",
+  "idExpansion": 6232,
+  "slugSet": "MEP-Black-Star-Promos",
+  "voie": "impression-numero",
+  "tirage": "intl",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 873722 « Mega Feraligatr ex [Mortal Crunch] », MEP n°036, métacarte lue)",
+    "la carte 347575 déclare elle-même une impression de ce numéro dans « MEP-Black-Star-Promos » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-numero de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 851066,
+  "carteId": 335818,
+  "code": "MEP",
+  "idExpansion": 6232,
+  "slugSet": "MEP-Black-Star-Promos",
+  "voie": "impression-numero",
+  "tirage": "intl",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 851066 « Mega Latias ex [Strafe | Illusory Impulse] », MEP n°011, métacarte lue)",
+    "la carte 335818 déclare elle-même une impression de ce numéro dans « MEP-Black-Star-Promos » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-numero de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 873720,
+  "carteId": 347573,
+  "code": "MEP",
+  "idExpansion": 6232,
+  "slugSet": "MEP-Black-Star-Promos",
+  "voie": "impression-numero",
+  "tirage": "intl",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 873720 « Mega Emboar ex [Crimson Blast] », MEP n°035, métacarte lue)",
+    "la carte 347573 déclare elle-même une impression de ce numéro dans « MEP-Black-Star-Promos » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-numero de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 873718,
+  "carteId": 347570,
+  "code": "MEP",
+  "idExpansion": 6232,
+  "slugSet": "MEP-Black-Star-Promos",
+  "voie": "impression-numero",
+  "tirage": "intl",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 873718 « Mega Meganium ex [Giant Bouquet] », MEP n°034, métacarte lue)",
+    "la carte 347570 déclare elle-même une impression de ce numéro dans « MEP-Black-Star-Promos » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-numero de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 580162,
+  "carteId": 60348,
+  "code": "CEL",
+  "idExpansion": 4347,
+  "slugSet": "Celebrations",
+  "voie": "impression-du-tirage",
+  "tirage": "intl",
+  "expansionImpression": "Celebrations",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 580162 « Charizard [Energy Burn | Fire Spin] », CEL, sans numéro, métacarte lue)",
+    "la carte 60348 déclare elle-même une impression du tirage dans « Celebrations » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 580161,
+  "carteId": 263368,
+  "code": "CEL",
+  "idExpansion": 4347,
+  "slugSet": "Celebrations",
+  "voie": "impression-du-tirage",
+  "tirage": "intl",
+  "expansionImpression": "Celebrations",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 580161 « Pikachu [Gnaw | Thunder Jolt] », CEL, sans numéro, métacarte lue)",
+    "la carte 263368 déclare elle-même une impression du tirage dans « Celebrations » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 605985,
+  "carteId": 263368,
+  "code": "CEL",
+  "idExpansion": 4347,
+  "slugSet": "Celebrations",
+  "voie": "impression-du-tirage",
+  "tirage": "intl",
+  "expansionImpression": "Celebrations",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 605985 « Pikachu [Gnaw | Thunder Jolt] », CEL, sans numéro, métacarte lue)",
+    "la carte 263368 déclare elle-même une impression du tirage dans « Celebrations » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 920175,
+  "carteId": 345369,
+  "code": "xASC",
+  "idExpansion": 6455,
+  "slugSet": "Ascended-Heroes-Additionals",
+  "voie": "impression-du-tirage",
+  "tirage": "intl",
+  "expansionImpression": "Ascended Heroes",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 920175 « Pikachu [Tail Smack | Tiny Bolt] », xASC, sans numéro, métacarte lue)",
+    "la carte 345369 déclare elle-même une impression du tirage dans « Ascended Heroes » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 720951,
+  "carteId": 282793,
+  "code": "MEW",
+  "idExpansion": 5402,
+  "slugSet": "151",
+  "voie": "impression-numero",
+  "tirage": "intl",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 720951 « Mew ex [Restart | Genome Hacking] », MEW n°205, métacarte lue)",
+    "la carte 282793 déclare elle-même une impression de ce numéro dans « 151 » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-numero de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 804205,
+  "carteId": 306748,
+  "code": "TWM",
+  "idExpansion": 5691,
+  "slugSet": "Twilight-Masquerade",
+  "voie": "impression-numero",
+  "tirage": "intl",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 804205 « Greninja ex [Shinobi Blade | Mirage Barrage] », TWM n°106, métacarte lue)",
+    "la carte 306748 déclare elle-même une impression de ce numéro dans « Twilight-Masquerade » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-numero de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 912748,
+  "carteId": 322476,
+  "code": "xJTG",
+  "idExpansion": 6088,
+  "slugSet": "Journey-Together-Additionals",
+  "voie": "impression-du-tirage",
+  "tirage": "intl",
+  "expansionImpression": "Journey Together",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 912748 « Blaziken ex [Seething Spirit | Smolder-sault] », xJTG, sans numéro, métacarte lue)",
+    "la carte 322476 déclare elle-même une impression du tirage dans « Journey Together » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 912749,
+  "carteId": 322476,
+  "code": "xJTG",
+  "idExpansion": 6088,
+  "slugSet": "Journey-Together-Additionals",
+  "voie": "impression-du-tirage",
+  "tirage": "intl",
+  "expansionImpression": "Journey Together",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 912749 « Blaziken ex [Seething Spirit | Smolder-sault] », xJTG, sans numéro, métacarte lue)",
+    "la carte 322476 déclare elle-même une impression du tirage dans « Journey Together » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 916472,
+  "carteId": 253552,
+  "code": "VIV",
+  "idExpansion": 3484,
+  "slugSet": "Vivid-Voltage",
+  "voie": "impression-du-tirage",
+  "tirage": "intl",
+  "expansionImpression": "Vivid Voltage",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 916472 « Zeraora [Fighting Lightning] », VIV, sans numéro, métacarte lue)",
+    "la carte 253552 déclare elle-même une impression du tirage dans « Vivid Voltage » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 916471,
+  "carteId": 253300,
+  "code": "VIV",
+  "idExpansion": 3484,
+  "slugSet": "Vivid-Voltage",
+  "voie": "impression-numero",
+  "tirage": "intl",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 916471 « Zekrom [Slash | Wild Shock] », VIV n°060, métacarte lue)",
+    "la carte 253300 déclare elle-même une impression de ce numéro dans « Vivid-Voltage » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-numero de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 914415,
+  "carteId": 355911,
+  "code": "xPBL",
+  "idExpansion": 6640,
+  "slugSet": "Pitch-Black-Additionals",
+  "voie": "impression-du-tirage",
+  "tirage": "intl",
+  "expansionImpression": "Pitch Black",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 914415 « Marshadow [Shadowy Knot] », xPBL, sans numéro, métacarte lue)",
+    "la carte 355911 déclare elle-même une impression du tirage dans « Pitch Black » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 916473,
+  "carteId": 263127,
+  "code": "EVS",
+  "idExpansion": 4328,
+  "slugSet": "Evolving-Skies",
+  "voie": "impression-du-tirage",
+  "tirage": "intl",
+  "expansionImpression": "Evolving Skies",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 916473 « Regidrago [Hammer In | Dragon Energy] », EVS, sans numéro, métacarte lue)",
+    "la carte 263127 déclare elle-même une impression du tirage dans « Evolving Skies » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 806543,
+  "carteId": 323175,
+  "code": "xPRE",
+  "idExpansion": 6009,
+  "slugSet": "Prismatic-Evolutions-Additionals",
+  "voie": "impression-du-tirage",
+  "tirage": "intl",
+  "expansionImpression": "Prismatic Evolutions",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 806543 « Amarys », xPRE, sans numéro, métacarte lue)",
+    "la carte 323175 déclare elle-même une impression du tirage dans « Prismatic Evolutions » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 806565,
+  "carteId": 301313,
+  "code": "xPRE",
+  "idExpansion": 6009,
+  "slugSet": "Prismatic-Evolutions-Additionals",
+  "voie": "impression-du-tirage",
+  "tirage": "intl",
+  "expansionImpression": "Prismatic Evolutions",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 806565 « Ciphermaniac's Codebreaking », xPRE, sans numéro, métacarte lue)",
+    "la carte 301313 déclare elle-même une impression du tirage dans « Prismatic Evolutions » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 806571,
+  "carteId": 301343,
+  "code": "xPRE",
+  "idExpansion": 6009,
+  "slugSet": "Prismatic-Evolutions-Additionals",
+  "voie": "impression-du-tirage",
+  "tirage": "intl",
+  "expansionImpression": "Prismatic Evolutions",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 806571 « Explorer's Guidance », xPRE, sans numéro, métacarte lue)",
+    "la carte 301343 déclare elle-même une impression du tirage dans « Prismatic Evolutions » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 806589,
+  "carteId": 306539,
+  "code": "xPRE",
+  "idExpansion": 6009,
+  "slugSet": "Prismatic-Evolutions-Additionals",
+  "voie": "impression-du-tirage",
+  "tirage": "intl",
+  "expansionImpression": "Prismatic Evolutions",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 806589 « Ogre's Mask », xPRE, sans numéro, métacarte lue)",
+    "la carte 306539 déclare elle-même une impression du tirage dans « Prismatic Evolutions » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 806591,
+  "carteId": 295757,
+  "code": "xPRE",
+  "idExpansion": 6009,
+  "slugSet": "Prismatic-Evolutions-Additionals",
+  "voie": "impression-du-tirage",
+  "tirage": "intl",
+  "expansionImpression": "Prismatic Evolutions",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 806591 « Professor Sada's Vitality », xPRE, sans numéro, métacarte lue)",
+    "la carte 295757 déclare elle-même une impression du tirage dans « Prismatic Evolutions » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ },
+ {
+  "idProduct": 806593,
+  "carteId": 295758,
+  "code": "xPRE",
+  "idExpansion": 6009,
+  "slugSet": "Prismatic-Evolutions-Additionals",
+  "voie": "impression-du-tirage",
+  "tirage": "intl",
+  "expansionImpression": "Prismatic Evolutions",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket (produit 806593 « Professor Turo's Scenario », xPRE, sans numéro, métacarte lue)",
+    "la carte 295758 déclare elle-même une impression du tirage dans « Prismatic Evolutions » (base cartes, lue le 2026-11-02)"
+   ],
+   "references": [
+    "voie impression-du-tirage de collecte-cartes/fiches-prouvees.js, rejouée par planifier() le 2026-11-02"
+   ]
+  }
+ }
+]
