@@ -1085,6 +1085,8 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.match(mt(trad(), ptrad({ nomEn: 'Mareep', ndex: 180 })), /ndex-non-confirme/, 'le Pokédex de la carte contredit celui du nom (pokedex-dexids.json)');
         assert.match(mt(trad(), ptrad({ nomEn: 'Nemona', ndex: 179, slug: 'Nemona-svAL005' })), /ndex-non-confirme/, 'un ndex que la table ne peut pas confirmer (nom absent) est refusé');
         assert.match(mt(trad(), ptrad({ nomEn: 'Mareep', ndex: '179' })), /^$/, 'ndex numérique en texte : lu comme nombre');
+        assert.strictEqual(lue(trad(), ptrad({ nomEn: 'Mareep', ndex: '' })).ok, true, 'ndex vide = ndex absent (le nom décide)');
+        assert.strictEqual(lue(trad(), ptrad({ nomEn: 'Mareep', ndex: null })).ok, true);
         assert.match(mt(trad(), ptrad({ nomEn: 'Mareep', ndex: 'x' })), /ndex-non-confirme/, 'ndex illisible : jamais un témoin');
         assert.strictEqual(lue(trad({ dex: 10 }), ptrad({ nomEn: 'Caterpie', nomEnCarte: 'Caterpie', ndex: 10 })).ok, true, 'ndex contenu dans les Pokédex du nom : confirmé');
         // le nom du PRODUIT et celui de la CARTE disent la même chose, sinon refus : forme régionale ou règle
