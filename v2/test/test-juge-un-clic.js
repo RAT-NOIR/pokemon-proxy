@@ -342,7 +342,7 @@ const noter = async (x, r) => { const j = r.journal ? fs.readFileSync(r.journal,
         H.v('13. deux Entrées rapprochées : UNE seule résolution, une seule attente', [f.appels.filter(a => a.includes('resoudre')).length, f.appels.filter(a => a.includes('/verite')).length, f.E.attente && f.E.attente.via], [1, 0, 'url']);
 
         f = fabrique({ liste: { statut: 200, json: { success: true, scans: UN_SCAN, prochain: 'a'.repeat(24), autresComptes: 0, seau: { id: 's1', nom: 'juge-200', type: 'juge', etat: 'ouvert', n: 3, cible: 200 } } }, verite: { statut: 409, json: { success: false, erreur: { code: 'CONFLIT', detail: 'juge-scelle' } } } }); await f.ctrl.demarrer();
-        await f.ctrl.entrer('777'); await f.ctrl.confirmer();
+        await f.ctrl.entrer('777'); f.ctrl.photoSuffisante(true); await f.ctrl.confirmer();
         H.v('13. vérité refusée parce que le juge est scellé : phrase française', f.textes.some(t => /Le juge est scellé/.test(t)), true);
         aucunBrut('vérité refusée', f);
 
