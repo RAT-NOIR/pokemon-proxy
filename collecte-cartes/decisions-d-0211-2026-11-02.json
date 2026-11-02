@@ -1,0 +1,1974 @@
+[
+ {
+  "idProduct": 890048,
+  "carteId": 122795,
+  "code": "BW1b",
+  "idExpansion": 4214,
+  "slugSet": "Black-Collection",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Black Collection",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 890048 « Reshiram [Outrage | Blue Flare] » (exp 4214), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 122795 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Reshiram » [Outrage | Blue Flare] ⊇ attaques de la carte [\"Outrage\",\"Blue Flare\"] · métacarte Cardmarket 339816 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Black Collection » n°013/053, « Black Collection » n°055/053, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 677997,
+  "carteId": 69422,
+  "code": "PtGL",
+  "idExpansion": 4287,
+  "slugSet": "Gallade-SP-Half-Deck",
+  "voie": "impression-numero",
+  "tirage": "jp",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 677997 « Team Galactic's Invention G-101 Energy Gain » (exp 4287), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 69422 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-numero · nom + attaques : « Team Galactic's Invention G-101 Energy Gain » [] ⊇ attaques de la carte [] · métacarte Cardmarket 216397 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-numero : la carte déclare elle-même « Infernape vs Gallade SP Deck Kit » n°015/018, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 902232,
+  "carteId": 25611,
+  "code": "GTG",
+  "idExpansion": 5686,
+  "slugSet": "Guren-Town-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Guren Town Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 902232 « Blaine's Vulpix [Natural Healing | Tail Fan] » (exp 5686), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25611 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Blaine's Vulpix » [Natural Healing | Tail Fan] ⊇ attaques de la carte [\"Tail Fan\"] · métacarte Cardmarket 212062 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Guren Town Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 902235,
+  "carteId": 25613,
+  "code": "GTG",
+  "idExpansion": 5686,
+  "slugSet": "Guren-Town-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Guren Town Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 902235 « Blaine's Ponyta [Hind Kick] » (exp 5686), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25613 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Blaine's Ponyta » [Hind Kick] ⊇ attaques de la carte [\"Hind Kick\"] · métacarte Cardmarket 212193 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Guren Town Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 760283,
+  "carteId": 25612,
+  "code": "GTG",
+  "idExpansion": 5686,
+  "slugSet": "Guren-Town-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Guren Town Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 760283 « Blaine's Vulpix [Bite | Call Will-o'-the-wisp] » (exp 5686), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25612 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Blaine's Vulpix » [Bite | Call Will-o'-the-wisp] ⊇ attaques de la carte [\"Bite\",\"Call Will-o'-the-wisp\"] · métacarte Cardmarket 212195 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Guren Town Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 760284,
+  "carteId": 25604,
+  "code": "GTG",
+  "idExpansion": 5686,
+  "slugSet": "Guren-Town-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Guren Town Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 760284 « Blaine's Growlithe [Shake | Fire Tackle] » (exp 5686), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25604 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Blaine's Growlithe » [Shake | Fire Tackle] ⊇ attaques de la carte [\"Shake\",\"Fire Tackle\"] · métacarte Cardmarket 344067 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Guren Town Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 760286,
+  "carteId": 25609,
+  "code": "GTG",
+  "idExpansion": 5686,
+  "slugSet": "Guren-Town-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Guren Town Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 760286 « Blaine's Ponyta [Agility] » (exp 5686), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25609 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Blaine's Ponyta » [Agility] ⊇ attaques de la carte [\"Agility\"] · métacarte Cardmarket 212060 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Guren Town Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 760285,
+  "carteId": 25614,
+  "code": "GTG",
+  "idExpansion": 5686,
+  "slugSet": "Guren-Town-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Guren Town Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 760285 « Blaine's Growlithe [Stoke | Body Slam] » (exp 5686), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25614 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Blaine's Growlithe » [Stoke | Body Slam] ⊇ attaques de la carte [\"Stoke\",\"Body Slam\"] · métacarte Cardmarket 212191 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Guren Town Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 902244,
+  "carteId": 25662,
+  "code": "CGH",
+  "idExpansion": 5682,
+  "slugSet": "Hanada-City-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Hanada City Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 902244 « Misty's Staryu [Star Boomerang] » (exp 5682), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25662 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Misty's Staryu » [Star Boomerang] ⊇ attaques de la carte [\"Star Boomerang\"] · métacarte Cardmarket 344048 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Hanada City Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 760250,
+  "carteId": 25638,
+  "code": "CGH",
+  "idExpansion": 5682,
+  "slugSet": "Hanada-City-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Hanada City Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 760250 « Misty's Goldeen [Horn Hazard] » (exp 5682), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25638 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Misty's Goldeen » [Horn Hazard] ⊇ attaques de la carte [\"Horn Hazard\"] · métacarte Cardmarket 212027 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Hanada City Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 902243,
+  "carteId": 25639,
+  "code": "CGH",
+  "idExpansion": 5682,
+  "slugSet": "Hanada-City-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Hanada City Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 902243 « Misty's Goldeen [Fury Attack | Supersonic] » (exp 5682), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25639 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Misty's Goldeen » [Fury Attack | Supersonic] ⊇ attaques de la carte [\"Fury Attack\",\"Supersonic\"] · métacarte Cardmarket 212082 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Hanada City Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 760252,
+  "carteId": 25649,
+  "code": "CGH",
+  "idExpansion": 5682,
+  "slugSet": "Hanada-City-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Hanada City Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 760252 « Misty's Staryu [Swift] » (exp 5682), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25649 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Misty's Staryu » [Swift] ⊇ attaques de la carte [\"Swift\"] · métacarte Cardmarket 212087 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Hanada City Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 678038,
+  "carteId": 69422,
+  "code": "PtI",
+  "idExpansion": 4288,
+  "slugSet": "Infernape-SP-Half-Deck",
+  "voie": "impression-numero",
+  "tirage": "jp",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 678038 « Team Galactic's Invention G-101 Energy Gain » (exp 4288), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 69422 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-numero · nom + attaques : « Team Galactic's Invention G-101 Energy Gain » [] ⊇ attaques de la carte [] · métacarte Cardmarket 216397 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-numero : la carte déclare elle-même « Infernape vs Gallade SP Deck Kit » n°015/018, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 760255,
+  "carteId": 25864,
+  "code": "CGK",
+  "idExpansion": 5683,
+  "slugSet": "Kuchiba-City-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Kuchiba City Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 760255 « Lt. Surge's Pikachu [Charge | Lightning Tail] » (exp 5683), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25864 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Lt. Surge's Pikachu » [Charge | Lightning Tail] ⊇ attaques de la carte [\"Charge\",\"Lightning Tail\"] · métacarte Cardmarket 212078 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Kuchiba City Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 761139,
+  "carteId": 25877,
+  "code": "CGK",
+  "idExpansion": 5683,
+  "slugSet": "Kuchiba-City-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Kuchiba City Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 761139 « Lt. Surge's Pikachu [Quick Attack] » (exp 5683), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25877 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Lt. Surge's Pikachu » [Quick Attack] ⊇ attaques de la carte [\"Quick Attack\"] · métacarte Cardmarket 212213 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Kuchiba City Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 902269,
+  "carteId": 25855,
+  "code": "CGK",
+  "idExpansion": 5683,
+  "slugSet": "Kuchiba-City-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Kuchiba City Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 902269 « Lt. Surge's Magnemite [Thundershock | Tackle] » (exp 5683), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25855 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Lt. Surge's Magnemite » [Thundershock | Tackle] ⊇ attaques de la carte [\"Thundershock\",\"Tackle\"] · métacarte Cardmarket 212077 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Kuchiba City Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 760257,
+  "carteId": 25879,
+  "code": "CGK",
+  "idExpansion": 5683,
+  "slugSet": "Kuchiba-City-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Kuchiba City Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 760257 « Lt. Surge's Voltorb [Bouncing Ball] » (exp 5683), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25879 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Lt. Surge's Voltorb » [Bouncing Ball] ⊇ attaques de la carte [\"Bouncing Ball\"] · métacarte Cardmarket 212215 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Kuchiba City Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 902267,
+  "carteId": 25849,
+  "code": "CGK",
+  "idExpansion": 5683,
+  "slugSet": "Kuchiba-City-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Kuchiba City Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 902267 « Lt. Surge's Magnemite [Removal Pulse | Confusion Pulse] » (exp 5683), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25849 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Lt. Surge's Magnemite » [Removal Pulse | Confusion Pulse] ⊇ attaques de la carte [\"Removal Pulse\",\"Confusion Pulse\"] · métacarte Cardmarket 212047 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Kuchiba City Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 902272,
+  "carteId": 25867,
+  "code": "CGK",
+  "idExpansion": 5683,
+  "slugSet": "Kuchiba-City-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Kuchiba City Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 902272 « Lt. Surge's Voltorb [Spin Ball | Double Spin] » (exp 5683), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25867 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Lt. Surge's Voltorb » [Spin Ball | Double Spin] ⊇ attaques de la carte [\"Spin Ball\",\"Double Spin\"] · métacarte Cardmarket 212081 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Kuchiba City Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 566220,
+  "carteId": 26280,
+  "code": "L-P",
+  "idExpansion": 4274,
+  "slugSet": "L-P-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "L-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 566220 « Tropical Tidal Wave » (exp 4274), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 26280 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Tropical Tidal Wave » [] ⊇ attaques de la carte [] · métacarte Cardmarket 213361 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « L-P Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 792446,
+  "carteId": 193402,
+  "code": "MMBP",
+  "idExpansion": 5915,
+  "slugSet": "M-Master-Deck-Build-Box-Power-Style",
+  "voie": "impression-numero",
+  "tirage": "jp",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 792446 « Landorus [Shout of Power | Sky Lariat] » (exp 5915), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 193402 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-numero · nom + attaques : « Landorus » [Shout of Power | Sky Lariat] ⊇ attaques de la carte [\"Shout of Power\",\"Sky Lariat\"] · métacarte Cardmarket 336899 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-numero : la carte déclare elle-même « M Master Deck Build Box Power Style » n°019/049, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 902283,
+  "carteId": 25511,
+  "code": "CGN",
+  "idExpansion": 5681,
+  "slugSet": "Nivi-City-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Nivi City Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 902283 « Brock's Geodude [Call for Friend | Hook Shot] » (exp 5681), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25511 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Brock's Geodude » [Call for Friend | Hook Shot] ⊇ attaques de la carte [\"Call for Friend\",\"Hook Shot\"] · métacarte Cardmarket 212063 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Nivi City Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 760241,
+  "carteId": 25514,
+  "code": "CGN",
+  "idExpansion": 5681,
+  "slugSet": "Nivi-City-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Nivi City Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 760241 « Brock's Onix [Bind | Tunneling] » (exp 5681), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25514 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Brock's Onix » [Bind | Tunneling] ⊇ attaques de la carte [\"Bind\",\"Tunneling\"] · métacarte Cardmarket 212018 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Nivi City Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 760239,
+  "carteId": 25510,
+  "code": "CGN",
+  "idExpansion": 5681,
+  "slugSet": "Nivi-City-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Nivi City Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 760239 « Brock's Geodude [Tackle | Lucky Shot] » (exp 5681), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25510 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Brock's Geodude » [Tackle | Lucky Shot] ⊇ attaques de la carte [\"Tackle\",\"Lucky Shot\"] · métacarte Cardmarket 212035 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Nivi City Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 902285,
+  "carteId": 25515,
+  "code": "CGN",
+  "idExpansion": 5681,
+  "slugSet": "Nivi-City-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Nivi City Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 902285 « Brock's Onix [Bellow | Rock Throw] » (exp 5681), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25515 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Brock's Onix » [Bellow | Rock Throw] ⊇ attaques de la carte [\"Bellow\",\"Rock Throw\"] · métacarte Cardmarket 344047 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Nivi City Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 554749,
+  "carteId": 60335,
+  "code": "VS",
+  "idExpansion": 4168,
+  "slugSet": "Pokemon-CardVS",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Pokémon VS",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 554749 « Rainbow Energy » (exp 4168), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 60335 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Rainbow Energy » [] ⊇ attaques de la carte [] · métacarte Cardmarket 211994 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Pokémon VS » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 468484,
+  "carteId": 25165,
+  "code": "SM-P",
+  "idExpansion": 3324,
+  "slugSet": "Sun-Moon-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "SM-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 468484 « Rare Candy » (exp 3324), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25165 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Rare Candy » [] ⊇ attaques de la carte [] · métacarte Cardmarket 211527 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « SM-P Promotional cards » n°025/SM-P, « SM-P Promotional cards » n°SM-P, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 468489,
+  "carteId": 25165,
+  "code": "SM-P",
+  "idExpansion": 3324,
+  "slugSet": "Sun-Moon-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "SM-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 468489 « Rare Candy » (exp 3324), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25165 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Rare Candy » [] ⊇ attaques de la carte [] · métacarte Cardmarket 211527 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « SM-P Promotional cards » n°025/SM-P, « SM-P Promotional cards » n°SM-P, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 468494,
+  "carteId": 25165,
+  "code": "SM-P",
+  "idExpansion": 3324,
+  "slugSet": "Sun-Moon-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "SM-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 468494 « Rare Candy » (exp 3324), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25165 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Rare Candy » [] ⊇ attaques de la carte [] · métacarte Cardmarket 211527 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « SM-P Promotional cards » n°025/SM-P, « SM-P Promotional cards » n°SM-P, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 760264,
+  "carteId": 25167,
+  "code": "CGT",
+  "idExpansion": 5684,
+  "slugSet": "Tamamushi-City-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Tamamushi City Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 760264 « Erika's Oddish [Photosynthesis | Poisonpowder] » (exp 5684), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25167 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Erika's Oddish » [Photosynthesis | Poisonpowder] ⊇ attaques de la carte [\"Poisonpowder\"] · métacarte Cardmarket 212044 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Tamamushi City Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 760266,
+  "carteId": 25459,
+  "code": "CGT",
+  "idExpansion": 5684,
+  "slugSet": "Tamamushi-City-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Tamamushi City Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 760266 « Erika's Bellsprout [Poison Vine | Vine Whip] » (exp 5684), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25459 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Erika's Bellsprout » [Poison Vine | Vine Whip] ⊇ attaques de la carte [\"Poison Vine\",\"Vine Whip\"] · métacarte Cardmarket 212072 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Tamamushi City Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 902298,
+  "carteId": 25168,
+  "code": "CGT",
+  "idExpansion": 5684,
+  "slugSet": "Tamamushi-City-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Tamamushi City Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 902298 « Erika's Oddish [Blot | Sporadic Sponging] » (exp 5684), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25168 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Erika's Oddish » [Blot | Sporadic Sponging] ⊇ attaques de la carte [\"Blot\",\"Sporadic Sponging\"] · métacarte Cardmarket 212075 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Tamamushi City Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 902301,
+  "carteId": 25460,
+  "code": "CGT",
+  "idExpansion": 5684,
+  "slugSet": "Tamamushi-City-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Tamamushi City Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 902301 « Erika's Bellsprout [Careless Tackle] » (exp 5684), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25460 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Erika's Bellsprout » [Careless Tackle] ⊇ attaques de la carte [\"Careless Tackle\"] · métacarte Cardmarket 212073 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Tamamushi City Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 571803,
+  "carteId": 31315,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 571803 « _____'s Pikachu [Birthday Surprise] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 31315 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « _____'s Pikachu » [Birthday Surprise] ⊇ attaques de la carte [\"Birthday Surprise\"] · métacarte Cardmarket 344055 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 606006,
+  "carteId": 20368,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 606006 « Pikachu [Growl | Thundershock] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 20368 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Pikachu » [Growl | Thundershock] ⊇ attaques de la carte [\"Growl\",\"Thundershock\"] · métacarte Cardmarket 337373 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 557905,
+  "carteId": 60348,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 557905 « Charizard [Energy Burn | Fire Spin] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 60348 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Charizard » [Energy Burn | Fire Spin] ⊇ attaques de la carte [\"Fire Spin\"] · métacarte Cardmarket 211560 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 571764,
+  "carteId": 20619,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 571764 « Mew [Neutral Shield | Psyshock] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 20619 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Mew » [Neutral Shield | Psyshock] ⊇ attaques de la carte [\"Psyshock\"] · métacarte Cardmarket 344042 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 882119,
+  "carteId": 20368,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 882119 « Pikachu [Growl | Thundershock] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 20368 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Pikachu » [Growl | Thundershock] ⊇ attaques de la carte [\"Growl\",\"Thundershock\"] · métacarte Cardmarket 337373 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 571802,
+  "carteId": 31315,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 571802 « _____'s Pikachu [Birthday Surprise] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 31315 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « _____'s Pikachu » [Birthday Surprise] ⊇ attaques de la carte [\"Birthday Surprise\"] · métacarte Cardmarket 344055 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 882120,
+  "carteId": 20316,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 882120 « Jigglypuff [First Aid | Double-edge] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 20316 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Jigglypuff » [First Aid | Double-edge] ⊇ attaques de la carte [\"First Aid\",\"Double-edge\"] · métacarte Cardmarket 213287 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 557899,
+  "carteId": 15178,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 557899 « Venusaur [Energy Trans | Solarbeam] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 15178 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Venusaur » [Energy Trans | Solarbeam] ⊇ attaques de la carte [\"Solarbeam\",\"Solar Beam\"] · métacarte Cardmarket 338940 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 571826,
+  "carteId": 35251,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 571826 « Articuno [Diamond Dust] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 35251 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Articuno » [Diamond Dust] ⊇ attaques de la carte [\"Diamond Dust\"] · métacarte Cardmarket 343840 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 709552,
+  "carteId": 53251,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 709552 « Victory Medal » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 53251 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Victory Medal » [] ⊇ attaques de la carte [] · métacarte Cardmarket 213270 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 606002,
+  "carteId": 20316,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 606002 « Jigglypuff [First Aid | Double-edge] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 20316 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Jigglypuff » [First Aid | Double-edge] ⊇ attaques de la carte [\"First Aid\",\"Double-edge\"] · métacarte Cardmarket 213287 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 571766,
+  "carteId": 20880,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 571766 « Surfing Pikachu [Surf] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 20880 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Surfing Pikachu » [Surf] ⊇ attaques de la carte [\"Surf\"] · métacarte Cardmarket 337328 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 571768,
+  "carteId": 20381,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 571768 « Flying Pikachu [Thundershock | Fly] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 20381 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Flying Pikachu » [Thundershock | Fly] ⊇ attaques de la carte [\"Thundershock\",\"Fly\"] · métacarte Cardmarket 336754 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 571828,
+  "carteId": 35252,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 571828 « Zapdos [Lightning Burn] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 35252 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Zapdos » [Lightning Burn] ⊇ attaques de la carte [\"Lightning Burn\"] · métacarte Cardmarket 343841 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 654100,
+  "carteId": 31310,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 654100 « Venusaur [Solar Power | Mega Drain] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 31310 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Venusaur » [Solar Power | Mega Drain] ⊇ attaques de la carte [\"Mega Drain\"] · métacarte Cardmarket 213293 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 606005,
+  "carteId": 31316,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 606005 « Pikachu [Scratch | Thunderbolt] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 31316 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Pikachu » [Scratch | Thunderbolt] ⊇ attaques de la carte [\"Scratch\",\"Thunderbolt\"] · métacarte Cardmarket 213306 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 606004,
+  "carteId": 29087,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 606004 « Meowth [Cat Punch] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 29087 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Meowth » [Cat Punch] ⊇ attaques de la carte [\"Cat Punch\"] · métacarte Cardmarket 345883 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 571763,
+  "carteId": 20368,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 571763 « Pikachu [Growl | Thundershock] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 20368 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Pikachu » [Growl | Thundershock] ⊇ attaques de la carte [\"Growl\",\"Thundershock\"] · métacarte Cardmarket 337373 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 571771,
+  "carteId": 23781,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 571771 « Mewtwo [Energy Control | Telekinesis] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 23781 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Mewtwo » [Energy Control | Telekinesis] ⊇ attaques de la carte [\"Energy Control\",\"Telekinesis\"] · métacarte Cardmarket 212655 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 571827,
+  "carteId": 35253,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 571827 « Moltres [Hyper Flame] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 35253 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Moltres » [Hyper Flame] ⊇ attaques de la carte [\"Hyper Flame\"] · métacarte Cardmarket 343839 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 709553,
+  "carteId": 53251,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 709553 « Victory Medal » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 53251 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Victory Medal » [] ⊇ attaques de la carte [] · métacarte Cardmarket 213270 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 654094,
+  "carteId": 20880,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 654094 « Surfing Pikachu [Surf] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 20880 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Surfing Pikachu » [Surf] ⊇ attaques de la carte [\"Surf\"] · métacarte Cardmarket 337328 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 722924,
+  "carteId": 60348,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 722924 « Charizard [Energy Burn | Fire Spin] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 60348 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Charizard » [Energy Burn | Fire Spin] ⊇ attaques de la carte [\"Fire Spin\"] · métacarte Cardmarket 211560 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 654099,
+  "carteId": 31262,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 654099 « Dragonite [Special Delivery | Supersonic Flight] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 31262 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Dragonite » [Special Delivery | Supersonic Flight] ⊇ attaques de la carte [\"Supersonic Flight\"] · métacarte Cardmarket 343836 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 571904,
+  "carteId": 24680,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 571904 « Lucky Stadium » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 24680 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Lucky Stadium » [] ⊇ attaques de la carte [] · métacarte Cardmarket 212613 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 571902,
+  "carteId": 24680,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 571902 « Lucky Stadium » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 24680 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Lucky Stadium » [] ⊇ attaques de la carte [] · métacarte Cardmarket 212613 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 571906,
+  "carteId": 24680,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 571906 « Lucky Stadium » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 24680 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Lucky Stadium » [] ⊇ attaques de la carte [] · métacarte Cardmarket 212613 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 571901,
+  "carteId": 24680,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 571901 « Lucky Stadium » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 24680 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Lucky Stadium » [] ⊇ attaques de la carte [] · métacarte Cardmarket 212613 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 571907,
+  "carteId": 24680,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 571907 « Lucky Stadium » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 24680 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Lucky Stadium » [] ⊇ attaques de la carte [] · métacarte Cardmarket 212613 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 841985,
+  "carteId": 20368,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 841985 « Pikachu [Growl | Thundershock] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 20368 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Pikachu » [Growl | Thundershock] ⊇ attaques de la carte [\"Growl\",\"Thundershock\"] · métacarte Cardmarket 337373 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 654130,
+  "carteId": 24406,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 654130 « Lugia [Aerowing] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 24406 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Lugia » [Aerowing] ⊇ attaques de la carte [\"Aerowing\"] · métacarte Cardmarket 212467 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 571903,
+  "carteId": 24680,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 571903 « Lucky Stadium » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 24680 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Lucky Stadium » [] ⊇ attaques de la carte [] · métacarte Cardmarket 212613 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 882098,
+  "carteId": 20381,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 882098 « Flying Pikachu [Thundershock | Fly] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 20381 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Flying Pikachu » [Thundershock | Fly] ⊇ attaques de la carte [\"Thundershock\",\"Fly\"] · métacarte Cardmarket 336754 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 606007,
+  "carteId": 31519,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 606007 « Togepi [Snivel | Mini-Metronome] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 31519 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Togepi » [Snivel | Mini-Metronome] ⊇ attaques de la carte [\"Snivel\",\"Mini-Metronome\"] · métacarte Cardmarket 213310 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 571911,
+  "carteId": 24380,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 571911 « Eevee [Energy Evolution | Smash Kick] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 24380 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Eevee » [Energy Evolution | Smash Kick] ⊇ attaques de la carte [\"Smash Kick\"] · métacarte Cardmarket 344122 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 571900,
+  "carteId": 24680,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 571900 « Lucky Stadium » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 24680 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Lucky Stadium » [] ⊇ attaques de la carte [] · métacarte Cardmarket 212613 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 571905,
+  "carteId": 24680,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 571905 « Lucky Stadium » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 24680 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Lucky Stadium » [] ⊇ attaques de la carte [] · métacarte Cardmarket 212613 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 576716,
+  "carteId": 23911,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 576716 « Chikorita [Tackle | Deflector] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 23911 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Chikorita » [Tackle | Deflector] ⊇ attaques de la carte [\"Tackle\",\"Deflector\"] · métacarte Cardmarket 345891 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 576718,
+  "carteId": 23998,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 576718 « Totodile [Leer | Fury Swipes] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 23998 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Totodile » [Leer | Fury Swipes] ⊇ attaques de la carte [\"Leer\",\"Fury Swipes\"] · métacarte Cardmarket 265039 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 576717,
+  "carteId": 23997,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 576717 « Cyndaquil [Fireworks | Quick Attack] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 23997 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Cyndaquil » [Fireworks | Quick Attack] ⊇ attaques de la carte [\"Fireworks\",\"Quick Attack\"] · métacarte Cardmarket 212318 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 654127,
+  "carteId": 24448,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 654127 « Entei [Legendary Body | Mega Flame] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 24448 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Entei » [Legendary Body | Mega Flame] ⊇ attaques de la carte [\"Mega Flame\"] · métacarte Cardmarket 212464 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 654113,
+  "carteId": 23914,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 654113 « Cyndaquil [Leer | Swift] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 23914 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Cyndaquil » [Leer | Swift] ⊇ attaques de la carte [\"Leer\",\"Swift\"] · métacarte Cardmarket 212317 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 654101,
+  "carteId": 31516,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 654101 « Marill [Water Gun] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 31516 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Marill » [Water Gun] ⊇ attaques de la carte [\"Water Gun\"] · métacarte Cardmarket 343821 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 654110,
+  "carteId": 60410,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 654110 « Chikorita [Growl | Razor Leaf] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 60410 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Chikorita » [Growl | Razor Leaf] ⊇ attaques de la carte [\"Growl\",\"Razor Leaf\"] · métacarte Cardmarket 212315 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 654116,
+  "carteId": 23917,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 654116 « Totodile [Bite | Rage] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 23917 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Totodile » [Bite | Rage] ⊇ attaques de la carte [\"Bite\",\"Rage\"] · métacarte Cardmarket 212341 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 571819,
+  "carteId": 39231,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 571819 « Magikarp [Trickle | Dragon Rage] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 39231 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Magikarp » [Trickle | Dragon Rage] ⊇ attaques de la carte [\"Trickle\",\"Dragon Rage\"] · métacarte Cardmarket 343835 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 571897,
+  "carteId": 60215,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 571897 « Eevee [Chain Reaction | Bite] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 60215 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Eevee » [Chain Reaction | Bite] ⊇ attaques de la carte [\"Bite\"] · métacarte Cardmarket 344117 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 571832,
+  "carteId": 19431,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 571832 « Moltres [Wildfire | Dive Bomb] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 19431 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Moltres » [Wildfire | Dive Bomb] ⊇ attaques de la carte [\"Wildfire\",\"Dive Bomb\"] · métacarte Cardmarket 211734 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 557923,
+  "carteId": 15254,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 557923 « Magikarp [Tackle | Flail] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 15254 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Magikarp » [Tackle | Flail] ⊇ attaques de la carte [\"Tackle\",\"Flail\"] · métacarte Cardmarket 338962 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 557927,
+  "carteId": 15274,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 557927 « Pikachu [Gnaw | Thunder Jolt] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 15274 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Pikachu » [Gnaw | Thunder Jolt] ⊇ attaques de la carte [\"Gnaw\",\"Thunder Jolt\"] · métacarte Cardmarket 211614 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 557938,
+  "carteId": 19583,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 557938 « Articuno [Freeze Dry | Blizzard] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 19583 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Articuno » [Freeze Dry | Blizzard] ⊇ attaques de la carte [\"Freeze Dry\",\"Blizzard\"] · métacarte Cardmarket 211724 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 571833,
+  "carteId": 19583,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 571833 « Articuno [Freeze Dry | Blizzard] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 19583 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Articuno » [Freeze Dry | Blizzard] ⊇ attaques de la carte [\"Freeze Dry\",\"Blizzard\"] · métacarte Cardmarket 211724 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 571834,
+  "carteId": 19600,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 571834 « Zapdos [Thunderstorm] » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 19600 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Zapdos » [Thunderstorm] ⊇ attaques de la carte [\"Thunderstorm\"] · métacarte Cardmarket 211737 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 571908,
+  "carteId": 24680,
+  "code": "UNP",
+  "idExpansion": 4170,
+  "slugSet": "Unnumbered-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Unnumbered Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 571908 « Lucky Stadium » (exp 4170), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 24680 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Lucky Stadium » [] ⊇ attaques de la carte [] · métacarte Cardmarket 212613 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Unnumbered Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 554185,
+  "carteId": 192356,
+  "code": "XY-P",
+  "idExpansion": 4159,
+  "slugSet": "XY-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "XY-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 554185 « Pitch's Pikachu [Pika Shoot] » (exp 4159), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 192356 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Pitch's Pikachu » [Pika Shoot] ⊇ attaques de la carte [\"Pika Shoot\"] · métacarte Cardmarket 337395 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 864131,
+  "carteId": 207575,
+  "code": "XY-P",
+  "idExpansion": 4159,
+  "slugSet": "XY-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "XY-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 864131 « Empoleon BREAK [Emperor's Command] » (exp 4159), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 207575 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Empoleon BREAK » [Emperor's Command] ⊇ attaques de la carte [\"Emperor's Command\"] · métacarte Cardmarket 222634 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « XY-P Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 864132,
+  "carteId": 211895,
+  "code": "XY-P",
+  "idExpansion": 4159,
+  "slugSet": "XY-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "XY-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 864132 « Crobat BREAK [Silent Bite] » (exp 4159), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 211895 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Crobat BREAK » [Silent Bite] ⊇ attaques de la carte [\"Silent Bite\"] · métacarte Cardmarket 224534 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « XY-P Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 553933,
+  "carteId": 208225,
+  "code": "XY-P",
+  "idExpansion": 4159,
+  "slugSet": "XY-Promos",
+  "voie": "impression-numero",
+  "tirage": "jp",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 553933 « Max Elixir » (exp 4159), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 208225 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-numero · nom + attaques : « Max Elixir » [] ⊇ attaques de la carte [] · métacarte Cardmarket 221912 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-numero : la carte déclare elle-même « XY-P Promotional cards » n°244/XY-P, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 554265,
+  "carteId": 186612,
+  "code": "XY-P",
+  "idExpansion": 4159,
+  "slugSet": "XY-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "XY-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 554265 « Pikachu [Nuzzle | Quick Attack] » (exp 4159), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 186612 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Pikachu » [Nuzzle | Quick Attack] ⊇ attaques de la carte [\"Nuzzle\",\"Quick Attack\"] · métacarte Cardmarket 337228 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « XY-P Promotional cards » n°206/XY-P, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 864133,
+  "carteId": 211895,
+  "code": "XY-P",
+  "idExpansion": 4159,
+  "slugSet": "XY-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "XY-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 864133 « Crobat BREAK [Silent Bite] » (exp 4159), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 211895 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Crobat BREAK » [Silent Bite] ⊇ attaques de la carte [\"Silent Bite\"] · métacarte Cardmarket 224534 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « XY-P Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 554190,
+  "carteId": 194736,
+  "code": "XY-P",
+  "idExpansion": 4159,
+  "slugSet": "XY-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "XY-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 554190 « Pikachu [Tail Whip | Electro Ball] » (exp 4159), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 194736 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Pikachu » [Tail Whip | Electro Ball] ⊇ attaques de la carte [\"Tail Whip\",\"Electro Ball\"] · métacarte Cardmarket 224506 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « XY-P Promotional cards » n°064/XY-P, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 554195,
+  "carteId": 194736,
+  "code": "XY-P",
+  "idExpansion": 4159,
+  "slugSet": "XY-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "XY-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 554195 « Pikachu [Tail Whip | Electro Ball] » (exp 4159), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 194736 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Pikachu » [Tail Whip | Electro Ball] ⊇ attaques de la carte [\"Tail Whip\",\"Electro Ball\"] · métacarte Cardmarket 224506 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « XY-P Promotional cards » n°064/XY-P, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 554198,
+  "carteId": 194736,
+  "code": "XY-P",
+  "idExpansion": 4159,
+  "slugSet": "XY-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "XY-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 554198 « Pikachu [Tail Whip | Electro Ball] » (exp 4159), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 194736 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Pikachu » [Tail Whip | Electro Ball] ⊇ attaques de la carte [\"Tail Whip\",\"Electro Ball\"] · métacarte Cardmarket 224506 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « XY-P Promotional cards » n°064/XY-P, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 554201,
+  "carteId": 194736,
+  "code": "XY-P",
+  "idExpansion": 4159,
+  "slugSet": "XY-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "XY-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 554201 « Pikachu [Tail Whip | Electro Ball] » (exp 4159), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 194736 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Pikachu » [Tail Whip | Electro Ball] ⊇ attaques de la carte [\"Tail Whip\",\"Electro Ball\"] · métacarte Cardmarket 224506 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « XY-P Promotional cards » n°064/XY-P, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 554206,
+  "carteId": 194736,
+  "code": "XY-P",
+  "idExpansion": 4159,
+  "slugSet": "XY-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "XY-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 554206 « Pikachu [Tail Whip | Electro Ball] » (exp 4159), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 194736 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Pikachu » [Tail Whip | Electro Ball] ⊇ attaques de la carte [\"Tail Whip\",\"Electro Ball\"] · métacarte Cardmarket 224506 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « XY-P Promotional cards » n°064/XY-P, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 554207,
+  "carteId": 194736,
+  "code": "XY-P",
+  "idExpansion": 4159,
+  "slugSet": "XY-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "XY-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 554207 « Pikachu [Tail Whip | Electro Ball] » (exp 4159), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 194736 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Pikachu » [Tail Whip | Electro Ball] ⊇ attaques de la carte [\"Tail Whip\",\"Electro Ball\"] · métacarte Cardmarket 224506 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « XY-P Promotional cards » n°064/XY-P, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 554270,
+  "carteId": 186612,
+  "code": "XY-P",
+  "idExpansion": 4159,
+  "slugSet": "XY-Promos",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "XY-P Promotional cards",
+  "numeroFiche": null,
+  "ajoutSet": false,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 554270 « Pikachu [Nuzzle | Quick Attack] » (exp 4159), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 186612 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Pikachu » [Nuzzle | Quick Attack] ⊇ attaques de la carte [\"Nuzzle\",\"Quick Attack\"] · métacarte Cardmarket 337228 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « XY-P Promotional cards » n°206/XY-P, « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 760274,
+  "carteId": 25565,
+  "code": "CGY",
+  "idExpansion": 5685,
+  "slugSet": "Yamabuki-City-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Yamabuki City Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 760274 « Sabrina's Gastly [Spook] » (exp 5685), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25565 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Sabrina's Gastly » [Spook] ⊇ attaques de la carte [\"Spook\"] · métacarte Cardmarket 212090 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Yamabuki City Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 760272,
+  "carteId": 25582,
+  "code": "CGY",
+  "idExpansion": 5685,
+  "slugSet": "Yamabuki-City-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Yamabuki City Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 760272 « Sabrina's Abra [Psyscan | Quick Attack] » (exp 5685), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25582 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Sabrina's Abra » [Psyscan | Quick Attack] ⊇ attaques de la carte [\"Psyscan\",\"Quick Attack\"] · métacarte Cardmarket 212223 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Yamabuki City Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 760273,
+  "carteId": 25584,
+  "code": "CGY",
+  "idExpansion": 5685,
+  "slugSet": "Yamabuki-City-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Yamabuki City Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 760273 « Sabrina's Gastly [Lick | Fade Out] » (exp 5685), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25584 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Sabrina's Gastly » [Lick | Fade Out] ⊇ attaques de la carte [\"Lick\",\"Fade Out\"] · métacarte Cardmarket 212225 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Yamabuki City Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ },
+ {
+  "idProduct": 760271,
+  "carteId": 25581,
+  "code": "CGY",
+  "idExpansion": 5685,
+  "slugSet": "Yamabuki-City-Gym",
+  "voie": "impression-du-tirage",
+  "tirage": "jp",
+  "expansionImpression": "Yamabuki City Gym",
+  "numeroFiche": null,
+  "ajoutSet": true,
+  "preuve": {
+   "sources": [
+    "Cardmarket : produit 760271 « Sabrina's Abra [Pound | Synchronize] » (exp 5685), nom, attaques et métacarte portés par le catalogue",
+    "notre carte 25581 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
+   ],
+   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Sabrina's Abra » [Pound | Synchronize] ⊇ attaques de la carte [\"Pound\",\"Synchronize\"] · métacarte Cardmarket 212222 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « Yamabuki City Gym » n°—, et elle est la seule candidate à le faire"
+  }
+ }
+]

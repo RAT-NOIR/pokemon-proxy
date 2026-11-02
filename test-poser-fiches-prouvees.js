@@ -177,6 +177,10 @@ verifier('la décision du jour est une liste fermée de 8 produits distincts', (
 verifier('décision 2026-11-02-c-0211 : liste fermée de 25 produits distincts (24 EC1 + 605406), 654791 exclu, voies déclarées avec leur extension',
     (() => { const d = DECISIONS['2026-11-02-c-0211'] || []; return [d.length, new Set(d.map(x => x.idProduct)).size, d.some(x => x.idProduct === 654791), d.filter(x => x.code === 'EC1').every(x => x.voie === 'impression-equivalente' && x.expansionImpression === 'Pokémon-e Starter Deck' && x.prefixe === 'S' && x.total === '029'), d.find(x => x.idProduct === 605406)?.carteId]; })(),
     [25, 25, false, true, 25392]);
+// lot d-0211 (chasseur niveau d, 2026-11-02) : 104 lignes (Unnumbered-Promos 54, XY-Promos 13, six Gym japonais 28, …), voies impression-du-tirage (extension déclarée) et impression-numero (extension lue de la ligne de table)
+verifier('décision 2026-11-02-d-0211 : liste fermée de 104 produits distincts ; toute voie impression-du-tirage nomme son extension ; Vivillon et les 2 Mewtwo ambigus (576706, 654096) exclus',
+    (() => { const d = DECISIONS['2026-11-02-d-0211'] || []; return [d.length, new Set(d.map(x => x.idProduct)).size, d.filter(x => x.voie === 'impression-du-tirage').every(x => typeof x.expansionImpression === 'string' && x.expansionImpression !== ''), d.every(x => ['impression-du-tirage', 'impression-numero'].includes(x.voie)), d.some(x => [576706, 654096].includes(x.idProduct))]; })(),
+    [104, 104, true, true, false]);
 // (décision de l'utilisateur, 2026-11-02) les 4 « a » posés avant la garde d'expansion DÉCLARENT l'impression « Yellow A Alternate cards » que leur carte porte (numéro suffixé « a »)
 verifier('les 4 Yellow A Alternate (Togepi 143a, Karen XY177a, Lusamine 153a ×2) déclarent expansionImpression « Yellow A Alternate cards »',
     [582672, 311408, 449878, 449883].map(id => Object.values(DECISIONS).flat().find(x => x.idProduct === id)?.expansionImpression ?? null),

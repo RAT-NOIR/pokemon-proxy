@@ -58,6 +58,8 @@ const DECISIONS = {
     // lot c-0211 (chasseur niveau c, 2026-11-02) : 24 EC1 S-xx, voie impression-equivalente comme S01/S05/S07/S19 (la carte déclare « Pokémon-e Starter Deck » 0xx/029,
     // page japonaise de la carte en corroboration) ; Blaine's Quiz #3 G2 (la carte déclare « Challenge from the Darkness »). Moo-Moo Milk 654791 exclu (métacarte absente de la carte).
     '2026-11-02-c-0211': require('./collecte-cartes/decisions-c-0211-2026-11-02.json'),
+    // lot d-0211 (chasseur niveau d, 2026-11-02) : 104 lignes, planifier() rejoué en lecture seule par le chasseur ; Vivillon (un document pour plusieurs motifs) et 2 Mewtwo ambigus exclus
+    '2026-11-02-d-0211': require('./collecte-cartes/decisions-d-0211-2026-11-02.json'),
 };
 
 /** lecture : { cartes, produits: Map(idExpansion → produits), existants: Map(_id → ligne), lignesDuProduit?: Map(idProduct → [_id]), etats?: Map(slugSet → collecte_etat) } */
