@@ -970,6 +970,106 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.strictEqual(plan.entrees, 1, 'le retrait est EXACT : source ET lot');
     });
 
+    // ───────── le nom TRADUIT : se compare par ce qui ne se traduit pas (Pokédex + PV + règle), et seulement avec numéro ET code du set concordants ─────────
+    // La règle est celle de tpc.js (dexDuNom, reglesDuNom : jamais recopiées, §21 bis). Un manifeste sans dex/pv/regle/codeSet garde le comportement d'avant.
+    const trad = (o = {}) => entree({ attendu: { ...entree().attendu, numero: '005' }, lu: { nom: 'メリープ', numero: '005', total: '021', langue: 'ja', tampon: null, finition: 'normale', marques: ['code svAL imprimé'], codeSet: 'svAL', dex: 179, pv: 60, ...o } });
+    const ptrad = (o = {}) => produit({ tirage: 'jp', numero: '005', carteId: -1, slugSet: 'Starter-Set-AL', slug: 'Mareep-svAL005', nomEn: 'Mareep', ...o });
+    const mt = (e, p) => lue(e, p).motifs.join(',');
+    await test('nom traduit : fiche simple japonaise (sans carte, sans nomJa) : passe par Pokédex + PV + règle + code + numéro', () => {
+        assert.deepStrictEqual(lue(trad(), ptrad()), { ok: true, motifs: [] });
+        assert.deepStrictEqual(lue(trad({ nomEn: 'Mareep' }), ptrad()), { ok: true, motifs: [] }, 'un nom anglais lu à côté du japonais (lu.nomEn) n\'est ni témoin ni obstacle');
+        assert.strictEqual(lue(trad({ nom: 'Mareep' }), ptrad()).ok, true, 'la comparaison ne lit pas le nom : le nom ne sert qu\'à la règle');
+        assert.strictEqual(lue(trad({ codeSet: 'SVAL', numero: '5' }), ptrad()).ok, true, 'code insensible à la casse, zéros du numéro ignorés');
+        assert.strictEqual(lue(trad({ nom: 'モルペコV-UNION', dex: 877, pv: 160 }), ptrad({ nomEn: 'Morpeko V-UNION [Hunger Burst]', slug: 'Morpeko-V-UNION-svAL005' })).ok, true, 'V-UNION : règle lue dans le nom (et crochets du produit retirés)');
+        assert.strictEqual(lue(trad({ nom: 'ミミッキュex', dex: 778, pv: 170 }), ptrad({ nomEn: 'Mimikyu ex' })).ok, false, 'Mimikyu ex n\'est pas dans la table : pas de Pokédex possible');
+    });
+    await test('nom traduit : chinois, indonésien, thaï, « ex » et « X » collés', () => {
+        const zh = trad({ nom: '皮卡丘ex', langue: 'zh-hans', codeSet: 'CSV8C', numero: '071', dex: 25, pv: 190 });
+        const pzh = ptrad({ tirage: 'zh-hans', numero: '071', slug: 'Pikachu-ex-CSV8C071', nomEn: 'Pikachu ex' });
+        assert.deepStrictEqual(lue(zh, pzh), { ok: true, motifs: [] });
+        const x = trad({ nom: '超級噴火龍Xex', langue: 'zh-hant', codeSet: 'CSV8C', numero: '071', dex: 6, pv: 360 });
+        assert.deepStrictEqual(lue(x, ptrad({ tirage: 'zh-hant', numero: '071', slug: 'Mega-Charizard-X-ex-CSV8C071', nomEn: 'Mega Charizard X ex' })), { ok: true, motifs: [] }, '« Xex » : la forme se retire AVANT « ex »');
+        assert.match(mt(trad({ nom: '超級噴火龍Yex', langue: 'zh-hant', codeSet: 'CSV8C', numero: '071', dex: 6, pv: 360 }), ptrad({ tirage: 'zh-hant', numero: '071', slug: 'Mega-Charizard-X-ex-CSV8C071', nomEn: 'Mega Charizard X ex' })), /regle-differente/, 'forme X contre forme Y');
+        const th = trad({ nom: 'ฮิโทคาเงะ', langue: 'th', codeSet: 'MA5', numero: '012', dex: 4, pv: 70 });
+        assert.deepStrictEqual(lue(th, ptrad({ tirage: 'th', numero: '012', slug: 'Charmander-MA5-012', nomEn: 'Charmander' })), { ok: true, motifs: [] });
+        const id = trad({ nom: 'Charmander', langue: 'id', codeSet: 'MA5', numero: '012', dex: 4, pv: 70 });
+        assert.deepStrictEqual(lue(id, ptrad({ tirage: 'id', numero: '012', slug: 'Charmander-MA5-012', nomEn: 'Charmander' })), { ok: true, motifs: [] });
+        const vu = trad({ nom: 'ピカチュウV-UNION', dex: 25, pv: 130, numero: '026', codeSet: 's8a' });
+        assert.deepStrictEqual(lue(vu, ptrad({ numero: '026', slug: 'Pikachu-V-UNION-s8a-026', nomEn: 'Pikachu V-UNION' })), { ok: true, motifs: [] });
+        assert.match(mt(vu, ptrad({ numero: '026', slug: 'Pikachu-V-UNION-s8a-026', nomEn: 'Pikachu V' })), /regle-differente/);
+    });
+    await test('nom traduit : chaque discordance REFUSE, avec son motif', () => {
+        assert.match(mt(trad({ pv: null }), ptrad()), /pv-non-lu/, 'PV absent');
+        assert.match(mt(trad({ pv: 0 }), ptrad()), /pv-non-lu/);
+        assert.match(mt(trad({ pv: '60' }), ptrad()), /pv-non-lu/, 'un PV est un nombre, pas un texte');
+        assert.match(mt(trad(), ptrad({ pv: 70 })), /pv-different/, 'PV faux (la carte a ses PV : ils doivent concorder)');
+        assert.strictEqual(lue(trad(), ptrad({ pv: 60 })).ok, true);
+        assert.match(mt(trad({ dex: 180 }), ptrad()), /pokedex-different/, 'Pokédex faux');
+        assert.match(mt(trad({ dex: null }), ptrad()), /pokedex-non-lu/);
+        assert.match(mt(trad({ dex: 179.5 }), ptrad()), /pokedex-non-lu/);
+        assert.match(mt(trad(), ptrad({ nomEn: 'Caterpie' })), /pokedex-ambigu/, 'deux Pokédex possibles pour ce nom (table versionnée) : refus');
+        assert.match(mt(trad(), ptrad({ nomEn: null })), /nom-traduit-sans-temoin/, 'nomEn absent');
+        assert.match(mt(trad(), ptrad({ nomEn: 'Mareep', ndex: 180 })), /pokedex-ambigu/, 'le Pokédex de la carte contredit celui du nom');
+        assert.match(mt(trad(), ptrad({ categorie: 'dresseur' })), /nom-traduit-sans-temoin/, 'la carte est un Dresseur : le Pokédex du nom ne témoigne pas');
+        assert.strictEqual(lue(trad(), ptrad({ categorie: 'pokemon' })).ok, true);
+        assert.match(mt(trad({ numero: '006' }), ptrad()), /numero-different/, 'numéro discordant');
+        assert.match(mt(trad({ codeSet: 'svOD' }), ptrad()), /code-set-different/, 'code du set discordant (le numéro seul ne suffit pas)');
+        assert.match(mt(trad({ codeSet: null }), ptrad()), /code-set-non-lu/);
+        assert.match(mt(trad(), ptrad({ slug: 'Mareep' })), /code-set-non-verifiable/, 'ni slug ni ligne ne portent le code');
+        assert.match(mt(trad(), ptrad({ slug: 'Mareep', codeSet: 'svAL' })), /^$/, 'la ligne (codes_set) porte le code : suffisant');
+        assert.match(mt(trad(), ptrad({ slug: 'Mareep-svAL005', codeSet: 'svOD' })), /code-set-different/, 'la ligne contredit : refus même si le slug concorde');
+        assert.match(mt(trad({ codeSet: 'AL' }), ptrad({ slug: 'Mareep-svAL005' })), /code-set-different/, 'le code est comparé en entier (frontière), jamais par suffixe');
+        assert.match(mt(trad({ nom: 'メリープex' }), ptrad()), /regle-differente/, 'règle lue ≠ règle du produit');
+        assert.match(mt(trad({ regle: 'ex' }), ptrad()), /regle-incoherente|regle-differente/, 'règle saisie ≠ nom lu');
+        assert.match(mt(trad({ regle: 'V' }), ptrad({ nomEn: 'Mareep V' })), /regle-incoherente/, 'règle saisie et nom lu en désaccord');
+        assert.match(mt(trad({ nom: '' }), ptrad()), /nom-different/, 'nom lu vide');
+        assert.match(mt(trad({ langue: 'zh-hans' }), ptrad()), /langue-differente/);
+        assert.match(mt(trad(), ptrad({ numero: null, slug: 'Mareep-svAL' })), /nom-traduit-numero-absent|numero-attendu/, 'produit sans numéro : le numéro est une des deux clés');
+        assert.match(mt(trad({ nom: 'ガラルファイヤーV', dex: 146, pv: 220 }), ptrad({ nomEn: 'Galarian Moltres V', slug: 'Galarian-Moltres-V-svAL005' })), /forme-regionale/, 'forme régionale : le Pokédex ne la distingue pas');
+        assert.match(mt(trad({ nom: 'ガラルファイヤーV', dex: 146, pv: 220 }), ptrad({ nomEn: 'Moltres V', slug: 'Moltres-V-svAL005' })), /forme-regionale/, 'forme régionale lue sur un produit qui n\'en nomme pas');
+        assert.match(mt(trad({ nom: '洗翠' + 'V' }), ptrad({ nomEn: 'Mareep V' })), /forme-regionale/, 'marque régionale chinoise lue');
+    });
+    await test('nom traduit : un Dresseur ou une Énergie au nom traduit reste refusé, sauf table de traduction OFFICIELLE (nomJa d\'autres cartes de même nomEn)', () => {
+        const dr = trad({ nom: 'ネモ', dex: null, pv: null, codeSet: 'svAL' });
+        const pd = ptrad({ nomEn: 'Nemona', slug: 'Nemona-svAL005' });
+        assert.match(mt(dr, pd), /nom-traduit-sans-temoin/, 'Dresseur : ni Pokédex ni PV');
+        const temoin = { noms: ['ネモ'], cartes: 3, divergent: false };
+        assert.deepStrictEqual(lue(dr, { ...pd, nomJaTemoin: temoin }), { ok: true, motifs: [] });
+        assert.match(mt({ ...dr, lu: { ...dr.lu, nom: 'ボタン' } }, { ...pd, nomJaTemoin: temoin }), /nom-different/, 'la table contredit le nom lu');
+        assert.match(mt(dr, { ...pd, nomJaTemoin: { ...temoin, divergent: true } }), /nom-traduit-sans-temoin/, 'une table qui diverge entre cartes ne témoigne pas');
+        assert.match(mt(dr, { ...pd, nomJaTemoin: { noms: [], cartes: 0, divergent: false } }), /nom-traduit-sans-temoin/);
+        assert.match(mt(dr, { ...pd, nomJaTemoin: temoin, slug: 'Nemona' }), /code-set-non-verifiable/, 'la table ne dispense pas du code');
+        const zh = trad({ nom: '妮莫', langue: 'zh-hans', dex: null, pv: null, codeSet: 'CSV8C' });
+        assert.match(mt(zh, ptrad({ tirage: 'zh-hans', nomEn: 'Nemona', slug: 'Nemona-CSV8C005', nomJaTemoin: temoin })), /nom-traduit-sans-temoin/, 'la table japonaise ne vaut pas pour le chinois');
+        const energie = trad({ nom: '基本【火】能量', langue: 'zh-hans', dex: null, pv: null, codeSet: 'CSV8C' });
+        assert.match(mt(energie, ptrad({ tirage: 'zh-hans', nomEn: 'Basic Fire Energy', slug: 'Basic-Fire-Energy-CSV8C005' })), /nom-traduit-sans-temoin/, 'Énergie traduite : refus');
+    });
+    await test('nom traduit : régressions — anglais, français, japonais avec nomJa, et manifestes sans témoin gardent leur comportement', () => {
+        assert.deepStrictEqual(lue(entree(), produit()), { ok: true, motifs: [] });
+        // japonais AVEC nomJa : la règle d\'avant, sans repli sur Pokédex (un nom japonais qui diffère reste un désaccord)
+        const pj = ptrad({ nomJa: 'メリープ', carteId: 77 });
+        assert.deepStrictEqual(lue(trad(), pj), { ok: true, motifs: [] });
+        assert.deepStrictEqual(lue(trad({ nom: 'モココ' }), pj).motifs, ['nom-different'], 'nomJa présent et différent : pas de repli Pokédex');
+        // lu sans aucun témoin : motifs d\'avant
+        const nu = o => entree({ lu: { nom: 'メリープ', numero: '005', total: '021', langue: 'ja', tampon: null, finition: 'normale', marques: ['x'], ...o }, attendu: { ...entree().attendu, numero: '005' } });
+        assert.deepStrictEqual(lue(nu(), ptrad()).motifs, ['nom-different']);
+        assert.deepStrictEqual(lue(nu({ langue: 'zh-hans', nom: '皮卡丘' }), ptrad({ tirage: 'zh-hans' })).motifs, ['nom-langue-non-anglaise']);
+        // les champs-témoin n\'ouvrent rien pour l\'anglais ni le français : le nom se compare comme avant
+        assert.match(mt(entree({ lu: { ...entree().lu, nom: 'Squirtle', dex: 7, pv: 40, codeSet: 'AA' } }), produit()), /nom-different/);
+        assert.match(mt(entree({ lu: { ...entree().lu, langue: 'fr', nom: 'Carapuce', dex: 7, pv: 40, codeSet: 'AA' } }), produit({ idExpansion: 2361 })), /nom-different/);
+        // ni une langue hors liste (coréen) ni un tirage à deux langues
+        assert.match(mt(trad({ langue: 'ko' }), ptrad({ tirage: 'jp' })), /langue-differente/);
+        assert.match(mt(trad(), ptrad({ tirage: 'idth' })), /langue-du-tirage-inconnue/);
+    });
+    await test('nom traduit : ce que le chasseur a saisi (dex, pv, règle, code) est ÉCRIT dans la preuve lue, rien d\'autre', () => {
+        const a = { entree: trad({ regle: undefined, libre: 'x' }), validation: validation(), produit: ptrad(), langue: 'ja' };
+        const pl = PV.preuvesDe(a).preuveLue.lu;
+        assert.deepStrictEqual([pl.dex, pl.pv, pl.codeSet], [179, 60, 'svAL']);
+        assert.ok(!('libre' in pl));
+        const ancien = PV.preuvesDe({ entree: entree(), validation: validation(), produit: produit(), langue: 'en' }).preuveLue.lu;
+        assert.ok(!('dex' in ancien) && !('pv' in ancien) && !('codeSet' in ancien), 'les manifestes existants gardent la forme de leur preuve');
+    });
+
     console.log(`\ntest-preuves : ${ok} OK, ${ko} KO`);
     process.exitCode = ko ? 1 : 0;
 })();
