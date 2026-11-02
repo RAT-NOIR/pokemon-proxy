@@ -1650,25 +1650,6 @@
   }
  },
  {
-  "idProduct": 554185,
-  "carteId": 192356,
-  "code": "XY-P",
-  "idExpansion": 4159,
-  "slugSet": "XY-Promos",
-  "voie": "impression-du-tirage",
-  "tirage": "jp",
-  "expansionImpression": "XY-P Promotional cards",
-  "numeroFiche": null,
-  "ajoutSet": false,
-  "preuve": {
-   "sources": [
-    "Cardmarket : produit 554185 « Pitch's Pikachu [Pika Shoot] » (exp 4159), nom, attaques et métacarte portés par le catalogue",
-    "notre carte 192356 : impression jp déclarée du set, nom et attaques, métacarte déjà portée (témoins de planifier(), rejoué en lecture seule le 2026-11-02)"
-   ],
-   "temoinsPlanifier": "impression-du-tirage · nom + attaques : « Pitch's Pikachu » [Pika Shoot] ⊇ attaques de la carte [\"Pika Shoot\"] · métacarte Cardmarket 337395 déjà portée par la carte · témoin du nom de joindre() : ne contredit pas · impression-du-tirage : la carte déclare elle-même « XY-P Promotional cards » n°—, « XY-P Promotional cards » n°—, et elle est la seule candidate à le faire"
-  }
- },
- {
   "idProduct": 864131,
   "carteId": 207575,
   "code": "XY-P",
