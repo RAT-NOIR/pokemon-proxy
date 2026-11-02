@@ -109,9 +109,72 @@ const motifDeNom = (lu, produit, langueProduit) => {
     if (lu.langue === 'en') return memeNomQueLeProduit(lu.nom, produit?.nomEn) ? null : 'nom-different';
     if (lu.langue === 'fr' && langueProduit === 'fr') return memeNomQueLeProduit(lu.nom, produit?.nomFr) ? null : 'nom-different';
     // a-reste (japonais) : un nom lu en japonais se compare au nom JAPONAIS de la carte désignée par la ligne (`produit.nomJa`, témoin de lecture, jamais écrit en public), SEULEMENT pour un tirage japonais ; jamais au nom anglais.
-    if (lu.langue === 'ja' && langueProduit === 'ja') return memeNomJaponais(lu.nom, produit?.nomJa) ? null : 'nom-different';
+    // Une carte qui A un nomJa s'en tient là (un nom qui diffère est un désaccord, jamais un repli) ; sans nomJa, le nom traduit se juge par ce qui ne se traduit pas (ci-dessous).
+    if (lu.langue === 'ja' && langueProduit === 'ja' && (texte(produit?.nomJa) || !porteUnTemoinTraduit(lu))) return memeNomJaponais(lu.nom, produit?.nomJa) ? null : 'nom-different';
+    if (LANGUES_A_NOM_TRADUIT.includes(lu.langue) && lu.langue === langueProduit && porteUnTemoinTraduit(lu)) return motifDeNomTraduit(lu, produit, numeroDuProduit(produit));
     return 'nom-langue-non-anglaise';
 };
+// ── Le nom TRADUIT (2026-11-02) : chinois, indonésien, thaï, et japonais sans `nomJa` (fiche simple, aucune carte) ─────────────────────────────────────────────
+// Un nom traduit ne se compare à rien chez nous. Il se compare par ce qui NE SE TRADUIT PAS : le n° de Pokédex, les PV (en chiffres) et la RÈGLE (ex, V, VMAX, V-UNION, Méga, forme X/Y : lettres latines
+// partout) — la règle de tpc.js (§75), dont on RÉUTILISE les fonctions (`dexDuNom`, `reglesDuNom`) : une copie divergerait (§21 bis). Le nom traduit n'est qu'un TÉMOIN EN PLUS : la règle ne s'ouvre que si le
+// numéro (déjà comparé par l'appelant) ET le code du set lus concordent avec le produit (slug Cardmarket, ou la ligne `codes_set`). Écrite par ce qu'elle AUTORISE : tout cas imprévu refuse.
+const TPC = require('./tpc');
+const LANGUES_A_NOM_TRADUIT = Object.freeze(['ja', 'zh-hans', 'zh-hant', 'id', 'th']);
+/** Ce que le chasseur saisit en plus du nom : un manifeste qui n'en porte aucun garde exactement le comportement d'avant. */
+const CHAMPS_TEMOIN_TRADUIT = Object.freeze(['dex', 'pv', 'regle', 'codeSet']);
+const porteUnTemoinTraduit = lu => CHAMPS_TEMOIN_TRADUIT.some(k => lu?.[k] != null && lu[k] !== '');
+// Une forme régionale (Alola, Galar, Hisui, Paldea) a le Pokédex de sa forme de base : aucun témoin ne la distingue. Lue d'un côté OU de l'autre, elle REFUSE.
+const REGIONAL_PRODUIT = /\b(alolan|galarian|hisuian|paldean)\b/i;
+const REGIONAL_LU = /アローラ|ガラル|ヒスイ|パルデア|阿羅拉|阿罗拉|伽勒爾|伽勒尔|洗翠|帕底亞|帕底亚|อโลลา|กาลาร์|ฮิซุย|ปัลเดีย|alola|galar|hisui|paldea/i;
+const entierPositif = v => typeof v === 'number' && Number.isInteger(v) && v > 0;
+const echapper = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** Le code du set lu, confronté au slug Cardmarket (`…-svAL005`, `…-MA5-012`) et à la ligne du produit (`codeSet`, codes_set). @returns {string|null} le motif de refus, null si concordant. */
+function motifDeCode(lu, produit, np) {
+    const code = norm(lu.codeSet);
+    if (!code) return 'code-set-non-lu';
+    const ligne = norm(produit?.codeSet);
+    if (ligne && ligne !== code) return 'code-set-different';
+    const n = String(np).trim().toLowerCase().replace(/^0+(?=\d)/, '');
+    const slug = texte(produit?.slug) ? produit.slug.trim().toLowerCase() : null;
+    if (slug && new RegExp(`(^|-)${echapper(code)}-?0*${echapper(n)}$`).test(slug)) return null;
+    if (ligne === code) return null;
+    // le slug porte un code collé au numéro, et ce n'est pas celui qui est lu : désaccord ; sinon rien ne permet de vérifier
+    if (slug && new RegExp(`(^|-)[a-z][a-z0-9.]*-?0*${echapper(n)}$`).test(slug)) return 'code-set-different';
+    return 'code-set-non-verifiable';
+}
+function motifDeNomTraduit(lu, produit, np) {
+    if (!texte(lu.nom)) return 'nom-different';
+    if (np == null) return 'nom-traduit-numero-absent';
+    const mc = motifDeCode(lu, produit, np); if (mc) return mc;
+    const nomRef = produit?.nomEnCarte ?? produit?.nomEn;
+    const nom = texte(nomRef) ? J.decomposerNomCardmarket(nomRef).nom : null;
+    if (REGIONAL_LU.test(String(lu.nom).normalize('NFKC')) || (nom && REGIONAL_PRODUIT.test(nom))) return 'forme-regionale-non-distinguee';
+    // une TABLE de traduction OFFICIELLE : le `nomJa` que portent d'autres cartes (vraies pages) de même nomEn (tpc.construireTemoinNomJa), seulement quand elles s'accordent — pour le japonais seul
+    const t = produit?.nomJaTemoin;
+    if (lu.langue === 'ja' && t && !t.divergent && Array.isArray(t.noms) && t.noms.length === 1) {
+        const lue = TPC.nomCompare(lu.nom);
+        return lue !== '' && lue === TPC.nomCompare(t.noms[0]) ? null : 'nom-different';
+    }
+    // sinon seul un Pokémon a de quoi témoigner : un Dresseur ou une Énergie au nom traduit n'a ni Pokédex ni PV
+    if (!nom || (produit?.categorie != null && produit.categorie !== 'pokemon')) return 'nom-traduit-sans-temoin';
+    const dexNom = TPC.dexDuNom(nom);
+    const ndex = entierPositif(Number(produit?.ndex)) ? Number(produit.ndex) : null;
+    let dex;
+    if (ndex != null) { if (dexNom && !dexNom.includes(ndex)) return 'pokedex-ambigu'; dex = ndex; }
+    else if (!dexNom) return 'nom-traduit-sans-temoin';
+    else if (dexNom.length !== 1) return 'pokedex-ambigu';
+    else dex = dexNom[0];
+    if (!entierPositif(lu.dex)) return 'pokedex-non-lu';
+    if (lu.dex !== dex) return 'pokedex-different';
+    if (!entierPositif(lu.pv)) return 'pv-non-lu';
+    // (sans carte, nous n'avons pas les PV du produit : le PV lu s'écrit alors dans la preuve, il ne témoigne pas)
+    const pv = Number(produit?.pv);
+    if (Number.isFinite(pv) && pv > 0 && lu.pv !== pv) return 'pv-different';
+    const lue = TPC.reglesDuNom(lu.nom);
+    if (lu.regle != null && TPC.reglesDuNom(lu.regle) !== lue) return 'regle-incoherente';
+    if (lue !== TPC.reglesDuNom(nom)) return 'regle-differente';
+    return null;
+}
 /**
  * Tour 4 (2) — l'ANNÉE d'un set Battle Academy (et la moitié d'un Trainer Kit) ne se lit pas sur l'image : DEUX conditions cumulées. (a) le couple (position, nom normalisé) désigne UN SEUL produit parmi tous les
  * produits des slugSet `Battle-Academy*` / `*Trainer-Kit*` connus de la base — et c'est le produit jugé ; (b) le numéro imprimé lu (et son total, s'il est lu) est une impression de la carte du produit.
@@ -458,7 +521,9 @@ function paireNommee(v, tous) {
 const MARQUES_MAX = 12;
 /** Les seuls champs lus sur le scan qui s'écrivent (tour 1, point 2) : rien de libre — ni `note`, ni un champ que l'agent aurait ajouté. */
 const CHAMPS_LUS = Object.freeze(['nom', 'numero', 'total', 'langue', 'tampon', 'finition', 'position']);
-const luEnumere = lu => Object.fromEntries(CHAMPS_LUS.map(k => [k, typeof lu?.[k] === 'string' || typeof lu?.[k] === 'number' ? lu[k] : null]));
+// (le nom TRADUIT : ce que le chasseur a saisi — Pokédex, PV, règle, code du set — s'écrit AUSSI, mais seulement quand il est présent : la forme des preuves existantes ne bouge pas)
+const luEnumere = lu => ({ ...Object.fromEntries(CHAMPS_LUS.map(k => [k, typeof lu?.[k] === 'string' || typeof lu?.[k] === 'number' ? lu[k] : null])),
+    ...Object.fromEntries(CHAMPS_TEMOIN_TRADUIT.filter(k => typeof lu?.[k] === 'string' || typeof lu?.[k] === 'number').map(k => [k, lu[k]])) });
 
 function preuvesDe(a) {
     const e = a.entree, lu = luEnumere(e.lu), marques = (Array.isArray(e.lu.marques) ? e.lu.marques : []).filter(texte).slice(0, MARQUES_MAX);
@@ -549,4 +614,4 @@ function trousDuManifeste({ trous, recus, famille }) {
 }
 
 module.exports = { SOURCE, LOT, SRC, LANGUE_PREUVE, EDITIONS_LOCALES, REGLES, REGLE_MEME_DESSIN, LANGUES_NON_LATINES, MOYENS_DE_LECTURE, MOYENS_DE_LANGUE, SEUIL_PLANCHER, SCORE_PLANCHER, VIDE_PLANCHER, lienAvecLEntree, evaluerRemplacementMemeDessin, langueDuProduit, formeEntree, lireManifeste, lireValidations, rapprocher, evaluerPreuveLue, evaluerDeuxSources, evaluerEntree,
-    verifierCache, setAdmisPourPosition, TAMPONS_ATTENDUS, tamponAttendu, cleFiche, grouperUnites, MOTIFS_DE_TROU, motifDeTrou, trousDuManifeste, sha256De, racineDe };
+    verifierCache, setAdmisPourPosition, preuvesDe, motifDeNom, motifDeNomTraduit, porteUnTemoinTraduit, CHAMPS_TEMOIN_TRADUIT, LANGUES_A_NOM_TRADUIT, TAMPONS_ATTENDUS, tamponAttendu, cleFiche, grouperUnites, MOTIFS_DE_TROU, motifDeTrou, trousDuManifeste, sha256De, racineDe };

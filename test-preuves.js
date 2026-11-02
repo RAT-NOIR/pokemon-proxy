@@ -981,7 +981,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.strictEqual(lue(trad({ nom: 'Mareep' }), ptrad()).ok, true, 'la comparaison ne lit pas le nom : le nom ne sert qu\'à la règle');
         assert.strictEqual(lue(trad({ codeSet: 'SVAL', numero: '5' }), ptrad()).ok, true, 'code insensible à la casse, zéros du numéro ignorés');
         assert.strictEqual(lue(trad({ nom: 'モルペコV-UNION', dex: 877, pv: 160 }), ptrad({ nomEn: 'Morpeko V-UNION [Hunger Burst]', slug: 'Morpeko-V-UNION-svAL005' })).ok, true, 'V-UNION : règle lue dans le nom (et crochets du produit retirés)');
-        assert.strictEqual(lue(trad({ nom: 'ミミッキュex', dex: 778, pv: 170 }), ptrad({ nomEn: 'Mimikyu ex' })).ok, false, 'Mimikyu ex n\'est pas dans la table : pas de Pokédex possible');
+        assert.strictEqual(lue(trad({ nom: 'ネモ', dex: 778, pv: 170 }), ptrad({ nomEn: 'Nemona' })).ok, false, 'un nom absent de la table (Dresseur) n\'a pas de Pokédex possible');
     });
     await test('nom traduit : chinois, indonésien, thaï, « ex » et « X » collés', () => {
         const zh = trad({ nom: '皮卡丘ex', langue: 'zh-hans', codeSet: 'CSV8C', numero: '071', dex: 25, pv: 190 });
@@ -1021,7 +1021,8 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.match(mt(trad({ codeSet: 'AL' }), ptrad({ slug: 'Mareep-svAL005' })), /code-set-different/, 'le code est comparé en entier (frontière), jamais par suffixe');
         assert.match(mt(trad({ nom: 'メリープex' }), ptrad()), /regle-differente/, 'règle lue ≠ règle du produit');
         assert.match(mt(trad({ regle: 'ex' }), ptrad()), /regle-incoherente|regle-differente/, 'règle saisie ≠ nom lu');
-        assert.match(mt(trad({ regle: 'V' }), ptrad({ nomEn: 'Mareep V' })), /regle-incoherente/, 'règle saisie et nom lu en désaccord');
+        assert.match(mt(trad({ regle: 'V', dex: 25 }), ptrad({ nomEn: 'Pikachu V' })), /regle-incoherente/, 'règle saisie (V) et nom lu (sans règle) en désaccord');
+        assert.strictEqual(lue(trad({ regle: 'V', nom: 'ピカチュウV', dex: 25 }), ptrad({ nomEn: 'Pikachu V' })).ok, true, 'règle saisie et nom lu d\'accord');
         assert.match(mt(trad({ nom: '' }), ptrad()), /nom-different/, 'nom lu vide');
         assert.match(mt(trad({ langue: 'zh-hans' }), ptrad()), /langue-differente/);
         assert.match(mt(trad(), ptrad({ numero: null, slug: 'Mareep-svAL' })), /nom-traduit-numero-absent|numero-attendu/, 'produit sans numéro : le numéro est une des deux clés');
