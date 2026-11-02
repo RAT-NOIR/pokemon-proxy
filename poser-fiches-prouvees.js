@@ -55,6 +55,9 @@ const DECISIONS = {
     // (collecte-cartes/decisions-b-lignes-2026-11-02.json) : produit par produit, `planifier()` rejoue la preuve à l'écriture ; une seule qui ne tient plus est REFUSÉE et `--attendu` arrête.
     // voie impression-numero : le numéro du produit a été vérifié à la main contre une impression de l'EXPANSION du set (la voie ne compare que le tirage : Mareep svB, Poké Ball s8a-G, Energy Switch SV-P/CS et Ogerpon ex CSV9.5C en ont été écartés).
     '2026-11-02-b-lignes': require('./collecte-cartes/decisions-b-lignes-2026-11-02.json'),
+    // lot c-0211 (chasseur niveau c, 2026-11-02) : 24 EC1 S-xx, voie impression-equivalente comme S01/S05/S07/S19 (la carte déclare « Pokémon-e Starter Deck » 0xx/029,
+    // page japonaise de la carte en corroboration) ; Blaine's Quiz #3 G2 (la carte déclare « Challenge from the Darkness »). Moo-Moo Milk 654791 exclu (métacarte absente de la carte).
+    '2026-11-02-c-0211': require('./collecte-cartes/decisions-c-0211-2026-11-02.json'),
 };
 
 /** lecture : { cartes, produits: Map(idExpansion → produits), existants: Map(_id → ligne), lignesDuProduit?: Map(idProduct → [_id]), etats?: Map(slugSet → collecte_etat) } */

@@ -173,6 +173,10 @@ verifier('planifier : un produit qui a DÉJÀ une ligne (autre carte) → refus 
 verifier('planifier : un produit absent du catalogue de l\'expansion → refus', (() => { const p = planifier({ entrees: [{ ...E1, idProduct: 404, idExpansion: 9, slugSet: 'Le-Set', numeroFiche: null }], lecture }); return [p.lignes.length, p.refus.length]; })(), [0, 1]);
 verifier('--attendu : le bon nombre passe, un autre ou l\'absence refuse', [verifierAttendu(p1, 1).ok, verifierAttendu(p1, 2).ok, verifierAttendu(p1, undefined).ok], [true, false, false]);
 verifier('la décision du jour est une liste fermée de 8 produits distincts', (() => { const d = DECISIONS['2026-10-17']; return [d.length, new Set(d.map(x => x.idProduct)).size]; })(), [8, 8]);
+// lot c-0211 (chasseur niveau c, 2026-11-02) : 24 EC1 S-xx (voie impression-equivalente, comme S01/S05/S07/S19) + Blaine's Quiz #3 G2 (impression-du-tirage) ; Moo-Moo Milk 654791 EXCLU (métacarte absente de la carte)
+verifier('décision 2026-11-02-c-0211 : liste fermée de 25 produits distincts (24 EC1 + 605406), 654791 exclu, voies déclarées avec leur extension',
+    (() => { const d = DECISIONS['2026-11-02-c-0211'] || []; return [d.length, new Set(d.map(x => x.idProduct)).size, d.some(x => x.idProduct === 654791), d.filter(x => x.code === 'EC1').every(x => x.voie === 'impression-equivalente' && x.expansionImpression === 'Pokémon-e Starter Deck' && x.prefixe === 'S' && x.total === '029'), d.find(x => x.idProduct === 605406)?.carteId]; })(),
+    [25, 25, false, true, 25392]);
 // (décision de l'utilisateur, 2026-11-02) les 4 « a » posés avant la garde d'expansion DÉCLARENT l'impression « Yellow A Alternate cards » que leur carte porte (numéro suffixé « a »)
 verifier('les 4 Yellow A Alternate (Togepi 143a, Karen XY177a, Lusamine 153a ×2) déclarent expansionImpression « Yellow A Alternate cards »',
     [582672, 311408, 449878, 449883].map(id => Object.values(DECISIONS).flat().find(x => x.idProduct === id)?.expansionImpression ?? null),
