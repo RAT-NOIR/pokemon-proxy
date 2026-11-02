@@ -158,6 +158,28 @@ function motifDeCode(lu, produit, np, drapeaux = []) {
     if (slug && new RegExp(`(^|-)[a-z][a-z0-9.]*-?0*${echapper(n)}$`).test(slug)) return 'code-set-different';
     return 'code-set-non-verifiable';
 }
+/**
+ * DÉCISION 5 DU TESTEUR (2026-11-02) — « STAFF "SVP 006" : ADMIS quand le code imprimé lu concorde avec le numéro ET le code du set du produit, avec deux sources. Liste fermée. »
+ * Une promo Black Star imprime « SVP 006 » : le code du set et le numéro, SANS total. Table FERMÉE slugSet du produit -> code IMPRIMÉ ; aucun autre set n'est tolérant, aucune règle générale.
+ *   · SV-Black-Star-Promos -> SVP (scans STAFF de Scarlet-Violet-Promos, tampons-0211 / tampons-0211b ; les slugs Cardmarket finissent par « …-SVP006 »).
+ */
+const CODES_SANS_TOTAL = Object.freeze({ 'SV-Black-Star-Promos': 'SVP' });
+/**
+ * L'absence de total est tolérée SEULEMENT si : le slugSet du produit est dans la table, le code imprimé lu est EXACTEMENT le code de ce set (casse comprise), le numéro lu et celui du produit sont purement
+ * numériques, et le slug du produit (témoin indépendant, `motifDeCode`) finit par ce code et ce numéro. Le numéro lu doit ENSUITE égaler celui du produit : la comparaison ordinaire s'applique toujours.
+ * Elle ne vaut que pour la voie à deux sources (`sansTotalAutorise`) : une source seule ne la reçoit jamais.
+ */
+function sansTotalAdmis(lu, produit, np) {
+    const slugSet = produit?.slugSet;
+    if (typeof slugSet !== 'string' || !Object.hasOwn(CODES_SANS_TOTAL, slugSet)) return false;
+    if (lu?.codeSet !== CODES_SANS_TOTAL[slugSet]) return false;
+    if (!/^\d+$/.test(String(lu.numero ?? '').trim()) || !/^\d+$/.test(String(np ?? '').trim())) return false;
+    // le slug du produit est un témoin OBLIGATOIRE, indépendant de la ligne codes_set (relecture) : il finit par ce code et ce numéro, frontière avant le code
+    const chiffres = String(np).trim().replace(/^0+(?=\d)/, '');
+    const slug = typeof produit.slug === 'string' ? produit.slug.trim() : '';
+    if (!new RegExp(`(^|-)${echapper(CODES_SANS_TOTAL[slugSet])}-?0*${echapper(chiffres)}$`, 'i').test(slug)) return false;
+    return motifDeCode(lu, produit, np) === null;
+}
 /** La clé de témoin d'un nom : Pokédex unique + règle. null si le nom n'a pas de Pokédex unique (rien ne permet alors de dire que deux produits se ressemblent). */
 function cleDuTemoin(nom) {
     const n = texte(nom) ? J.decomposerNomCardmarket(nom).nom : null;
@@ -336,7 +358,7 @@ function rapprocher({ entrees, validations }) {
  * (null ≠ un tampon, dans les deux sens), aucune contradiction, des marques lues. Produit sans numéro : des marques et `attendu.numero` null. TOUTE discordance refuse.
  * @returns {{ok: boolean, motifs: string[]}}
  */
-function evaluerPreuveLue({ entree, produit, langueProduit }) {
+function evaluerPreuveLue({ entree, produit, langueProduit, sansTotalAutorise = false }) {
     const motifs = [], drapeaux = [], lu = entree.lu ?? {};
     const marques = Array.isArray(lu.marques) && lu.marques.length > 0 && lu.marques.every(texte);
     if (!marques) motifs.push('marques-vides');
@@ -356,7 +378,8 @@ function evaluerPreuveLue({ entree, produit, langueProduit }) {
     } else if (np != null) {
         const n = lu.numero == null ? '' : String(lu.numero).trim(), t = lu.total == null ? '' : String(lu.total).trim();
         // tour 2 (1) : une promo (« XY150a », « SM30a ») n'imprime aucun total — il n'est exigé que pour un numéro purement numérique (+ suffixe) ; un préfixe alphabétique se juge sans total
-        if (n === '' || (t === '' && !PREFIXE_ALPHABETIQUE.test(n))) motifs.push('numero-ou-total-absent');
+        const sansTotalTolere = sansTotalAutorise === true && t === '' && sansTotalAdmis(lu, produit, np);   // décision 5 : deux sources + liste fermée
+        if (n === '' || (t === '' && !PREFIXE_ALPHABETIQUE.test(n) && !sansTotalTolere)) motifs.push('numero-ou-total-absent');
         else if (J.cleNumero(n) !== J.cleNumero(np) && !numeroSansPrefixeAdmis(n, np, produit?.slug)) motifs.push('numero-different');
         const mn = motifDeNom(lu, produit, langueProduit, drapeaux); if (mn) motifs.push(mn);       // tour 4 (1) : le nom aussi, avec numéro
     } else {
@@ -404,7 +427,13 @@ async function evaluerDeuxSources({ entree, produit, langueProduit, octets, deci
     if (!ta.ok) return non('tampon-inconnu');
     // tour 1 (3) : la SECONDE image porte sa propre lecture, jugée comme la première (P2) — la concordance d'image ne prouve que le dessin, jamais le tirage
     if (!objet(s.lu)) return non('seconde-sans-lecture');
-    const l2 = evaluerPreuveLue({ entree: { lu: s.lu, attendu: entree.attendu, contradictions: entree.contradictions }, produit, langueProduit });
+    // décision 5 : pour un set de la liste fermée CODES_SANS_TOTAL, la PREMIÈRE lecture (jusqu'ici non jugée par cette voie) est jugée aussi quand elle n'a pas de total — les deux lectures portent code et numéro
+    const sansTotal = lu => lu?.total == null || String(lu.total).trim() === '';
+    if (Object.hasOwn(CODES_SANS_TOTAL, produit?.slugSet) && sansTotal(entree.lu)) {
+        const l1 = evaluerPreuveLue({ entree: { lu: entree.lu, attendu: entree.attendu, contradictions: entree.contradictions }, produit, langueProduit, sansTotalAutorise: true });
+        if (!l1.ok) return non(`premiere-lecture:${l1.motifs[0]}`);
+    }
+    const l2 = evaluerPreuveLue({ entree: { lu: s.lu, attendu: entree.attendu, contradictions: entree.contradictions }, produit, langueProduit, sansTotalAutorise: true });
     if (!l2.ok) return non(`seconde-lecture:${l2.motifs[0]}`);
     const r = await decider({
         produit: { langue: langueProduit, codeSet: null, numero: CO.reduireNumero(produit?.numero), tampon: ta.valeur },
@@ -660,5 +689,5 @@ function trousDuManifeste({ trous, recus, famille }) {
     return { trous: gardes, ecartes };
 }
 
-module.exports = { SOURCE, LOT, SRC, LANGUE_PREUVE, EDITIONS_LOCALES, REGLES, REGLE_MEME_DESSIN, LANGUES_NON_LATINES, MOYENS_DE_LECTURE, MOYENS_DE_LANGUE, SEUIL_PLANCHER, SCORE_PLANCHER, VIDE_PLANCHER, lienAvecLEntree, evaluerRemplacementMemeDessin, langueDuProduit, formeEntree, lireManifeste, lireValidations, rapprocher, evaluerPreuveLue, evaluerDeuxSources, evaluerEntree,
+module.exports = { CODES_SANS_TOTAL, sansTotalAdmis, SOURCE, LOT, SRC, LANGUE_PREUVE, EDITIONS_LOCALES, REGLES, REGLE_MEME_DESSIN, LANGUES_NON_LATINES, MOYENS_DE_LECTURE, MOYENS_DE_LANGUE, SEUIL_PLANCHER, SCORE_PLANCHER, VIDE_PLANCHER, lienAvecLEntree, evaluerRemplacementMemeDessin, langueDuProduit, formeEntree, lireManifeste, lireValidations, rapprocher, evaluerPreuveLue, evaluerDeuxSources, evaluerEntree,
     verifierCache, setAdmisPourPosition, preuvesDe, motifDeNom, motifDeNomTraduit, porteUnTemoinTraduit, CHAMPS_TEMOIN_TRADUIT, LANGUES_A_NOM_TRADUIT, TAMPONS_ATTENDUS, tamponAttendu, cleFiche, grouperUnites, MOTIFS_DE_TROU, motifDeTrou, trousDuManifeste, sha256De, racineDe };
