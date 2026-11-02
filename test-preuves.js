@@ -367,6 +367,55 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         const autreNumero = await PV.evaluerDeuxSources({ entree: e, produit: produit({ numero: '14' }), langueProduit: 'en', octets: { a: IA, b: IA2 } });
         assert.strictEqual(autreNumero.ok, false, 'le produit fait foi : numéro lu ≠ numéro du produit');
     });
+    // ───────── décision 5 du testeur (02/11) : les STAFF « SVP 006 » — code + numéro SANS total ─────────
+    // Exception par ce qu'elle AUTORISE : liste fermée de sets (SV-Black-Star-Promos, code imprimé SVP) ; code imprimé lu = code du set, numéro lu = numéro du produit, slug du produit qui finit par ce code et ce numéro, ET deux sources.
+    const SVP = (o = {}) => produit({ idProduct: 761120, numero: '006', slugSet: 'SV-Black-Star-Promos', slug: 'Pawmot-V2-SVP006', nomEn: 'Pawmot [Electrogenesis | Electro Paws]', ...o });
+    const luSVP = (o = {}) => ({ nom: 'Pawmot', numero: '006', total: null, codeSet: 'SVP', langue: 'en', tampon: null, finition: 'scan de carte réelle', marques: ['SVP EN 006', 'mention STAFF'], ...o });
+    const E2SVP = (premiere = {}, deuxieme = {}) => E2({ attendu: { nom: 'Pawmot', numero: '006', langue: 'en', tampon: null, variante: null }, lu: luSVP(premiere), seconde: seconde({ lu: luSVP(deuxieme) }) });
+    await test('décision 5 : STAFF « SVP 006 » sur le produit 006 — admis à deux sources (code du set + numéro égal, sans total)', async () => {
+        let appels = 0; const oui = async () => { appels++; return { decision: 'ecrire', preuve: { regle: 'strict' } }; };
+        const o = { a: Buffer.from('A'), b: Buffer.from('B') };
+        const r = await deux(E2SVP(), o, oui, SVP());
+        assert.strictEqual(r.ok, true, JSON.stringify(r)); assert.strictEqual(appels, 1);
+        assert.strictEqual((await deux(E2SVP({ numero: '6' }, { numero: '006' }), o, oui, SVP())).ok, true, 'zéros de tête ignorés (cleNumero)');
+        const viaAiguillage = await PV.evaluerEntree({ entree: E2SVP(), produit: SVP(), octets: o, decider: oui });
+        assert.deepStrictEqual([viaAiguillage.ok, viaAiguillage.regle], [true, 'deux-sources']);
+    });
+    await test('décision 5 : tout le reste reste refusé, avec son motif (numéro différent, code différent, une seule source, autre set)', async () => {
+        let appels = 0; const oui = async () => { appels++; return { decision: 'ecrire', preuve: {} }; };
+        const o = { a: Buffer.from('A'), b: Buffer.from('B') };
+        const m = async (e, p = SVP()) => (await deux(e, o, oui, p)).motif ?? 'ADMIS';
+        assert.match(await m(E2SVP({ numero: '007' }, { numero: '007' })), /numero-different/, 'SVP 007 sur le produit 006');
+        assert.match(await m(E2SVP({}, { numero: '007' })), /seconde-lecture:numero-different/, 'la seconde lecture ne tient pas');
+        assert.match(await m(E2SVP({ numero: '007' }, {})), /premiere-lecture:numero-different/, 'la première lecture ne tient pas');
+        assert.match(await m(E2SVP({ codeSet: 'SV' }, { codeSet: 'SV' })), /numero-ou-total-absent/, '« SV 006 » : le code n\'est pas celui du set');
+        assert.match(await m(E2SVP({ codeSet: 'PAR' }, { codeSet: 'PAR' })), /numero-ou-total-absent/, 'code d\'un autre set');
+        assert.match(await m(E2SVP({ codeSet: 'svp' }, { codeSet: 'svp' })), /numero-ou-total-absent/, 'le code s\'égale à la lettre près');
+        assert.match(await m(E2SVP({ codeSet: 'SVPX' }, { codeSet: 'SVPX' })), /numero-ou-total-absent/, 'pas d\'inclusion');
+        assert.match(await m(E2SVP({ codeSet: undefined }, { codeSet: undefined })), /numero-ou-total-absent/, 'code non lu');
+        assert.match(await m(E2SVP({}, { codeSet: 'SV' })), /seconde-lecture:numero-ou-total-absent/, 'les DEUX lectures portent le code');
+        assert.match(await m(E2SVP({ codeSet: 'SV' }, {})), /premiere-lecture:numero-ou-total-absent/);
+        // un autre set sans total : jamais admis, même avec un code qui ressemble
+        assert.match(await m(E2SVP(), SVP({ slugSet: 'Set-A' })), /numero-ou-total-absent/, 'set hors de la liste fermée');
+        assert.match(await m(E2SVP({ codeSet: 'SWSH' }, { codeSet: 'SWSH' }), SVP({ slugSet: 'SWSH-Black-Star-Promos', slug: 'Pawmot-V2-SWSH006' })), /numero-ou-total-absent/, 'autre set de promos');
+        assert.match(await m(E2SVP(), SVP({ slugSet: 'sv-black-star-promos' })), /numero-ou-total-absent/, 'le slugSet s\'égale exactement');
+        // le slug du produit est le témoin : il doit finir par ce code et ce numéro
+        assert.match(await m(E2SVP(), SVP({ slug: 'Pawmot-V2' })), /numero-ou-total-absent/, 'slug sans code');
+        assert.match(await m(E2SVP(), SVP({ slug: 'Pawmot-V2-SVE006' })), /numero-ou-total-absent/, 'slug d\'un autre code');
+        assert.match(await m(E2SVP(), SVP({ slug: null })), /numero-ou-total-absent/, 'sans slug : pas de témoin');
+        // le produit ne porte pas le numéro lu
+        assert.match(await m(E2SVP(), SVP({ numero: '007', slug: 'Pawmot-V2-SVP007' })), /numero-different/, 'numéro du produit différent');
+        // numéro lu non numérique : l'exception ne couvre que les chiffres
+        assert.match(await m(E2SVP({ numero: '006a' }, { numero: '006a' }), SVP({ numero: '006a', slug: 'Pawmot-V2-SVP006a' })), /numero-ou-total-absent/);
+        // une seule source : la règle preuve-lue ne tolère JAMAIS l'absence de total, même pour ce set
+        const seule = PV.evaluerPreuveLue({ entree: entree({ lu: luSVP(), attendu: E2SVP().attendu }), produit: SVP(), langueProduit: 'en' });
+        assert.strictEqual(seule.ok, false); assert.match(seule.motifs.join(), /numero-ou-total-absent/, 'une seule source : refus');
+        const viaAiguillage = await PV.evaluerEntree({ entree: entree({ lu: luSVP(), attendu: E2SVP().attendu }), produit: SVP(), octets: o });
+        assert.deepStrictEqual([viaAiguillage.ok, viaAiguillage.motif], [false, 'preuve-lue:numero-ou-total-absent']);
+        // avec un total lu, rien ne change pour ce set : le total reste vérifié comme avant
+        assert.strictEqual((await deux(E2SVP({ total: '198' }, { total: '198' }), o, oui, SVP())).ok, true);
+        assert.strictEqual(appels, 2, 'la règle d\'image n\'est appelée que pour les deux cas admis');
+    });
     await test('evaluerEntree : aiguille par règle ; une règle inconnue est refusée', async () => {
         const a = await PV.evaluerEntree({ entree: entree(), produit: produit(), octets: {} });
         assert.deepStrictEqual([a.ok, a.regle], [true, 'preuve-lue']);
