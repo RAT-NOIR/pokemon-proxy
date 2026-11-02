@@ -416,6 +416,16 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.strictEqual((await deux(E2SVP({ total: '198' }, { total: '198' }), o, oui, SVP())).ok, true);
         assert.strictEqual(appels, 1, 'la règle d\'image n\'est appelée que pour le seul cas admis (celui qui porte son total)');
     });
+    await test('décision 5 (relecture) : le slug du produit est un témoin OBLIGATOIRE, même quand la ligne codes_set porte « SVP »', async () => {
+        const lu = { numero: '006', codeSet: 'SVP' };
+        assert.strictEqual(PV.sansTotalAdmis(lu, SVP({ codeSet: 'SVP' }), '006'), true, 'slug et codeSet concordent');
+        assert.strictEqual(PV.sansTotalAdmis(lu, SVP({ codeSet: 'SVP', slug: 'Pawmot-V2' }), '006'), false, 'codeSet SVP, slug sans code');
+        assert.strictEqual(PV.sansTotalAdmis(lu, SVP({ codeSet: 'SVP', slug: undefined }), '006'), false, 'codeSet SVP, slug absent');
+        assert.strictEqual(PV.sansTotalAdmis(lu, SVP({ codeSet: 'SVP', slug: null }), '006'), false);
+        assert.strictEqual(PV.sansTotalAdmis(lu, SVP({ codeSet: 'SVP', slug: 'Pawmot-V2-SVP007' }), '006'), false, 'codeSet SVP, slug d\'un autre numéro');
+        assert.strictEqual(PV.sansTotalAdmis(lu, SVP({ codeSet: 'SVP', slug: 'Pawmot-V2-SVE006' }), '006'), false, 'slug d\'un autre code');
+        assert.strictEqual(PV.sansTotalAdmis(lu, SVP({ codeSet: 'SVP', slug: 'Pawmot-V2-XSVP006' }), '006'), false, 'frontière : le code n\'est pas un suffixe de mot');
+    });
     await test('evaluerEntree : aiguille par règle ; une règle inconnue est refusée', async () => {
         const a = await PV.evaluerEntree({ entree: entree(), produit: produit(), octets: {} });
         assert.deepStrictEqual([a.ok, a.regle], [true, 'preuve-lue']);
