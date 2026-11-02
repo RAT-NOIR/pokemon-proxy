@@ -100,4 +100,27 @@ t('Les décisions antérieures et Eldegoss restent intacts (8 lignes en 2026-10-
     assert.strictEqual(DECISIONS['2026-10-08c'].length, 8);
     assert.strictEqual(estInterdite('x|481749'), true);
 });
+// ---- Erika's Bellsprout 25470|605116 (feu vert nommé du testeur, 2026-11-02) : le produit « [Careless Tackle] » est joint à 25460 (juste) ET à 25470 (Stretch Vine) ----
+const EB = DECISIONS['2026-11-02'];
+t('2026-11-02 : exactement UNE ligne, 25470|605116, preuve attaques (autre 25460), liste fermée', () => {
+    assert.ok(EB, 'décision absente');
+    assert.deepStrictEqual(EB.map(l => l.id), ['25470|605116']);
+    assert.strictEqual(EB[0].preuve, 'attaques');
+    assert.strictEqual(EB[0].autre, 25460);
+    assert.strictEqual(EB[0].type, 'fiche-contredite-par-les-attaques');
+    assert.ok(EB[0].pourquoi);
+});
+const eb = EB && EB[0];
+const bellsprout = "Erika's Bellsprout [Careless Tackle]";
+const bs25470 = { nomEn: "Erika's Bellsprout", attaques: [{ nom: 'Stretch Vine' }] };
+const bs25460 = { nomEn: "Erika's Bellsprout", attaques: [{ nom: 'Careless Tackle' }] };
+t('Bellsprout : les attaques [Careless Tackle] désignent 25460 (1 contre 0) -> 25470 contredite', () => {
+    assert.ok(eb && jugerLigne(eb, bellsprout, bs25470, bs25460).verdict);
+});
+t('Bellsprout : REFUSE si 25470 porte Careless Tackle, si 25460 ne la porte plus, si l\'autre manque, ou pour un produit sans attaque', () => {
+    assert.strictEqual(jugerLigne(eb, bellsprout, { ...bs25470, attaques: [{ nom: 'Careless Tackle' }] }, bs25460).verdict, null);
+    assert.strictEqual(jugerLigne(eb, bellsprout, bs25470, { ...bs25460, attaques: [] }).verdict, null);
+    assert.strictEqual(jugerLigne(eb, bellsprout, bs25470, null).verdict, null);
+    assert.strictEqual(jugerLigne(eb, "Erika's Bellsprout", bs25470, bs25460).verdict, null);
+});
 console.log(`${ok} passés, 0 en échec`);
