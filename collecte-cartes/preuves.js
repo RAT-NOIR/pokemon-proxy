@@ -9,6 +9,9 @@
 // Rien ici n'est recopié (§21 bis) : la clé de numéro est celle de la jointure (`cleNumero`), la langue d'un tirage celle de comblement.js (`langueDuTirage`), la règle d'image celle de
 // concordance-image.js (`deciderVisuel`), la lecture d'un cache celle de recolte-hote.js (`lireDuCache`), le jugement d'une image celui de recolte-commun.js (`juger`).
 // Écrit par ce qu'il AUTORISE : tout ce qui n'est pas explicitement conforme est REFUSÉ (direction sûre : un visuel absent est honnête, celui d'un autre tirage est un mensonge).
+// ⚠️ LIMITE CONNUE (nom traduit, 2026-11-02) : la LANGUE du scan n'est vérifiée que par la saisie du chasseur (`lu.langue`) ; rien, dans ce module, ne la lit sur l'image. Elle est comparée à la langue du tirage du
+// produit, jamais à l'image. De même, le nom traduit ne témoigne que par Pokédex + règle (+ PV quand la carte existe) : deux cartes de même espèce et même règle dans un set (« jumeaux ») ne se séparent
+// que par le numéro lu — la preuve porte alors `jumeau-dans-le-set`, et le coordinateur le vérifie sur une rognure.
 const crypto = require('crypto');
 const fs = require('fs');
 const J = require('./jointure');
@@ -105,13 +108,13 @@ const memeNomJaponais = (lu, nomJa) => cleJaponaise(lu) !== '' && cleJaponaise(l
  * Décision du testeur (27/10) : lu en français, il se compare au nom FRANÇAIS du produit (`nomFr`, numeros_cartes) — SEULEMENT si le produit est un tirage français (langue du produit = langue lue) ;
  * jamais au nom anglais. Toute autre langue lue = refus.
  */
-const motifDeNom = (lu, produit, langueProduit) => {
+const motifDeNom = (lu, produit, langueProduit, drapeaux = []) => {
     if (lu.langue === 'en') return memeNomQueLeProduit(lu.nom, produit?.nomEn) ? null : 'nom-different';
     if (lu.langue === 'fr' && langueProduit === 'fr') return memeNomQueLeProduit(lu.nom, produit?.nomFr) ? null : 'nom-different';
     // a-reste (japonais) : un nom lu en japonais se compare au nom JAPONAIS de la carte désignée par la ligne (`produit.nomJa`, témoin de lecture, jamais écrit en public), SEULEMENT pour un tirage japonais ; jamais au nom anglais.
     // Une carte qui A un nomJa s'en tient là (un nom qui diffère est un désaccord, jamais un repli) ; sans nomJa, le nom traduit se juge par ce qui ne se traduit pas (ci-dessous).
     if (lu.langue === 'ja' && langueProduit === 'ja' && (texte(produit?.nomJa) || !porteUnTemoinTraduit(lu))) return memeNomJaponais(lu.nom, produit?.nomJa) ? null : 'nom-different';
-    if (LANGUES_A_NOM_TRADUIT.includes(lu.langue) && lu.langue === langueProduit && porteUnTemoinTraduit(lu)) return motifDeNomTraduit(lu, produit, numeroDuProduit(produit));
+    if (LANGUES_A_NOM_TRADUIT.includes(lu.langue) && lu.langue === langueProduit && porteUnTemoinTraduit(lu)) return motifDeNomTraduit(lu, produit, numeroDuProduit(produit), drapeaux);
     return 'nom-langue-non-anglaise';
 };
 // ── Le nom TRADUIT (2026-11-02) : chinois, indonésien, thaï, et japonais sans `nomJa` (fiche simple, aucune carte) ─────────────────────────────────────────────
@@ -142,37 +145,65 @@ function motifDeCode(lu, produit, np) {
     if (slug && new RegExp(`(^|-)[a-z][a-z0-9.]*-?0*${echapper(n)}$`).test(slug)) return 'code-set-different';
     return 'code-set-non-verifiable';
 }
-function motifDeNomTraduit(lu, produit, np) {
+/** La clé de témoin d'un nom : Pokédex unique + règle. null si le nom n'a pas de Pokédex unique (rien ne permet alors de dire que deux produits se ressemblent). */
+function cleDuTemoin(nom) {
+    const n = texte(nom) ? J.decomposerNomCardmarket(nom).nom : null;
+    const d = n ? TPC.dexDuNom(n) : null;
+    return d && d.length === 1 ? `${d[0]}|${TPC.reglesDuNom(n)}` : null;
+}
+/** Un JUMEAU dans le set : un autre produit du même set (autre idProduct, autre numéro) qui partage Pokédex ET règle avec celui-ci. Le numéro reste la clé, mais le coordinateur le vérifie sur une rognure. */
+function aUnJumeauDansLeSet(produit, cleDuProduit, np) {
+    if (!cleDuProduit || !Array.isArray(produit?.autresDuSet)) return false;
+    return produit.autresDuSet.some(a => a && a.idProduct !== produit.idProduct && a.numero != null && J.cleNumero(String(a.numero)) !== J.cleNumero(String(np)) && cleDuTemoin(a.nomEn) === cleDuProduit);
+}
+function motifDeNomTraduit(lu, produit, np, drapeaux = []) {
     if (!texte(lu.nom)) return 'nom-different';
     if (np == null) return 'nom-traduit-numero-absent';
     const mc = motifDeCode(lu, produit, np); if (mc) return mc;
-    const nomRef = produit?.nomEnCarte ?? produit?.nomEn;
-    const nom = texte(nomRef) ? J.decomposerNomCardmarket(nomRef).nom : null;
-    if (REGIONAL_LU.test(String(lu.nom).normalize('NFKC')) || (nom && REGIONAL_PRODUIT.test(nom))) return 'forme-regionale-non-distinguee';
-    // une TABLE de traduction OFFICIELLE : le `nomJa` que portent d'autres cartes (vraies pages) de même nomEn (tpc.construireTemoinNomJa), seulement quand elles s'accordent — pour le japonais seul
-    const t = produit?.nomJaTemoin;
-    if (lu.langue === 'ja' && t && !t.divergent && Array.isArray(t.noms) && t.noms.length === 1) {
+    const net = x => (texte(x) ? J.decomposerNomCardmarket(x).nom : null);
+    const nomProduit = net(produit?.nomEn), nomCarte = net(produit?.nomEnCarte);
+    const nom = nomCarte ?? nomProduit;
+    // le nom du PRODUIT et celui de la CARTE disent la même chose (forme régionale, règle) ; sinon la fiche est douteuse
+    if (nomProduit && nomCarte && (REGIONAL_PRODUIT.test(nomProduit) !== REGIONAL_PRODUIT.test(nomCarte) || TPC.reglesDuNom(nomProduit) !== TPC.reglesDuNom(nomCarte))) return 'nom-produit-carte-divergent';
+    if (REGIONAL_LU.test(String(lu.nom).normalize('NFKC')) || (nomProduit && REGIONAL_PRODUIT.test(nomProduit)) || (nomCarte && REGIONAL_PRODUIT.test(nomCarte))) return 'forme-regionale-non-distinguee';
+    // une TABLE de traduction INTERNE (pas une source officielle) : le `nomJa` que portent NOS autres cartes (vraies pages) de même nomEn (tpc.construireTemoinNomJa) — au moins DEUX cartes distinctes qui s'accordent, pour le japonais seul
+    const t = produit?.tableJaInterne;
+    const tableUtilisable = lu.langue === 'ja' && t && !t.divergent && Array.isArray(t.noms) && t.noms.length === 1;
+    if (tableUtilisable && t.cartes >= 2) {
         const lue = TPC.nomCompare(lu.nom);
-        return lue !== '' && lue === TPC.nomCompare(t.noms[0]) ? null : 'nom-different';
+        if (!(lue !== '' && lue === TPC.nomCompare(t.noms[0]))) return 'nom-different';
+        drapeaux.push('table-ja-interne');
+        return null;
     }
+    const sansTemoin = tableUtilisable ? 'table-ja-insuffisante' : 'nom-traduit-sans-temoin';
     // sinon seul un Pokémon a de quoi témoigner : un Dresseur ou une Énergie au nom traduit n'a ni Pokédex ni PV
-    if (!nom || (produit?.categorie != null && produit.categorie !== 'pokemon')) return 'nom-traduit-sans-temoin';
+    if (!nom || (produit?.categorie != null && produit.categorie !== 'pokemon')) return sansTemoin;
     const dexNom = TPC.dexDuNom(nom);
-    const ndex = entierPositif(Number(produit?.ndex)) ? Number(produit.ndex) : null;
+    // le ndex de la carte doit être CONFIRMÉ par la table du dépôt (pokedex-dexids.json) : contredit, illisible ou nom absent de la table = refus
+    let ndex = null;
+    if (produit?.ndex != null && produit.ndex !== '') {
+        ndex = Number(produit.ndex);
+        if (!entierPositif(ndex) || !dexNom || !dexNom.includes(ndex)) return 'ndex-non-confirme';
+    }
     let dex;
-    if (ndex != null) { if (dexNom && !dexNom.includes(ndex)) return 'pokedex-ambigu'; dex = ndex; }
-    else if (!dexNom) return 'nom-traduit-sans-temoin';
+    if (ndex != null) dex = ndex;
+    else if (!dexNom) return !nomCarte && TPC.nomQualifie(nomProduit) ? 'fiche-simple-nom-qualifie' : sansTemoin;
     else if (dexNom.length !== 1) return 'pokedex-ambigu';
     else dex = dexNom[0];
+    // sans carte, la fiche simple n'a que le nom de son produit : il ne porte que l'espèce et sa règle
+    if (!nomCarte && !TPC.nomEstEspeceEtRegle(nomProduit)) return 'fiche-simple-nom-qualifie';
     if (!entierPositif(lu.dex)) return 'pokedex-non-lu';
     if (lu.dex !== dex) return 'pokedex-different';
     if (!entierPositif(lu.pv)) return 'pv-non-lu';
-    // (sans carte, nous n'avons pas les PV du produit : le PV lu s'écrit alors dans la preuve, il ne témoigne pas)
     const pv = Number(produit?.pv);
-    if (Number.isFinite(pv) && pv > 0 && lu.pv !== pv) return 'pv-different';
+    const pvCompare = Number.isFinite(pv) && pv > 0;
+    if (pvCompare && lu.pv !== pv) return 'pv-different';
     const lue = TPC.reglesDuNom(lu.nom);
     if (lu.regle != null && TPC.reglesDuNom(lu.regle) !== lue) return 'regle-incoherente';
     if (lue !== TPC.reglesDuNom(nom)) return 'regle-differente';
+    // acceptée : les marques que la preuve porte (sans carte, le PV lu n'est comparé à rien ; un jumeau dans le set se vérifie au numéro, à l'œil)
+    if (!pvCompare) drapeaux.push('pv-non-verifie');
+    if (aUnJumeauDansLeSet(produit, cleDuTemoin(nom), np)) drapeaux.push('jumeau-dans-le-set');
     return null;
 }
 /**
@@ -293,7 +324,7 @@ function rapprocher({ entrees, validations }) {
  * @returns {{ok: boolean, motifs: string[]}}
  */
 function evaluerPreuveLue({ entree, produit, langueProduit }) {
-    const motifs = [], lu = entree.lu ?? {};
+    const motifs = [], drapeaux = [], lu = entree.lu ?? {};
     const marques = Array.isArray(lu.marques) && lu.marques.length > 0 && lu.marques.every(texte);
     if (!marques) motifs.push('marques-vides');
     else if (lu.marques.some(nommeUneSource)) motifs.push('marque-nomme-une-source');
@@ -308,17 +339,17 @@ function evaluerPreuveLue({ entree, produit, langueProduit }) {
         else if (np == null) motifs.push('position-sans-numero-produit');
         else if (J.cleNumero(String(lu.position).trim()) !== J.cleNumero(np)) motifs.push('numero-different');
         else motifs.push(...motifsDePosition(lu, produit));
-        const mn = motifDeNom(lu, produit, langueProduit); if (mn) motifs.push(mn);       // tour 4 (1) : le nom, branche position
+        const mn = motifDeNom(lu, produit, langueProduit, drapeaux); if (mn) motifs.push(mn);       // tour 4 (1) : le nom, branche position
     } else if (np != null) {
         const n = lu.numero == null ? '' : String(lu.numero).trim(), t = lu.total == null ? '' : String(lu.total).trim();
         // tour 2 (1) : une promo (« XY150a », « SM30a ») n'imprime aucun total — il n'est exigé que pour un numéro purement numérique (+ suffixe) ; un préfixe alphabétique se juge sans total
         if (n === '' || (t === '' && !PREFIXE_ALPHABETIQUE.test(n))) motifs.push('numero-ou-total-absent');
         else if (J.cleNumero(n) !== J.cleNumero(np) && !numeroSansPrefixeAdmis(n, np, produit?.slug)) motifs.push('numero-different');
-        const mn = motifDeNom(lu, produit, langueProduit); if (mn) motifs.push(mn);       // tour 4 (1) : le nom aussi, avec numéro
+        const mn = motifDeNom(lu, produit, langueProduit, drapeaux); if (mn) motifs.push(mn);       // tour 4 (1) : le nom aussi, avec numéro
     } else {
         if (entree.attendu?.numero != null && String(entree.attendu.numero).trim() !== '') motifs.push('numero-attendu-non-null');
         // tour 1 (1) : sans numéro, RIEN d'autre ne relie l'image au produit que son NOM — le nom lu doit être celui du produit (Cardmarket, avant « [ »), par la normalisation de la jointure
-        const mn = motifDeNom(lu, produit, langueProduit); if (mn) motifs.push(mn);       // tour 4 (1) : le nom, branche sans numéro
+        const mn = motifDeNom(lu, produit, langueProduit, drapeaux); if (mn) motifs.push(mn);       // tour 4 (1) : le nom, branche sans numéro
         // tour 4 (3) : et quand le slug du produit porte un numéro en fin (« …-PPS8MEG-114 »), le numéro lu doit être celui-là
         const sn = numeroFinDeSlug(produit?.slug);
         if (sn != null && (lu.numero == null || String(lu.numero).trim() === '' || J.cleNumero(String(lu.numero).trim()) !== J.cleNumero(sn))) motifs.push('numero-different');
@@ -333,7 +364,8 @@ function evaluerPreuveLue({ entree, produit, langueProduit }) {
     if (!ta.ok) motifs.push('tampon-inconnu');
     else if (norm(lu.tampon) !== norm(ta.valeur)) motifs.push('tampon-different');
     if (!Array.isArray(entree.contradictions) || entree.contradictions.length > 0) motifs.push('contradictions');
-    return { ok: motifs.length === 0, motifs };
+    // (les drapeaux — marques de la preuve — ne sortent que d'une preuve ACCEPTÉE et seulement s'il y en a : la forme des résultats d'avant ne bouge pas)
+    return { ok: motifs.length === 0, motifs, ...(motifs.length === 0 && drapeaux.length ? { drapeaux } : {}) };
 }
 
 // ── 5. P3 : la règle « deux-sources » ────────────────────────────────────────────────────────────────────────────────────────
@@ -471,7 +503,7 @@ async function evaluerEntree({ entree, produit, octets, decider }) {
     }
     if (entree.regle === 'preuve-lue') {
         const r = evaluerPreuveLue({ entree, produit, langueProduit });
-        return r.ok ? { ok: true, regle: 'preuve-lue' } : { ok: false, motif: `preuve-lue:${r.motifs[0]}`, motifs: r.motifs };
+        return r.ok ? { ok: true, regle: 'preuve-lue', ...(r.drapeaux ? { drapeaux: r.drapeaux } : {}) } : { ok: false, motif: `preuve-lue:${r.motifs[0]}`, motifs: r.motifs };
     }
     if (entree.regle === 'deux-sources') return evaluerDeuxSources({ entree, produit, langueProduit, octets, decider });
     return { ok: false, motif: 'regle-inconnue' };
@@ -536,6 +568,8 @@ function preuvesDe(a) {
         // les dates s'écrivent en ISO (texte) : le plan passe par un fichier JSON entre sa construction et l'écriture, une Date n'y survit pas
         // (la preuve de même dessin n'écrit que score, seuil et vide : la clé de l'entrée comparée reste dans le manifeste — elle porte le code d'une autre source)
         preuveLue: { regle: e.regle, lu, marques, luLe: dateDe(e.luLe).toISOString(), valideLe: dateDe(a.validation.valideLe).toISOString(),
+            // (nom traduit : les marques de la preuve — pv-non-verifie, jumeau-dans-le-set, table-ja-interne — s'écrivent quand il y en a)
+            ...(Array.isArray(a.evaluation?.drapeaux) && a.evaluation.drapeaux.length ? { drapeaux: [...a.evaluation.drapeaux] } : {}),
             // (le moyen de lecture du numéro s'écrit pour cette règle seule : l'énumération des champs lus des autres règles ne bouge pas)
             ...(e.regle === REGLE_MEME_DESSIN ? { lu: { ...lu, moyen: e.lu.moyen, langueMoyen: e.lu.langueMoyen }, memeDessin: { lien: a.evaluation?.lien ?? null, score: e.memeDessin.score, seuil: e.memeDessin.seuil, vide: e.memeDessin.vide } } : {}) } };
 }

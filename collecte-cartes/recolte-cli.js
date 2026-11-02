@@ -120,6 +120,7 @@ async function lancer(def, args = process.argv.slice(2)) {
             try {
                 const r = await RC.ecrire({ SRC, unites: aFaire, M: { Carte: { db: { db: lecture.cartes.db } } }, dossierCache: F.cache, indexImages, compterSeulement: true, basseDefinition: basse, lecteur: RC.lecteurNatif(lecture.cartes.db) });
                 console.log(`COMPTE${basse ? ' BASSE DÉFINITION' : ''} : --attendu=${r.reel} (cédées ${r.cedees}, déjà posées ${r.dejaPosees}, écartées ${r.ecartees}, trop petites ${r.tropPetits}, hors cache ${r.horsCache}, altérées ${r.altere}, retirées ${r.retires})`);
+                if (typeof def.noteCompte === 'function') console.log(def.noteCompte(aFaire));
             } finally { await lecture.fermer(); }
             return;
         }
