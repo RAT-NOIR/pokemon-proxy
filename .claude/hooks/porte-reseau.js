@@ -13,6 +13,9 @@
 //     autre forme (variable, `cd -`, Pop-Location, cd dans un bloc { }, if, cmd /c) rend le dossier INCERTAIN : un script relatif qui porte une primitive est alors refusé.
 //   · les chaînes littérales qui sont des ARGUMENTS (après -m, here-strings, entre guillemets hors position de commande) ne sont pas cherchées comme des outils ; une chaîne en position de
 //     COMMANDE (& 'curl.exe', ."wget") ou donnée à -Command / -c / /c reste lue.
+// 2026-11-02 (git/npm/pip) : git clone et git submodule sont refusés quelle que soit l'adresse ; fetch/pull/push/ls-remote/archive/remote add|set-url/config url ne sont admis que vers le dépôt d'origine
+// EXACT https://github.com/RAT-NOIR/pokemon-proxy (nom de dépôt `origin` ou sans nom) ; tout autre nom de dépôt distant est refusé. npm/pnpm/yarn n'admettent que test, run, start… ; pip/pipx/uv n'installent rien.
+// Les données ouvertes (TCGdex…) passent par la porte, pas par git. Les dossiers de DOSSIERS_LIBRES (API) gardent leur régime.
 // Code 2 = refus : le message part sur stderr et revient à l'agent. Toute panne, toute entrée illisible REFUSE (une garde qui ne peut pas conclure bloque et le dit).
 //
 // TOUR 3 : (B2) dossiers de la porte et des arrêts FIXES — le hook ne lit aucune variable d'environnement, le banc passe --banc=<json> en argument ; une commande qui pose ARRETS_HOTES_DOSSIER,
@@ -78,12 +81,18 @@ const PRIMITIVES = [
     { re: /\bimport\s*\(/, nom: 'import() dynamique' },
 ];
 const PY_RESEAU = /\bimport\b[^\n]*\b(?:requests|urllib3?|httpx|aiohttp|socket|http\.client|ftplib|smtplib|telnetlib|subprocess)\b|^\s*from\s+(?:requests|urllib3?|httpx|aiohttp|socket|http(?:\.client)?|ftplib|smtplib|telnetlib|subprocess)\b|\bos\.(?:system|popen)\b|__import__\s*\(/m;
-const PY_MODULES_REFUSES = /^(http|urllib|socket|ftplib|smtplib|telnetlib|requests|pip|ensurepip|xmlrpc)/i;
+const PY_MODULES_REFUSES = /^(http|urllib|socket|ftplib|smtplib|telnetlib|requests|pip|ensurepip|xmlrpc|uv$|poetry|pdm|pipenv|easy_install|setuptools|conda)/i;
 const NODE_VALEURS = new Set(['-r', '--require', '--import', '--loader', '--experimental-loader', '--env-file', '--conditions', '-c', '--stack-size', '--max-old-space-size']);
 const NODE_EVAL = /^(-e|-p|-pe|--eval|--print|--input-type)/;
 const G_DEFINITION = /\$g\s*=\s*\(Get-ChildItem\s+"\$env:LOCALAPPDATA\\GitHubDesktop"\s+-Filter\s+'app-\*'\s+-Directory\s*\|\s*Sort-Object\s+Name\s+-Descending\s*\|\s*Select-Object\s+-First\s+1\)\.FullName\s*\+\s*'\\resources\\app\\git\\cmd\\git\.exe'/i;
-const GIT_SENSIBLES = new Set(['clone', 'fetch', 'pull', 'push', 'ls-remote', 'archive', 'submodule', 'remote', 'config']);
-const GIT_HOTES_PERMIS = new Set(['github.com', 'www.github.com']);
+const GIT_SENSIBLES = new Set(['fetch', 'pull', 'push', 'ls-remote', 'archive', 'remote', 'config']);
+// 2026-11-02 (A) : seul le dépôt d'origine exact est un dépôt distant admis ; clone et submodule sont refusés quelle que soit l'adresse (les données ouvertes passent par la porte).
+const GIT_TOUJOURS_REFUSES = new Set(['clone', 'submodule', 'fetch-pack', 'send-pack', 'svn', 'p4', 'imap-send', 'http-fetch', 'http-push', 'remote-http', 'remote-https', 'lfs', 'daemon']);
+const GIT_ORIGINE = 'https://github.com/RAT-NOIR/pokemon-proxy';
+const GIT_ORIGINE_CHEMIN = '/RAT-NOIR/pokemon-proxy';
+const GIT_OPTIONS_A_VALEUR = new Set(['--depth', '--deepen', '--jobs', '-j', '-o', '--push-option', '--server-option', '--refmap', '--negotiation-tip', '--shallow-since', '--shallow-exclude', '-s', '--strategy', '-X', '--strategy-option', '--repo']);
+// réglages -c / --config-env : tout ce qui touche aux dépôts distants, aux adresses, aux proxy ou lance un programme
+const GIT_REGLAGES_DANGEREUX = /(sshcommand|gitproxy|fsmonitor|pager|editor|askpass|^alias\.|credential|proxy|^url\.|^remote\.|^core\.(ssh|gitproxy|hookspath)|^http\.|^https\.)/i;
 const MODIFIE = /(^|[^\w-])(remove-item|del|erase|rm|rmdir|rd|set-content|add-content|clear-content|out-file|copy-item|cp|copy|move-item|mv|move|rename-item|ren|new-item|ni|tee|tee-object|sc|ac|ri|mi|ci|cpi)(?![\w-])|>/i;
 const MODIFIE_VERBE = /(^|[^\w-])(remove-item|del|erase|rm|rmdir|rd|set-content|add-content|clear-content|out-file|copy-item|cp|copy|move-item|mv|move|rename-item|ren|new-item|ni|tee|tee-object|sc|ac|ri|mi|ci|cpi)(?![\w-])/i;
 const ECRIT_SCRIPT = /(?:>>?|(?:^|[^\w-])(?:set-content|add-content|out-file|new-item|copy-item|move-item|rename-item|tee|tee-object|sc|ac|ni|cp|mv|copy|move)(?![\w-]))[^\n;|&]{0,160}?\.(?:c?m?js|py|ps1)\b/i;
@@ -95,7 +104,12 @@ const POSITION_COMMANDE = /(^|[;|&\r\n{(]|\.)\s*$/;
 const ARGUMENT_DE_SHELL = /(^|\s)(-c(?:o\w*)?|-command|\/c|\/k|-lc|-ec|-ic)\b:?\s*$/i;        // PowerShell accepte tout préfixe de -Command (-Com), et -Command:"…"
 const LANCEUR_DE_SHELL = /(^|[\s&(])(powershell|pwsh|cmd|bash|sh|zsh|dash)(\.exe)?(?=\s|$)/i;     // I1 : toute chaîne d'une instruction qui lance un autre shell reste lue
 const REFUS_NODE_PRECHARGE = new Set(['--import', '--loader', '--experimental-loader']);
-const VARIABLES_FIXES = /(ARRETS_HOTES_DOSSIER|PORTE_RESEAU_DOSSIER|PORTE_RESEAU_BANC|PORTE_HOOK_BANC)/gi;
+const VARIABLES_PROXY = /(\$env:|\bset\s+|\bexport\s+|\bsetx\s+|SetEnvironmentVariable\(\s*["']?|(^|[\s;&|({]))(GIT_SSH_COMMAND|GIT_SSH|GIT_PROXY_COMMAND|HTTPS?_PROXY|ALL_PROXY)(?:\s*=|\s+\S|["'])/i;
+// un git en tête d'instruction : guillemets, $g, ou un chemin (avec ou sans & devant, sans espace dans le chemin non guillemeté)
+const GIT_DEBUT = /^\s*(&\s*)?(["'][^"']*git(\.exe)?["']|\$g\b|(?:[^\s"'{}()]*[\\/])?git(\.exe)?(?![\w-]))/i;
+const GIT_DEBUT_B = /^\s*(&\s*)?(["'][^"']*git(\.exe)?["']|\$g\b(?!\s*=)|(?:[^\s"'{}()]*[\\/])?git(\.exe)?(?![\w-]))/i;
+const GIT_ENCHASSE = /(^|[\s{(&;|])((?:[^\s"'{}()]*[\\/])?git(?:\.exe)?|\$g)(?=\s|$)/gi;
+const VARIABLES_FIXES =/(ARRETS_HOTES_DOSSIER|PORTE_RESEAU_DOSSIER|PORTE_RESEAU_BANC|PORTE_HOOK_BANC)/gi;
 const VERBES_SUPPR = /^(remove-item|ri|del|erase|rm|rmdir|rd)$/i;
 const VERBES_DEPL = /^(move-item|mi|mv|move|rename-item|ren|rni)$/i;
 const DRAPEAU_RECURSIF = /^(-r|-rf|-fr|-rec\w*|\/s)$/i;
@@ -175,24 +189,97 @@ function sansChaines(cmd) {
     });
 }
 
+/** 2026-11-02 : le SEUL dépôt distant admis est l'origine exacte (https, github.com sans casse, sans identifiant ni port, avec ou sans .git). */
+function adresseOrigine(a) {
+    try {
+        const u = new URL(a);
+        return u.protocol === 'https:' && !u.username && !u.password && !u.port && !u.search && !u.hash && u.hostname === 'github.com' && (u.pathname === GIT_ORIGINE_CHEMIN || u.pathname === GIT_ORIGINE_CHEMIN + '.git');
+    } catch { return false; }
+}
+/** Un nom de dépôt distant ou une adresse : admis seulement `origin` ou l'adresse d'origine exacte (tout autre nom : on ne sait pas où il pointe). */
+const depotAdmis = x => (/:\/\//.test(x) || /^[\w.-]+@[\w.-]+:/.test(x)) ? adresseOrigine(x) : x === 'origin';
+/** Arguments positionnels d'une sous-commande git ; les options à valeur séparée sont sautées. */
+function positionnelsGit(args) {
+    const p = [];
+    for (let k = 0; k < args.length; k++) {
+        const a = args[k];
+        if (a === '--') { p.push(...args.slice(k + 1)); break; }
+        if (a.startsWith('-')) { if (!a.includes('=') && GIT_OPTIONS_A_VALEUR.has(a)) k++; continue; }
+        p.push(a);
+    }
+    return p;
+}
 function verdictGit(ins) {
     const t = jetons(ins.replace(/^\s*&\s*/, ''));
     let i = t.findIndex(x => /(^|[\\/])git(\.exe)?$/i.test(x) || x.toLowerCase() === '$g');
     if (i < 0) return null;
     for (let j = i + 1; j < t.length; j++) {
-        if (t[j] === '-c' && t[j + 1] && /(sshcommand|gitproxy|fsmonitor|pager|editor|askpass|^alias\.|credential\.helper|http\.proxy|^url\.)/i.test(t[j + 1])) return `git -c ${t[j + 1]} : réglage qui lance un programme ou détourne l'adresse`;
+        if (t[j] === '-c' && t[j + 1] && GIT_REGLAGES_DANGEREUX.test(t[j + 1])) return `git -c ${t[j + 1]} : réglage qui lance un programme ou détourne l'adresse`;
+        if (/^--config-env(=|$)/i.test(t[j])) { const v = t[j].includes('=') ? t[j].slice(t[j].indexOf('=') + 1) : (t[j + 1] || ''); if (GIT_REGLAGES_DANGEREUX.test(v)) return `git --config-env ${v} : réglage qui lance un programme ou détourne l'adresse`; }
     }
     i++;
-    while (i < t.length && t[i].startsWith('-')) i += (t[i] === '-C' || t[i] === '-c') ? 2 : 1;
+    while (i < t.length && t[i].startsWith('-')) i += (t[i] === '-C' || t[i] === '-c' || t[i] === '--git-dir' || t[i] === '--work-tree' || t[i] === '--namespace') ? 2 : 1;
     const sub = (t[i] || '').toLowerCase();
+    if (GIT_TOUJOURS_REFUSES.has(sub)) return `git ${sub} : refusé quelle que soit l'adresse (données ouvertes : node collecte-cartes/porte-reseau.js lire <url>)`;
     if (!GIT_SENSIBLES.has(sub)) return null;
     if (sub === 'config' && /\burl\.\S*\.(pushinsteadof|insteadof)/i.test(ins)) return 'git config url.*.insteadOf : réécriture d\'adresse';
-    const adresses = ins.match(/(?:https?|git|ssh|ftps?):\/\/[^\s'"]+|[\w.-]+@[\w.-]+:[^\s'"]*/gi) || [];
-    for (const m of ins.matchAll(/--remote=([^\s'"]+)/gi)) if (!/^(?:\w+:\/\/|[\w.-]+@)/.test(m[1])) adresses.push(`ssh://${m[1].split(':')[0]}/`);
-    for (const a of adresses) {
-        let h;
-        try { h = /:\/\//.test(a) ? new URL(a).hostname : a.split('@')[1].split(':')[0]; } catch { return `git ${sub} : adresse illisible (${a})`; }
-        if (!GIT_HOTES_PERMIS.has(h.toLowerCase())) return `git ${sub} vers ${h} : seul github.com est permis`;
+    const args = t.slice(i + 1), pos = positionnelsGit(args);
+    const refus = m => `git ${sub} : ${m} (seul le dépôt d'origine ${GIT_ORIGINE} est admis)`;
+    // toute adresse écrite dans la commande doit être l'origine exacte
+    const adresses = ins.match(/(?:\w+):\/\/[^\s'"]+|[\w.-]+@[\w.-]+:[^\s'"]*/gi) || [];
+    for (const a of adresses) if (!adresseOrigine(a)) return refus(`adresse ${a}`);
+    for (const a of args) if (/^--(upload-pack|receive-pack|exec)\b/i.test(a)) return refus(`option ${a} qui lance un programme`);
+    if (sub === 'fetch' || sub === 'pull' || sub === 'push') {
+        if (sub !== 'push' && args.some(a => /^--(all|multiple)$/i.test(a))) return refus('--all / --multiple vise tous les dépôts distants');
+        for (const a of args) { const m = /^--repo=(.*)$/i.exec(a); if (m && !depotAdmis(m[1])) return refus(`--repo=${m[1]}`); }
+        if (args.some((a, k) => a === '--repo' && !(args[k + 1] !== undefined && depotAdmis(args[k + 1])))) return refus('--repo vers un autre dépôt');
+        if (pos.length && !depotAdmis(pos[0])) return refus(`dépôt « ${pos[0]} »`);
+    } else if (sub === 'ls-remote') {
+        if (pos.length && !depotAdmis(pos[0])) return refus(`dépôt « ${pos[0]} »`);
+    } else if (sub === 'archive') {
+        for (const a of args) { const m = /^--remote=(.*)$/i.exec(a); if (m && !depotAdmis(m[1])) return refus(`--remote=${m[1]}`); }
+        if (args.some((a, k) => a === '--remote' && args[k + 1] !== undefined && !depotAdmis(args[k + 1]))) return refus('--remote vers un autre dépôt');
+    } else if (sub === 'remote') {
+        if (/^(add|set-url)$/i.test(pos[0] || '') && !pos.slice(1).some(x => /:\/\//.test(x) || /^[\w.-]+@[\w.-]+:/.test(x))) return refus(`remote ${pos[0]} sans adresse littérale`);
+    } else if (sub === 'config') {
+        const k = pos.findIndex(x => /^(remote\.[^.\s]+\.(url|pushurl)|url\..*)$/i.test(x));
+        if (k >= 0 && pos[k + 1] !== undefined && !depotAdmis(pos[k + 1])) return refus(`${pos[k]} réglé sur une valeur non admise`);
+    }
+    return null;
+}
+/** 2026-11-02 : npm/pnpm/yarn, pip/pipx/uv — fermé par défaut : seules les sous-commandes locales listées passent. */
+const PM_LOCAL = new Set(['test', 't', 'tst', 'run', 'run-script', 'start', 'stop', 'restart', 'help', 'ls', 'list']);
+// Gestionnaires cherchés PARTOUT dans l'instruction (hors chaînes-arguments), pas seulement en tête : { npm i }, $(npm i), cmd /d /c npm install, Start-Process npm…
+const PM_TOUJOURS = new Set(['pnpx', 'uvx', 'bunx', 'corepack', 'easy_install']);
+const PM_SOUS_REFUSEES = {
+    poetry: /^(add|install|update|lock|self|sync|build|publish)$/i, pdm: /^(add|install|update|sync|lock|build|publish)$/i, pipenv: /^(install|update|sync|lock|upgrade)$/i,
+    conda: /^(install|create|update|upgrade|env|search|install)$/i, mamba: /^(install|create|update|upgrade)$/i, cargo: /^(install|add|fetch|update|publish)$/i,
+    go: /^(get|install|mod)$/i, gem: /^(install|update|fetch|push)$/i, composer: /^(install|require|update|create-project|global)$/i,
+    dotnet: /^(add|restore|tool|publish|workload)$/i, nvm: /^(install|install-latest-npm)$/i,
+};
+const PM_RE = /(^|[^\w.-])(npm|pnpm|pnpx|yarn|pip3?(?:\.\d+)?|pipx|uvx?|bunx|corepack|poetry|pdm|pipenv|conda|mamba|easy_install|cargo|go|gem|composer|dotnet|nvm)(?:\.(?:exe|cmd|ps1|bat))?(?=\s|$|[)}"'])/gi;
+function verdictPaquets(ins) {
+    const strict = /(^|[^\w.-])(start-process|saps|start|invoke-command|icm)(\.exe)?(?![\w-])/i.test(ins);      // la sous-commande est dans une chaîne retirée : on ne peut pas conclure
+    for (const m of ins.matchAll(PM_RE)) {
+        const nom = m[2].toLowerCase().replace(/\.\d+$/, '');
+        const apres = ins.slice(m.index + m[0].length).split(/[)}]/)[0];
+        const reste = apres.split(/\s+/).map(x => x.replace(/^["'`]+|["'`]+$/g, '')).filter(Boolean);
+        const sub = reste.find(x => !x.startsWith('-'));
+        const info = reste.some(x => /^(-v|--version|-h|--help)$/i.test(x));
+        if (PM_TOUJOURS.has(nom)) return `${nom} : exécution ou installation de paquet distant, refusé`;
+        if (/^(npm|pnpm|yarn)$/.test(nom)) {
+            if (sub === undefined) { if ((nom === 'yarn' || strict) && !info) return `${nom} sans sous-commande locale lisible : refusé`; continue; }
+            if (!PM_LOCAL.has(sub.toLowerCase())) return `${nom} ${sub} : installation ou accès au registre, refusé (seuls test, run, start… sont admis)`;
+            continue;
+        }
+        if (/^(pip3?|pipx|uv)$/.test(nom)) {
+            if (reste.some(x => /^(--index-url|--extra-index-url|-i)(=|$)/i.test(x))) return `${nom} avec un index de paquets (--index-url, -i) : refusé`;
+            if (sub === undefined) { if (!info) return `${nom} sans sous-commande lisible : refusé`; continue; }
+            if (/^pip3?$/.test(nom) && /^(list|show|freeze|check|help)$/i.test(sub)) continue;
+            return `${nom} ${sub} : accès au registre, refusé`;
+        }
+        const re = PM_SOUS_REFUSEES[nom];
+        if (re && (sub !== undefined ? re.test(sub) : strict)) return `${nom} ${sub || ''} : télécharge des paquets, refusé`;
     }
     return null;
 }
@@ -345,6 +432,7 @@ function sousExpressions(texte) {
 }
 
 function verdictShell(cmd, cwd) {
+    cmd = cmd.replace(/`\r?\n[ \t]*/g, ' ').replace(/\\\r?\n[ \t]*/g, ' ');        // 2026-11-02 : continuation de ligne (PowerShell `, Bash \) recollée avant l'analyse
     cmd = cmd.replace(/`(?=[A-Za-z0-9_])/g, '');        // I1 : l'accent grave PowerShell (Invoke-Web`Request) ne cache rien
     const raisons = [];
     const protections = [];      // « libre » ne lève QUE les raisons réseau : celles-ci (porte, arrêts, variables fixes, levée) restent pour tout le monde
@@ -355,6 +443,8 @@ function verdictShell(cmd, cwd) {
         if (/^["'`\]\)]*\s*[=,]/.test(apres) || /(env:|\bset|\bexport|\bsetx|environment\w*\(?|\benv)\s*["'(]?\s*$/i.test(avant)) prot(`${m[0]} : les dossiers des arrêts et de la porte sont FIXES, une commande ne les change pas`);
     }
     if (/NODE_OPTIONS/i.test(cmd)) prot('NODE_OPTIONS précharge du code node : refusé');
+    // 2026-11-02 : une commande ne pose ni proxy ni programme ssh pour git (les chaînes-arguments, comme un message de commit, sont écartées)
+    if (VARIABLES_PROXY.test(sansChaines(cmd))) raisons.push('variable de proxy ou GIT_SSH_COMMAND posée dans la commande : refusé');
     // I1 : dot-source d'une variable ou d'une expression (équivalent de &)
     if (/(^|[;|&\r\n{(])\s*\.\s+[$(]/.test(cmd)) raisons.push('dot-source (. $x, . (…)) : cible non résolue');
     if (mentionneProtege(cmd) && MODIFIE.test(cmd)) prot('modification du dossier de la porte ou des arrêts (robots\\, cadence\\, journal, arrets-hotes\\, ARRET/LEVEE/PAUSE-HOTE) : la levée ou la suppression d\'un arrêt est une action de l\'utilisateur, à la main dans son terminal');
@@ -386,7 +476,7 @@ function verdictShell(cmd, cwd) {
             if (wd) { const v = wd[1].replace(/^["']|["']$/g, ''); if (nonResolu(v)) incIns = true; else dirIns = path.resolve(ctx.cwd, v); }
         }
         executees++; if (incIns || !estLibre(dirIns)) horsLibre++;
-        if (/^\s*(&\s*)?(["'][^"']*git(\.exe)?["']|\$g\b|git(\.exe)?(?![\w-]))/i.test(ins)) { const g = verdictGit(ins); if (g) raisons.push(g); continue; }
+        if (GIT_DEBUT.test(ins)) { const g = verdictGit(ins); if (g) raisons.push(g); continue; }
         hors.push(ins);
         const tl = jetons(ins.replace(/^\s*&\s*/, '')), ip = tl.findIndex(x => /^porte-reseau(\.js)?$/i.test(path.basename(x)));       // B3 : `lever` est une action de l'utilisateur
         if (ip >= 0 && tl.slice(ip + 1).some(x => x.toLowerCase() === 'lever')) prot('porte-reseau.js lever : un agent ne lève pas un arrêt ; la levée est une action de l\'utilisateur, à la main dans son terminal');
@@ -407,7 +497,16 @@ function verdictShell(cmd, cwd) {
     }
     for (const ins of sans.split(/[;|&\r\n]+/)) {
         if (!ins.trim()) continue;
-        if (/^\s*(&\s*)?(["'][^"']*git(\.exe)?["']|\$g\b(?!\s*=)|git(\.exe)?(?![\w-]))/i.test(ins)) continue;
+        const pk = verdictPaquets(ins); if (pk) raisons.push(pk);
+        const enGit = GIT_DEBUT_B.test(ins);
+        if (!enGit) {      // git enchâssé ({ git fetch evil }, $(git …)) ou lancé par Start-Process : jugé sur le texte sans chaînes (une adresse entre guillemets y devient vide, donc refusée)
+            for (const g of ins.matchAll(GIT_ENCHASSE)) {
+                if (!ins.slice(0, g.index + g[1].length).replace(/[\s&]/g, '')) continue;
+                const v = verdictGit(ins.slice(g.index + g[1].length).split(/[)}]/)[0]); if (v) raisons.push(v);
+            }
+            if (/(^|[^\w.-])(start-process|saps|start)(\.exe)?(?![\w-])[\s\S]*?(^|[\s'"])(?:[^\s"']*[\\/])?git(?:\.exe)?(?=[\s'"]|$)/i.test(ins)) raisons.push('Start-Process vers git : refusé (la sous-commande ne se lit pas)');
+        }
+        if (enGit) continue;
         if (/(^|[^\w.-])node(\.exe)?\s[^\n]*porte-reseau\.js(\s|$)/i.test(ins) && ctx.estPorte) continue;        // la porte elle-même : l'adresse qu'on lui donne n'est pas un outil
         const touches = OUTILS.filter(m => m.re.test(ins) && !(m.sauf && m.sauf.test(ins))).map(m => m.nom);
         if (touches.length) raisons.push(`outil réseau (${touches.join(', ')})`);
