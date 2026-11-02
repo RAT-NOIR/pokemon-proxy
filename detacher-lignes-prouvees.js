@@ -121,6 +121,14 @@ const DECISIONS = {
         ['202633|363674', 'Rayquaza EX [Mega Ascension | Aeroscream]', 'Rayquaza-EX', [289723, 289780, 363675], 'set+numero', 'la vignette Cardmarket montre le Rayquaza-EX VERT n° XY66 (jumbo) ; la ligne le joint à la fiche XY69, le Rayquaza noir chromé : autre illustration']
     ].map(([id, nomCm, carteNom, justes, preuveLigne, vu]) => ({ id, preuve: 'vu', type: 'fiche-contredite-par-la-vue', nomCm, carteNom, justes, preuveLigne, vu,
         pourquoi: `feu vert de l'éditeur du 27/10 : « ${nomCm} » (jumbo) joint à la fiche XY69 de « ${carteNom} » (ligne posée par ${preuveLigne}) — ${vu}` })),
+    // FEU VERT NOMMÉ du testeur (2026-11-02) : « Ligne 25470|605116 (Erika's Bellsprout jointe à Stretch Vine) : détacher ». Le produit 605116
+    // « Erika's Bellsprout [Careless Tackle] » (Leaders-Stadium V1) est joint à DEUX cartes de même nom : 25460 (attaque Careless Tackle, set+nom+attaques,
+    // JUSTE, jamais détachée ici) et 25470 (attaque Stretch Vine, set+nom seul). Lu en base le 2026-11-02 : Careless Tackle est sur 25460, pas sur 25470.
+    // Témoin `attaques` (autre = 25460, 1 contre 0) rejoué à l'écriture ; `nom` ne contredit rien (même nom). Le produit garde la ligne 25460 : pas de reste.
+    '2026-11-02': [
+        { id: '25470|605116', preuve: 'attaques', autre: 25460, type: 'fiche-contredite-par-les-attaques',
+            pourquoi: 'Erika\'s Bellsprout [Careless Tackle] joint par set+nom aux DEUX Bellsprout de Leaders\' Stadium : les attaques désignent 25460 (Careless Tackle), pas 25470 (Stretch Vine)' }
+    ],
     '2026-10-17': [
         ['158475|676477', 'Energy Switch', 'Minccino'], ['148517|676478', 'Energy Search', 'Ultra Ball'], ['25165|676479', 'Switch', 'Rare Candy'],
         ['158409|676480', 'Pokédex HANDY910is', 'Giant Cape'], ['120958|676481', 'Poké Ball', 'Professor Juniper'], ['126640|676482', 'Buffer Piece', 'Cheren'],
