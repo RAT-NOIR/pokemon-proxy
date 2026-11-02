@@ -20,8 +20,9 @@ function fabriquer({ jeton = true, candidats = null, resolution = null } = {}) {
         if (chemin === '/api/banc/seau/verite') { scans.find(s => s.scanId === corps.scanId).etiquetees++; return { statut: 200, json: { success: true, rev: 1, candidatsVus: false } }; }
         return { statut: 404, json: null };
     };
-    const ecran = { scan: null, attente: undefined, candidats: undefined, messages: [], vide: 0, session: null, progres: null };
+    const ecran = { scan: null, attente: undefined, candidats: undefined, messages: [], vide: 0, session: null, progres: null, photo: null };
     const ui = {
+        montrerPhotoSuffisante: v => { ecran.photo = v; },
         montrerScan: (s, carte) => { ecran.scan = { ...s, carte }; }, montrerAttente: a => { ecran.attente = a; }, montrerCandidats: l => { ecran.candidats = l; },
         dire: (t, c) => ecran.messages.push([t, c]), montrerVide: () => { ecran.vide++; ecran.scan = null; }, montrerSession: v => { ecran.session = v; }, montrerProgres: p => { ecran.progres = p; }
     };
@@ -47,12 +48,18 @@ const nCandidats = appels => appels.filter(a => a.chemin === '/api/banc/seau/can
         await ctrl.entrer('777');
         H.v('2. première Entrée sur un idProduct : une vérité en attente de confirmation, RIEN d\'écrit', [ecran.attente && ecran.attente.corps, appels.some(a => a.chemin === '/api/banc/seau/verite')], [{ idProduct: 777 }, false]);
         await ctrl.entrer('777');
+        H.v('2. 🔑 seconde Entrée SANS réponse à « la photo suffit-elle ? » : refusée, rien d\'écrit, la confirmation reste en attente, message d\'erreur', [appels.some(a => a.chemin === '/api/banc/seau/verite'), !!ecran.attente, ecran.messages[ecran.messages.length - 1][1]], [false, true, 'erreur']);
+        ctrl.photoSuffisante(false);
+        await ctrl.entrer('777');
         const v = appels.find(a => a.chemin === '/api/banc/seau/verite');
-        H.v('2. seconde Entrée : la vérité est écrite (scan, carte, idProduct, via)', v && v.corps, { scanId: 'a'.repeat(24), carte: 0, via: 'idProduct', idProduct: 777 });
+        H.v('2. seconde Entrée : la vérité est écrite (scan, carte, idProduct, via, photoSuffisante)', v && v.corps, { scanId: 'a'.repeat(24), carte: 0, via: 'idProduct', photoSuffisante: false, idProduct: 777 });
         H.v('2. passage AUTOMATIQUE au scan suivant (rang 2), confirmation effacée', [ecran.scan && ecran.scan.rang, ecran.attente], [2, null]);
+        H.v('2. 🔑 la réponse est EFFACÉE au scan suivant (aucune réponse héritée)', [ctrl.etat().photoSuffisante, ecran.photo], [null, null]);
         await ctrl.entrer('https://www.cardmarket.com/fr/Pokemon/Products/Singles/Jungle/Pikachu-V1-JU60');
+        ctrl.photoSuffisante(true);
         H.v('2. une adresse Cardmarket : résolue par l\'API (local), vérité en attente, via url', [appels.filter(a => a.chemin === '/api/banc/resoudre-cardmarket').length, ecran.attente && ecran.attente.via, ecran.attente && ecran.attente.corps], [1, 'url', { idProduct: 777 }]);
         await ctrl.entrer('');
+        H.v('2. la seconde vérité porte photoSuffisante vrai', appels.filter(a => a.chemin === '/api/banc/seau/verite')[1].corps.photoSuffisante, true);
         H.v('2. Entrée sur un champ vide avec confirmation en attente : confirme', appels.filter(a => a.chemin === '/api/banc/seau/verite').length, 2);
         H.v('2. dernier scan étiqueté : la page dit qu\'il n\'y en a plus', [ecran.vide, ecran.scan], [1, null]);
         H.v('2. 🔑 pas un seul appel à /candidats pendant tout le parcours', nCandidats(appels), 0);
@@ -81,6 +88,7 @@ const nCandidats = appels => appels.filter(a => a.chemin === '/api/banc/seau/can
         H.v('4. l\'appel porte le scan et la carte', appels.find(a => a.chemin === '/api/banc/seau/candidats').corps, { scanId: 'a'.repeat(24), carte: 0 });
         ctrl.choisirCandidat(ecran.candidats[1]);
         H.v('4. choisir un candidat : en attente, via candidat, RIEN d\'écrit', [ecran.attente.via, ecran.attente.corps, appels.some(a => a.chemin === '/api/banc/seau/verite')], ['candidat', { idProduct: 4 }, false]);
+        ctrl.photoSuffisante(true);
         await ctrl.confirmer();
         H.v('4. confirmer : écrite via candidat', appels.find(a => a.chemin === '/api/banc/seau/verite').corps.via, 'candidat');
         H.v('4. le scan suivant n\'affiche plus les candidats du précédent', [ecran.candidats, ecran.scan.rang], [null, 2]);
@@ -93,9 +101,21 @@ const nCandidats = appels => appels.filter(a => a.chemin === '/api/banc/seau/can
         H.v('5. « pas une carte » demande une CONFIRMATION (rien d\'écrit)', [ecran.attente && ecran.attente.corps, appels.some(a => a.chemin === '/api/banc/seau/verite')], [{ aucune: 'pas-une-carte' }, false]);
         ctrl.annuler();
         H.v('5. annuler efface l\'attente', ecran.attente, null);
-        ctrl.aucune('hors-catalogue'); await ctrl.confirmer();
+        ctrl.aucune('hors-catalogue');
+        ctrl.photoSuffisante(true); ctrl.photoSuffisante(false);
+        await ctrl.confirmer();
         const v = appels.find(a => a.chemin === '/api/banc/seau/verite');
-        H.v('5. confirmée : aucune écrite, via manuel (pas « idProduct » sans idProduct)', v.corps, { scanId: 'a'.repeat(24), carte: 0, via: 'manuel', aucune: 'hors-catalogue' });
+        H.v('5. confirmée : aucune écrite, via manuel, la DERNIÈRE réponse photoSuffisante (modifiable avant clôture)', v.corps, { scanId: 'a'.repeat(24), carte: 0, via: 'manuel', photoSuffisante: false, aucune: 'hors-catalogue' });
+    });
+
+    await essayer('photo suffisante', async () => {
+        const { ecran, ctrl } = fabriquer();
+        await ctrl.demarrer();
+        H.v('6. au chargement : aucune réponse (ni oui ni non), rien de pré-rempli', [ctrl.etat().photoSuffisante, ecran.photo], [null, null]);
+        ctrl.photoSuffisante(true);
+        H.v('6. répondre oui : l\'écran le montre', [ctrl.etat().photoSuffisante, ecran.photo], [true, true]);
+        ctrl.photoSuffisante('peut-être');
+        H.v('6. une valeur qui n\'est ni oui ni non est ignorée', ctrl.etat().photoSuffisante, true);
     });
 
     H.bilan();

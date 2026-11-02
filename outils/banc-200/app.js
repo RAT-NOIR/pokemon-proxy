@@ -56,6 +56,7 @@
         },
         cacherCode: function () { $('codeLiaison').textContent = ''; $('lien').hidden = true; ui.dire('Extension liée : les scans arrivent.', 'bon'); },
         montrerAvis: function (texte) { $('avis').textContent = texte || ''; $('avis').hidden = !texte; },
+        montrerPhotoSuffisante: function (v) { $('photoOui').setAttribute('aria-pressed', v === true ? 'true' : 'false'); $('photoNon').setAttribute('aria-pressed', v === false ? 'true' : 'false'); },
         vider: function () { var e = $('entree'); e.value = ''; e.focus(); e.select(); },
         montrerArret: function () {
             scanCourant = null; $('saisie').hidden = true; $('arreter').hidden = true; $('connexion').textContent = 'arrêté'; $('vignettes').textContent = ''; $('vue').textContent = '';
@@ -83,6 +84,8 @@
     $('confirmer').addEventListener('click', function () { ctrl.confirmer(); });
     $('annuler').addEventListener('click', function () { ctrl.annuler(); });
     $('voir').addEventListener('click', function () { ctrl.voirCandidats(); });
+    $('photoOui').addEventListener('click', function () { ctrl.photoSuffisante(true); $('entree').focus(); });
+    $('photoNon').addEventListener('click', function () { ctrl.photoSuffisante(false); $('entree').focus(); });
     $('pasCarte').addEventListener('click', function () { ctrl.aucune('pas-une-carte'); });
     $('horsCatalogue').addEventListener('click', function () { ctrl.aucune('hors-catalogue'); });
     $('lier').addEventListener('click', function () { ctrl.lier(); });
@@ -94,6 +97,8 @@
         var k = e.key.toLowerCase();
         if (k >= '1' && k <= '8' && scanCourant && Number(k) <= scanCourant.photos) { e.preventDefault(); photoCourante = Number(k) - 1; afficherPhoto(); }
         else if (k === 'c') { e.preventDefault(); ctrl.voirCandidats(); }
+        else if (k === 'o') { e.preventDefault(); ctrl.photoSuffisante(true); }
+        else if (k === 'x') { e.preventDefault(); ctrl.photoSuffisante(false); }
         else if (k === 'n') { e.preventDefault(); ctrl.aucune('pas-une-carte'); }
         else if (k === 'h') { e.preventDefault(); ctrl.aucune('hors-catalogue'); }
     });

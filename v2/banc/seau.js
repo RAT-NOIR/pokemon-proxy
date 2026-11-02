@@ -401,8 +401,10 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
     }
 
     /** La vérité d'une carte d'un scan rangé. `candidatsVus` est CALCULÉ ici (une vue enregistrée pour ce scan et cette carte) : le client ne le déclare jamais. */
-    async function saisirVerite({ scanId, carte = 0, idProduct, aucune, via, porteur }) {
-        const p = await preparerVerite({ scanId, carte, idProduct, aucune, via, porteur });
+    async function saisirVerite({ scanId, carte = 0, idProduct, aucune, via, photoSuffisante, porteur }) {
+        // « la photo suffit-elle à un expert pour trancher l'impression exacte ? » : vrai/faux de l'éditeur, enregistré avec la vérité ; absent = on ne touche pas à la valeur déjà posée
+        if (photoSuffisante !== undefined && typeof photoSuffisante !== 'boolean') throw erreur('ENTREE', 'photo-suffisante');
+        const p = { ...await preparerVerite({ scanId, carte, idProduct, aucune, via, porteur }), photoSuffisante };
         // 🔑 un JUGE scellé (ou en cours de scellement) ne reçoit plus AUCUNE vérité : une erreur humaine s'ajoute en ERRATUM (ajouterErratum), jamais par réécriture
         const seau = await col('seaux').findOne({ _id: p.ligne.seauId });
         if (!seau) throw erreur('CONFLIT', 'seau-illisible');
@@ -434,17 +436,17 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
         return { ligne, scanId, carte, idProduct: idProduct ?? null, aucune: aucune ?? null, via, candidatsVus: vues.length > 0, vuesN: vues.length };
     }
 
-    async function ecrireVerite({ ligne, scanId, carte, idProduct, aucune, via, candidatsVus, vuesN }) {
+    async function ecrireVerite({ ligne, scanId, carte, idProduct, aucune, via, candidatsVus, vuesN, photoSuffisante }) {
         const id = `${scanId}:${carte}`, now = horloge();
         const contenu = { idProduct, aucune, via, candidatsVus, vuesN, saisieLe: now };
         for (let essai = 0; essai < 3; essai++) {
             const e = await col('verites').findOne({ _id: id });
             if (!e) {
-                try { await col('verites').insertOne({ _id: id, seauId: ligne.seauId, scanId, carte, ...contenu, rev: 1, historique: [] }); return { rev: 1, candidatsVus }; }
+                try { await col('verites').insertOne({ _id: id, seauId: ligne.seauId, scanId, carte, ...contenu, photoSuffisante: photoSuffisante ?? null, rev: 1, historique: [] }); return { rev: 1, candidatsVus }; }
                 catch (x) { if (x && x.code === 11000) continue; throw x; }
             }
-            const ancien = { rev: e.rev, idProduct: e.idProduct, aucune: e.aucune, via: e.via, candidatsVus: e.candidatsVus, saisieLe: e.saisieLe };
-            const r = await col('verites').updateOne({ _id: id, rev: e.rev }, { $set: { ...contenu, candidatsVus: candidatsVus || e.candidatsVus === true, rev: e.rev + 1 }, $push: { historique: ancien } });
+            const ancien = { rev: e.rev, idProduct: e.idProduct, aucune: e.aucune, via: e.via, candidatsVus: e.candidatsVus, photoSuffisante: e.photoSuffisante ?? null, saisieLe: e.saisieLe };
+            const r = await col('verites').updateOne({ _id: id, rev: e.rev }, { $set: { ...contenu, photoSuffisante: photoSuffisante ?? e.photoSuffisante ?? null, candidatsVus: candidatsVus || e.candidatsVus === true, rev: e.rev + 1 }, $push: { historique: ancien } });
             if (r && r.matchedCount === 1) return { rev: e.rev + 1, candidatsVus: candidatsVus || e.candidatsVus === true };
         }
         throw erreur('CONFLIT', 'concurrence');

@@ -75,8 +75,8 @@ function monter(router, cfg, seaux) {
     });
     router.post('/api/banc/seau/verite', ...base, async (req, res) => {
         const b = req.body;
-        if (!cleStr(b, ['scanId', 'carte', 'idProduct', 'aucune', 'via']) || typeof b.scanId !== 'string' || !FORME_ID.test(b.scanId)) return refuse(res, 'corps');
-        try { return res.status(200).json({ success: true, ...await seaux.saisirVerite({ scanId: b.scanId, carte: b.carte === undefined ? 0 : b.carte, idProduct: b.idProduct, aucune: b.aucune, via: b.via, porteur: porteurDe(req) }) }); } catch (e) { return repondre(res, e, 'verite'); }
+        if (!cleStr(b, ['scanId', 'carte', 'idProduct', 'aucune', 'via', 'photoSuffisante']) || typeof b.scanId !== 'string' || !FORME_ID.test(b.scanId)) return refuse(res, 'corps');
+        try { return res.status(200).json({ success: true, ...await seaux.saisirVerite({ scanId: b.scanId, carte: b.carte === undefined ? 0 : b.carte, idProduct: b.idProduct, aucune: b.aucune, via: b.via, photoSuffisante: b.photoSuffisante, porteur: porteurDe(req) }) }); } catch (e) { return repondre(res, e, 'verite'); }
     });
 
     // L'ERRATUM : la seule correction d'une vérité d'un juge SCELLÉ ; ajouté à la chaîne, jamais une réécriture (seau.js).

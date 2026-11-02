@@ -248,6 +248,19 @@ const blocs = async (w = 400, h = 560) => {
         v = await db.col('banc_seau_verites').findOne({ scanId: s1, carte: 0 });
         H.v('4. l\'historique garde la première saisie', [v.idProduct, v.historique.length, v.historique[0].idProduct, v.historique[0].candidatsVus], [2002, 1, 2005, false]);
         H.v('4. un candidat qui n\'a PAS été montré : 409', detail(await post(sv, ADM, '/api/banc/seau/verite', { scanId: s1, idProduct: 2005, via: 'candidat' })), 'candidat-non-vu');
+        // 4e bis. « la photo suffit-elle à un expert ? » : booléen enregistré AVEC la vérité, modifiable, jamais renvoyé comme un indice
+        H.v('4. photoSuffisante qui n\'est pas un booléen : 400', detail(await post(sv, ADM, '/api/banc/seau/verite', { scanId: s1, idProduct: 2002, via: 'idProduct', photoSuffisante: 'oui' })), 'photo-suffisante');
+        v = await db.col('banc_seau_verites').findOne({ scanId: s1, carte: 0 });
+        H.v('4. une saisie sans la réponse la laisse nulle (rev 2 inchangée par le refus)', [v.rev, v.photoSuffisante ?? null], [2, null]);
+        r = await post(sv, ADM, '/api/banc/seau/verite', { scanId: s1, idProduct: 2002, via: 'idProduct', photoSuffisante: true });
+        v = await db.col('banc_seau_verites').findOne({ scanId: s1, carte: 0 });
+        H.v('4. photoSuffisante vrai : écrite avec la vérité (même document)', [r.statut, v.rev, v.photoSuffisante], [200, 3, true]);
+        await post(sv, ADM, '/api/banc/seau/verite', { scanId: s1, idProduct: 2002, via: 'idProduct', photoSuffisante: false });
+        v = await db.col('banc_seau_verites').findOne({ scanId: s1, carte: 0 });
+        H.v('4. modifiable : faux remplace vrai, et l\'historique garde vrai', [v.photoSuffisante, v.historique[v.historique.length - 1].photoSuffisante], [false, true]);
+        await post(sv, ADM, '/api/banc/seau/verite', { scanId: s1, idProduct: 2002, via: 'idProduct' });
+        v = await db.col('banc_seau_verites').findOne({ scanId: s1, carte: 0 });
+        H.v('4. une re-saisie sans le champ ne l\'efface pas', v.photoSuffisante, false);
         // 4f. les refus
         H.v('4. un idProduct inconnu du catalogue : 422', (await post(sv, ADM, '/api/banc/seau/verite', { scanId: scans[1], idProduct: 999999, via: 'idProduct' })).statut, 422);
         H.v('4. idProduct ET aucune : 400', (await post(sv, ADM, '/api/banc/seau/verite', { scanId: scans[1], idProduct: 2001, aucune: 'pas-une-carte', via: 'idProduct' })).statut, 400);

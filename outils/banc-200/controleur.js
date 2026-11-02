@@ -34,7 +34,9 @@
 
     function creer(o) {
         var api = o.api, ui = o.ui;
-        var etat = { seau: null, scans: [], scan: null, carte: 0, attente: null, occupe: false, lanceur: false, resolution: false, autres: 0 };
+        var etat = { seau: null, scans: [], scan: null, carte: 0, attente: null, occupe: false, lanceur: false, resolution: false, autres: 0, photoSuffisante: null };      // photoSuffisante : null tant que l'éditeur n'a pas répondu (jamais pré-remplie)
+        function montrerPhoto() { if (ui.montrerPhotoSuffisante) ui.montrerPhotoSuffisante(etat.photoSuffisante); }
+        var PHRASE_PHOTO = 'Répondez d\'abord à « La photo suffit-elle à un expert pour trancher l\'impression exacte ? » (oui ou non).';
         var attendreMs = o.attendre || function (f, ms) { setTimeout(f, ms); };            // injectable : un banc n'attend pas pour de vrai
         function connexion(c) { if (ui.montrerConnexion) ui.montrerConnexion(c); }
         var PHRASE_EXPIREE = 'Connexion à l\'essai impossible (jeton refusé) — attendez une minute puis double-cliquez de nouveau sur « Juge Rat-Market » ; si ça persiste, prévenez l\'agent API';
@@ -48,6 +50,7 @@
         }
         function afficher() {
             ui.montrerCandidats(null); attendre(null);
+            etat.photoSuffisante = null; montrerPhoto();                 // une réponse ne passe jamais d'une carte à la suivante
             if (ui.montrerAvis) ui.montrerAvis(etat.scan && etat.autres > 0 ? phraseAutres(etat.autres) : '');
             if (!etat.scan) { ui.montrerVide(phraseVide()); return; }
             etat.carte = Math.min(etat.scan.etiquetees, Math.max(0, etat.scan.cartes - 1));
@@ -97,8 +100,9 @@
         }
         function confirmer() {
             if (!etat.attente || !etat.scan || etat.occupe) return Promise.resolve();
+            if (etat.photoSuffisante !== true && etat.photoSuffisante !== false) { ui.dire(PHRASE_PHOTO, 'erreur'); return Promise.resolve(); }      // obligatoire avant de valider ; la confirmation reste en attente
             etat.occupe = true;
-            var corps = { scanId: etat.scan.scanId, carte: etat.carte, via: etat.attente.via };
+            var corps = { scanId: etat.scan.scanId, carte: etat.carte, via: etat.attente.via, photoSuffisante: etat.photoSuffisante };
             Object.keys(etat.attente.corps).forEach(function (k) { corps[k] = etat.attente.corps[k]; });
             return api('POST', '/api/banc/seau/verite', corps).then(function (r) {
                 etat.occupe = false;
@@ -140,6 +144,7 @@
             if (!etat.scan) return;
             attendre({ libelle: type === 'pas-une-carte' ? 'Pas une carte' : 'Hors catalogue', corps: { aucune: type }, via: 'manuel' });
         }
+        function photoSuffisante(v) { if (v !== true && v !== false) return; etat.photoSuffisante = v; montrerPhoto(); }      // modifiable jusqu'à la confirmation (la dernière réponse gagne)
         function poserJeton(jeton) {
             return api('POST', '/_session', { jeton: jeton }).then(function (r) { if (r.statut === 200) { ui.montrerSession(false); return charger(); } ui.dire('Jeton refusé.', 'erreur'); });
         }
@@ -164,7 +169,7 @@
             });
         }
         function arreter() { return api('POST', '/_arreter', {}).then(function () { if (ui.montrerArret) ui.montrerArret(); }, function () { if (ui.montrerArret) ui.montrerArret(); }); }
-        return { lier: lier, arreter: arreter, demarrer: demarrer, charger: charger, entrer: entrer, confirmer: confirmer, annuler: function () { attendre(null); }, voirCandidats: voirCandidats, choisirCandidat: choisirCandidat, aucune: aucune, poserJeton: poserJeton, etat: function () { return etat; } };
+        return { lier: lier, arreter: arreter, demarrer: demarrer, charger: charger, entrer: entrer, confirmer: confirmer, annuler: function () { attendre(null); }, voirCandidats: voirCandidats, choisirCandidat: choisirCandidat, aucune: aucune, photoSuffisante: photoSuffisante, poserJeton: poserJeton, etat: function () { return etat; } };
     }
     return { creer: creer, trierParPrix: trierParPrix };
 });

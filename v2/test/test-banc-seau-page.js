@@ -52,6 +52,8 @@ const essayer = async (nom, f) => { try { await f(); } catch (e) { H.v(`${nom} (
         H.v('2. /_etat dit « un jeton est posé » sans le rendre', [etat.jeton, JSON.stringify(etat).includes(JETON)], [true, false]);
         const src = fs.readFileSync(path.join(__dirname, '..', '..', 'outils', 'banc-200', 'app.js'), 'utf8') + fs.readFileSync(path.join(__dirname, '..', '..', 'outils', 'banc-200', 'controleur.js'), 'utf8') + html;
         H.v('2. la page n\'utilise jamais innerHTML (tout passe par textContent)', /innerHTML|insertAdjacentHTML|document\.write|eval\(/.test(src), false);
+        H.v('2. la case « la photo suffit-elle à un expert ? » est dans la page : question, oui, non', [html.includes('id="photoSuffisante"'), html.includes('id="photoOui"'), html.includes('id="photoNon"'), /la photo suffit-elle/i.test(html)], [true, true, true, true]);
+        H.v('2. 🔑 la page ne montre aucune réponse du modèle à côté de la case (aucun champ de réponse, de rang ou de confiance dans la page)', /reponse-modele|r[ée]ponse du mod[èe]le|confiance|ia-propose/i.test(html), false);
     });
 
     await essayer('relais', async () => {
