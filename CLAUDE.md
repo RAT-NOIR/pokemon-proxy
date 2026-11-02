@@ -59,10 +59,12 @@ fichiers, rien ne les rendait : 208 récupérés depuis R2, 63 + 84 à redépose
 > **cardcodex.com** (concurrent) : consultation SEULEMENT, comme un visiteur (robots.txt relu, peu de pages, cadence lente) — pour SAVOIR quel logo officiel existe ; aucune image téléchargée, aucun
 > fichier copié, aucune donnée reprise. Le logo se récupère ensuite dans une source LÉGALE déjà ouverte (TCGdex, Bill's Archive, sites TPC par région, Bulbapedia).
 
-## 🇫🇷 PRIORITÉ DU CATALOGUE : L'OCCIDENTAL À QUASI 100 % (testeur, 2026-10-13)
+## 🌏 PRIORITÉ DU CATALOGUE : L'IMPACT SUR LE SCANNER, TOUTES LANGUES (testeur, 2026-11-01)
 
-> Le public sera surtout français : le catalogue OCCIDENTAL (intl) doit atteindre quasi 100 % en fiches, visuels et logos — **avant tout nouveau visuel chinois, japonais ou d'Asie du Sud-Est** (les
-> collectes déjà en file continuent seules). Les réimpressions tamponnées ne reçoivent jamais l'image d'une autre impression.
+> **LEVÉE le 2026-11-01 (décision du testeur) : la règle « aucun nouveau visuel chinois, japonais ou d'Asie du Sud-Est tant que l'occidental n'est pas à quasi 100 % » ne vaut plus, partout.**
+> Raison : **les cartes asiatiques circulent sur Vinted, le modèle doit les connaître.** L'ordre de travail est l'IMPACT SUR LE SCANNER (niveaux a, b, c, d de `impact\TROUS-IMPACT.md`), toutes
+> langues confondues. Les réimpressions tamponnées ne reçoivent toujours jamais l'image d'une autre impression (hors emprunts marqués prévus par les règles).
+> ~~Ancienne règle (testeur, 2026-10-13) : le catalogue OCCIDENTAL (intl) à quasi 100 % en fiches, visuels et logos avant tout nouveau visuel zh/jp/SEA.~~
 
 ---
 
