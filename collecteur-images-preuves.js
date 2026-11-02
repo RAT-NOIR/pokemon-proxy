@@ -23,6 +23,9 @@ const CLI = require('./collecte-cartes/recolte-cli');
 const CO = require('./collecte-cartes/comblement');
 const PV = require('./collecte-cartes/preuves');
 const BD = require('./collecte-cartes/basse-definition');
+const J = require('./collecte-cartes/jointure');
+const TPC = require('./collecte-cartes/tpc');
+const texte = s => typeof s === 'string' && s.trim() !== '';
 
 const DOSSIER_PHASE4 = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\couverture\\S8\\PHASE4';
 const DOSSIER = path.join(DOSSIER_PHASE4, 'PRV');
@@ -77,7 +80,7 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
         if (!impressionsCache.has(carteId)) impressionsCache.set(carteId, lire.impressions ? ((await lire.impressions([carteId]))[0]?.impressions ?? []) : []);
         return impressionsCache.get(carteId);
     };
-    const refus = [], unitesBrutes = [], jugements = {}, empreintes = {}, parRegle = {}, entreesParFamille = {}, avertissements = [], trousAuto = [];
+    const refus = [], unitesBrutes = [], jugements = {}, empreintes = {}, parRegle = {}, entreesParFamille = {}, avertissements = [], trousAuto = [], jumeauxDansLeSet = [];
     const MOTIFS_ANNEE = ['position-ambigue', 'numero-imprime-hors-carte'];
     for (const famille of noms) {
         const { manifeste, validations, empreinte } = lireFamille(dossier, famille);
@@ -95,9 +98,23 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
         const setsDe = new Map((slugs.length ? await lire.sets(slugs) : []).map(s => [s._id, s]));
         // ➕ HD-ZH : la règle de remplacement lit ce que la carte SERT déjà (cartes.images) et les documents de ces entrées (lecture seule, par le lecteur du plan) — jamais ce que le manifeste en dit
         // a-reste (japonais) : le nom JAPONAIS de la carte désignée par la ligne, lu seulement pour les entrées qui LISENT du japonais (lu.langue 'ja') — témoin de lecture, jamais écrit en public
-        const nomsJa = new Map();
-        const carteIdsJa = [...new Set(r.appariees.filter(a => a.entree.lu?.langue === 'ja').flatMap(a => (lignesDe.get(a.entree.idProduct) ?? []).map(l => l.carteId)).filter(c => c != null))];
-        if (carteIdsJa.length && lire.nomsJa) for (const c of await lire.nomsJa(carteIdsJa)) nomsJa.set(c._id, c.nomJa ?? null);
+        const nomsJa = new Map(), cartesLues = new Map();
+        // (nom TRADUIT : les entrées qui portent Pokédex / PV / règle / code lisent aussi la carte désignée — son nomEn, son ndex, ses PV, sa catégorie —, toujours en lecture seule)
+        const luitLaCarte = lu => lu?.langue === 'ja' || PV.porteUnTemoinTraduit(lu);
+        const carteIdsJa = [...new Set(r.appariees.filter(a => luitLaCarte(a.entree.lu)).flatMap(a => (lignesDe.get(a.entree.idProduct) ?? []).map(l => l.carteId)).filter(c => c != null))];
+        if (carteIdsJa.length && lire.nomsJa) for (const c of await lire.nomsJa(carteIdsJa)) { nomsJa.set(c._id, c.nomJa ?? null); cartesLues.set(c._id, c); }
+        // le code du set (codes_set) de la ligne, et la TABLE de traduction officielle : le nomJa des autres cartes (vraies pages) de même nomEn — seulement pour les entrées à nom traduit
+        const aTraduit = r.appariees.filter(a => PV.porteUnTemoinTraduit(a.entree.lu));
+        const codesSet = new Map();
+        const idExpTraduit = [...new Set(aTraduit.map(a => etatDe.get(a.entree.idProduct)?.idExpansion).filter(Number.isInteger))];
+        if (idExpTraduit.length && lire.codesSet) for (const c of await lire.codesSet(idExpTraduit)) if (c?.codeSet) codesSet.set(c.idExpansion, c.codeSet);
+        let temoinNomJa = null;
+        const nomsEnTraduit = [...new Set([...aTraduit.map(a => etatDe.get(a.entree.idProduct)?.name), ...aTraduit.flatMap(a => (lignesDe.get(a.entree.idProduct) ?? []).map(l => cartesLues.get(l.carteId)?.nomEn))].filter(texte).map(n => J.decomposerNomCardmarket(n).nom))];
+        if (nomsEnTraduit.length && lire.cartesDeNomEn) temoinNomJa = TPC.construireTemoinNomJa(await lire.cartesDeNomEn(nomsEnTraduit));
+        // les autres produits des sets des entrées à nom traduit (jumeaux : même Pokédex et même règle dans le même set) — lecture seule
+        const autresParSet = new Map();
+        const slugsTraduit = [...new Set(aTraduit.flatMap(a => (lignesDe.get(a.entree.idProduct) ?? []).map(l => l.slugSet)).filter(Boolean))];
+        if (slugsTraduit.length && lire.produitsDuSet) for (const l of await lire.produitsDuSet(slugsTraduit)) (autresParSet.get(l.slugSet) || autresParSet.set(l.slugSet, []).get(l.slugSet)).push({ idProduct: l.idProduct, numero: l.numeroFiche ?? null, nomEn: etatDe.get(l.idProduct)?.name ?? null });
         const servies = new Map();
         const carteIdsRemplacement = [...new Set(r.appariees.filter(a => a.entree.regle === PV.REGLE_MEME_DESSIN).flatMap(a => (lignesDe.get(a.entree.idProduct) ?? []).map(l => l.carteId)).filter(c => c != null))];
         if (carteIdsRemplacement.length) {
@@ -122,6 +139,15 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
             if (!set) { non('set-absent', L.slugSet); continue; }
             if ((set.tirage ?? set.region) !== E.langue) { non('tirage-du-set-different', `set ${set.tirage ?? set.region}, état ${E.langue}`); continue; }
             const produit = { idProduct: id, idExpansion: E.idExpansion ?? L.idExpansion ?? null, tirage: E.langue, tamponnee: E.tamponnee ?? null, numero: L.numeroFiche ?? numerosDe.get(id)?.numero ?? null, carteId: L.carteId, slugSet: L.slugSet, slug: L.slug ?? numerosDe.get(id)?.slug ?? null, nomEn: E.name ?? null, nomFr: numerosDe.get(id)?.nomFr ?? null, nomJa: nomsJa.get(L.carteId) ?? null };
+            // nom TRADUIT : les témoins que la règle lit (rien d'écrit) — la carte quand elle existe (nomEn, ndex, PV, catégorie), le code du set de la ligne, la table de traduction officielle
+            if (PV.porteUnTemoinTraduit(e.lu)) {
+                const cl = cartesLues.get(L.carteId);
+                if (cl) { produit.nomEnCarte = cl.nomEn ?? null; produit.ndex = cl.ndex ?? null; produit.pv = cl.pv ?? null; produit.categorie = cl.categorie ?? null; }
+                produit.codeSet = codesSet.get(produit.idExpansion) ?? null;
+                const nomDeLaTable = produit.nomEnCarte ?? produit.nomEn;
+                produit.tableJaInterne = temoinNomJa && nomDeLaTable ? temoinNomJa(J.decomposerNomCardmarket(nomDeLaTable).nom) : null;
+                produit.autresDuSet = autresParSet.get(L.slugSet) ?? [];
+            }
             if (e.regle === PV.REGLE_MEME_DESSIN) { const s = servies.get(L.carteId); produit.imagesServies = s?.images ?? []; produit.documentsServis = s?.documents ?? new Map(); }
             // tour 4 (2) : pour une position (Battle Academy, Trainer Kit), la règle a besoin de TOUS les produits de ces sets et des impressions de la carte (lecture seule)
             if (PV.setAdmisPourPosition(L.slugSet)) {
@@ -145,6 +171,7 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
                 continue;
             }
             parRegle[e.regle] = (parRegle[e.regle] || 0) + 1;
+            if (ev.drapeaux?.includes('jumeau-dans-le-set')) jumeauxDansLeSet.push(id);
             produits.set(id, produit);
             jugements[e.url] = c1.jugement;
             acceptees.push({ entree: e, validation: a.validation, produit, langue: PV.langueDuProduit(produit), evaluation: ev, collecteLe: c1.collecteLe });
@@ -177,7 +204,9 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
     for (const r of refus) { const k = /^(preuve-lue|deux-sources|remplacement-meme-dessin):/.test(r.motif) ? r.motif : r.motif.replace(/:.*$/, ''); refusParMotif[k] = (refusParMotif[k] || 0) + 1; }
     const aAjouter = decidees.filter(u => u.decision.action === 'ajouter');
     const resume = { le: new Date().toISOString(), source: SRC.SOURCE, lot: SRC.LOT, familles: noms, entrees: entreesParFamille, parRegle, unitesProuvees: unitesBrutes.length, decisions, aAjouter: aAjouter.length,
-        dontRemplacentUneBasseDefinition: aAjouter.filter(u => u.decision.remplace.length).length, refus, refusParMotif, avertissements };
+        dontRemplacentUneBasseDefinition: aAjouter.filter(u => u.decision.remplace.length).length, refus, refusParMotif, avertissements,
+        // les unités dont le numéro doit être vérifié à l'œil sur une rognure (un autre produit du même set partage Pokédex et règle) : comptées à part
+        jumeauxDansLeSet: jumeauxDansLeSet.filter(id => unitesBrutes.some(u => u.produits.includes(id))) };
     return { resume, unites: decidees, restes: refus, empreintes, trousAuto };
 }
 
@@ -216,7 +245,11 @@ function lireDepuisLaBase(db, prodDb) {
         fiches: (carteIds, slugs) => par(db.collection('cartes_produits'), { carteId: { $in: carteIds }, slugSet: { $in: slugs } }, { _id: 0, idProduct: 1, carteId: 1, slugSet: 1, numeroFiche: 1 }),
         numeros: ids => lots(ids, lot => par(prodDb.collection('numeros_cartes'), { idProduct: { $in: lot } }, { _id: 0, idProduct: 1, numero: 1, slug: 1, nomFr: 1 })),
         sets: slugs => par(db.collection('sets'), { _id: { $in: slugs } }, { tirage: 1, region: 1 }),
-        nomsJa: ids => lots(ids, lot => par(db.collection('cartes'), { _id: { $in: lot } }, { nomJa: 1 })),
+        nomsJa: ids => lots(ids, lot => par(db.collection('cartes'), { _id: { $in: lot } }, { nomJa: 1, nomEn: 1, ndex: 1, pv: 1, categorie: 1 })),
+        // nom traduit (lecture seule) : le code du set d'une expansion (codes_set, base de production) et les cartes à page qui portent un nomJa pour un nomEn donné (la table officielle)
+        codesSet: ids => lots(ids, lot => par(prodDb.collection('codes_set'), { idExpansion: { $in: lot } }, { _id: 0, idExpansion: 1, codeSet: 1 })),
+        cartesDeNomEn: noms => lots(noms, lot => par(db.collection('cartes'), { nomEn: { $in: lot }, nomJa: { $nin: [null, ''] }, _id: { $gt: 0 } }, { nomEn: 1, nomJa: 1 })),
+        produitsDuSet: slugs => par(db.collection('cartes_produits'), { slugSet: { $in: slugs } }, { _id: 0, idProduct: 1, slugSet: 1, numeroFiche: 1 }),
         // tour 4 (2) : tous les produits des sets à position, et les impressions des cartes (le numéro imprimé lu doit en être une)
         positions: () => par(db.collection('cartes_produits'), { slugSet: { $regex: '^Battle-Academy|Trainer-Kit' } }, { _id: 0, idProduct: 1, slugSet: 1, numeroFiche: 1 }),
         impressions: ids => par(db.collection('cartes'), { _id: { $in: ids } }, { impressions: 1 })
@@ -235,7 +268,13 @@ async function construirePlan({ db, fichiers }) {
     } finally { await cx.fermer(); }
 }
 
-const def = { CODE, SRC, DOSSIER, hoteImages: 'aucun', hotesLibelle: 'aucun hôte (aucune requête)',
+/** Ce que `--compter` ajoute : les unités à numéro à vérifier à l'œil (jumeau dans le set) et celles dont le PV n'a été comparé à rien, comptées À PART du reste. */
+const noteCompte = unites => {
+    const marques = u => u.champsEntree?.preuveLue?.drapeaux ?? [];
+    const n = m => (unites ?? []).filter(u => marques(u).includes(m)).length;
+    return `   dont ${n('jumeau-dans-le-set')} jumeau(x) dans le set (numéro à vérifier sur une rognure, à part) · ${n('pv-non-verifie')} au PV non vérifié · ${n('table-ja-interne')} par la table japonaise interne`;
+};
+const def = { noteCompte, CODE, SRC, DOSSIER, hoteImages: 'aucun', hotesLibelle: 'aucun hôte (aucune requête)',
     clientDe: () => { throw new Error('prv : aucune requête, jamais de client'); }, maximumReleve: () => { throw new Error('prv : aucun relevé'); }, releve: () => { throw new Error('prv : aucun relevé'); }, construirePlan };
 
 // ── 3. La ligne de commande : écrite par ce qu'elle AUTORISE ─────────────────────────────────────────────────────────────────

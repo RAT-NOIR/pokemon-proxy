@@ -97,7 +97,8 @@ const latin = s => /^[\x20-\x7EÀ-ɏ♂♀'’é]+$/.test(String(s ?? '').normal
 const REGLES = [['VMAX', /VMAX/], ['VSTAR', /VSTAR/], ['V-UNION', /V-?UNION/], ['GX', /GX/], ['BREAK', /BREAK/], ['LV.X', /LV\.?X/i],
     ['forme X', /(^|[^A-Za-z])X(?=$|[^A-Za-z]|ex|EX)/], ['forme Y', /(^|[^A-Za-z])Y(?=$|[^A-Za-z]|ex|EX)/],
     ['EX', /(^|[^A-Za-z])EX($|[^A-Za-z])/], ['ex', /(^|[^A-Za-z])ex($|[^A-Za-z])/], ['V', /(^|[^A-Za-z])V($|[^A-Za-z])/],
-    ['Méga', /(^|[^A-Za-z])Mega($|[^A-Za-z])|超級|เมก้า/]];
+    // (メガ japonais et 超级 chinois simplifié : 2026-11-02 ; « メガ » seul ouvrirait aussi メガニウム (Meganium) et メガヤンマ (Yanmega) — exclus)
+    ['Méga', /(^|[^A-Za-z])Mega($|[^A-Za-z])|超級|超级|メガ(?!ニウム|ヤンマ)|เมก้า/]];
 // LE POKÉDEX DE NOTRE NOM : quand notre carte n'a pas de `ndex` (fiche simple, infobox incomplète), le numéro se lit dans son nom anglais par
 // la table versionnée du dépôt (pokedex-dexids.json : le nom COMPLET d'une carte TCGdex → numéro(s), construire-table-pokedex.js), avec
 // la normalisation qui l'a construite (scoring.js) — la sonde lit la même chose que la production.
@@ -113,6 +114,28 @@ function dexDuNom(nom) {
 // asiatiques impriment (calibration du 2026-10-07 : 032 火, 033 超, 034 惡 /M-P). Une autre écriture ne se traduit pas : un trou.
 const TYPES_ENERGIE = { '草': 'Grass', '火': 'Fire', '水': 'Water', '雷': 'Lightning', '超': 'Psychic', '鬥': 'Fighting', '惡': 'Darkness', '鋼': 'Metal' };
 const energieDeBase = nom => { const m = /^基本【(.)】能量$/.exec(String(nom ?? '').trim()); return m && TYPES_ENERGIE[m[1]] ? `Basic ${TYPES_ENERGIE[m[1]]} Energy` : null; };
+// L'ESPÈCE SEULE : le nom d'une carte qui ne porte que l'espèce et sa règle (ex, V, VMAX, VSTAR, V-UNION, GX, BREAK, LV.X, Mega, forme X/Y). Un qualificatif (« Detective Pikachu »), un propriétaire
+// (« Hiroshima's Pikachu »), une forme (« Pikachu Libre »), un « & » en font un nom QUALIFIÉ. L'espèce est reconnue par la table du dépôt : la plus courte clé à Pokédex unique de chaque numéro.
+let ESPECES = null;
+const MOTS_DE_REGLE = /^(VMAX|VSTAR|V-?UNION|GX|BREAK|LV\.?X|ex|EX|V|Mega|X|Y)$/i;
+/** Le nom contient une espèce ET autre chose que sa règle (« Hiroshima's Pikachu », « Pikachu & Zekrom GX ») : un nom QUALIFIÉ. Un nom sans aucune espèce (un Dresseur) n'est pas qualifié, il est sans témoin. */
+function nomQualifie(nom) {
+    if (!nom || nomEstEspeceEtRegle(nom)) return false;
+    const { normaliserNomPourComparaison } = require('../scoring');
+    return String(nom).split('[')[0].split(/[\s&]+/).filter(w => w && !MOTS_DE_REGLE.test(w)).some(w => ESPECES.has(normaliserNomPourComparaison(w)));
+}
+function nomEstEspeceEtRegle(nom) {
+    if (!nom) return false;
+    if (!ESPECES) {
+        if (!TABLE_POKEDEX) TABLE_POKEDEX = require('../pokedex-dexids.json');
+        const plus = new Map();
+        for (const [k, v] of Object.entries(TABLE_POKEDEX)) if (Array.isArray(v) && v.length === 1 && (!plus.has(v[0]) || k.length < plus.get(v[0]).length)) plus.set(v[0], k);
+        ESPECES = new Set(plus.values());
+    }
+    const base = String(nom).split('[')[0].split(/\s+/).filter(w => w && !MOTS_DE_REGLE.test(w)).join(' ');
+    const { normaliserNomPourComparaison } = require('../scoring');
+    return ESPECES.has(normaliserNomPourComparaison(base));
+}
 function reglesDuNom(nom) {
     let s = String(nom ?? '').normalize('NFKC');
     const t = [];
@@ -521,5 +544,5 @@ module.exports = {
     SITES, SOURCES_TPC, MENTION, LOT, CADENCE_MS, VERROU_GLOBAL_MS, UA,
     lireFicheAsie, lireListeAsie, lireApiPcc, lireFichePcc,
     preuveDeCorrespondance, planifierTpc, contexteNomJaPv, SEUIL_PART_SANS_NUMERO, dejaServi, construireTemoinNomJa, reglesDuNom, nomCompare, entites,
-    autoriseParRobots, delaiDesRobots, fabriquerClientTpc, idImageTpc, idAlerteBloquee, planRetrait, transportFetch
+    dexDuNom, nomEstEspeceEtRegle, nomQualifie, autoriseParRobots, delaiDesRobots, fabriquerClientTpc, idImageTpc, idAlerteBloquee, planRetrait, transportFetch
 };
