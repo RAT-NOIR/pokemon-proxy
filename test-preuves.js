@@ -414,7 +414,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.deepStrictEqual([viaAiguillage.ok, viaAiguillage.motif], [false, 'preuve-lue:numero-ou-total-absent']);
         // avec un total lu, rien ne change pour ce set : le total reste vérifié comme avant
         assert.strictEqual((await deux(E2SVP({ total: '198' }, { total: '198' }), o, oui, SVP())).ok, true);
-        assert.strictEqual(appels, 2, 'la règle d\'image n\'est appelée que pour les deux cas admis');
+        assert.strictEqual(appels, 1, 'la règle d\'image n\'est appelée que pour le seul cas admis (celui qui porte son total)');
     });
     await test('evaluerEntree : aiguille par règle ; une règle inconnue est refusée', async () => {
         const a = await PV.evaluerEntree({ entree: entree(), produit: produit(), octets: {} });
