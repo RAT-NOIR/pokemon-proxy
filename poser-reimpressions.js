@@ -37,6 +37,7 @@ if (process.argv.includes('--ecrire')) {
 let SEULEMENT = null;
 if (arg('seulement')) { try { SEULEMENT = require('./collecte-cartes/produits-sauf').lireSauf(arg('seulement'), undefined, '--seulement'); } catch (e) { console.error(`❌ ${e.message} — rien n'est écrit`); process.exit(2); } }
 const { verifierPose } = require('./collecte-cartes/verif-pose-lot');
+const { separerMatiereSpeciale } = require('./collecte-cartes/matiere-speciale');
 
 (async () => {
     const ecrire = process.argv.includes('--ecrire');
@@ -66,6 +67,8 @@ const { verifierPose } = require('./collecte-cartes/verif-pose-lot');
             if (b && (a === b || a.includes(b) || b.includes(a))) return true;
             causes.nomDiscordant.push({ ...x, nomCarte: cartes.get(x.carteId)?.nomEn }); return false;
         });
+        // (tour 2 b-lignes, 2026-11-02) TABLE FERMÉE des produits en matière spéciale (lot METAL) : jamais la fiche de la carte normale — un trou, sans exception (§21 bis : jointure.js la lisait, cet outil non)
+        { const { gardes, ecartes } = separerMatiereSpeciale(causes.resolu); causes.resolu = gardes; causes.matiereSpeciale = ecartes; for (const x of ecartes) console.log(`   ⛔ matière spéciale (table fermée) : ${x.slug} (${x.idProduct}) écarté`); }
         console.log(`\n■ ${CODE} : ${famille.length} produits appris · ${Object.entries(causes).map(([k, v]) => `${k} ${v.length}`).join(' · ')}`);
         for (const x of causes.nomDiscordant.slice(0, 6)) console.log(`   TÉMOIN ✗ ${x.slug} → « ${x.nomCarte} »`);
         let g = 20260925; const hasard = () => (g = (g * 1103515245 + 12345) % 2147483648) / 2147483648;

@@ -76,4 +76,11 @@ function garderMatiereSpeciale(idProducts, contexte = '') {
     if (trouves.length) throw new Error(`❌ ARRÊT${contexte ? ` (${contexte})` : ''} : ${trouves.length} produit(s) en matière spéciale dans le lot (${trouves.join(', ')}) — décision du testeur : un trou, jamais la fiche de la carte normale. Rien n'est écrit.`);
 }
 
-module.exports = { PRODUITS_MATIERE_SPECIALE, estMatiereSpeciale, motifMatiere, garderMatiereSpeciale };
+/** Sépare une liste d'objets { idProduct } en { gardes, ecartes } : `ecartes` = ceux de la table (un trou, jamais la fiche de la carte normale). Pure. */
+function separerMatiereSpeciale(liste) {
+    const gardes = [], ecartes = [];
+    for (const x of liste || []) (estMatiereSpeciale(x && x.idProduct) ? ecartes : gardes).push(x);
+    return { gardes, ecartes };
+}
+
+module.exports = { PRODUITS_MATIERE_SPECIALE, estMatiereSpeciale, motifMatiere, garderMatiereSpeciale, separerMatiereSpeciale };

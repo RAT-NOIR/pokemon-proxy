@@ -71,6 +71,17 @@ verifier('un produit ordinaire se joint comme avant', J3.lignes.map(l => `${l.ca
     verifier('ecrire-jointure.js : la garde précède l\'upsert des lignes', (() => { const s = lire('collecte-cartes/ecrire-jointure.js'); const a = s.indexOf('garderMatiereSpeciale(J.lignes'), b = s.indexOf('M.CarteProduit.updateOne'); return a > 0 && b > 0 && a < b; })(), true);
 }
 
+// 3 ter. (tour 2 b-lignes, 2026-11-02) poser-reimpressions.js et fiches-prouvees.js consultent la table (le lot b-lignes avait 8 produits en métal/lenticulaire dans sa décision, arrêtés par la garde de lot)
+{
+    const fs = require('fs'), path = require('path');
+    const lire = f => fs.readFileSync(path.join(__dirname, f), 'utf8');
+    const sep = M.separerMatiereSpeciale ? M.separerMatiereSpeciale([{ idProduct: 580161 }, { idProduct: 605985 }, { idProduct: '859012' }, { idProduct: 1 }]) : null;
+    verifier('separerMatiereSpeciale : la table est lue (580161 et 859012 écartés, 605985 et 1 gardés)', sep && [sep.gardes.map(x => x.idProduct), sep.ecartes.map(x => x.idProduct)], [[605985, 1], [580161, '859012']]);
+    const r = lire('poser-reimpressions.js'), appel = r.indexOf('separerMatiereSpeciale('), ecriture = r.indexOf(".collection('cartes_produits').bulkWrite");
+    verifier('poser-reimpressions.js : la table est consultée AVANT le bulkWrite', appel > 0 && ecriture > 0 && appel < ecriture, true);
+    verifier('fiches-prouvees.js : consulte la table fermée (motif matiere-speciale)', /estMatiereSpeciale/.test(lire('collecte-cartes/fiches-prouvees.js')) && /matiere-speciale/.test(lire('collecte-cartes/fiches-prouvees.js')), true);
+}
+
 // 4. l'écriture de la jointure : un lot qui contiendrait une ligne de la table est refusé AVANT toute écriture (défense en profondeur, si `joindre` était contourné)
 (async () => {
     const appels = [];

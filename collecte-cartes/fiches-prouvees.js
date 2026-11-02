@@ -9,6 +9,7 @@
 const { clesNom, nomJointDe, temoinDuNom, cleNumero } = require('./jointure');
 const { indexer, candidats } = require('./cle-nom-attaques');
 const { rejouer, contradictions } = require('./deux-sources');
+const { estMatiereSpeciale, motifMatiere } = require('./matiere-speciale');
 
 /** Le témoin du nom, celui de la PRODUCTION (jointure.js) — injectable pour l'observer (il ne contredit jamais une carte que la clé vient de désigner : mêmes clés de nom). */
 const TEMOIN_PRODUCTION = temoinDuNom;
@@ -79,6 +80,8 @@ function prouver({ entree, produit, carte, cartesDuSet = [], cartesPourCle = [],
     // (`produit` est réassigné par ⓪ : une COPIE avec l'attaque corrigée, jamais le document lu)
     const temoins = [], refus = [];
     if (!VOIES.includes(entree.voie)) return { ok: false, temoins, refus: [`voie « ${entree.voie} » inconnue : la liste des voies est fermée (${VOIES.join(', ')})`] };
+    // TABLE FERMÉE des produits en matière spéciale (lot METAL, matiere-speciale.js) : un produit en métal ou lenticulaire ne reçoit JAMAIS la fiche de la carte normale — un trou, sans exception, quelle que soit la voie (§21 bis : jointure.js et voie-deux-sources.js la lisaient, pas ce module)
+    if (estMatiereSpeciale(entree.idProduct) || estMatiereSpeciale(produit && produit.idProduct)) return { ok: false, temoins, refus: [`matiere-speciale : le produit ${entree.idProduct} est dans la table fermée (${motifMatiere(entree.idProduct) || motifMatiere(produit && produit.idProduct)}) — un trou, jamais la fiche de la carte normale`] };
     if (!carte || carte._id !== entree.carteId) return { ok: false, temoins, refus: [`la carte lue (${carte?._id}) n'est pas celle de la décision (${entree.carteId})`] };
 
     // ⓪ FAUTES DE FRAPPE de Cardmarket, DÉCLARÉES par la décision (« Hyptnotic Gaze ») : la même attaque à UNE lettre près, présente des deux côtés — jamais devinée
