@@ -675,6 +675,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
             sets: async slugs => sets.filter(s => slugs.includes(s._id)),
             nomsJa: async ids => cartes.filter(c => ids.includes(c._id)).map(c => ({ _id: c._id, nomJa: c.nomJa ?? null, nomEn: c.nomEn, ndex: c.ndex, pv: c.pv, categorie: c.categorie })),
             codesSet: async ids => codesSet.filter(c => ids.includes(c.idExpansion)),
+            produitsDuSet: async slugs => lignes.filter(l => slugs.includes(l.slugSet)).map(l => ({ idProduct: l.idProduct, slugSet: l.slugSet, numeroFiche: l.numeroFiche })),
             cartesDeNomEn: async noms => cartes.filter(c => noms.includes(c.nomEn) && c.nomJa && c._id > 0).map(c => ({ _id: c._id, nomEn: c.nomEn, nomJa: c.nomJa })),
             positions: async () => positions,
             impressions: async ids => ids.map(i => ({ _id: i, impressions: impressionsDe[i] ?? [] }))
@@ -760,6 +761,23 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
             { const p = await monter(base(o)); assert.strictEqual(p.unites.length, 0, nom); assert.match(JSON.stringify(p.resume.refus), motif, nom); }
         const ligne = await monter(base({ slug: 'Mareep', codesSet: [{ idExpansion: 5000, codeSet: 'svAL' }] }));
         assert.deepStrictEqual([ligne.resume.refus, ligne.unites.length], [[], 1], 'le code vient de codes_set (la ligne)');
+        // une ligne codes_set sans code ne retire pas le code d'une autre ligne de la même expansion
+        const deuxLignes = await monter(base({ slug: 'Mareep', codesSet: [{ idExpansion: 5000, codeSet: 'svAL' }, { idExpansion: 5000, codeSet: null }] }));
+        assert.deepStrictEqual([deuxLignes.resume.refus, deuxLignes.unites.length], [[], 1], 'une ligne sans code est ignorée');
+        // la preuve écrite porte ses marqueurs ; un jumeau dans le set est listé à part
+        assert.deepStrictEqual(bon.unites[0].champsEntree.preuveLue.drapeaux, ['pv-non-verifie']);
+        const jum = await monter({ ...base({}), etat: [...base({}).etat, { idProduct: 1002, idExpansion: 5000, langue: 'jp', tamponnee: null, name: 'Mareep [Gnaw]' }], lignes: [...base({}).lignes, { idProduct: 1002, carteId: -2, slugSet: SLUG, numeroFiche: '14', slug: 'Mareep-svAL014', idExpansion: 5000 }] });
+        assert.deepStrictEqual([jum.resume.refus, jum.unites.length], [[], 1]);
+        assert.deepStrictEqual(jum.unites[0].champsEntree.preuveLue.drapeaux, ['pv-non-verifie', 'jumeau-dans-le-set']);
+        assert.deepStrictEqual(jum.resume.jumeauxDansLeSet, [1001], 'le plan liste les jumeaux à part');
+        assert.deepStrictEqual(bon.resume.jumeauxDansLeSet, []);
+        assert.match(K.def.noteCompte(jum.unites), /1 .*jumeau/i, '--compter les compte à part');
+        assert.match(K.def.noteCompte(bon.unites), /0 .*jumeau/i);
+        // une entrée sans témoin saisi ne déclenche AUCUNE lecture supplémentaire (codes_set, table, produits du set)
+        const w0 = await mondeSimple(); const appels = [];
+        for (const k of ['codesSet', 'cartesDeNomEn', 'produitsDuSet']) { const f = w0.lire[k]; w0.lire[k] = async (...a) => { appels.push(k); return f(...a); }; }
+        await K.construirePlanAvec({ dossier: w0.racine, cache: w0.cache, lire: w0.lire, etat: w0.etat, lecteur: RC.lecteurNatif(w0.db), fichiers: w0.F });
+        assert.deepStrictEqual(appels, [], 'aucune lecture de nom traduit pour une entrée ordinaire');
         // le PV de la carte, quand elle existe : il doit être celui qui est lu
         const carte = pv => base({ cartes: [{ _id: 77, nomEn: 'Mareep', pv, ndex: 179, categorie: 'pokemon', images: [] }] });
         const avecCarte = o => ({ ...o, lignes: [{ ...o.lignes[0], carteId: 77 }] });
@@ -773,7 +791,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.strictEqual(zhFaux.unites.length, 0); assert.match(JSON.stringify(zhFaux.resume.refus), /pv-different/);
         // le n° de Pokédex et la catégorie de la CARTE sont lus aussi ; son nomEn passe avant le nom Cardmarket du produit
         const ndexFaux = await monter(avecCarte(base({ cartes: [{ _id: 77, nomEn: 'Mareep', pv: 60, ndex: 180, categorie: 'pokemon', images: [] }] })));
-        assert.strictEqual(ndexFaux.unites.length, 0); assert.match(JSON.stringify(ndexFaux.resume.refus), /pokedex-ambigu/);
+        assert.strictEqual(ndexFaux.unites.length, 0); assert.match(JSON.stringify(ndexFaux.resume.refus), /ndex-non-confirme/);
         const dresseurCarte = await monter(avecCarte(base({ cartes: [{ _id: 77, nomEn: 'Mareep', pv: 60, ndex: 179, categorie: 'dresseur', images: [] }] })));
         assert.strictEqual(dresseurCarte.unites.length, 0); assert.match(JSON.stringify(dresseurCarte.resume.refus), /nom-traduit-sans-temoin/);
         const nomDeLaCarte = await monter(avecCarte(base({ name: 'Mareep Holo', cartes: [{ _id: 77, nomEn: 'Mareep', pv: 60, categorie: 'pokemon', images: [] }] })));
@@ -1020,6 +1038,10 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
 
     // ───────── le nom TRADUIT : se compare par ce qui ne se traduit pas (Pokédex + PV + règle), et seulement avec numéro ET code du set concordants ─────────
     // La règle est celle de tpc.js (dexDuNom, reglesDuNom : jamais recopiées, §21 bis). Un manifeste sans dex/pv/regle/codeSet garde le comportement d'avant.
+    const lueBrut = lue;
+    {   // (bloc : `lue` rend ici { ok, motifs } sans les drapeaux ; `drap` rend les drapeaux — marques qui n'empêchent rien mais que le coordinateur doit voir)
+    const lue = (e, p = produit()) => { const r = lueBrut(e, p); return { ok: r.ok, motifs: r.motifs }; };
+    const drap = (e, p = produit()) => lueBrut(e, p).drapeaux ?? [];
     const trad = (o = {}) => entree({ attendu: { ...entree().attendu, numero: '005' }, lu: { nom: 'メリープ', numero: '005', total: '021', langue: 'ja', tampon: null, finition: 'normale', marques: ['code svAL imprimé'], codeSet: 'svAL', dex: 179, pv: 60, ...o } });
     const ptrad = (o = {}) => produit({ tirage: 'jp', numero: '005', carteId: -1, slugSet: 'Starter-Set-AL', slug: 'Mareep-svAL005', nomEn: 'Mareep', ...o });
     const mt = (e, p) => lue(e, p).motifs.join(',');
@@ -1057,7 +1079,15 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.match(mt(trad({ dex: 179.5 }), ptrad()), /pokedex-non-lu/);
         assert.match(mt(trad(), ptrad({ nomEn: 'Caterpie' })), /pokedex-ambigu/, 'deux Pokédex possibles pour ce nom (table versionnée) : refus');
         assert.match(mt(trad(), ptrad({ nomEn: null })), /nom-traduit-sans-temoin/, 'nomEn absent');
-        assert.match(mt(trad(), ptrad({ nomEn: 'Mareep', ndex: 180 })), /pokedex-ambigu/, 'le Pokédex de la carte contredit celui du nom');
+        assert.match(mt(trad(), ptrad({ nomEn: 'Mareep', ndex: 180 })), /ndex-non-confirme/, 'le Pokédex de la carte contredit celui du nom (pokedex-dexids.json)');
+        assert.match(mt(trad(), ptrad({ nomEn: 'Nemona', ndex: 179, slug: 'Nemona-svAL005' })), /ndex-non-confirme/, 'un ndex que la table ne peut pas confirmer (nom absent) est refusé');
+        assert.match(mt(trad(), ptrad({ nomEn: 'Mareep', ndex: '179' })), /^$/, 'ndex numérique en texte : lu comme nombre');
+        assert.match(mt(trad(), ptrad({ nomEn: 'Mareep', ndex: 'x' })), /ndex-non-confirme/, 'ndex illisible : jamais un témoin');
+        assert.strictEqual(lue(trad(), ptrad({ nomEn: 'Caterpie', ndex: 10 })).ok, true, 'ndex contenu dans les Pokédex du nom : confirmé');
+        // le nom du PRODUIT et celui de la CARTE disent la même chose, sinon refus : forme régionale ou règle
+        assert.match(mt(trad({ nom: 'ファイヤーV', dex: 146, pv: 220 }), ptrad({ nomEnCarte: 'Moltres V', nomEn: 'Galarian Moltres V', slug: 'Moltres-V-svAL005' })), /nom-produit-carte-divergent/, 'carte « Moltres V », produit « Galarian Moltres V »');
+        assert.match(mt(trad({ nom: 'ピカチュウ', dex: 25, pv: 60 }), ptrad({ nomEnCarte: 'Pikachu', nomEn: 'Pikachu ex', slug: 'Pikachu-svAL005' })), /nom-produit-carte-divergent/, 'règle différente entre carte et produit');
+        assert.strictEqual(lue(trad(), ptrad({ nomEnCarte: 'Mareep', nomEn: 'Mareep [Static Shock]' })).ok, true, 'même espèce et même règle : pas de divergence');
         assert.match(mt(trad(), ptrad({ categorie: 'dresseur' })), /nom-traduit-sans-temoin/, 'la carte est un Dresseur : le Pokédex du nom ne témoigne pas');
         assert.strictEqual(lue(trad(), ptrad({ categorie: 'pokemon' })).ok, true);
         assert.match(mt(trad({ numero: '006' }), ptrad()), /numero-different/, 'numéro discordant');
@@ -1086,15 +1116,44 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         const pd = ptrad({ nomEn: 'Nemona', slug: 'Nemona-svAL005' });
         assert.match(mt(dr, pd), /nom-traduit-sans-temoin/, 'Dresseur : ni Pokédex ni PV');
         const temoin = { noms: ['ネモ'], cartes: 3, divergent: false };
-        assert.deepStrictEqual(lue(dr, { ...pd, nomJaTemoin: temoin }), { ok: true, motifs: [] });
-        assert.match(mt({ ...dr, lu: { ...dr.lu, nom: 'ボタン' } }, { ...pd, nomJaTemoin: temoin }), /nom-different/, 'la table contredit le nom lu');
-        assert.match(mt(dr, { ...pd, nomJaTemoin: { ...temoin, divergent: true } }), /nom-traduit-sans-temoin/, 'une table qui diverge entre cartes ne témoigne pas');
-        assert.match(mt(dr, { ...pd, nomJaTemoin: { noms: [], cartes: 0, divergent: false } }), /nom-traduit-sans-temoin/);
-        assert.match(mt(dr, { ...pd, nomJaTemoin: temoin, slug: 'Nemona' }), /code-set-non-verifiable/, 'la table ne dispense pas du code');
+        assert.deepStrictEqual(lue(dr, { ...pd, tableJaInterne: temoin }), { ok: true, motifs: [] });
+        assert.match(mt({ ...dr, lu: { ...dr.lu, nom: 'ボタン' } }, { ...pd, tableJaInterne: temoin }), /nom-different/, 'la table contredit le nom lu');
+        assert.match(mt(dr, { ...pd, tableJaInterne: { ...temoin, divergent: true } }), /nom-traduit-sans-temoin/, 'une table qui diverge entre cartes ne témoigne pas');
+        assert.match(mt(dr, { ...pd, tableJaInterne: { noms: [], cartes: 0, divergent: false } }), /nom-traduit-sans-temoin/);
+        // cette table vient de NOS pages carte, pas d'une source officielle : au moins DEUX cartes distinctes au même nomEn, d'accord sur le nomJa
+        assert.match(mt(dr, { ...pd, tableJaInterne: { noms: ['ネモ'], cartes: 1, divergent: false } }), /table-ja-insuffisante/, 'une seule carte ne fait pas une table');
+        assert.deepStrictEqual(lue(dr, { ...pd, tableJaInterne: { noms: ['ネモ'], cartes: 2, divergent: false } }), { ok: true, motifs: [] }, 'deux cartes suffisent');
+        assert.ok(drap(dr, { ...pd, tableJaInterne: { noms: ['ネモ'], cartes: 2, divergent: false } }).includes('table-ja-interne'), 'la preuve dit que la table est interne');
+        assert.ok(!/officiel/i.test(mt(dr, { ...pd, tableJaInterne: { noms: ['ネモ'], cartes: 1, divergent: false } })));
+        assert.match(mt(dr, { ...pd, tableJaInterne: temoin, slug: 'Nemona' }), /code-set-non-verifiable/, 'la table ne dispense pas du code');
         const zh = trad({ nom: '妮莫', langue: 'zh-hans', dex: null, pv: null, codeSet: 'CSV8C' });
-        assert.match(mt(zh, ptrad({ tirage: 'zh-hans', nomEn: 'Nemona', slug: 'Nemona-CSV8C005', nomJaTemoin: temoin })), /nom-traduit-sans-temoin/, 'la table japonaise ne vaut pas pour le chinois');
+        assert.match(mt(zh, ptrad({ tirage: 'zh-hans', nomEn: 'Nemona', slug: 'Nemona-CSV8C005', tableJaInterne: temoin })), /nom-traduit-sans-temoin/, 'la table japonaise ne vaut pas pour le chinois');
         const energie = trad({ nom: '基本【火】能量', langue: 'zh-hans', dex: null, pv: null, codeSet: 'CSV8C' });
         assert.match(mt(energie, ptrad({ tirage: 'zh-hans', nomEn: 'Basic Fire Energy', slug: 'Basic-Fire-Energy-CSV8C005' })), /nom-traduit-sans-temoin/, 'Énergie traduite : refus');
+    });
+    await test('nom traduit : fiche simple sans carte : PV non vérifié (marqueur) ; un nom de produit qualifié refuse ; avec carte et PV comparé, plus de marqueur', () => {
+        assert.deepStrictEqual(drap(trad(), ptrad()), ['pv-non-verifie'], 'sans carte, le PV lu n\'est comparé à rien : la preuve le dit');
+        assert.deepStrictEqual(drap(trad(), ptrad({ pv: 60, nomEnCarte: 'Mareep' })), [], 'PV de la carte comparé : pas de marqueur');
+        assert.deepStrictEqual(drap(trad(), ptrad({ nomEnCarte: 'Mareep' })), ['pv-non-verifie'], 'une carte sans PV connu : toujours non vérifié');
+        assert.deepStrictEqual(drap(trad({ pv: 0 }), ptrad()), [], 'un refus ne porte pas de marqueur');
+        for (const nom of ['Hiroshima\'s Pikachu', 'Detective Pikachu', 'Pikachu & Zekrom GX', 'Dark Charizard', 'Pikachu Libre', 'Mega Tokyo\'s Pikachu'])
+            assert.match(mt(trad({ nom: '皮卡丘', dex: 25, pv: 60 }), ptrad({ nomEn: nom, slug: 'X-svAL005' })), /fiche-simple-nom-qualifie|pokedex-ambigu|nom-traduit-sans-temoin/, nom);
+        assert.match(mt(trad({ nom: 'ピカチュウ', dex: 25, pv: 60 }), ptrad({ nomEn: 'Detective Pikachu [Thorough Investigation]', slug: 'X-svAL005' })), /fiche-simple-nom-qualifie/, 'qualificatif');
+        assert.match(mt(trad({ nom: 'ピカチュウ', dex: 25, pv: 60 }), ptrad({ nomEn: 'Hiroshima\'s Pikachu', slug: 'X-svAL005' })), /fiche-simple-nom-qualifie/, 'propriétaire');
+        assert.match(mt(trad({ nom: 'ピカチュウ', dex: 25, pv: 60 }), ptrad({ nomEn: 'Pikachu Libre', slug: 'X-svAL005' })), /fiche-simple-nom-qualifie/, 'forme');
+        assert.strictEqual(lue(trad({ nom: 'ピカチュウ', dex: 25, pv: 60 }), ptrad({ nomEn: 'Pikachu', slug: 'X-svAL005' })).ok, true, 'espèce seule');
+        assert.strictEqual(lue(trad({ nom: 'ピカチュウV', dex: 25, pv: 60 }), ptrad({ nomEn: 'Pikachu V', slug: 'X-svAL005' })).ok, true, 'espèce + règle');
+        assert.ok(!/qualifie/.test(mt(trad({ nom: 'ピカチュウ', dex: 25, pv: 60 }), ptrad({ nomEn: 'Hiroshima\'s Pikachu', nomEnCarte: 'Hiroshima\'s Pikachu', pv: 60, slug: 'X-svAL005' }))), 'le qualificatif ne vise que la fiche SANS carte');
+    });
+    await test('nom traduit : jumeau dans le set = marqueur (la preuve passe, le numéro se vérifie à l\'œil) ; autre espèce, autre règle ou même numéro = pas de jumeau', () => {
+        const autre = (o = {}) => ({ idProduct: 2002, numero: '006', nomEn: 'Mareep [Static Shock]', ...o });
+        assert.ok(drap(trad(), ptrad({ autresDuSet: [autre()] })).includes('jumeau-dans-le-set'));
+        assert.strictEqual(lue(trad(), ptrad({ autresDuSet: [autre()] })).ok, true, 'ce n\'est PAS un refus');
+        for (const a of [autre({ nomEn: 'Flaaffy' }), autre({ nomEn: 'Mareep ex' }), autre({ numero: '005' }), autre({ numero: '5' }), autre({ idProduct: 1001 }), autre({ nomEn: null }), autre({ nomEn: 'Caterpie' })])
+            assert.ok(!drap(trad(), ptrad({ autresDuSet: [a] })).includes('jumeau-dans-le-set'), JSON.stringify(a));
+        assert.ok(!drap(trad(), ptrad()).includes('jumeau-dans-le-set'), 'sans liste des autres produits du set : pas de marqueur');
+        // un autre produit de même Pokédex et même règle parmi d'autres : jumeau
+        assert.ok(drap(trad(), ptrad({ autresDuSet: [autre({ nomEn: 'Flaaffy' }), autre({ idProduct: 2003, numero: '007' })] })).includes('jumeau-dans-le-set'));
     });
     await test('nom traduit : régressions — anglais, français, japonais avec nomJa, et manifestes sans témoin gardent leur comportement', () => {
         assert.deepStrictEqual(lue(entree(), produit()), { ok: true, motifs: [] });
@@ -1121,6 +1180,8 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         const ancien = PV.preuvesDe({ entree: entree(), validation: validation(), produit: produit(), langue: 'en' }).preuveLue.lu;
         assert.ok(!('dex' in ancien) && !('pv' in ancien) && !('codeSet' in ancien), 'les manifestes existants gardent la forme de leur preuve');
     });
+
+    }   // fin du bloc « nom traduit »
 
     console.log(`\ntest-preuves : ${ok} OK, ${ko} KO`);
     process.exitCode = ko ? 1 : 0;

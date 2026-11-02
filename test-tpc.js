@@ -17,6 +17,14 @@ const verifier = (nom, obtenu, attendu) => {
 const F = f => fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'tpc-fixtures', f), 'utf8');
 
 (async () => {
+    // ── 0. La règle « Méga » lue en japonais (メガ) et en chinois simplifié (超级) — sans prendre Meganium (メガニウム) ni Yanmega (メガヤンマ) pour un Méga ──
+    verifier('Méga : メガ japonais', T.reglesDuNom('メガリザードンXex'), 'Méga+ex+forme X');
+    verifier('Méga : 超级 chinois simplifié', T.reglesDuNom('超级喷火龙Xex'), 'Méga+ex+forme X');
+    verifier('Méga : 超級 chinois traditionnel (inchangé)', T.reglesDuNom('超級噴火龍Xex'), 'Méga+ex+forme X');
+    verifier('Méga : Meganium (メガニウム) n\'est pas un Méga', T.reglesDuNom('メガニウム'), '');
+    verifier('Méga : Yanmega (メガヤンマ) n\'est pas un Méga', T.reglesDuNom('メガヤンマ'), '');
+    verifier('Méga : Mega Meganium (メガメガニウム) en est un', T.reglesDuNom('メガメガニウム'), 'Méga');
+
     // ── 1. LA LECTURE DES PAGES ──────────────────────────────────────────────────────────────────────────────────
     const id = T.lireFicheAsie(F('asie-id-fiche-7125.html'));
     verifier('TPC Asie id 7125 : nom, numéro, set, Pokédex, PV, image', [id.nom, id.numero, id.denominateur, id.dex, id.pv, id.image],
