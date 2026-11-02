@@ -8,7 +8,7 @@
 // chose que le booléen vrai : le jeton tombe, en silence, jamais d'exception. La liste est gelée ; l'ORDRE de la réponse est celui de la liste ; aucun doublon.
 //
 // ── CE QUI REND CHAQUE JETON VRAI, SUR CE CODE (prouvé ligne à ligne ; le banc appelle ce code pour que la preuve ne vieillisse pas) ──
-//   Aucun des cinq ne dépend d'un drapeau de v2/config.js. TROIS sont servis par le CODE seul (constantes vraies). DEUX (`langue-impression`, `marques`) dépendent d'une DONNÉE : l'archive des visuels, EN MÉMOIRE
+//   (02/11 : `mention-langues-1` est le seul jeton de DÉFAUT qu'un drapeau peut retirer : V2_MENTION_LANGUES=0 — voir sa condition.) Aucun des cinq premiers ne dépend d'un drapeau de v2/config.js. TROIS sont servis par le CODE seul (constantes vraies). DEUX (`langue-impression`, `marques`) dépendent d'une DONNÉE : l'archive des visuels, EN MÉMOIRE
 //   (v2/chargeur/etat.js, `version()`) — sans archive (réveil à froid, clés de lecture fermées) `impressions` est vide et `Produit.marques` vaut null ; avec une archive d'avant la colonne des jumeaux, `langue` vaut null partout.
 //   Un jeton ne s'annonce que si la donnée est RÉELLEMENT servie à cet instant : il lit la version en mémoire par un LECTEUR INJECTÉ (3e argument de capacitesServies ; index.js passe etat.version), jamais la base ;
 //   pas de lecteur, lecteur qui lève, archive absente ou sans la colonne : le jeton tombe. Quand un drapeau conditionnera une partie, la condition lira `cfg` (la MÊME configuration que la route) ; le banc balaie
@@ -26,7 +26,7 @@
 // Un jeton dont le code ne pourrait pas être prouvé servi n'entre pas dans CONDITIONS : il n'est jamais annoncé.
 
 /** La liste fermée (DEMANDE-SERVEUR-EXTENSION.md, « EXTENSION — 24/10 (soir) »), dans l'ordre de la réponse. UN seul endroit : les bancs, le schéma et le contrat la lisent d'ici. */
-const CAPACITES = Object.freeze(['langue-impression', 'marques', 'prix-incertains', 'prix-repli', 'achete-avant-jour', 'empreinte', 'mesures-client', 'probable', 'leviers-abde', 'promotion-surs']);
+const CAPACITES = Object.freeze(['langue-impression', 'marques', 'prix-incertains', 'prix-repli', 'achete-avant-jour', 'mention-langues-1', 'empreinte', 'mesures-client', 'probable', 'leviers-abde', 'promotion-surs']);
 
 /**
  * L'archive des visuels EN MÉMOIRE est-elle en place, avec au moins un produit ? `version` est ce que rend le lecteur (chargeur/etat.js::version) : un objet gelé, ou null. Écrit par ce qu'il AUTORISE :
@@ -55,6 +55,9 @@ const CONDITIONS = Object.freeze({
     'prix-incertains': () => true,
     'prix-repli': () => true,
     'achete-avant-jour': () => true,
+    // MENTION-LANGUES (02/11) : `Produit.visuelMentionLangues` est servi au client qui déclare `capacitesClient: ["mention-langues-1"]` (identifier/routes.js, identifier/produit.js) SI le drapeau V2_MENTION_LANGUES est allumé (`cfg.mentionLangues === true`,
+    // allumé par défaut ; « 0 » : jamais servi, donc jamais annoncé). Aucune donnée n'est exigée : sans visuel ou sans mention le champ vaut null, il reste servi.
+    'mention-langues-1': (cfg) => cfg.mentionLangues === true,
     // 25/10 (DEMANDE-SERVEUR-EXTENSION.md, contrat de l'empreinte, point 8) : « le serveur attend le vecteur de l'extension ». Il ne le dit QUE s'il sait s'en servir, donc les TROIS à la fois :
     //   (1) le drapeau V2_EMPREINTE_EXTENSION est allumé — `cfg.empreinteExtension === true` (config.js le ramène à false quand la configuration du modèle est mal formée) ;
     //   (2) la configuration du modèle est COMPLÈTE : identifiant, sha256 des poids, objet R2 du modèle (celui que /api/modele-empreinte/<sha256> présigne) ;

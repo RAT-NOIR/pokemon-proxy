@@ -269,6 +269,9 @@ function lireConfig(env = process.env) {
         // DECISION-SURS (01/11/2026) : un PROBABLE que S2 ∪ S3 ∪ I(0,2) prouve (identifier/promotion-surs.js) devient un SÛR. ÉTEINT par défaut (0), « 0 » ou « 1 » seulement ; sans effet si V2_LEVIERS_ABDE et V2_PROBABLE ne sont pas allumés.
         // Réservé à l'ESSAI : s'éteint seul au premier sûr faux d'une série (mesures/serie-essai.js --eteindre-si-sur-faux).
         promotionSurs: booleen('V2_PROMOTION_SURS', env.V2_PROMOTION_SURS, false),
+        // MENTION-LANGUES (02/11/2026) : le champ additif `visuelMentionLangues` du Produit (capacité `mention-langues-1`). ALLUMÉ par défaut : absente ou « 1 » = servi au client qui déclare la capacité (et annoncée par /ping) ;
+        // « 0 » = jamais servi, même si le client la déclare, et le jeton n'est plus annoncé ; toute autre valeur rend la configuration INVALIDE.
+        mentionLangues: booleen('V2_MENTION_LANGUES', env.V2_MENTION_LANGUES, true),
         // JUMEAUX-VERDICTS (02/11/2026) : préparer le verdict des jumeaux de TOUS les candidats que l'adaptateur peut passer à la garde (et non du seul produit affirmé), pour qu'un filtre de nom qui laisse un candidat seul ne rende plus
         // une panne INDISPONIBLE à tort. ÉTEINT par défaut (0), « 0 » ou « 1 » seulement : la route est celle d'e833578c, octet pour octet. Allumé : au plus 10 requêtes par réponse, 40 par lot, 4 en parallèle, 1,5 s chacune, 3 s au total (jumeaux.js).
         jumeauxPreparerTous: booleen('V2_JUMEAUX_PREPARER_TOUS', env.V2_JUMEAUX_PREPARER_TOUS, false),

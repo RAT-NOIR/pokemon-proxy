@@ -81,6 +81,22 @@ const ID = 990501;
     const tard = await jouer({ capacitesClient: ['mesures-1', 'mention-langues-1'] });
     H.v('4. déclarée parmi d\'autres capacités : servie', produits(tard.json).every(p => p.visuelMentionLangues && p.visuelMentionLangues.fr === MENTION_EDITION_1) && produits(tard.json).length > 0, true);
 
+    // 5. DRAPEAU V2_MENTION_LANGUES=0 : même route, même client qui déclare la capacité — le champ n'est JAMAIS servi, et la réponse est celle d'avant octet pour octet
+    const cfg0 = lireConfig({ V2_MENTION_LANGUES: '0' });
+    H.v('5a. la configuration lit V2_MENTION_LANGUES : « 0 » éteint, défaut allumé', [cfg0.mentionLangues, cfg.mentionLangues], [false, true]);
+    const app0 = express(); app0.set('trust proxy', true); app0.use(express.json({ limit: '2400kb' }));
+    app0.use(assembler([require('../argent/monter'), require('../identifier/monter')], cfg0, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaineFabriquee }));
+    const sv0 = await H.serveur(app0);
+    const jouer0 = async extra => {
+        const jeton = J.genererJeton(); await db.col('installations').insertOne(M.nouvelleInstallation({ jetonEmpreinte: J.empreinte(jeton), essais: 3, libelle: 'banc' }));
+        return H.appel(sv0.url, '/api/identifier', { methode: 'POST', corps: corps(extra), entetes: { origin: ORIGINE, ...ip(), authorization: `Bearer ${jeton}`, 'idempotency-key': cle() } });
+    };
+    const S0 = await jouer0({ capacitesClient: ['mention-langues-1'] });
+    const p0 = produits(S0.json);
+    H.v('5b. drapeau à « 0 », client qui DÉCLARE la capacité : 200, des Produits servis, AUCUNE clé `visuelMentionLangues`', [S0.statut, p0.length > 0, p0.some(p => 'visuelMentionLangues' in p)], [200, true, false]);
+    H.v('5c. … et la réponse est identique à celle d\'un client qui ne déclare rien', normaliser(S0.json) === normaliser((await jouer0({})).json), true);
+    await sv0.fermer();
+
     crochet.apresReponse = origRep;
     const monter = require('../identifier/monter'); monter.arreterBalayage(); monter.arreterPurge(); require('../argent/marque-scan').arreterRattrapage();
     await sv.fermer();

@@ -125,8 +125,8 @@ function verifierEntree(corps, cfg) {
     // CALCUL-CLIENT : `capacitesClient` n'est LU que si V2_MESURES_CLIENT=1 (éteint : un champ inconnu, ignoré comme aujourd'hui). Il ne refuse jamais la requête : seule la valeur exacte « mesures-1 » dans un tableau compte.
     const mesuresClient = cfg.mesuresClient === true && Array.isArray(corps.capacitesClient) && corps.capacitesClient.length <= 8 && corps.capacitesClient.includes('mesures-1');
     // MENTION-LANGUES : le champ additif `visuelMentionLangues` du Produit n'est servi QU'AU client qui annonce `capacitesClient: ["mention-langues-1"]` (même garde que `mesures-1` : un tableau de 8 éléments au plus, la valeur EXACTE dedans).
-    // Pas de drapeau de configuration : le champ est purement additif ; qui ne l'annonce pas reçoit la réponse d'avant, octet pour octet (test-mention-langues-route.js).
-    const mentionLangues = Array.isArray(corps.capacitesClient) && corps.capacitesClient.length <= 8 && corps.capacitesClient.includes('mention-langues-1');
+    // Derrière le drapeau V2_MENTION_LANGUES (allumé par défaut ; « 0 » = jamais servi, même déclaré) ; qui ne l'annonce pas reçoit la réponse d'avant, octet pour octet (test-mention-langues-route.js).
+    const mentionLangues = cfg.mentionLangues === true && Array.isArray(corps.capacitesClient) && corps.capacitesClient.length <= 8 && corps.capacitesClient.includes('mention-langues-1');
     return { entree: {
         ...(photoIds ? { photoIds } : {}),
         ...(mesuresClient ? { mesuresClient: true } : {}),

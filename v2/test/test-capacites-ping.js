@@ -24,7 +24,8 @@ const SANS_EMPREINTE = j => j !== 'empreinte' && j !== 'mesures-client' && j !==
 const ENV = { RM_API_V2: '1', MONGODB_BASE: 'test_scratch' };
 // Le contrat de l'EXTENSION (DEMANDE-SERVEUR-EXTENSION.md, « EXTENSION — 24/10 (soir) ») : cinq jetons, dans cet ordre. Le dire ici une fois, à la main, est voulu : changer la liste est une décision
 // qui se prend des deux côtés, pas un effet de bord. Tous les AUTRES contrôles lisent la liste exportée par v2/capacites.js.
-const CONTRAT_EXTENSION = ['langue-impression', 'marques', 'prix-incertains', 'prix-repli', 'achete-avant-jour'];
+// 02/11 : `mention-langues-1` (champ additif `visuelMentionLangues`, drapeau V2_MENTION_LANGUES allumé par défaut) suit `achete-avant-jour` : un jeton de DÉFAUT, annoncé sans archive ni index ; les jetons des drapeaux d'essai restent en fin de liste.
+const CONTRAT_EXTENSION = ['langue-impression', 'marques', 'prix-incertains', 'prix-repli', 'achete-avant-jour', 'mention-langues-1'];
 // 25/10 : le sixième jeton, `empreinte` (DEMANDE-SERVEUR-EXTENSION.md, contrat de l'empreinte, point 8), en fin de liste, annoncé seulement si l'index d'empreintes est CHARGÉ.
 // 26/10 (nuit) : le septième, `mesures-client` (contrat « calcul client », point 5), en fin de liste, annoncé seulement si V2_MESURES_CLIENT=1, V2_ORB_SERVEUR=0 ET le jeton `empreinte`.
 // 31/10 : le huitième, `probable` (contrat « niveau probable » du 25/10), en DERNIER, annoncé seulement si V2_PROBABLE=1 et la version minimale valide (jamais compté ici : ses drapeaux ne sont pas posés).
@@ -39,7 +40,7 @@ const LISTE = C && Array.isArray(C.CAPACITES) ? C.CAPACITES : [];
 H.v('la liste fermée est celle du contrat de l\'extension (cinq jetons) puis `empreinte`, `mesures-client` et `probable` (le dernier) en fin de liste', [...LISTE], [...CONTRAT_LISTE, 'probable', 'leviers-abde', 'promotion-surs']);
 H.vrai('   elle est gelée (un bout de code ne la rallonge pas)', C !== null && Object.isFrozen(C.CAPACITES));
 H.v('   sans doublon', new Set(LISTE).size, LISTE.length);
-H.vrai('   que des jetons minuscules à tirets', LISTE.every(j => /^[a-z]+(-[a-z]+)*$/.test(j)));
+H.vrai('   que des jetons minuscules à tirets', LISTE.every(j => /^[a-z]+(-[a-z0-9]+)*$/.test(j)));   // 02/11 : `mention-langues-1` porte un chiffre de version (comme `mesures-1`) ; une lettre d'abord, jamais de majuscule
 
 // ── 2. la garde : un jeton entre s'il est dans la liste ET si sa condition est EXACTEMENT vraie ──
 if (C) {
@@ -103,7 +104,7 @@ if (C) {
         V2_COMPTE_HEURE: ENT, V2_SOLDE_HEURE: ENT, V2_REPONSE_HEURE: ENT, V2_RETOUR_LIVE_HEURE: ENT, V2_ETIQUETTE_HEURE: ENT, V2_VERSION_MODELE: 'banc-1',
         V2_URL_VERIFICATION: 'https://exemple.org/verification', V2_URL_REINIT: 'https://exemple.org/reinit', V2_EMPREINTE_JOURS: ENT, V2_COURRIELS_JOUR: ENT, V2_AVERTISSEMENTS_INACTIFS: BOOL, V2_COURRIEL_DE: 'banc@exemple.org', V2_COURRIEL_REPONSE: 'reponse@exemple.org', V2_ORIGINE_EXTENSION_DEV: 'chrome-extension://abcdefghijklmnop',
         V2_VISUELS_HMAC: 'valeur-de-banc', V2_VISUELS_SOURCE: 'calcul', V2_VISUELS_BANC_FICHIER: 'fichier-fictif.rmv', V2_PHOTO_ADMIN_DELAI_S: '5', V2_PHOTO_ADMIN_INTERVALLE_S: '5', V2_PHOTO_ADMIN_MAX_JOUR: '5',
-        V2_DESCRIPTION_CONSERVEE: BOOL, V2_DESCRIPTION_AU_MODELE: BOOL, V2_MARCHES: 'vinted.fr', V2_VERSION_MIN_EXTENSION: '2.5.0', V2_REGLE_G: BOOL, V2_SECONDE_LECTURE: BOOL, V2_LECTURE_TAMPON: BOOL, V2_SUR_PAR_IMAGE: BOOL, V2_VIVIER_IMAGE: BOOL, V2_SPI_COMPARATEUR: BOOL, V2_GARDE_MARQUEURS: BOOL, V2_JUMBO_TITRE: BOOL, V2_PROBABLE: BOOL, V2_PROBABLE_COSINUS_MIN: '0.5', V2_PROBABLE_VECTEUR_EXIGE: BOOL, V2_LEVIERS_ABDE: BOOL, V2_LEVIERS_ECART: '0.2', V2_LEVIERS_UN_CANDIDAT: BOOL, V2_PROMOTION_SURS: BOOL, V2_JUMEAUX_PREPARER_TOUS: BOOL,
+        V2_DESCRIPTION_CONSERVEE: BOOL, V2_DESCRIPTION_AU_MODELE: BOOL, V2_MARCHES: 'vinted.fr', V2_VERSION_MIN_EXTENSION: '2.5.0', V2_REGLE_G: BOOL, V2_SECONDE_LECTURE: BOOL, V2_LECTURE_TAMPON: BOOL, V2_SUR_PAR_IMAGE: BOOL, V2_VIVIER_IMAGE: BOOL, V2_SPI_COMPARATEUR: BOOL, V2_GARDE_MARQUEURS: BOOL, V2_JUMBO_TITRE: BOOL, V2_PROBABLE: BOOL, V2_PROBABLE_COSINUS_MIN: '0.5', V2_PROBABLE_VECTEUR_EXIGE: BOOL, V2_LEVIERS_ABDE: BOOL, V2_LEVIERS_ECART: '0.2', V2_LEVIERS_UN_CANDIDAT: BOOL, V2_PROMOTION_SURS: BOOL, V2_JUMEAUX_PREPARER_TOUS: BOOL, V2_MENTION_LANGUES: BOOL,
         V2_TE_VOISINS_UNE_FOIS: BOOL, V2_TE_EMPREINTE_TOT: BOOL, V2_TE_FIN_PARALLELE: BOOL, V2_TE_ORB_UTILE: BOOL, V2_MESURES_CLIENT: BOOL, V2_ORB_SERVEUR: BOOL, V2_G_GROUPE: BOOL, V2_G_GROUPE_ECART: '50',
         V2_CONFIRMATION_NOMBREUX: BOOL, V2_TAUX_BCE: BOOL, V2_RESOLUTION_CARDMARKET: BOOL, V2_BANC_SEAU: BOOL, V2_PHOTOS_MULTIPLES: BOOL, V2_PHOTOS_MULTIPLES_TOUS: BOOL, V2_PHOTO_COMPTES_BANC: BOOL, V2_ABONNEMENTS: BOOL,
         // abonnements/config.js (lu par config.js) : des valeurs fictives, jamais une forme de clé
@@ -126,6 +127,13 @@ if (C) {
     H.v('LEVIERS-ABDE : V2_LEVIERS_ABDE=1 ajoute leviers-abde en DERNIER (V2_LEVIERS_ECART ne change rien), éteint ou invalide : pas de jeton', [servi({ V2_LEVIERS_ABDE: '1', V2_PROBABLE: '1' }), servi({ V2_LEVIERS_ABDE: '1', V2_PROBABLE: '1', V2_LEVIERS_ECART: '0.3' }), servi({ V2_LEVIERS_ABDE: '1' }), servi({ V2_LEVIERS_ABDE: '0', V2_PROBABLE: '1' })].map(l => l.includes('leviers-abde') ? l[l.length - 1] : null), ['leviers-abde', 'leviers-abde', null, null]);
     H.v('   éteint (défaut), « 0 » ou valeur invalide (« 2 », « oui ») : pas de jeton', [{}, { V2_PROBABLE: '0' }, { V2_PROBABLE: '2' }, { V2_PROBABLE: 'oui' }].map(e => { try { return servi(e).includes('probable'); } catch { return false; } }), [false, false, false, false]);       // « 2 » et « oui » : la configuration est invalide (elle lève), jamais de jeton
     H.v('   la condition exige une version minimale lisible (configuration valide)', [C.CONDITIONS.probable({ probable: true, versionMinProbable: '2.0.1' }), C.CONDITIONS.probable({ probable: true, versionMinProbable: 'x' }), C.CONDITIONS.probable({ probable: true }), C.CONDITIONS.probable({ probable: 1, versionMinProbable: '2.0.1' })], [true, false, false, false]);
+    // MENTION-LANGUES : V2_MENTION_LANGUES est la SEULE variable qui retire un jeton de DÉFAUT : absente ou « 1 » = annoncé ; « 0 » = jamais annoncé (et rien d'autre ne bouge) ; toute autre valeur = configuration invalide
+    const ML = 'mention-langues-1';
+    H.v('MENTION-LANGUES : absente, « 1 » : `mention-langues-1` annoncé ; « 0 » : jamais', [servi({}), servi({ V2_MENTION_LANGUES: '1' }), servi({ V2_MENTION_LANGUES: '0' })].map(l => l.includes(ML)), [true, true, false]);
+    H.v('   « 0 » ne retire que ce jeton (les autres, dans le même ordre, restent)', servi({ V2_MENTION_LANGUES: '0' }), servi({}).filter(j => j !== ML));
+    H.v('   le jeton est de DÉFAUT : annoncé sans archive en mémoire ni index chargé', C.capacitesServies(lireConfig(ENV)).includes(ML), true);
+    H.v('   « 2 », « oui », « true » : la configuration est invalide (elle lève), jamais de jeton', ['2', 'oui', 'true'].map(v => { try { return servi({ V2_MENTION_LANGUES: v }).includes(ML) ? 'servi' : 'tu'; } catch { return 'leve'; } }), ['leve', 'leve', 'leve']);
+    H.v('   la condition exige le booléen vrai de la configuration', [C.CONDITIONS[ML]({ mentionLangues: true }), C.CONDITIONS[ML]({ mentionLangues: 1 }), C.CONDITIONS[ML]({ mentionLangues: '1' }), C.CONDITIONS[ML]({})], [true, false, false, false]);
     console.log(`   (${resultats.length - invalides.length} essais valides ; ${invalides.length} valeurs d'essai refusées par la configuration — le ping y est vide, donc aucun jeton : ${invalides.map(([n]) => n).join(', ') || 'aucune'})`);
     H.vrai('   la plupart des essais sont des configurations VALIDES (le balayage ne se vide pas en essais refusés)', resultats.length - invalides.length >= resultats.length * 0.8);
 }
@@ -173,6 +181,10 @@ if (C) {
     H.v('   rien d\'autre ne change dans /ping : les deux mêmes clés, la même version minimale', [Object.keys(v2.ping()), v2.ping().versionMinExtension], [['versionMinExtension', 'capacites'], lireConfig({ ...ENV, ...BON }).versionMinExtension]);
     etatEmp.vider();
     H.v('   index vidé (rechargement refusé puis bascule perdue) : le jeton tombe à l\'appel suivant', jetons(), CONTRAT_EXTENSION);
+    // MENTION-LANGUES de bout en bout : V2_MENTION_LANGUES=0 sur le vrai /ping — le jeton tombe, les autres restent
+    v2.arreter(); etatEmp.vider(); E.installer(COMPLETE);
+    silence(() => v2.monterEnTete(express(), { ...ENV, V2_MENTION_LANGUES: '0' }));
+    H.v('/ping, V2_MENTION_LANGUES=0 : pas de `mention-langues-1`, les autres jetons de défaut restent', v2.ping().capacites, CONTRAT_EXTENSION.filter(j => j !== 'mention-langues-1'));
     v2.arreter(); E.vider();
     silence(() => v2.monterEnTete(express(), ENV));
     etatEmp.installer(CHARGE);
