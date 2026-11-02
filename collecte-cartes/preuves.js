@@ -131,14 +131,27 @@ const REGIONAL_PRODUIT = /\b(alolan|galarian|hisuian|paldean)\b/i;
 const REGIONAL_LU = /アローラ|ガラル|ヒスイ|パルデア|阿羅拉|阿罗拉|伽勒爾|伽勒尔|洗翠|帕底亞|帕底亚|อโลลา|กาลาร์|ฮิซุย|ปัลเดีย|alola|galar|hisui|paldea/i;
 const entierPositif = v => typeof v === 'number' && Number.isInteger(v) && v > 0;
 const echapper = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/**
+ * Deux decks japonais impriment un autre code que Cardmarket. Table FERMÉE, code Cardmarket → code IMPRIMÉ, dans ce sens seulement ; aucune règle générale (suffixe « v » retiré, inclusion) : ce serait une clé par inclusion.
+ *  · mEEv → mEE : planche pl-sb-mEEv-mEZ.png (phase4-b-visuels), 10 cartes MEGA Starter Set Eevee ex (Jolteon 001/019 … Eevee 020/019) portant « mEE » dans la ligne du bas ; Cardmarket : slugSet MEGA-Starter-Set-Eevee-ex, idExpansion 6637, codeSet « mEEv ».
+ *  · sKV → sK  : planche pl-sKV.png (phase4-b-visuels), 5 cartes VSTAR Premium Trainer Box (Cherubi 001/030 … Mew 007/030) portant « sK » ; Cardmarket : slugSet Premium-Trainer-Box-VSTAR, idExpansion 4515, codeSet « sKV ».
+ * Aucun autre set ne porte « mEE » ou « sK » (univers-expansions.json, table-sets.js, table-sets-auto.json, table-sets-sans-page.json : aucune occurrence, vérifié le 2026-11-02).
+ */
+const CODES_IMPRIMES_ALIAS = Object.freeze({ mEEv: 'mEE', sKV: 'sK' });
 /** Le code du set lu, confronté au slug Cardmarket (`…-svAL005`, `…-MA5-012`) et à la ligne du produit (`codeSet`, codes_set). @returns {string|null} le motif de refus, null si concordant. */
-function motifDeCode(lu, produit, np) {
+function motifDeCode(lu, produit, np, drapeaux = []) {
     const code = norm(lu.codeSet);
     if (!code) return 'code-set-non-lu';
     const ligne = norm(produit?.codeSet);
-    if (ligne && ligne !== code) return 'code-set-different';
     const n = String(np).trim().toLowerCase().replace(/^0+(?=\d)/, '');
     const slug = texte(produit?.slug) ? produit.slug.trim().toLowerCase() : null;
+    // Alias FERMÉ (2026-11-02) : le code imprimé n'est pas celui de Cardmarket. Passe SEULEMENT si le produit porte exactement le code Cardmarket de la paire (ligne codes_set, ou slug quand la ligne est vide).
+    const cm = Object.keys(CODES_IMPRIMES_ALIAS).find(k => norm(CODES_IMPRIMES_ALIAS[k]) === code);
+    if (cm) {
+        const cmN = norm(cm);
+        if (ligne === cmN || (!ligne && slug && new RegExp(`(^|-)${echapper(cmN)}-?0*${echapper(n)}$`).test(slug))) { drapeaux.push(`codeAlias:${cm}→${CODES_IMPRIMES_ALIAS[cm]}`); return null; }
+    }
+    if (ligne && ligne !== code) return 'code-set-different';
     if (slug && new RegExp(`(^|-)${echapper(code)}-?0*${echapper(n)}$`).test(slug)) return null;
     if (ligne === code) return null;
     // le slug porte un code collé au numéro, et ce n'est pas celui qui est lu : désaccord ; sinon rien ne permet de vérifier
@@ -159,7 +172,7 @@ function aUnJumeauDansLeSet(produit, cleDuProduit, np) {
 function motifDeNomTraduit(lu, produit, np, drapeaux = []) {
     if (!texte(lu.nom)) return 'nom-different';
     if (np == null) return 'nom-traduit-numero-absent';
-    const mc = motifDeCode(lu, produit, np); if (mc) return mc;
+    const mc = motifDeCode(lu, produit, np, drapeaux); if (mc) return mc;
     const net = x => (texte(x) ? J.decomposerNomCardmarket(x).nom : null);
     const nomProduit = net(produit?.nomEn), nomCarte = net(produit?.nomEnCarte);
     const nom = nomCarte ?? nomProduit;

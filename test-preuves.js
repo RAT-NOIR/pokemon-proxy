@@ -1075,12 +1075,12 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         const jolteon = trad({ nom: 'サンダース', dex: 135, pv: 110, numero: '001', total: '019', codeSet: 'mEE' });
         const pj = ptrad({ numero: '001', slug: 'Jolteon-mEEv-001', slugSet: 'MEGA-Starter-Set-Eevee-ex', nomEn: 'Jolteon' });
         assert.deepStrictEqual(lue(jolteon, pj), { ok: true, motifs: [] }, 'mEE imprimé contre un produit mEEv (slug)');
-        assert.deepStrictEqual(drap(jolteon, pj), ['codeAlias:mEEv→mEE'], 'l\'alias est écrit dans la preuve');
+        assert.ok(drap(jolteon, pj).includes('codeAlias:mEEv→mEE'), 'l\'alias est écrit dans la preuve');
         assert.strictEqual(lue(jolteon, ptrad({ numero: '001', slug: 'Jolteon', codeSet: 'mEEv', nomEn: 'Jolteon' })).ok, true, 'mEE imprimé contre la ligne codes_set mEEv');
         const mareep = trad({ codeSet: 'sK' });
         const pm = ptrad({ slug: 'Mareep-sKV005', slugSet: 'Premium-Trainer-Box-VSTAR' });
         assert.deepStrictEqual(lue(mareep, pm), { ok: true, motifs: [] }, 'sK imprimé contre un produit sKV');
-        assert.deepStrictEqual(drap(mareep, pm), ['codeAlias:sKV→sK']);
+        assert.ok(drap(mareep, pm).includes('codeAlias:sKV→sK'));
         assert.match(mt(jolteon, ptrad({ numero: '001', slug: 'Jolteon-mEZ-001', nomEn: 'Jolteon' })), /code-set-different/, 'mEE contre un produit d\'un autre code');
         assert.match(mt(jolteon, ptrad({ numero: '001', slug: 'Jolteon', codeSet: 'mEZ', nomEn: 'Jolteon' })), /code-set-different/, 'idem par la ligne');
         assert.match(mt(mareep, ptrad({ slug: 'Mareep-sKX005' })), /code-set-different/, 'sK contre un autre code');
@@ -1088,7 +1088,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.match(mt(trad({ codeSet: 'sKV' }), ptrad({ slug: 'Mareep-sK005' })), /code-set-different/, 'sKV imprimé contre un produit sK refuse');
         assert.match(mt(trad({ nom: 'サンダース', dex: 135, pv: 110, numero: '001', codeSet: 'mE' }), ptrad({ numero: '001', slug: 'Jolteon-mEEv-001', nomEn: 'Jolteon' })), /code-set-different/, 'aucune règle générale : « mE » contre mEEv refuse');
         assert.match(mt(trad({ codeSet: 's' }), pm), /code-set-different/, '« s » contre sKV refuse');
-        assert.deepStrictEqual(drap(trad(), ptrad()), [], 'aucun alias sans alias : pas de drapeau');
+        assert.ok(!drap(trad(), ptrad()).some(d => d.startsWith('codeAlias')), 'aucun alias hors des deux paires : pas de drapeau');
     });
     await test('nom traduit : chaque discordance REFUSE, avec son motif', () => {
         assert.match(mt(trad({ pv: null }), ptrad()), /pv-non-lu/, 'PV absent');

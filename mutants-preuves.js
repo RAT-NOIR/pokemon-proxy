@@ -171,7 +171,8 @@ const GROUPES = [
         ['nom traduit : un nombre décimal lu comme entier', "typeof v === 'number' && Number.isInteger(v) && v > 0", "typeof v === 'number' && v > 0"],
         ['nom traduit : règle saisie ≠ nom lu acceptée', "if (lu.regle != null && TPC.reglesDuNom(lu.regle) !== lue) return 'regle-incoherente';", ""],
         ['nom traduit : règle du produit non comparée', "if (lue !== TPC.reglesDuNom(nom)) return 'regle-differente';", ""],
-        ['nom traduit : ce que le chasseur a lu non écrit dans la preuve', "...Object.fromEntries(CHAMPS_TEMOIN_TRADUIT.filter(", "...Object.fromEntries([].filter("]
+        ['nom traduit : ce que le chasseur a lu non écrit dans la preuve', "...Object.fromEntries(CHAMPS_TEMOIN_TRADUIT.filter(", "...Object.fromEntries([].filter("],
+        ['alias de code : table des alias retirée', "Object.freeze({ mEEv: 'mEE', sKV: 'sK' })", "Object.freeze({})"]
     ] },
     // ➕ HD-ZH : chaque condition de « remplacement-meme-dessin » retirée doit faire échouer son banc
     { module: 'collecte-cartes/preuves.js', bancs: ['test-preuves-remplacement.js'], mutants: [
@@ -295,12 +296,15 @@ const GROUPES = [
 let tues = 0, total = 0;
 const survivants = [];
 const filtres = process.argv.slice(2).filter(a => a.startsWith('--groupe=')).map(a => a.slice(9));
+const seuls = process.argv.slice(2).filter(a => a.startsWith('--mutant=')).map(a => a.slice(9));   // ne rejoue que les mutants dont le nom contient le fragment
 for (const G of GROUPES) {
     if (filtres.length && !filtres.some(f => G.module.includes(f))) continue;
+    if (seuls.length && !G.mutants.some(([nom]) => seuls.some(s => nom.includes(s)))) continue;
     const fichier = path.join(__dirname, G.module);
     const original = fs.readFileSync(fichier, 'utf8');
     try {
         for (const [nom, de, vers] of G.mutants) {
+            if (seuls.length && !seuls.some(s => nom.includes(s))) continue;
             total++;
             if (!original.includes(de)) { console.log(`❌ motif introuvable pour « ${nom} » (${G.module})`); process.exitCode = 2; continue; }
             fs.writeFileSync(fichier, original.replace(de, vers));
