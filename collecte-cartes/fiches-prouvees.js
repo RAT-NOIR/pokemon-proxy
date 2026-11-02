@@ -121,9 +121,13 @@ function prouver({ entree, produit, carte, cartesDuSet = [], cartesPourCle = [],
 
     // ⑤ LA VOIE : ce que la carte ou la Setlist déclare, indépendamment du nom
     const impressions = c => (c.impressions || []).filter(i => i && i.tirage === entree.tirage);
+    // (tour 1, 2026-11-02) « impression-numero » compare AUSSI l'EXPANSION : `entree.expansionImpression` (un nom ou une liste de noms de l'expansion du set visé) est EXIGÉ ; un numéro qui est celui
+    // d'une impression d'un AUTRE set du même tirage est refusé « impression-autre-expansion » (Mareep svB n°009, Poké Ball s8a-G n°011, Energy Switch SV-P/CS n°031, Ogerpon ex CSV9.5C n°256).
+    const expansionsVoulues = [].concat(entree.expansionImpression ?? []);
+    const memeNumero = i => nu(i.numero) !== '' && nu(i.numero) === nu(`${entree.prefixeNumero ?? ''}${produit.numero ?? ''}`);
     const voie = {
         // `prefixeNumero` (API-52 L3, DÉCLARÉ par la décision) : la carte écrit « XY177a » là où Cardmarket écrit « 177a » ; le préfixe se déclare, il ne se devine pas, et la lettre finale compte toujours
-        'impression-numero': c => impressions(c).filter(i => nu(i.numero) !== '' && nu(i.numero) === nu(`${entree.prefixeNumero ?? ''}${produit.numero ?? ''}`)),
+        'impression-numero': c => impressions(c).filter(i => memeNumero(i) && expansionsVoulues.includes(i.expansion)),
         'impression-equivalente': c => {
             const m = new RegExp(`^${entree.prefixe ?? 'S'}0*(\\d+)$`, 'i').exec(String(produit.numero ?? '').trim());
             if (!m) return [];
@@ -177,7 +181,9 @@ function prouver({ entree, produit, carte, cartesDuSet = [], cartesPourCle = [],
     } else {
         const f = voie[entree.voie];
         const mienne = f(carte);
-        if (!mienne.length) refus.push(`${entree.voie} : la carte ne déclare aucune impression qui corresponde au produit (numéro ${produit.numero ?? '—'}, tirage ${entree.tirage}${entree.expansionImpression ? `, extension « ${entree.expansionImpression} »` : ''})`);
+        if (entree.voie === 'impression-numero' && !expansionsVoulues.length) refus.push('impression-numero : aucune expansion déclarée sur l\'entrée (expansionImpression) — la voie ne compare pas le numéro seul, elle compare celui de l\'impression du SET visé');
+        else if (!mienne.length && entree.voie === 'impression-numero' && impressions(carte).some(memeNumero)) refus.push(`impression-autre-expansion : le numéro ${produit.numero} est celui d'une impression de « ${[...new Set(impressions(carte).filter(memeNumero).map(i => i.expansion))].join(' ; ')} », pas de l'expansion visée (« ${expansionsVoulues.join(' ; ')} »)`);
+        else if (!mienne.length) refus.push(`${entree.voie} : la carte ne déclare aucune impression qui corresponde au produit (numéro ${produit.numero ?? '—'}, tirage ${entree.tirage}${entree.expansionImpression ? `, extension « ${entree.expansionImpression} »` : ''})`);
         else {
             const concurrentes = cands.filter(c => c._id !== carte._id && f(c).length);
             if (concurrentes.length) refus.push(`${entree.voie} : ${concurrentes.length} autre(s) candidate(s) satisfont la même voie (${concurrentes.slice(0, 3).map(c => c._id).join(', ')}) — un doute est un refus`);

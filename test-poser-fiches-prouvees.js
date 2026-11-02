@@ -19,7 +19,7 @@ const imp = (tirage, expansion, numero, total = null) => ({ tirage, expansion, n
 // ── voie « impression-numero » : la carte déclare, dans CE tirage, une impression au MÊME numéro que le produit (suffixe gardé)
 const togepi = carte(10, 'Togepi GX', ['Rolling Panic'], [imp('intl', 'Cosmic', '143', '236'), imp('intl', 'Yellow A Alternate cards', '143a', '236')]);
 const pTog = produit(20, 'Togepi GX [Rolling Panic | Supreme Puff GX]', '143a');
-const E1 = { idProduct: 20, carteId: 10, voie: 'impression-numero', tirage: 'intl' };
+const E1 = { idProduct: 20, carteId: 10, voie: 'impression-numero', tirage: 'intl', expansionImpression: ['Cosmic', 'Yellow A', 'Yellow A Alternate cards'] };
 const ctx = (cartes, extra = {}) => ({ cartesDuSet: cartes, cartesPourCle: cartes, etatSetlist: null, ...extra });
 const bon = prouver({ entree: E1, produit: pTog, carte: togepi, ...ctx([togepi]) });
 verifier('impression-numero : nom+attaques, métacarte, témoin du nom et impression au même numéro → prouvé', [bon.ok, bon.temoins.length >= 4], [true, true]);
@@ -32,6 +32,26 @@ verifier('un homonyme aux mêmes attaques déclare AUSSI le numéro 143a → deu
     const r = prouver({ entree: E1, produit: pTog, carte: togepi, cartesDuSet: [togepi, autre], cartesPourCle: [togepi, autre], etatSetlist: null });
     return [r.ok, /candidate/.test(r.refus.join())];
 })(), [false, true]);
+
+// ── (tour 1 du coordinateur, 2026-11-02) « impression-numero » compare AUSSI l'EXPANSION : un numéro qui est celui d'une impression d'un AUTRE set du même tirage ne prouve rien
+//    (les 4 cas vus au lot b-lignes : Mareep svB n°009, Poké Ball s8a-G n°011, Energy Switch SV-P/CS n°031, Teal Mask Ogerpon ex CSV9.5C n°256)
+{
+    const cas = [
+        ['Mareep svB', 'jp', 'Premium Trainer Box ex', 'Mareep [Rear Kick | Electro Ball]', '009', ['Rear Kick', 'Electro Ball'], [imp('jp', 'Premium Trainer Box ex', '008', '028'), imp('jp', 'Sword & Shield Family Pokémon Card Game', '009')]],
+        ['Poké Ball s8a-G', 'jp', '25th Anniversary Golden Box', 'Poké Ball', '011', [], [imp('jp', '25th Anniversary Golden Box', '002', '015'), imp('jp', 'Autre set', '011')]],
+        ['Energy Switch SV-P/CS', 'zh-hans', 'SV-P Promotional cards', 'Energy Switch', '031', [], [imp('zh-hans', 'SV-P Promotional cards', '293'), imp('zh-hans', 'Gem Pack Vol. 1', '031')]],
+        ['Ogerpon ex CSV9.5C', 'zh-hans', 'Terastal Gathering', 'Teal Mask Ogerpon ex [Teal Dance | Myriad Leaf Shower]', '256', ['Teal Dance', 'Myriad Leaf Shower'], [imp('zh-hans', 'Terastal Gathering', '222'), imp('zh-hans', 'Autre set', '256')]]
+    ];
+    cas.forEach(([quoi, tirage, expo, nom, numero, attaques, imps], i) => {
+        const c = carte(300 + i, nom.replace(/ \[.*$/, ''), attaques, imps), p = produit(310 + i, nom, numero);
+        const r = prouver({ entree: { idProduct: 310 + i, carteId: 300 + i, voie: 'impression-numero', tirage, expansionImpression: expo }, produit: p, carte: c, ...ctx([c]) });
+        verifier(`impression-numero : ${quoi} — le numéro ${numero} est celui d'une impression d'un AUTRE set du tirage → refus « impression-autre-expansion »`, [r.ok, /impression-autre-expansion/.test(r.refus.join())], [false, true]);
+        const bonne = prouver({ entree: { idProduct: 310 + i, carteId: 300 + i, voie: 'impression-numero', tirage, expansionImpression: expo }, produit: p, carte: { ...c, impressions: [...imps, imp(tirage, expo, numero)] }, ...ctx([c]) });
+        verifier(`impression-numero : ${quoi} — la même carte avec une impression de CE set au n°${numero} → prouvé`, bonne.ok, true);
+    });
+    verifier('impression-numero : une entrée SANS expansion déclarée est refusée (une garde s\'écrit par ce qu\'elle autorise)', (() => { const { expansionImpression, ...nue } = E1; const r = prouver({ entree: nue, produit: pTog, carte: togepi, ...ctx([togepi]) }); return [r.ok, /expansion/.test(r.refus.join())]; })(), [false, true]);
+    verifier('impression-numero : l\'expansion déclarée peut être une liste (les noms d\'expansion d\'un set)', prouver({ entree: { ...E1, expansionImpression: ['Cosmic', 'Yellow A Alternate cards'] }, produit: pTog, carte: togepi, ...ctx([togepi]) }).ok, true);
+}
 
 // ── voie « impression-equivalente » : S01 ↔ 001/029 d'une AUTRE extension de la carte (calibrée)
 const bulba = carte(30, 'Bulbasaur', ['Tackle', 'Poison Seed'], [imp('jp', 'Pokémon-e Starter Deck', '001', '029')], { liens: { idProduct: [7], idMetacards: [212830] } });
@@ -83,7 +103,7 @@ verifier('les voies sont une liste fermée de cinq (la 5e, « deux-sources », e
 // (1) `prefixeNumero` : la carte écrit son numéro AVEC le préfixe du set (« XY177a »), Cardmarket le sien SANS (« 177a ») — comme `prefixe` de la voie « impression-equivalente », le préfixe est DÉCLARÉ.
 const karen = carte(80, 'Karen', [], [imp('intl', 'XY Black Star Promos', 'XY177'), imp('intl', 'Yellow A Alternate cards', 'XY177a')], { liens: { idProduct: [1], idMetacards: [223881] } });
 const pKaren = produit(81, 'Karen', '177a', 223881);
-const EK = { idProduct: 81, carteId: 80, voie: 'impression-numero', tirage: 'intl' };
+const EK = { idProduct: 81, carteId: 80, voie: 'impression-numero', tirage: 'intl', expansionImpression: 'Yellow A Alternate cards' };
 verifier('prefixeNumero : sans la déclaration, « 177a » ne désigne pas « XY177a » (refus, rien n\'est deviné)', prouver({ entree: EK, produit: pKaren, carte: karen, ...ctx([karen]) }).ok, false);
 verifier('prefixeNumero : déclaré « XY », « 177a » = « XY177a » et la lettre compte (XY177 ≠ XY177a) → prouvé', [prouver({ entree: { ...EK, prefixeNumero: 'XY' }, produit: pKaren, carte: karen, ...ctx([karen]) }).ok, prouver({ entree: { ...EK, prefixeNumero: 'XY' }, produit: pKaren, carte: { ...karen, impressions: [imp('intl', 'XY Black Star Promos', 'XY177')] }, ...ctx([karen]) }).ok], [true, false]);
 verifier('prefixeNumero : un mauvais préfixe (« SM ») refuse', prouver({ entree: { ...EK, prefixeNumero: 'SM' }, produit: pKaren, carte: karen, ...ctx([karen]) }).ok, false);
@@ -94,7 +114,7 @@ verifier('prefixeNumero : une homonyme qui déclare AUSSI XY177a → deux candid
 // (2) `metacarteAbsenteDeLaCarte` : la carte ne porte AUCUNE métacarte (rien à contredire) ; le témoin parle alors par les deux autres éléments et la seconde source de la décision. Une carte qui en porte une, fausse, refuse toujours.
 const lusa = carte(90, 'Lusamine', [], [imp('intl', 'Yellow A Alternate cards', '153a', '156')], { liens: { idProduct: [1], idMetacards: [] } });
 const pLusa = produit(91, 'Lusamine', '153a', 234656);
-const EL = { idProduct: 91, carteId: 90, voie: 'impression-numero', tirage: 'intl' };
+const EL = { idProduct: 91, carteId: 90, voie: 'impression-numero', tirage: 'intl', expansionImpression: 'Yellow A Alternate cards' };
 verifier('metacarteAbsenteDeLaCarte : sans la déclaration, la carte sans métacarte refuse (le témoin ne peut pas parler)', (() => { const r = prouver({ entree: EL, produit: pLusa, carte: lusa, ...ctx([lusa]) }); return [r.ok, /métacarte/.test(r.refus.join())]; })(), [false, true]);
 verifier('metacarteAbsenteDeLaCarte : déclarée et la carte n\'en porte aucune → prouvé, le témoin DIT qu\'il n\'a pas parlé', (() => { const r = prouver({ entree: { ...EL, metacarteAbsenteDeLaCarte: true }, produit: pLusa, carte: lusa, ...ctx([lusa]) }); return [r.ok, r.temoins.some(t => /aucune métacarte/.test(t))]; })(), [true, true]);
 verifier('metacarteAbsenteDeLaCarte : déclarée mais la carte porte UNE AUTRE métacarte → refus (la déclaration ne lève pas une contradiction)', prouver({ entree: { ...EL, metacarteAbsenteDeLaCarte: true }, produit: pLusa, carte: { ...lusa, liens: { idProduct: [1], idMetacards: [999] } }, ...ctx([lusa]) }).ok, false);

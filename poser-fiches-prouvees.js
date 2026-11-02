@@ -71,7 +71,9 @@ function planifier({ entrees, lecture, le = new Date() }) {
         if (!carte) { refus.push({ idProduct: e.idProduct, raison: `carte ${e.carteId} absente de la base` }); continue; }
         const produit = { ...p0, niveau: decomposerNomCardmarket(p0.name).niveau };
         const cartesDuSet = lecture.cartes.filter(c => (c.sets || []).includes(e.slugSet));
-        const r = prouver({ entree: e, produit, carte, cartesDuSet, cartesPourCle: lecture.cartes, etatSetlist: lecture.etats?.get(e.slugSet) ?? null });
+        // « impression-numero » compare l'EXPANSION (tour 1, 2026-11-02) : celle de l'entrée, sinon les noms d'expansion de la LIGNE DE TABLE du code (jamais deviné : sans l'un ni l'autre la voie refuse)
+        const expLigne = e.expansionImpression ?? (e.voie === 'impression-numero' && e.code ? (() => { try { return require('./collecte-cartes/table-sets').ligne(e.code)?.bulba?.expansion; } catch (_) { return undefined; } })() : undefined);
+        const r = prouver({ entree: expLigne === undefined ? e : { ...e, expansionImpression: expLigne }, produit, carte, cartesDuSet, cartesPourCle: lecture.cartes, etatSetlist: lecture.etats?.get(e.slugSet) ?? null });
         if (!r.ok) { refus.push({ idProduct: e.idProduct, raison: r.refus.join(' ; ') }); continue; }
         lignes.push({
             _id, carteId: e.carteId, idProduct: e.idProduct, idExpansion: e.idExpansion, tirage: e.tirage, preuve: 'fiche-prouvee', slug: p0.slug ?? null, slugSet: e.slugSet, numeroFiche: e.numeroFiche ?? null,
