@@ -57,7 +57,7 @@ const cartes = [
     // invariant : tout élément du plan vise une carte dont nomJa est absent ou null
     const r = P.planifier({ entrees: cartes.map(c => e(c._id, c.nomEn, 'テスト')), cartes });
     egal('P7 invariant : le plan ne vise que absent/null', r.ecrire.every(x => { const c = cartes.find(k => k._id === x.carteId); return c.nomJa === undefined || c.nomJa === null; }), true);
-    egal('P7b ... et il y en a bien (-1, -2, -6, -7)', r.ecrire.map(x => x.carteId).sort(), [-7, -6, -2, -1]);
+    egal('P7b ... et il y en a bien (-1, -2, -6, -7)', r.ecrire.map(x => x.carteId).sort((a, b) => a - b), [-7, -6, -2, -1]);
 }
 {
     const le = new Date('2026-11-02T00:00:00Z');
