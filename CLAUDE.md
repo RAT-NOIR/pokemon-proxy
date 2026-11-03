@@ -8,6 +8,7 @@ renégocie pas en cours de route.
 ## MÉTHODE OBLIGATOIRE — À RELIRE APRÈS TOUTE REPRISE OU COUPURE
 
 - Au démarrage et après toute coupure : recharger les skills Superpowers, relire HANDOFF-CATALOGUE.md et RAPPORT-CATALOGUE.md.
+- **Et relancer l'audit des sets, sans attendre qu'on le demande** (testeur, 2026-11-03) : `node audit-sets.js` (lecture seule, ~13 min ; `--depuis-cache` rejoue en 2 s) → `rat-market-travail\catalogue\AUDIT-SETS.md`. C'est la FILE DE TRAVAIL : corriger par cause, données d'abord, chasse ensuite ; le relancer en fin de session pour l'écart par cause et les sets passés à 100 %. Le testeur ne contrôle plus le catalogue à l'œil.
 - Coordinateur seul ; sous-agents Sonnet 5.5 ; Haiku pour le mécanique.
 - Relecteur DISTINCT de l'implémenteur ; relectures proportionnées au risque : 1 passe (faible), 2 (moyen), 3 (production, sécurité).
 - 3 tours de correction maximum, puis arrêt et rapport.
