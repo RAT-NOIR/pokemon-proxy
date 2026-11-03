@@ -17,6 +17,8 @@ const { compterEtat, comparer, COMPTEURS } = require('./garde-lot');
 
 const MOTIFS = Object.freeze(['produit-ailleurs', 'composition-autre-region']);
 const indexer = (xs, cle) => { const m = new Map(); for (const x of xs) { const k = cle(x); if (k === null || k === undefined) continue; (m.get(k) || m.set(k, []).get(k)).push(x); } return m; };
+// mots d'un nom : minuscules, accents et ponctuation retirés (garde d'inclusion)
+const motsDe = n => String(n || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 const nul = x => (x === undefined ? null : x);
 
 function classerClones(lecture, regles) {
@@ -51,6 +53,7 @@ function classerClones(lecture, regles) {
         const cible = cibleDe(s);
         const sansLigne = prods.filter(p => p.fiche && p.fiche.classe === 'SANS_LIGNE');
         const nomsSansLigne = new Set(sansLigne.map(p => normaliserNom(decomposerNomCardmarket(p.name).nom)));
+        const motsSansLigne = sansLigne.map(p => new Set(motsDe(decomposerNomCardmarket(p.name).nom)));
         const numerosSansLigne = new Set(sansLigne.map(p => numProd.get(p.idProduct)).filter(n => n !== null && n !== undefined));
         for (const c of membres) {
             auditees++;
@@ -61,7 +64,11 @@ function classerClones(lecture, regles) {
             const imps = (c.impressions || []).filter(i => impressionDuSet(i, cible));
             const parNom = typeof c.nomEn === 'string' && c.nomEn !== '' && nomsSansLigne.has(normaliserNom(c.nomEn));
             const parNumero = imps.some(i => { const n = normaliserNumero(i.numero); return n !== null && n !== undefined && numerosSansLigne.has(n); });
-            if (parNom || parNumero) { jointures.push({ carteId: c._id, nomEn: nul(c.nomEn), set: s._id, par: parNumero ? 'numero' : 'nom' }); continue; }
+            // GARDE D'INCLUSION (jamais une clé d'appariement) : tous les mots du nomEn figurent dans ceux du nom décomposé d'UN produit SANS_LIGNE du set
+            // (« Shellos » ⊂ « Shellos West Sea Lv.25 ») : ce produit est probablement le sien, on REFUSE de supprimer.
+            const mots = motsDe(c.nomEn);
+            const parInclusion = !parNom && !parNumero && mots.length > 0 && motsSansLigne.some(m => mots.every(w => m.has(w)));
+            if (parNom || parNumero || parInclusion) { jointures.push({ carteId: c._id, nomEn: nul(c.nomEn), set: s._id, par: parNumero ? 'numero' : parNom ? 'nom' : 'nom-inclus' }); continue; }
             // 3. sa vraie fiche ailleurs
             let motif = null, vraieFiche = null;
             const ailleurs = lignesC.filter(l => l.slugSet && l.slugSet !== s._id && setPublie.has(l.slugSet));

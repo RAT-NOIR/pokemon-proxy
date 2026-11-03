@@ -82,6 +82,37 @@ test('jointure-a-faire par le nom : le nom Cardmarket décomposé (attaques reti
     assert.strictEqual(r.clones.length, 0);
     assert.deepStrictEqual(r.jointures.map(j => j.par), ['nom']);
 });
+test('garde d\'inclusion : Shellos ⊂ « Shellos West Sea Lv.25 » (SANS_LIGNE du set) -> jointure-a-faire nom-inclus, pas un clone', () => {
+    const l = lecture({
+        cartes: [carte('sh', 'Shellos', ['Shining-Legends'], [imp('jp', 'Autre', '3')])],
+        lignes: [ligne('sh', 902, 'SM-Black-Star-Promos', 'SM1')], produits: [prodSL, prod(12, 1, 'Shellos West Sea Lv.25', { classe: 'SANS_LIGNE' }), prodSMP],
+    });
+    const r = C.classerClones(l, regles);
+    assert.strictEqual(r.clones.length, 0);
+    assert.deepStrictEqual(r.jointures.map(j => j.par), ['nom-inclus']);
+});
+test('garde d\'inclusion : accents et ponctuation normalisés (Pokémon / pokemon, Mr. Mime / Mr Mime Lv.20)', () => {
+    const l = lecture({
+        cartes: [carte('mm', 'Mr. Mime', ['Shining-Legends'], [])],
+        lignes: [ligne('mm', 902, 'SM-Black-Star-Promos', 'SM1')], produits: [prodSL, prod(12, 1, 'Mr Mime Éclair Lv.20', { classe: 'SANS_LIGNE' }), prodSMP],
+    });
+    assert.deepStrictEqual(C.classerClones(l, regles).jointures.map(j => j.par), ['nom-inclus']);
+});
+test('garde d\'inclusion : « Erika » face à « Venusaur & Snivy GX » reste un clone', () => {
+    const l = lecture({
+        cartes: [carte('er', 'Erika', ['Shining-Legends'], [])],
+        lignes: [ligne('er', 902, 'SM-Black-Star-Promos', 'SM1')], produits: [prodSL, prod(12, 1, 'Venusaur & Snivy GX', { classe: 'SANS_LIGNE' }), prodSMP],
+    });
+    const r = C.classerClones(l, regles);
+    assert.strictEqual(r.clones.length, 1); assert.strictEqual(r.jointures.length, 0);
+});
+test('garde d\'inclusion : un produit rattaché (non SANS_LIGNE) dont le nom contient le nomEn n\'interdit rien', () => {
+    const l = lecture({
+        cartes: [carte('sh', 'Shellos', ['Shining-Legends'], [])],
+        lignes: [ligne('sh', 902, 'SM-Black-Star-Promos', 'SM1')], produits: [prodSL, prod(12, 1, 'Shellos West Sea Lv.25', { classe: 'FICHE_OK', carteId: 'z', numero: '9', setId: 'Shining-Legends' }), prodSMP],
+    });
+    assert.strictEqual(C.classerClones(l, regles).clones.length, 1);
+});
 test('xASC : carte dont tous les produits du set sont rattachés ailleurs, ligne dans Ascended-Heroes -> clone produit-ailleurs', () => {
     const l = lecture({
         sets: [ASC, XASC], cartes: [carte('a1', 'Alpha', ['Ascended-Heroes-Additionals'], [imp('intl', 'Ascended Heroes', '5')])],
