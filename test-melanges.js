@@ -93,9 +93,25 @@ verifier('retrait : $pull restreint au lot, à la source et à la clé', Object.
 // ── 5. numéro de fiche de Guzma : null → 115a, avec preuve, jamais d'écrasement
 const nf = M.planNumeroFiche({ lignes: [lg({ numeroFiche: null })], appris: new Map([[449623, { slug: 'Guzma-V4-BUS115a', numero: '115a' }]]) });
 verifier('numeroFiche : null → 115a quand le produit porte lui-même ce numéro (slug et numéro appris)', nf.ecrire.map(x => [x.idProduct, x.numeroFiche]), [[449623, '115a']]);
-verifier('numeroFiche : un numéro déjà posé n\'est jamais écrasé', M.planNumeroFiche({ lignes: [lg({ numeroFiche: '115' })], appris: new Map([[449623, { slug: 'Guzma-V4-BUS115a', numero: '115a' }]]) }).refus.map(x => x.raison), ['numero-deja-pose']);
-verifier('numeroFiche : le slug ne dit pas 115a → refus', M.planNumeroFiche({ lignes: [lg({ numeroFiche: null })], appris: new Map([[449623, { slug: 'Guzma-V4-BUS115', numero: '115' }]]) }).refus.map(x => x.raison), ['numero-appris-different']);
-verifier('numeroFiche : produit non appris → refus', M.planNumeroFiche({ lignes: [lg({ numeroFiche: null })], appris: new Map() }).refus.map(x => x.raison), ['produit-non-appris']);
+verifier('numeroFiche : un numéro déjà posé n\'est jamais écrasé', M.planNumeroFiche({ lignes: [lg({ numeroFiche: '115' })], appris: new Map([[449623, { slug: 'Guzma-V4-BUS115a', numero: '115a' }]]) }).refus.filter(x => x.idProduct === 449623).map(x => x.raison), ['numero-deja-pose']);
+verifier('numeroFiche : le slug ne dit pas 115a → refus', M.planNumeroFiche({ lignes: [lg({ numeroFiche: null })], appris: new Map([[449623, { slug: 'Guzma-V4-BUS115', numero: '115' }]]) }).refus.filter(x => x.idProduct === 449623).map(x => x.raison), ['numero-appris-different']);
+verifier('numeroFiche : produit non appris → refus', M.planNumeroFiche({ lignes: [lg({ numeroFiche: null })], appris: new Map() }).refus.filter(x => x.idProduct === 449623).map(x => x.raison), ['produit-non-appris']);
+
+// ── 6. les « a/b » : 10 produits dont la carte porte DÉJÀ le scan du numéro appris (fiche annexe du site, lib/annexes.json), numeroFiche null → numéro appris (2026-11-03, rejeu de la règle du site)
+const YA = [[358590, 221222, 'SM-Black-Star-Promos', 'SM30a', 'Tapu-Koko-V3-SMSM30a'], [475134, 236775, 'Unified-Minds', '206a', 'Reset-Stamp-V3-UNM206a'], [475144, 87404, 'Unbroken-Bonds', '182b', 'Pokegear-30-V4-UNB182b'],
+    [475149, 234576, 'Unbroken-Bonds', '195a', 'Dedenne-GX-V4-UNB195a'], [365544, 219810, 'Guardians-Rising', '92a', 'Sylveon-GX-V4-GRI92a'], [450878, 221756, 'Guardians-Rising', '157a', 'Metagross-GX-V4-GRI157a'],
+    [475139, 87405, 'Team-Up', '152b', 'Pokemon-Communication-V3-TEU152b'], [562701, 230075, 'Celestial-Storm', '148a', 'Tate-Liza-V3'], [450888, 224190, 'Shining-Legends', '77a', 'Zoroark-GX-V3-SLG77a'], [321006, 224120, 'Shining-Legends', '10a', 'Entei-GX-V4-SLG10a']];
+verifier('numeroFiche a/b : la liste fermée porte Guzma + les 10 produits prouvés, gelée', [Object.keys(M.NUMEROS_FICHE).length, YA.every(([id]) => M.NUMEROS_FICHE[id] && Object.isFrozen(M.NUMEROS_FICHE[id])), Object.isFrozen(M.NUMEROS_FICHE)], [11, true, true]);
+verifier('numeroFiche a/b : chaque entrée garde carte, set et numéro de la preuve', YA.map(([id, carteId, set, num]) => { const e = M.NUMEROS_FICHE[id]; return !!e && e.carteId === carteId && e.slugSet === set && e.numeroFiche === num; }), YA.map(() => true));
+const ligneYA = (id, carteId, set, extra = {}) => ({ _id: `${carteId}|${id}`, carteId, idProduct: id, slugSet: set, numeroFiche: null, preuve: 'metacarte+freres', ...extra });
+const planYA = YA.map(([id, carteId, set, num, slug]) => M.planNumeroFiche({ lignes: [ligneYA(id, carteId, set)], appris: new Map([[id, { slug, numero: num }]]) }));
+verifier('numeroFiche a/b : null → numéro appris pour les 10 (un plan par produit, une seule écriture de la liste concernée)', YA.map(([id], i) => planYA[i].ecrire.filter(x => x.idProduct === id).map(x => x.numeroFiche)), YA.map(([, , , num]) => [num]));
+const yEntei = YA.find(y => y[0] === 321006), yTate = YA.find(y => y[0] === 562701);
+verifier('numeroFiche a/b : Entei, le slug appris sans la lettre (SLG10) → refus', M.planNumeroFiche({ lignes: [ligneYA(321006, 224120, 'Shining-Legends')], appris: new Map([[321006, { slug: 'Entei-GX-V4-SLG10', numero: '10' }]]) }).refus.filter(x => x.idProduct === 321006).map(x => x.raison), ['numero-appris-different']);
+verifier('numeroFiche a/b : Entei, un numéro déjà posé n\'est jamais écrasé', M.planNumeroFiche({ lignes: [ligneYA(321006, 224120, 'Shining-Legends', { numeroFiche: '10' })], appris: new Map([[321006, { slug: yEntei[4], numero: '10a' }]]) }).refus.filter(x => x.idProduct === 321006).map(x => x.raison), ['numero-deja-pose']);
+verifier('numeroFiche a/b : Tate & Liza (slug sans numéro) → refus si le numéro appris n\'est pas 148a', M.planNumeroFiche({ lignes: [ligneYA(562701, 230075, 'Celestial-Storm')], appris: new Map([[562701, { slug: yTate[4], numero: '148' }]]) }).refus.filter(x => x.idProduct === 562701).map(x => x.raison), ['numero-appris-different']);
+verifier('numeroFiche a/b : une ligne d\'une autre carte que celle de la liste → refus', M.planNumeroFiche({ lignes: [ligneYA(321006, 5, 'Shining-Legends')], appris: new Map([[321006, { slug: yEntei[4], numero: '10a' }]]) }).refus.filter(x => x.idProduct === 321006).map(x => x.raison), ['ligne-differente-de-la-liste']);
+verifier('numeroFiche a/b : produit non appris → refus', M.planNumeroFiche({ lignes: [ligneYA(321006, 224120, 'Shining-Legends')], appris: new Map() }).refus.filter(x => x.idProduct === 321006).map(x => x.raison), ['produit-non-appris']);
 
 console.log(`\n${ok} réussi(s), ${ko} échec(s)`);
 process.exit(ko ? 1 : 0);

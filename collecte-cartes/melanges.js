@@ -150,7 +150,22 @@ const operationsRetrait = m => m.entrees.map(o => ({ coll: 'cartes', filter: { _
 
 // ── 4. le numéro de fiche de Guzma ────────────────────────────────────────────────────────────────────────────────────
 // `numeroFiche` null → « 115a » quand le PRODUIT porte lui-même ce numéro (slug et numéro appris par Cardmarket) : la jointure « metacarte+freres » ne l'avait pas lu. Un numéro posé n'est jamais écrasé.
-const NUMEROS_FICHE = Object.freeze({ 449623: Object.freeze({ numeroFiche: '115a', carteId: 223420, slugSet: 'Burning-Shadows', slug: /^Guzma-V\d+-BUS115a$/ }) });
+// 2026-11-03 : + 10 produits « a/b » dont la carte porte DÉJÀ le scan de ce numéro dans le set et dont la fiche existe (annexe de lib/annexes.json du site) ; règle du site rejouée en mémoire sur toute la base
+// (V3IS\impression-hors-set.js) : avant, le produit n'est sur aucune fiche ; après, sur la fiche du numéro, avec son scan. Preuve par produit : slug + numéro appris (Tate & Liza : le slug ne porte pas de numéro, le numéro appris seul).
+const fiche = (carteId, slugSet, numeroFiche, slug) => Object.freeze({ numeroFiche, carteId, slugSet, slug });
+const NUMEROS_FICHE = Object.freeze({
+    449623: fiche(223420, 'Burning-Shadows', '115a', /^Guzma-V\d+-BUS115a$/),
+    358590: fiche(221222, 'SM-Black-Star-Promos', 'SM30a', /^Tapu-Koko-V\d+-SMSM30a$/),
+    475134: fiche(236775, 'Unified-Minds', '206a', /^Reset-Stamp-V\d+-UNM206a$/),
+    475144: fiche(87404, 'Unbroken-Bonds', '182b', /^Pokegear-30-V\d+-UNB182b$/),
+    475149: fiche(234576, 'Unbroken-Bonds', '195a', /^Dedenne-GX-V\d+-UNB195a$/),
+    365544: fiche(219810, 'Guardians-Rising', '92a', /^Sylveon-GX-V\d+-GRI92a$/),
+    450878: fiche(221756, 'Guardians-Rising', '157a', /^Metagross-GX-V\d+-GRI157a$/),
+    475139: fiche(87405, 'Team-Up', '152b', /^Pokemon-Communication-V\d+-TEU152b$/),
+    562701: fiche(230075, 'Celestial-Storm', '148a', /^Tate-Liza-V\d+$/),
+    450888: fiche(224190, 'Shining-Legends', '77a', /^Zoroark-GX-V\d+-SLG77a$/),
+    321006: fiche(224120, 'Shining-Legends', '10a', /^Entei-GX-V\d+-SLG10a$/),
+});
 function planNumeroFiche({ lignes, appris }) {
     const ecrire = [], refus = [];
     for (const [k, v] of Object.entries(NUMEROS_FICHE)) {
