@@ -1,0 +1,255 @@
+'use strict';
+// Banc de audit-sets.js — lectures FABRIQUÉES (aucune base). node audit-catalogue/test-audit-sets.js
+const assert = require('assert');
+const A = require('./audit-sets');
+
+let ok = 0, ko = 0;
+const test = (nom, f) => { try { f(); ok++; console.log('  ok  ' + nom); } catch (e) { ko++; console.log('  ÉCHEC ' + nom + '\n        ' + String(e.message).split('\n')[0]); } };
+
+// règles du site simulées (mêmes signatures que impressionDuSet / normaliserNumero du site)
+const normaliserNumero = n => (n == null || String(n).trim() === '' ? null : String(n).trim().toLowerCase().replace(/^0+(?=\d)/, ''));
+const impressionDuSet = (imp, cible) => imp.tirage === cible.tirage && (!cible.expansions.length || cible.expansions.includes(imp.expansion));
+const memeCodeSaufFin = (a, b) => typeof a === 'string' && typeof b === 'string' && a.length === b.length && a !== b && a.slice(0, -1) === b.slice(0, -1) && /\d/.test(a.slice(0, -1));
+const exclure = (s, table = []) => {
+    const exclus = [], sansObjet = [];
+    for (const e of table) if (e.set === s.set) for (const n of e.numeros) (s.trous.includes(n) ? exclus : sansObjet).push(n);
+    return { set: s.set, trous: s.trous.filter(n => !exclus.includes(n)), manque: Math.max(0, s.manque - exclus.length), exclus, sansObjet };
+};
+const regles = { impressionDuSet, normaliserNumero, memeCodeSaufFin, exclure: s => exclure(s, [{ set: 'S1', numeros: ['4'] }]) };
+
+const imp = (numero, total = 3) => ({ tirage: 'intl', expansion: 'Exp', numero, total });
+const carte = (id, nom, numeros, extra = {}) => ({ _id: id, nomEn: nom, pv: '60', attaques: ['Charge'], sets: ['S1'], impressions: [].concat(numeros).map(n => imp(n)), images: [], ...extra });
+const set = (o = {}) => ({ _id: 'S1', code: 'S1', nomAffichage: 'Set Un', tirage: 'intl', totalImprime: 3, idExpansion: [10], bulbaExpansion: ['Exp'], deck: null, ...o });
+const lig = (carteId, idProduct, numeroFiche = null) => ({ carteId, idProduct, slugSet: 'S1', numeroFiche });
+const prod = (idProduct, o = {}) => ({ idProduct, idExpansion: 10, name: 'P' + idProduct, setId: 'S1', fiche: { classe: 'FICHE_OK', motifs: [] }, visuel: { classe: 'A_COMPARER', motifs: [] }, ...o });
+const lecture = (o = {}) => ({ sets: [set()], cartes: [], lignes: [], produits: [], numerosProduits: [], offresParExpansion: { 10: 5 }, trousNommes: {}, restesParSet: {}, ...o });
+const img = (set, numero = null) => ({ set, numero });
+const auditer = (l, r = regles) => A.auditer(l, r);
+const un = a => a.sets.find(s => s.set === 'S1');
+const causes = (arr) => arr.map(x => x.cause).sort();
+
+// ── un set complet : 0 trou
+test('set complet et sain : tous compteurs à 0', () => {
+    const l = lecture({
+        cartes: [1, 2, 3].map(i => carte('c' + i, 'Nom' + i, String(i), { images: [img('S1', String(i))], attaques: ['A' + i] })),
+        lignes: [1, 2, 3].map(i => lig('c' + i, 100 + i)),
+        produits: [1, 2, 3].map(i => prod(100 + i, { fiche: { classe: 'FICHE_OK', motifs: [], carteId: 'c' + i, numero: String(i), setId: 'S1' } })),
+    });
+    const s = un(auditer(l));
+    assert.strictEqual(s.attendu, 3); assert.strictEqual(s.affichees, 3);
+    for (const k of ['sansVisuel', 'sansNumero', 'sansProduit', 'doublons', 'produitsSansFiche', 'manquants']) assert.strictEqual(s[k].n, 0, k);
+    assert.strictEqual(s.trous, 0);
+});
+
+// ── sans visuel
+test('sans visuel : aucune image en base', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', '1')], lignes: [lig('c1', 101)], produits: [prod(101, { fiche: { classe: 'FICHE_OK', carteId: 'c1', numero: '1', setId: 'S1' } })] });
+    assert.deepStrictEqual(causes(un(auditer(l)).sansVisuel.items), ['aucune-image-en-base']);
+});
+test('sans visuel : images d un autre set seulement', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', '1', { images: [img('AUTRE', '1')] })] });
+    assert.deepStrictEqual(causes(un(auditer(l)).sansVisuel.items), ['image-d-un-autre-set-seulement']);
+});
+test('sans visuel : image du set mais d un autre numéro', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', '1', { images: [img('S1', '9')] })] });
+    assert.deepStrictEqual(causes(un(auditer(l)).sansVisuel.items), ['image-d-un-autre-numero']);
+});
+test('sans visuel : numéro manquant sur la fiche (images du set, pas de numéro)', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', [null], { images: [img('S1', '1'), img('S1', '2')] })] });
+    // fiche sans numéro mais une image du set existe : elle n'est pas rattachable à un numéro → l'entrée sans numéro a l'image du set, pas de trou visuel
+    assert.strictEqual(un(auditer(l)).sansVisuel.n, 0);
+    const l2 = lecture({ cartes: [carte('c1', 'A', [null])] });   // et sans image du tout : cause = aucune image
+    assert.deepStrictEqual(causes(un(auditer(l2)).sansVisuel.items), ['aucune-image-en-base']);
+});
+test('sans visuel : numéro manquant quand l image du set existe mais la fiche numérotée n en est pas', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', [null, '5'], { images: [img('S1', '5')] })] });
+    // la fiche 5 a son image ; l entrée sans numéro est la même carte : sans numéro (un trou), pas de trou visuel supplémentaire
+    const s = un(auditer(l));
+    assert.strictEqual(s.sansVisuel.n, 0);
+});
+test('sans visuel : règle bloquante avec son motif (produits tous MANQUANT)', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', '1', { images: [img('S1', '1')] })], lignes: [lig('c1', 101)],
+        produits: [prod(101, { fiche: { classe: 'FICHE_OK', carteId: 'c1', numero: '1', setId: 'S1' }, visuel: { classe: 'MANQUANT', motifs: ['repli-refuse:tampon'] } })] });
+    assert.deepStrictEqual(causes(un(auditer(l)).sansVisuel.items), ['regle-bloquante:repli-refuse:tampon']);
+});
+test('sans visuel : produits MANQUANT sans motif → cause-inconnue (jamais un silence)', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', '1', { images: [img('S1', '1')] })], lignes: [lig('c1', 101)],
+        produits: [prod(101, { fiche: { classe: 'FICHE_OK', carteId: 'c1', numero: '1', setId: 'S1' }, visuel: { classe: 'MANQUANT', motifs: [] } })] });
+    assert.deepStrictEqual(causes(un(auditer(l)).sansVisuel.items), ['cause-inconnue']);
+});
+test('numéros normalisés : 006 et 6 sont la même entrée / image', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', '006', { images: [img('S1', '6')] })] });
+    assert.strictEqual(un(auditer(l)).sansVisuel.n, 0);
+});
+
+// ── sans numéro
+test('sans numéro : impression du set sans numéro', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', [null], { images: [img('S1')] })] });
+    const s = un(auditer(l));
+    assert.deepStrictEqual(causes(s.sansNumero.items), ['impression-sans-numero']);
+});
+test('sans numéro : aucune impression du set (carte rattachée au set, impression d un autre tirage)', () => {
+    const c = carte('c1', 'A', [], { impressions: [{ tirage: 'jp', expansion: 'Exp', numero: '1', total: 3 }], images: [img('S1')] });
+    assert.deepStrictEqual(causes(un(auditer(lecture({ cartes: [c] }))).sansNumero.items), ['aucune-impression-du-set']);
+});
+test('carte sans nomEn : hors affichage (règle du site)', () => {
+    const c = carte('c1', '', '1');
+    assert.strictEqual(un(auditer(lecture({ cartes: [c] }))).affichees, 0);
+});
+
+// ── sans produit (jumelles orphelines)
+test('sans produit : aucun produit dans l expansion', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', '1', { images: [img('S1', '1')] })] });
+    assert.deepStrictEqual(causes(un(auditer(l)).sansProduit.items), ['expansion-sans-produit-cardmarket']);
+});
+test('sans produit : jumelle 101a sans produit alors que 101 en a un', () => {
+    const l = lecture({ sets: [set({ totalImprime: 101 })],
+        cartes: [carte('c1', 'Evoli', '101', { images: [img('S1', '101')] }), carte('c2', 'Evoli', '101a', { images: [img('S1', '101a')] })],
+        lignes: [lig('c1', 500)], produits: [prod(500, { fiche: { classe: 'FICHE_OK', carteId: 'c1', numero: '101', setId: 'S1' } })] });
+    const a = un(auditer(l));
+    assert.deepStrictEqual(a.sansProduit.items.map(x => [x.numero, x.cause]), [['101a', 'jumelle-suffixe-sans-produit']]);
+});
+test('sans produit : des produits sans ligne attendent dans l expansion', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', '1', { images: [img('S1', '1')] })], produits: [prod(900, { fiche: { classe: 'SANS_LIGNE', motifs: [] } })], numerosProduits: [{ idProduct: 900, numero: '1' }] });
+    assert.deepStrictEqual(causes(un(auditer(l)).sansProduit.items), ['produit-sans-ligne-meme-numero']);
+});
+test('sans produit : le produit existe via numeroFiche de la ligne (pas orpheline)', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', ['1', '1a'], { images: [img('S1', '1'), img('S1', '1a')] })], lignes: [lig('c1', 7, '1'), lig('c1', 8, '1a')] });
+    assert.strictEqual(un(auditer(l)).sansProduit.n, 0);
+});
+
+test('sans produit : suffixe lettre SANS entrée de base pourvue → pas « jumelle »', () => {
+    const l = lecture({ cartes: [carte('c2', 'Evoli', '101a', { images: [img('S1', '101a')] })], produits: [prod(500, { fiche: { classe: 'FICHE_OK', carteId: 'cX', numero: '5', setId: 'S1' } })] });
+    assert.deepStrictEqual(causes(un(auditer(l)).sansProduit.items), ['tous-les-produits-deja-rattaches']);
+});
+test('numéros manquants : set dont aucune impression n est numérotée, le total fait foi', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', [null], { images: [img('S1')] })] });
+    const m = un(auditer(l)).manquants;
+    assert.strictEqual(m.n, 2); assert.strictEqual(m.items[0].cause, 'aucune-impression-numerotee');
+});
+
+// ── doublons de faits
+test('doublon : même nom/PV/attaques/numéro de base (101 et 101a)', () => {
+    const l = lecture({ sets: [set({ totalImprime: 101 })], cartes: [carte('c1', 'Evoli', '101'), carte('c2', 'Evoli', '101a')] });
+    const d = un(auditer(l)).doublons;
+    assert.strictEqual(d.n, 1); assert.strictEqual(d.groupes.length, 1); assert.strictEqual(d.groupes[0].cause, 'doublon-suffixe-lettre');
+});
+test('doublon : deux documents au même numéro', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', '1'), carte('c2', 'A', '1')] });
+    assert.strictEqual(un(auditer(l)).doublons.groupes[0].cause, 'doublon-deux-documents');
+});
+test('pas un doublon : mêmes faits, numéros de base différents (réimpression secrète)', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', '1'), carte('c2', 'A', '90')] });
+    assert.strictEqual(un(auditer(l)).doublons.n, 0);
+});
+test('pas un doublon : attaques différentes', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', '1', { attaques: ['X'] }), carte('c2', 'A', '1a', { attaques: ['Y'] })] });
+    assert.strictEqual(un(auditer(l)).doublons.n, 0);
+});
+
+// ── produits sans fiche
+test('produit sans fiche : SANS_LIGNE avec trou nommé, sans ligne sans rien', () => {
+    const l = lecture({ produits: [prod(1, { fiche: { classe: 'SANS_LIGNE', motifs: [] } }), prod(2, { fiche: { classe: 'SANS_LIGNE', motifs: [] } })], trousNommes: { 1: 'aucune-page-bulbapedia' } });
+    const s = un(auditer(l, regles));
+    assert.deepStrictEqual(causes(s.produitsSansFiche.items), ['cause-inconnue', 'sans-ligne:aucune-page-bulbapedia']);
+});
+test('produit sans fiche : LIGNE_SANS_FICHE reprend son premier motif', () => {
+    const l = lecture({ produits: [prod(1, { fiche: { classe: 'LIGNE_SANS_FICHE', motifs: ['carte-sans-nom'] } })] });
+    assert.deepStrictEqual(causes(un(auditer(l)).produitsSansFiche.items), ['ligne-sans-fiche:carte-sans-nom']);
+});
+test('produit d une expansion sans set publié : non attribué, compté dans le dénominateur', () => {
+    const a = auditer(lecture({ produits: [prod(1, { idExpansion: 99, setId: null, fiche: { classe: 'SANS_LIGNE', motifs: [] } })] }));
+    assert.strictEqual(a.denominateurs.produitsSansSetPublie, 1);
+});
+
+// ── numéros manquants
+test('numéros manquants dans la suite : 1..3 avec le 2 absent', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', '1'), carte('c3', 'B', '3')] });
+    const m = un(auditer(l)).manquants;
+    assert.deepStrictEqual(m.items.map(x => x.numero), ['2']);
+    assert.strictEqual(m.items[0].cause, 'aucune-source-en-base');
+});
+test('numéro manquant : un produit Cardmarket de ce numéro existe', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', '1'), carte('c3', 'B', '3')], produits: [prod(55, { fiche: { classe: 'SANS_LIGNE', motifs: [] } })], numerosProduits: [{ idProduct: 55, numero: '002' }] });
+    assert.strictEqual(un(auditer(l)).manquants.items[0].cause, 'produit-cardmarket-existe-sans-fiche');
+});
+test('numéro manquant : un reste est nommé pour le set', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', '1'), carte('c3', 'B', '3')], restesParSet: { S1: { 'sans-page': 2 } } });
+    assert.strictEqual(un(auditer(l)).manquants.items[0].cause, 'reste:sans-page');
+});
+test('numéro manquant : la table des « pas un trou » retire le numéro', () => {
+    const l = lecture({ sets: [set({ totalImprime: 4 })], cartes: [carte('c1', 'A', '1'), carte('c2', 'B', '2'), carte('c3', 'C', '3')] });
+    const m = un(auditer(l)).manquants;     // la règle de test exclut le 4 du set S1
+    assert.strictEqual(m.n, 0);
+    assert.deepStrictEqual(un(auditer(l)).exclusPasUnTrou, ['4']);
+});
+test('set sans total imprimé : pas de suite, attendu null, aucun manquant inventé', () => {
+    const l = lecture({ sets: [set({ totalImprime: null })], cartes: [carte('c1', 'A', '1')] });
+    const s = un(auditer(l)); assert.strictEqual(s.attendu, null); assert.strictEqual(s.manquants.n, 0);
+});
+test('jumeaux : total de la paire ramené à la moitié', () => {
+    const s1 = set({ _id: 'XY1x', code: 'XY1x', totalImprime: 6, bulbaExpansion: ['E1'], idExpansion: [10] });
+    const s2 = set({ _id: 'XY1y', code: 'XY1y', totalImprime: 6, bulbaExpansion: ['E2'], idExpansion: [11] });
+    const c = (id, set, n, e) => carte(id, 'N' + id, n, { sets: [set], impressions: [{ tirage: 'intl', expansion: e, numero: n, total: 3 }] });
+    const l = lecture({ sets: [s1, s2], cartes: ['1', '2', '3'].map((n, i) => c('a' + i, 'XY1x', n, 'E1')).concat(['1', '2', '3'].map((n, i) => c('b' + i, 'XY1y', n, 'E2'))) });
+    const a = auditer(l);
+    assert.strictEqual(a.sets.find(s => s.set === 'XY1x').manquants.n, 0);
+    assert.strictEqual(a.sets.find(s => s.set === 'XY1x').attendu, 3);
+});
+
+// ── garde de population, causes fermées
+test('lecture sans set : lève (un audit sur zéro set n est pas une mesure)', () => assert.throws(() => auditer(lecture({ sets: [] })), /population vide/));
+test('lecture sans carte alors qu il y a des sets : lève (§41)', () => assert.throws(() => auditer(lecture({ cartes: [], lignes: [lig('c1', 1)], produits: [] })), /cartes/));
+test('une cause hors liste fermée lève', () => assert.throws(() => A.verifierCause('sansVisuel', 'inventee'), /cause/));
+test('set non publié ignoré et compté', () => {
+    const a = auditer(lecture({ sets: [set(), set({ _id: 'S2', nomAffichage: null })], cartes: [carte('c1', 'A', '1')] }));
+    assert.strictEqual(a.sets.length, 1); assert.strictEqual(a.denominateurs.setsNonPublies, 1);
+});
+
+// ── tri et score
+test('tri : score = trous × log2(2+offres), le plus haut d abord ; à égalité, l id', () => {
+    const s = (id, trous, offres) => ({ set: id, trous, offres });
+    const t = A.trier([s('a', 10, 0), s('b', 10, 1000), s('c', 0, 99999), s('d', 3, 100000)]);
+    assert.deepStrictEqual(t.map(x => x.set), ['b', 'd', 'a', 'c']);
+    assert.ok(Math.abs(A.score(10, 6) - 30) < 1e-9);
+});
+test('audit : sets rendus triés par score', () => {
+    const l = lecture({ sets: [set({ _id: 'S1', idExpansion: [10] }), set({ _id: 'S2', idExpansion: [11], code: 'S2' })], offresParExpansion: { 10: 0, 11: 0 },
+        cartes: [carte('c1', 'A', '1'), carte('c2', 'B', '2', { sets: ['S2'] }), carte('c3', 'C', '3', { sets: ['S2'] })] });
+    const a = auditer(l);
+    assert.ok(a.sets[0].score >= a.sets[1].score);
+});
+
+// ── totaux par cause et écart
+test('totaux par cause : somme des causes de tous les sets', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', '1'), carte('c2', 'B', '2')] });
+    const a = auditer(l);
+    assert.strictEqual(a.parCause.sansVisuel['aucune-image-en-base'], 2);
+});
+test('écart : par cause, sets passés à 100 %, sets nouvellement troués', () => {
+    const avant = { le: 'x', sets: [{ set: 'A', trous: 3, causes: { 'sansVisuel/aucune-image-en-base': 3 } }, { set: 'B', trous: 0, causes: {} }], parCause: { sansVisuel: { 'aucune-image-en-base': 3 } }, totaux: { trous: 3 }, denominateurs: { sets: 2 } };
+    const apres = { le: 'y', sets: [{ set: 'A', trous: 0, causes: {} }, { set: 'B', trous: 2, causes: { 'sansProduit/jumelle-suffixe-sans-produit': 2 } }], parCause: { sansProduit: { 'jumelle-suffixe-sans-produit': 2 } }, totaux: { trous: 2 }, denominateurs: { sets: 2 } };
+    const e = A.ecart(avant, apres);
+    assert.strictEqual(e.totaux.trous, -1);
+    assert.deepStrictEqual(e.setsPassesA100, ['A']);
+    assert.deepStrictEqual(e.setsNouvellementTroues, ['B']);
+    assert.strictEqual(e.parCause['sansVisuel/aucune-image-en-base'], -3);
+    assert.strictEqual(e.parCause['sansProduit/jumelle-suffixe-sans-produit'], 2);
+});
+test('écart : un dénominateur différent est dit', () => {
+    const e = A.ecart({ sets: [], parCause: {}, totaux: { trous: 0 }, denominateurs: { sets: 2 } }, { sets: [], parCause: {}, totaux: { trous: 0 }, denominateurs: { sets: 3 } });
+    assert.strictEqual(e.memeDenominateur, false);
+});
+test('écart sans mesure précédente : null, jamais 0', () => assert.strictEqual(A.ecart(null, { sets: [] }), null));
+
+// ── Markdown
+test('markdown : formule du score en tête, dénominateurs, tableau trié', () => {
+    const a = auditer(lecture({ cartes: [carte('c1', 'A', '1')] }));
+    const md = A.formaterMd(a, null);
+    assert.ok(/score/i.test(md.split('\n').slice(0, 12).join('\n')));
+    assert.ok(md.includes('Set Un') && md.includes('aucune-image-en-base'));
+    assert.ok(/dénominateur/i.test(md));
+});
+
+console.log(`\n${ok} ok, ${ko} en échec`);
+process.exit(ko ? 1 : 0);
