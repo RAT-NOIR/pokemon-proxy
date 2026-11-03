@@ -101,7 +101,19 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
     });
 
     // ───────── P2 : la règle preuve-lue ─────────
-    const lue = (e, p = produit()) => PV.evaluerPreuveLue({ entree: e, produit: p, langueProduit: PV.langueDuProduit(p) });
+    // ➕ 2026-11-03 : comme la production (evaluerEntree), la langue du produit se calcule AVEC la langue lue (un tirage à deux langues, idth, admet celle des siennes qui est lue)
+    const lue = (e, p = produit()) => PV.evaluerPreuveLue({ entree: e, produit: p, langueProduit: PV.langueDuProduit({ ...p, langueLue: e.lu?.langue }) });
+    await test('P4 (03/11) : un tirage à DEUX langues (idth) admet la langue lue si elle est l\'une des siennes ; toute autre reste refusée ; un tirage à une langue ignore la langue lue', () => {
+        assert.strictEqual(PV.langueDuProduit({ idExpansion: 1, tirage: 'idth', langueLue: 'id' }), 'id');
+        assert.strictEqual(PV.langueDuProduit({ idExpansion: 1, tirage: 'idth', langueLue: 'th' }), 'th');
+        assert.strictEqual(PV.langueDuProduit({ idExpansion: 1, tirage: 'idth', langueLue: 'en' }), null, 'anglais sur un set idth : refusé');
+        assert.strictEqual(PV.langueDuProduit({ idExpansion: 1, tirage: 'idth', langueLue: 'ja' }), null);
+        assert.strictEqual(PV.langueDuProduit({ idExpansion: 1, tirage: 'idth' }), null, 'rien de lu : on ne sait pas');
+        assert.strictEqual(PV.langueDuProduit({ idExpansion: 1, tirage: 'intl', langueLue: 'id' }), 'en', 'un tirage à une langue ne lit pas la langue lue');
+        assert.strictEqual(PV.langueDuProduit({ idExpansion: 1, tirage: 'id', langueLue: 'th' }), 'id');
+        assert.strictEqual(PV.langueDuProduit({ idExpansion: 2361, tirage: 'idth', langueLue: 'id' }), 'fr', 'l\'édition locale énumérée l\'emporte toujours');
+        assert.strictEqual(PV.langueDuProduit({ idExpansion: 1, tirage: 'constructor', langueLue: 'constructor' }), null);
+    });
     await test('P2 : une preuve complète passe (numéro 013 = 13 par la clé de la jointure)', () => {
         assert.deepStrictEqual(lue(entree()), { ok: true, motifs: [] });
         assert.strictEqual(lue(entree({ lu: { ...entree().lu, numero: '013' } })).ok, true);
@@ -1259,6 +1271,11 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         // ni une langue hors liste (coréen) ni un tirage à deux langues
         assert.match(mt(trad({ langue: 'ko' }), ptrad({ tirage: 'jp' })), /langue-differente/);
         assert.match(mt(trad(), ptrad({ tirage: 'idth' })), /langue-du-tirage-inconnue/);
+        // ➕ 2026-11-03 : un scan lu en indonésien ou en thaï sur un set idth est DU tirage (le site admet les deux) : plus de refus de langue ; le nom traduit se juge comme ailleurs
+        assert.deepStrictEqual(lue(trad({ langue: 'id', nom: 'Mareep' }), ptrad({ tirage: 'idth' })), { ok: true, motifs: [] }, 'indonésien sur idth : passe');
+        assert.doesNotMatch(mt(trad({ langue: 'th' }), ptrad({ tirage: 'idth' })), /langue-du-tirage-inconnue|langue-differente/, 'thaï sur idth : aucun motif de langue');
+        assert.match(mt(trad({ langue: 'id', nom: 'Mareep' }), ptrad({ tirage: 'id' })), /^(?!.*langue-).*$/, 'indonésien sur id : inchangé');
+        assert.match(mt(trad({ langue: 'th' }), ptrad({ tirage: 'id' })), /langue-differente/, 'thaï sur un set id seul : refusé comme avant');
     });
     await test('nom traduit : ce que le chasseur a saisi (dex, pv, règle, code) est ÉCRIT dans la preuve lue, rien d\'autre', () => {
         const a = { entree: trad({ regle: undefined, libre: 'x' }), validation: validation(), produit: ptrad(), langue: 'ja' };

@@ -117,6 +117,13 @@ const unite = (o) => ({ carteId: 1, slugSet: 'Set-A', numero: '024', produits: [
     v('langueDuTirage : inconnu = null', CO.langueDuTirage('klingon'), null);
     v('langueDuTirage : absent = null', CO.langueDuTirage(undefined), null);
     v('langueDuTirage : hérité de Object.prototype = null (constructor)', CO.langueDuTirage('constructor'), null);
+    // ➕ 2026-11-03 : les LANGUES d'un tirage (liste) — `idth` en porte deux (comme le site : lib/langueDuVisuel.ts admet `id` et `th` sur un set idth) ; `langueDuTirage` (une seule) ne change pas
+    v('languesDuTirage : idth = [id, th]', CO.languesDuTirage('idth'), ['id', 'th']);
+    v('languesDuTirage : intl = [en]', CO.languesDuTirage('intl'), ['en']);
+    v('languesDuTirage : th = [th]', CO.languesDuTirage('th'), ['th']);
+    v('languesDuTirage : inconnu = [] (exclut)', CO.languesDuTirage('klingon'), []);
+    v('languesDuTirage : absent = []', CO.languesDuTirage(undefined), []);
+    v('languesDuTirage : hérité de Object.prototype = [] (constructor)', CO.languesDuTirage('constructor'), []);
     v('tirageProduit', CO.tirageProduit({ langue: 'intl', tamponnee: null, codeSet: 'PAL', numero: '012' }), { langue: 'en', codeSet: 'PAL', numero: '012', tampon: null });
     v('tirageProduit : numéro « 012/193 » réduit avant le « / »', CO.tirageProduit({ langue: 'intl', codeSet: 'PAL', numero: '012/193' }).numero, '012');
     v('tirageProduit : tamponnée gardée telle quelle', CO.tirageProduit({ langue: 'intl', tamponnee: 'pps', codeSet: 'X', numero: '1' }).tampon, 'pps');
