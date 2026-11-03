@@ -109,6 +109,10 @@ async function ecrireTrous(db, trous, { taille = 1000, classeVisuelParId = new M
 /** Le tirage d'un set -> la langue de ses cartes. Table ÉNUMÉRÉE ; tout le reste (idth = deux langues, inconnu, absent) = null, qui EXCLUT. */
 const LANGUE_DU_TIRAGE = Object.freeze({ intl: 'en', jp: 'ja', 'zh-hans': 'zh-hans', 'zh-hant': 'zh-hant', id: 'id', th: 'th' });
 const langueDuTirage = t => (typeof t === 'string' && Object.hasOwn(LANGUE_DU_TIRAGE, t) ? LANGUE_DU_TIRAGE[t] : null);
+/** ➕ 2026-11-03 : les LANGUES d'un tirage (liste). `idth` en a deux — la règle du site (rat-market-site/lib/langueDuVisuel.ts) admet `id` et `th` sur un set idth ; ici la même table.
+ *  Tout tirage inconnu ou absent = [] (exclut). `langueDuTirage` (une seule langue, null pour idth) ne change pas : ses lecteurs comparent à UNE langue. */
+const LANGUES_DU_TIRAGE = Object.freeze({ ...Object.fromEntries(Object.entries(LANGUE_DU_TIRAGE).map(([t, l]) => [t, Object.freeze([l])])), idth: Object.freeze(['id', 'th']) });
+const languesDuTirage = t => (typeof t === 'string' && Object.hasOwn(LANGUES_DU_TIRAGE, t) ? [...LANGUES_DU_TIRAGE[t]] : []);
 /** « 024/208 » -> « 024 » ; absent ou vide -> null. */
 function reduireNumero(n) {
     if (n == null) return null;
@@ -485,6 +489,6 @@ function redigerCompteRendu({ date, aBlanc, etat, population, comptesPlan, rappo
     return `${L.join('\n')}\n`;
 }
 
-module.exports = { FOURNISSEURS, chargerFournisseurs, MOTIFS, motifAdmis, INSTRUMENT, construireTrou, ecrireTrous, LANGUE_DU_TIRAGE, langueDuTirage, reduireNumero, tirageProduit, tirageCandidat,
+module.exports = { FOURNISSEURS, chargerFournisseurs, MOTIFS, motifAdmis, INSTRUMENT, construireTrou, ecrireTrous, LANGUE_DU_TIRAGE, langueDuTirage, LANGUES_DU_TIRAGE, languesDuTirage, reduireNumero, tirageProduit, tirageCandidat,
     PLAFOND_PAR_DEFAUT, synchroniserFournisseurs, choisirPopulation, calculerNeufs, regrouperUnites, candidatsDuProduit, classerProduit, planifier, recolterUnites, telechargerPlan, choisirGagnant, jugerProduit, assembler, executerEcriture,
     bilanTrous, lireBilanTrous, existeStrict, choisirNouvelEtat, regenererEtat, comparerTrous, trousResolus, ETAT_AGE_MAX_JOURS, etatTropVieux, verifierGardes, AUTORISES, MODES, verifierArguments, DOSSIER_PAR_DEFAUT, DOSSIER_COMPTEURS, dossierDe, dernierEtat, redigerCompteRendu };

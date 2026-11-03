@@ -33,9 +33,14 @@ const SRC = RC.fabriquerSource({ SOURCE, LOT, LANGUE: 'par-unite', LANGUE_PREUVE
 // DÉCISION DU TESTEUR (26/10) : « on ouvre le français pour McDonald's 2018/2019 européens (idExpansion 2361 et 3354) : le produit EST français, c'est son tirage ». Table ÉNUMÉRÉE par idExpansion ENTIER :
 // elle l'emporte sur la langue du set pour ces seules expansions ; tout autre idExpansion suit la fonction de production, sans changement.
 const EDITIONS_LOCALES = Object.freeze({ 2361: 'fr', 3354: 'fr' });
-function langueDuProduit({ idExpansion, tirage } = {}) {
+// ➕ 2026-11-03 (testeur : « pose le tirage des sets indonésiens et thaïs, puis les visuels qu'il débloque ») : le tirage DÉCLARÉ de 14 sets est `idth` — les deux langues, prouvées par la page
+// source (§67, 2026-09-26) ; le site admet `id` et `th` sur un set idth (lib/langueDuVisuel.ts). Un tirage à DEUX langues prend donc pour langue du produit celle des siennes qui est LUE sur le scan
+// (`langueLue`) ; une langue lue hors des siennes, ou rien de lu, rend null (refus `langue-du-tirage-inconnue`, inchangé). Un tirage à UNE langue ignore la langue lue (table de production, comme avant).
+function langueDuProduit({ idExpansion, tirage, langueLue } = {}) {
     if (Number.isInteger(idExpansion) && Object.hasOwn(EDITIONS_LOCALES, idExpansion)) return EDITIONS_LOCALES[idExpansion];
-    return CO.langueDuTirage(tirage);
+    const langues = CO.languesDuTirage(tirage);
+    if (langues.length === 1) return langues[0];
+    return langues.length > 1 && typeof langueLue === 'string' && langues.includes(langueLue) ? langueLue : null;
 }
 
 // ── 2. Petites lectures ──────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -538,7 +543,7 @@ async function largeurDesOctets(buf) {
 
 /** La décision d'une entrée appariée, par sa règle. @returns {Promise<{ok: boolean, regle?: string, motif?: string, motifs?: string[]}>} */
 async function evaluerEntree({ entree, produit, octets, decider }) {
-    const langueProduit = langueDuProduit(produit);
+    const langueProduit = langueDuProduit({ ...produit, langueLue: entree.lu?.langue });   // (03/11) la langue lue n'entre en jeu que pour un tirage à deux langues (idth)
     if (entree.regle === REGLE_MEME_DESSIN) {
         const r = evaluerRemplacementMemeDessin({ entree, produit, langueProduit, largeur: await largeurDesOctets(octets?.a) });
         return r.ok ? { ok: true, regle: REGLE_MEME_DESSIN, lien: r.lien } : { ok: false, motif: `${REGLE_MEME_DESSIN}:${r.motifs[0]}`, motifs: r.motifs };
