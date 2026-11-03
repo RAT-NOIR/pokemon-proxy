@@ -174,7 +174,8 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
             if (ev.drapeaux?.includes('jumeau-dans-le-set')) jumeauxDansLeSet.push(id);
             produits.set(id, produit);
             jugements[e.url] = c1.jugement;
-            acceptees.push({ entree: e, validation: a.validation, produit, langue: PV.langueDuProduit(produit), evaluation: ev, collecteLe: c1.collecteLe });
+            // (03/11) la langue écrite sur le visuel est celle du produit TELLE QUE la décision l'a calculée : pour un tirage à deux langues (idth), celle des siennes qui est LUE (jamais null : la règle a accepté)
+            acceptees.push({ entree: e, validation: a.validation, produit, langue: PV.langueDuProduit({ ...produit, langueLue: e.lu?.langue }), evaluation: ev, collecteLe: c1.collecteLe });
         }
         // les produits de chaque fiche : TOUS (aussi ceux que le manifeste ne cite pas) — une image qui sert deux produits ne s'écrit que si les deux sont prouvés
         const fiches = new Map();
