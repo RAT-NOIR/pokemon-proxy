@@ -4,8 +4,12 @@
 // ============================================================
 // Ce que le testeur faisait à l'œil, set par set : nombre de cartes attendu / affiché, fiches sans visuel, fiches sans numéro, fiches sans produit
 // Cardmarket (jumelles orphelines), doublons de faits, produits Cardmarket sans fiche, numéros manquants dans la suite — et, pour CHAQUE trou, sa cause.
-// 🔑 Rien n'est recopié de la production : les règles du site (impressionDuSet, normaliserNumero), la règle des jumeaux et la table des « pas un trou »
-// sont INJECTÉES (`regles`) par l'appelant, qui les importe ; les classes de fiche et de visuel des produits viennent de compteurs-abc.js::mesurer.
+// 🔑 Règles du site INJECTÉES (`regles`, importées par l'appelant, jamais réécrites ici) : impressionDuSet, normaliserNumero, expansionsDuSet, tirageDuSet, editionLocaleDuSet,
+// imageDeLImpression, visuelAdmisPourLaRegion, annexeDuSet (facultative) ; plus memeCodeSaufFin et la table « pas un trou » (trous-outils, hors dépôt).
+// Les classes de fiche et de visuel des produits viennent de compteurs-abc.js::mesurer.
+// ⚠️ Ce qui est RÉÉCRIT ici, faute d'export du site (les sets « jumeaux » et la suite 1..N viennent de mesure-trous.js, pas du site) : le groupement des doublons de faits
+// (nom + PV + attaques + numéro de base) et le total ramené de moitié pour les jumeaux ; les fiches « affichées » sont une approximation (carte, numéro normalisé) de
+// calculerEntreesDuSet, qui est asynchrone et lit la base — non importable sur une lecture en mémoire.
 // 🔑 Les causes sont une liste FERMÉE (CAUSES) : une cause hors liste LÈVE ; « cause-inconnue » est la seule réponse quand rien ne désigne la cause (jamais un silence).
 // Entrée `lecture` (objets simples, JSON-compatibles) :
 //   sets[{_id,code,nomAffichage,tirage,region,totalImprime,idExpansion[],bulbaExpansion,deck,type}], cartes[{_id,nomEn,pv,attaques[],sets[],impressions[{tirage,expansion,deck,numero,total}],images[{set,numero}]}],
@@ -14,11 +18,11 @@
 
 const TYPES = Object.freeze(['sansVisuel', 'sansNumero', 'sansProduit', 'doublons', 'produitsSansFiche', 'manquants']);
 const CAUSES = Object.freeze({
-    sansVisuel: ['regle-bloquante', 'aucune-image-en-base', 'image-d-un-autre-set-seulement', 'image-d-un-autre-numero', 'cause-inconnue'],
-    sansNumero: ['impression-sans-numero', 'aucune-impression-du-set', 'cause-inconnue'],
+    sansVisuel: ['regle-bloquante', 'aucune-image-en-base', 'image-d-un-autre-set-seulement', 'image-refusee-par-la-garde-de-langue', 'image-d-un-autre-numero', 'cause-inconnue'],
+    sansNumero: ['impression-sans-numero', 'set-sans-expansion-bulbapedia', 'expansion-declaree-sans-impression', 'cause-inconnue'],
     sansProduit: ['expansion-sans-produit-cardmarket', 'produit-sans-ligne-meme-numero', 'jumelle-suffixe-sans-produit', 'produits-sans-ligne-dans-l-expansion', 'tous-les-produits-deja-rattaches', 'cause-inconnue'],
     doublons: ['doublon-suffixe-lettre', 'doublon-deux-documents', 'doublon-numeros-distincts', 'cause-inconnue'],
-    produitsSansFiche: ['sans-ligne', 'ligne-sans-fiche', 'cause-inconnue'],
+    produitsSansFiche: ['sans-ligne', 'ligne-sans-fiche', 'reste', 'cause-inconnue'],
     manquants: ['produit-cardmarket-existe-sans-fiche', 'reste', 'aucune-source-en-base', 'aucune-impression-numerotee', 'cause-inconnue'],
 });
 const TITRES = Object.freeze({ sansVisuel: 'sans visuel', sansNumero: 'sans numéro', sansProduit: 'sans produit CM', doublons: 'doublons', produitsSansFiche: 'produits CM sans fiche', manquants: 'numéros manquants' });
@@ -40,8 +44,8 @@ const baseNumero = n => { const m = /(\d+)/.exec(String(n ?? '')); return m ? St
 const suffixeLettre = n => /\d[a-z]+$/i.test(String(n ?? ''));
 
 function auditer(lecture, regles) {
-    const { impressionDuSet, normaliserNumero, memeCodeSaufFin, exclure, annexeDuSet = null } = regles || {};   // annexeDuSet : facultatif (lib/annexes.ts du site)
-    for (const [k, f] of Object.entries({ impressionDuSet, normaliserNumero, memeCodeSaufFin, exclure })) if (typeof f !== 'function') throw new Error(`auditer : règle injectée absente (${k}) — jamais de repli`);
+    const { impressionDuSet, normaliserNumero, memeCodeSaufFin, exclure, expansionsDuSet, tirageDuSet, editionLocaleDuSet, imageDeLImpression, visuelAdmisPourLaRegion, annexeDuSet = null } = regles || {};   // annexeDuSet : facultatif (lib/annexes.ts du site)
+    for (const [k, f] of Object.entries({ impressionDuSet, normaliserNumero, memeCodeSaufFin, exclure, expansionsDuSet, tirageDuSet, editionLocaleDuSet, imageDeLImpression, visuelAdmisPourLaRegion })) if (typeof f !== 'function') throw new Error(`auditer : règle injectée absente (${k}) — jamais de repli`);
     const sets = lecture.sets || [], cartes = lecture.cartes || [], lignes = lecture.lignes || [], produits = lecture.produits || [];
     if (!sets.length) throw new Error('auditer : population vide (0 set) — un audit sur zéro set n\'est pas une mesure (§41)');
     if (lignes.length && !cartes.length) throw new Error('auditer : lecture des cartes vide alors que des lignes cartes_produits existent — clé ou lecture fausse (§41)');
@@ -51,20 +55,20 @@ function auditer(lecture, regles) {
     }
     const publies = sets.filter(s => nonVide(s.nomAffichage));
     const offresDe = lecture.offresParExpansion || {};
-    const trousNommes = lecture.trousNommes || {}, restesParSet = lecture.restesParSet || {};
+    const trousNommes = lecture.trousNommes || {}, restesParProduit = lecture.restesParProduit || {};   // restes NON résolus, un type par idProduct
     const numProd = new Map((lecture.numerosProduits || []).map(n => [n.idProduct, normaliserNumero(n.numero)]));
     const produitDe = new Map(produits.map(p => [p.idProduct, p]));
     const lignesParCarte = indexer(lignes, l => l.carteId);
     const produitsParFiche = indexer(produits.filter(p => p.fiche && p.fiche.carteId != null), p => `${p.fiche.carteId}|${p.fiche.setId}`);
     const setsParExpansion = indexer(publies.flatMap(s => [].concat(s.idExpansion ?? []).map(e => ({ e, s }))), x => x.e);
     const setPublie = new Map(publies.map(s => [s._id, s]));
-    const expansionsDe = s => { const e = s.bulbaExpansion; return typeof e === 'string' ? [e] : (Array.isArray(e) ? e.filter(x => typeof x === 'string') : []); };
-    const cibleDe = s => ({ tirage: s.tirage ?? s.region ?? null, expansions: expansionsDe(s), deck: s.deck ?? null });
+    const expansionsDe = s => expansionsDuSet(s);          // règle du site (lib/entreesDuSet.ts), injectée
+    const cibleDe = s => ({ tirage: tirageDuSet(s), expansions: expansionsDe(s), deck: s.deck ?? null });
     const affichables = cartes.filter(c => typeof c.nomEn === 'string' && c.nomEn !== '');
     const docsParSet = indexer(affichables.flatMap(c => [...new Set(c.sets || [])].map(s => ({ s, c }))), x => x.s);
 
     // ── jumeaux (règle de mesure-trous : même tirage + même total, expansions Bulbapedia différentes, codes identiques sauf la fin)
-    const groupesTotal = indexer(sets.filter(s => Number(s.totalImprime) > 0), s => `${s.tirage ?? s.region}|${Number(s.totalImprime)}`);
+    const groupesTotal = indexer(sets.filter(s => Number(s.totalImprime) > 0), s => `${tirageDuSet(s)}|${Number(s.totalImprime)}`);
     const exp1 = s => JSON.stringify(expansionsDe(s));
     const jumeaux = new Set();
     for (const g of groupesTotal.values()) for (const a of g) if (g.some(b => b !== a && exp1(b) !== exp1(a) && memeCodeSaufFin(a.code, b.code))) jumeaux.add(a._id);
@@ -93,7 +97,7 @@ function auditer(lecture, regles) {
             for (const i of imps) if (nonVide(i.total)) { const t = Number(String(i.total).replace(/\D/g, '')); if (t) denoms[t] = (denoms[t] || 0) + 1; }
             const nums = [...new Set(imps.concat(annexes).map(i => normaliserNumero(i.numero)).filter(n => n !== null))];
             if (nums.length) for (const n of nums) entrees.push({ c, numero: n, nEntreesCarte: nums.length });
-            else entrees.push({ c, numero: null, nEntreesCarte: 1, causeSansNumero: imps.length ? 'impression-sans-numero' : 'aucune-impression-du-set' });
+            else entrees.push({ c, numero: null, nEntreesCarte: 1, causeSansNumero: imps.length ? 'impression-sans-numero' : (cible.expansions.length ? 'expansion-declaree-sans-impression' : 'set-sans-expansion-bulbapedia') });
         }
         const nums = new Set(entrees.filter(e => e.numero !== null).map(e => e.numero));
         const sansVisuel = [], sansNumero = [], sansProduit = [];
@@ -105,7 +109,9 @@ function auditer(lecture, regles) {
             for (const l of lignesParCarte.get(c._id) || []) if (l.slugSet === s._id && memeNumero(l.numeroFiche)) liés.add(l.idProduct);
             const ps = [...liés].map(id => produitDe.get(id)).filter(Boolean);
             const imgsSet = (c.images || []).filter(i => i.set === s._id);
-            const aImage = e.numero === null ? imgsSet.length > 0 : imgsSet.some(i => normaliserNumero(i.numero) === null || normaliserNumero(i.numero) === e.numero);
+            // « image présente » = celle que le site choisirait : garde de langue du tirage du set PUIS image de l'impression (règles du site injectées)
+            const admises = imgsSet.filter(m => visuelAdmisPourLaRegion(m, cible.tirage, editionLocaleDuSet(s)));
+            const aImage = !!imageDeLImpression(admises, e.numero);
             const bloque = ps.length > 0 && ps.every(p => p.visuel && p.visuel.classe === 'MANQUANT');
             if (!aImage || bloque) {
                 let cause;
@@ -114,6 +120,7 @@ function auditer(lecture, regles) {
                     cause = motif ? `regle-bloquante:${motif}` : 'cause-inconnue';
                 } else if (!(c.images || []).length) cause = 'aucune-image-en-base';
                 else if (!imgsSet.length) cause = 'image-d-un-autre-set-seulement';
+                else if (!admises.length) cause = 'image-refusee-par-la-garde-de-langue';
                 else cause = 'image-d-un-autre-numero';
                 sansVisuel.push({ carteId: c._id, nom: c.nomEn, numero: e.numero, cause: verifierCause('sansVisuel', cause) });
             }
@@ -150,8 +157,9 @@ function auditer(lecture, regles) {
             const cl = p.fiche && p.fiche.classe;
             if (cl !== 'SANS_LIGNE' && cl !== 'LIGNE_SANS_FICHE') continue;
             let cause;
-            if (cl === 'SANS_LIGNE') cause = trousNommes[p.idProduct] ? `sans-ligne:${trousNommes[p.idProduct]}` : 'cause-inconnue';
-            else cause = (p.fiche.motifs || [])[0] ? `ligne-sans-fiche:${p.fiche.motifs[0]}` : 'cause-inconnue';
+            const reste = restesParProduit[p.idProduct];
+            if (cl === 'SANS_LIGNE') cause = trousNommes[p.idProduct] ? `sans-ligne:${trousNommes[p.idProduct]}` : (reste ? `reste:${reste}` : 'cause-inconnue');
+            else cause = (p.fiche.motifs || [])[0] ? `ligne-sans-fiche:${p.fiche.motifs[0]}` : (reste ? `reste:${reste}` : 'cause-inconnue');
             produitsSansFiche.push({ idProduct: p.idProduct, nom: p.name, classe: cl, cause: verifierCause('produitsSansFiche', cause) });
         }
         // ── attendu et numéros manquants (suite 1..attendu) — logique de mesure-trous, règles injectées
@@ -169,10 +177,12 @@ function auditer(lecture, regles) {
             const liste = [...Array(attendu).keys()].map(i => String(i + 1)).filter(n => !nums.has(n));
             const ex = exclure({ set: s._id, trous: liste, manque: liste.length });
             exclusPasUnTrou = ex.exclus;
-            const reste = Object.entries(restesParSet[s._id] || {}).sort((a, b) => b[1] - a[1])[0];
             const numerosProdSansFiche = new Set(produitsSansFiche.map(p => numProd.get(p.idProduct)).filter(Boolean));
+            // un reste ne se nomme que s'il désigne CE numéro (le produit du reste porte ce numéro) — jamais le type dominant du set
+            const resteDuNumero = n => { const p = prods.find(x => restesParProduit[x.idProduct] && numProd.get(x.idProduct) === n); return p ? restesParProduit[p.idProduct] : null; };
             for (const n of ex.trous) {
-                const cause = numerosProdSansFiche.has(n) ? 'produit-cardmarket-existe-sans-fiche' : reste ? `reste:${reste[0]}` : 'aucune-source-en-base';
+                const r = resteDuNumero(n);
+                const cause = r ? `reste:${r}` : numerosProdSansFiche.has(n) ? 'produit-cardmarket-existe-sans-fiche' : 'aucune-source-en-base';
                 manquants.push({ numero: n, nombre: 1, cause: verifierCause('manquants', cause) });
             }
         } else if (attendu && !parNumeros && attendu > portes) {
@@ -185,8 +195,15 @@ function auditer(lecture, regles) {
         const causes = {};
         for (const t of TYPES) for (const it of (entree[t].items || entree[t].groupes)) { const k = `${t}/${it.cause}`; causes[k] = (causes[k] || 0) + (t === 'doublons' ? it.membres.length - 1 : (it.nombre || 1)); }
         const trous = TYPES.reduce((a, t) => a + entree[t].n, 0);
+        // diagnostic du vrai suspect : l'expansion DÉCLARÉE par le set ne se retrouve dans aucune impression de la carte — l'impression la plus proche (même tirage d'abord) dit si c'est un décalage de nom
+        const suspects = sansNumero.filter(x => x.cause === 'expansion-declaree-sans-impression');
+        const diagnosticExpansion = suspects.length ? { n: suspects.length, expansionsDeclarees: cible.expansions, exemples: suspects.slice(0, 3).map(x => {
+            const imps = (cartes.find(c => c._id === x.carteId)?.impressions) || [];
+            const p = imps.find(i => i.tirage === cible.tirage) || imps[0] || null;
+            return { carteId: x.carteId, nom: x.nom, plusProche: p ? { tirage: p.tirage ?? null, expansion: p.expansion ?? null, numero: p.numero ?? null } : null };
+        }) } : null;
         resultats.push({ set: s._id, code: s.code ?? null, nom: s.nomAffichage, tirage: cible.tirage, type: s.type ?? null, attendu, totalImprime: total, affichees: entrees.length, cartesDocuments: docs.length, produitsCardmarket: prods.length, offres,
-            ...entree, exclusPasUnTrou, trous, causes });
+            ...entree, exclusPasUnTrou, diagnosticExpansion, trous, causes });
     }
     const sorted = trier(resultats);
     const parCause = {}; const totaux = { trous: 0, setsTroues: 0, sets100: 0 };
@@ -242,6 +259,9 @@ function formaterMd(audit, ec, { lignes = 150, detail = 40, parSet = 8 } = {}) {
         out.push(`- sets nouvellement troués (${ec.setsNouvellementTroues.length}) : ${ec.setsNouvellementTroues.slice(0, 60).join(', ') || '—'}`);
         out.push('- écart par cause : ' + (Object.entries(ec.parCause).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).map(([c, n]) => `${c} ${signe(n)}`).join(' · ') || 'aucun'), '');
     } else out.push('## Écart avec l\'audit précédent', '', 'Aucune mesure précédente à comparer.', '');
+    out.push('### Sets les plus touchés par « expansion-declaree-sans-impression » (le vrai suspect : décalage de nom d\'expansion ?)', '');
+    for (const x of suspectsExpansion(audit)) out.push(`- **${x.set}** ${x.n} — expansion déclarée : ${JSON.stringify(x.expansionsDeclarees)} — ex. ${x.exemples.map(e => `${e.nom} → impression la plus proche ${e.plusProche ? `${e.plusProche.tirage}/« ${e.plusProche.expansion} »/${e.plusProche.numero}` : 'aucune'}`).join(' ; ')}`);
+    out.push('');
     const troues = audit.sets.filter(s => s.trous > 0);
     out.push(`## Tableau (${Math.min(lignes, troues.length)} premiers sets sur ${troues.length} troués)`, '');
     out.push('| # | set | nom | tirage | offres | attendu | affichées | sans visuel | sans numéro | sans produit | doublons | prod. sans fiche | manquants | score | cause dominante |');
@@ -265,4 +285,10 @@ function formaterMd(audit, ec, { lignes = 150, detail = 40, parSet = 8 } = {}) {
     return out.join('\n');
 }
 
-module.exports = { auditer, ecart, trier, score, formaterMd, verifierCause, CAUSES, TYPES, TITRES, baseNumero, suffixeLettre };
+/** Les `n` sets les plus touchés par « expansion-declaree-sans-impression » : l'expansion déclarée et l'impression la plus proche d'une carte touchée. */
+function suspectsExpansion(audit, n = 10) {
+    return audit.sets.filter(s => s.diagnosticExpansion).sort((a, b) => b.diagnosticExpansion.n - a.diagnosticExpansion.n || (a.set < b.set ? -1 : 1)).slice(0, n)
+        .map(s => ({ set: s.set, n: s.diagnosticExpansion.n, expansionsDeclarees: s.diagnosticExpansion.expansionsDeclarees, exemples: s.diagnosticExpansion.exemples }));
+}
+
+module.exports = { suspectsExpansion, auditer, ecart, trier, score, formaterMd, verifierCause, CAUSES, TYPES, TITRES, baseNumero, suffixeLettre };

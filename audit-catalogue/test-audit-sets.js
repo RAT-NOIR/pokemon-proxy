@@ -8,22 +8,28 @@ const test = (nom, f) => { try { f(); ok++; console.log('  ok  ' + nom); } catch
 
 // règles du site simulées (mêmes signatures que impressionDuSet / normaliserNumero du site)
 const normaliserNumero = n => (n == null || String(n).trim() === '' ? null : String(n).trim().toLowerCase().replace(/^0+(?=\d)/, ''));
-const impressionDuSet = (imp, cible) => imp.tirage === cible.tirage && (!cible.expansions.length || cible.expansions.includes(imp.expansion));
+// même contrat que lib/impressionDuSet.ts : une liste d'expansions vide n'accepte AUCUNE impression
+const impressionDuSet = (imp, cible) => imp.tirage === cible.tirage && cible.expansions.includes(imp.expansion);
+const expansionsDuSet = s => { const e = s.bulba?.expansion; return typeof e === 'string' ? [e] : (Array.isArray(e) ? e.filter(x => typeof x === 'string') : []); };
+const tirageDuSet = s => s.tirage ?? s.region;
+const editionLocaleDuSet = () => null;
+const visuelAdmisPourLaRegion = m => !m.refuse;
+const imageDeLImpression = (images, numero) => { const v = normaliserNumero(numero); if (v === null) return images[0] ?? null; return images.find(m => normaliserNumero(m.numero) === v) ?? images.find(m => normaliserNumero(m.numero) === null) ?? null; };
 const memeCodeSaufFin = (a, b) => typeof a === 'string' && typeof b === 'string' && a.length === b.length && a !== b && a.slice(0, -1) === b.slice(0, -1) && /\d/.test(a.slice(0, -1));
 const exclure = (s, table = []) => {
     const exclus = [], sansObjet = [];
     for (const e of table) if (e.set === s.set) for (const n of e.numeros) (s.trous.includes(n) ? exclus : sansObjet).push(n);
     return { set: s.set, trous: s.trous.filter(n => !exclus.includes(n)), manque: Math.max(0, s.manque - exclus.length), exclus, sansObjet };
 };
-const regles = { impressionDuSet, normaliserNumero, memeCodeSaufFin, exclure: s => exclure(s, [{ set: 'S1', numeros: ['4'] }]) };
+const regles = { impressionDuSet, normaliserNumero, memeCodeSaufFin, exclure: s => exclure(s, [{ set: 'S1', numeros: ['4'] }]), expansionsDuSet, tirageDuSet, editionLocaleDuSet, imageDeLImpression, visuelAdmisPourLaRegion };
 
 const imp = (numero, total = 3) => ({ tirage: 'intl', expansion: 'Exp', numero, total });
 const carte = (id, nom, numeros, extra = {}) => ({ _id: id, nomEn: nom, pv: '60', attaques: ['Charge'], sets: ['S1'], impressions: [].concat(numeros).map(n => imp(n)), images: [], ...extra });
-const set = (o = {}) => ({ _id: 'S1', code: 'S1', nomAffichage: 'Set Un', tirage: 'intl', totalImprime: 3, idExpansion: [10], bulbaExpansion: ['Exp'], deck: null, ...o });
+const set = (o = {}) => ({ _id: 'S1', code: 'S1', nomAffichage: 'Set Un', tirage: 'intl', region: 'intl', totalImprime: 3, idExpansion: [10], bulba: { expansion: ['Exp'] }, deck: null, ...o });
 const lig = (carteId, idProduct, numeroFiche = null) => ({ carteId, idProduct, slugSet: 'S1', numeroFiche });
 const prod = (idProduct, o = {}) => ({ idProduct, idExpansion: 10, name: 'P' + idProduct, setId: 'S1', fiche: { classe: 'FICHE_OK', motifs: [] }, visuel: { classe: 'A_COMPARER', motifs: [] }, ...o });
-const lecture = (o = {}) => ({ sets: [set()], cartes: [], lignes: [], produits: [], numerosProduits: [], offresParExpansion: { 10: 5 }, trousNommes: {}, restesParSet: {}, ...o });
-const img = (set, numero = null) => ({ set, numero });
+const lecture = (o = {}) => ({ sets: [set()], cartes: [], lignes: [], produits: [], numerosProduits: [], offresParExpansion: { 10: 5 }, trousNommes: {}, restesParProduit: {}, ...o });
+const img = (set, numero = null, o = {}) => ({ set, numero, cleR2: `k/${set}/${numero}`, ...o });
 const auditer = (l, r = regles) => A.auditer(l, r);
 const un = a => a.sets.find(s => s.set === 'S1');
 const causes = (arr) => arr.map(x => x.cause).sort();
@@ -90,7 +96,7 @@ test('sans numéro : impression du set sans numéro', () => {
 });
 test('sans numéro : aucune impression du set (carte rattachée au set, impression d un autre tirage)', () => {
     const c = carte('c1', 'A', [], { impressions: [{ tirage: 'jp', expansion: 'Exp', numero: '1', total: 3 }], images: [img('S1')] });
-    assert.deepStrictEqual(causes(un(auditer(lecture({ cartes: [c] }))).sansNumero.items), ['aucune-impression-du-set']);
+    assert.deepStrictEqual(causes(un(auditer(lecture({ cartes: [c] }))).sansNumero.items), ['expansion-declaree-sans-impression']);
 });
 test('carte sans nomEn : hors affichage (règle du site)', () => {
     const c = carte('c1', '', '1');
@@ -183,10 +189,34 @@ test('numéro manquant : un produit Cardmarket de ce numéro existe', () => {
     const l = lecture({ cartes: [carte('c1', 'A', '1'), carte('c3', 'B', '3')], produits: [prod(55, { fiche: { classe: 'SANS_LIGNE', motifs: [] } })], numerosProduits: [{ idProduct: 55, numero: '002' }] });
     assert.strictEqual(un(auditer(l)).manquants.items[0].cause, 'produit-cardmarket-existe-sans-fiche');
 });
-test('numéro manquant : un reste est nommé pour le set', () => {
-    const l = lecture({ cartes: [carte('c1', 'A', '1'), carte('c3', 'B', '3')], restesParSet: { S1: { 'sans-page': 2 } } });
+test('numéro manquant : un reste qui désigne CE numéro est nommé', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', '1'), carte('c3', 'B', '3')], produits: [prod(55, { fiche: { classe: 'SANS_LIGNE', motifs: [] } })], numerosProduits: [{ idProduct: 55, numero: '2' }], restesParProduit: { 55: 'sans-page' } });
     assert.strictEqual(un(auditer(l)).manquants.items[0].cause, 'reste:sans-page');
 });
+test('numéro manquant : un reste d\'un AUTRE numéro ne se colle pas au numéro manquant', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', '1'), carte('c3', 'B', '3')], produits: [prod(55, { fiche: { classe: 'SANS_LIGNE', motifs: [] } })], numerosProduits: [{ idProduct: 55, numero: '9' }], restesParProduit: { 55: 'sans-page' } });
+    assert.strictEqual(un(auditer(l)).manquants.items[0].cause, 'aucune-source-en-base');
+});
+test('produit sans fiche : le reste du produit (par idProduct) est nommé, après le trou nommé', () => {
+    const l = lecture({ produits: [prod(1, { fiche: { classe: 'SANS_LIGNE', motifs: [] } }), prod(2, { fiche: { classe: 'LIGNE_SANS_FICHE', motifs: [] } }), prod(3, { fiche: { classe: 'SANS_LIGNE', motifs: [] } })],
+        trousNommes: { 3: 'tn' }, restesParProduit: { 1: 'produit-sans-carte', 2: 'produit-vers-plusieurs-cartes', 3: 'x' } });
+    assert.deepStrictEqual(causes(un(auditer(l)).produitsSansFiche.items), ['reste:produit-sans-carte', 'reste:produit-vers-plusieurs-cartes', 'sans-ligne:tn']);
+});
+test('sans numéro : un set sans expansion Bulbapedia (règle du site) se distingue de l\'expansion déclarée sans impression', () => {
+    const c = carte('c1', 'A', [], { impressions: [{ tirage: 'jp', expansion: 'JP', numero: '9', total: 3 }, { tirage: 'intl', expansion: 'Autre nom', numero: '1', total: 3 }], images: [img('S1')] });
+    const sans = un(auditer(lecture({ sets: [set({ bulba: null })], cartes: [c] })));
+    assert.deepStrictEqual(causes(sans.sansNumero.items), ['set-sans-expansion-bulbapedia']);
+    assert.strictEqual(sans.diagnosticExpansion, null);
+    const decl = un(auditer(lecture({ cartes: [c] })));
+    assert.deepStrictEqual(causes(decl.sansNumero.items), ['expansion-declaree-sans-impression']);
+    assert.deepStrictEqual(decl.diagnosticExpansion.exemples[0].plusProche, { tirage: 'intl', expansion: 'Autre nom', numero: '1' });
+    assert.strictEqual(A.suspectsExpansion(auditer(lecture({ cartes: [c] })))[0].set, 'S1');
+});
+test('sans visuel : image refusée par la garde de langue du tirage', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', '1', { images: [img('S1', '1', { refuse: true })] })] });
+    assert.deepStrictEqual(causes(un(auditer(l)).sansVisuel.items), ['image-refusee-par-la-garde-de-langue']);
+});
+test('règle du site absente : lève', () => assert.throws(() => A.auditer(lecture({ cartes: [carte('c1', 'A', '1')] }), { ...regles, imageDeLImpression: undefined }), /imageDeLImpression/));
 test('numéro manquant : la table des « pas un trou » retire le numéro', () => {
     const l = lecture({ sets: [set({ totalImprime: 4 })], cartes: [carte('c1', 'A', '1'), carte('c2', 'B', '2'), carte('c3', 'C', '3')] });
     const m = un(auditer(l)).manquants;     // la règle de test exclut le 4 du set S1
@@ -198,8 +228,8 @@ test('set sans total imprimé : pas de suite, attendu null, aucun manquant inven
     const s = un(auditer(l)); assert.strictEqual(s.attendu, null); assert.strictEqual(s.manquants.n, 0);
 });
 test('jumeaux : total de la paire ramené à la moitié', () => {
-    const s1 = set({ _id: 'XY1x', code: 'XY1x', totalImprime: 6, bulbaExpansion: ['E1'], idExpansion: [10] });
-    const s2 = set({ _id: 'XY1y', code: 'XY1y', totalImprime: 6, bulbaExpansion: ['E2'], idExpansion: [11] });
+    const s1 = set({ _id: 'XY1x', code: 'XY1x', totalImprime: 6, bulba: { expansion: ['E1'] }, idExpansion: [10] });
+    const s2 = set({ _id: 'XY1y', code: 'XY1y', totalImprime: 6, bulba: { expansion: ['E2'] }, idExpansion: [11] });
     const c = (id, set, n, e) => carte(id, 'N' + id, n, { sets: [set], impressions: [{ tirage: 'intl', expansion: e, numero: n, total: 3 }] });
     const l = lecture({ sets: [s1, s2], cartes: ['1', '2', '3'].map((n, i) => c('a' + i, 'XY1x', n, 'E1')).concat(['1', '2', '3'].map((n, i) => c('b' + i, 'XY1y', n, 'E2'))) });
     const a = auditer(l);
