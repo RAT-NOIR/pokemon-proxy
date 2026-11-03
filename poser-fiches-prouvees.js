@@ -60,6 +60,9 @@ const DECISIONS = {
     '2026-11-02-c-0211': require('./collecte-cartes/decisions-c-0211-2026-11-02.json'),
     // lot d-0211 (chasseur niveau d, 2026-11-02) : 104 lignes, planifier() rejoué en lecture seule par le chasseur ; Vivillon (un document pour plusieurs motifs) et 2 Mewtwo ambigus exclus
     '2026-11-02-d-0211': require('./collecte-cartes/decisions-d-0211-2026-11-02.json'),
+    // lot jumelles-0311 (chasseur « fiches jumelles orphelines », 2026-11-03) : fiches du site (annexes « Yellow A Alternate » comprises, ex. Évoli SUM n°101a) SANS produit rattaché alors que le catalogue Cardmarket
+    // a un produit non joint au même numéro et au même nom ; la carte déclare elle-même l'impression de ce numéro dans l'expansion du set. planifier() rejoue chaque preuve (refus nommé sinon).
+    '2026-11-03-jumelles-0311': require('./collecte-cartes/decisions-jumelles-0311-2026-11-03.json'),
 };
 
 /** lecture : { cartes, produits: Map(idExpansion → produits), existants: Map(_id → ligne), lignesDuProduit?: Map(idProduct → [_id]), etats?: Map(slugSet → collecte_etat) } */
