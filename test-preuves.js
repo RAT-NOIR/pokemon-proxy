@@ -1294,6 +1294,19 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.match(mt(trad({ langue: 'id', nom: 'Mareep' }), ptrad({ tirage: 'id' })), /^(?!.*langue-).*$/, 'indonésien sur id : inchangé');
         assert.match(mt(trad({ langue: 'th' }), ptrad({ tirage: 'id' })), /langue-differente/, 'thaï sur un set id seul : refusé comme avant');
     });
+    // ➕ 2026-11-03 : les cartes INDONÉSIENNES impriment le nom ANGLAIS des Pokémon (les Dresseurs sont traduits) : un nom lu en indonésien identique au nom anglais du produit témoigne seul
+    await test('nom indonésien (03/11) : identique au nom anglais du produit = témoin suffisant ; différent, ou thaï, ou autre tirage : règle traduite inchangée', () => {
+        const idn = (o = {}) => entree({ lu: { nom: 'Mareep', numero: '005', total: '021', langue: 'id', tampon: null, finition: 'normale', marques: ['x'], ...o }, attendu: { ...entree().attendu, numero: '005' } });
+        const pid = ptrad({ tirage: 'id', nomEn: 'Mareep' });
+        assert.deepStrictEqual(lue(idn(), pid), { ok: true, motifs: [] }, 'nom anglais lu sur la carte indonésienne : passe sans témoin');
+        assert.deepStrictEqual(lue(idn({ nom: ' mareep' }), pid), { ok: true, motifs: [] }, 'casse et espaces indifférents');
+        assert.deepStrictEqual(lue(idn(), ptrad({ tirage: 'idth', nomEn: 'Mareep' })), { ok: true, motifs: [] }, 'sur un set idth lu en indonésien : passe');
+        assert.deepStrictEqual(lue(idn({ dex: 179, pv: 60 }), pid), { ok: true, motifs: [] }, 'des témoins en plus ne gênent pas');
+        assert.match(mt(idn({ nom: 'Flaaffy' }), pid), /nom-traduit-sans-temoin/, 'un autre nom : la règle traduite, sans témoin = refus');
+        assert.match(mt(idn({ langue: 'th' }), ptrad({ tirage: 'th', nomEn: 'Mareep' })), /nom-traduit-sans-temoin/, 'thaï : une carte thaïe n\'imprime pas le nom anglais, la règle ne s\'ouvre pas');
+        assert.match(mt(idn(), ptrad({ tirage: 'jp', nomEn: 'Mareep' })), /langue-differente/, 'indonésien sur un set japonais : langue refusée');
+        assert.match(mt(idn(), ptrad({ tirage: 'jp', nomEn: 'Mareep' })), /nom-langue-non-anglaise/, '… et le nom ne témoigne pas pour un autre tirage');
+    });
     await test('nom traduit : ce que le chasseur a saisi (dex, pv, règle, code) est ÉCRIT dans la preuve lue, rien d\'autre', () => {
         const a = { entree: trad({ regle: undefined, libre: 'x' }), validation: validation(), produit: ptrad(), langue: 'ja' };
         const pl = PV.preuvesDe(a).preuveLue.lu;
