@@ -21,27 +21,6 @@
   }
  },
  {
-  "idProduct": 523095,
-  "carteId": 237806,
-  "code": "UNM",
-  "idExpansion": 2487,
-  "slugSet": "Unified-Minds",
-  "voie": "impression-numero",
-  "tirage": "intl",
-  "expansionImpression": "Yellow A Alternate cards",
-  "numeroFiche": "79a",
-  "ajoutSet": false,
-  "preuve": {
-   "sources": [
-    "Cardmarket (produit 523095, slug Jirachi-GX-V3-UNM79a, numéro 79a) sans aucune ligne cartes_produits",
-    "la carte 237806 « Jirachi-GX » déclare elle-même l'impression n°79a (« Yellow A Alternate cards ») ; la fiche du site n°79a n'a aucun produit rattaché (recensement jumelles-0311)"
-   ],
-   "references": [
-    "voie impression-numero de collecte-cartes/fiches-prouvees.js, rejouée par planifier() à la simulation"
-   ]
-  }
- },
- {
   "idProduct": 366837,
   "carteId": 221302,
   "code": "GRI",
@@ -56,90 +35,6 @@
    "sources": [
     "Cardmarket (produit 366837, slug Alolan-Sandshrew-V2-GRI19a, numéro 19a) sans aucune ligne cartes_produits",
     "la carte 221302 « Alolan Sandshrew » déclare elle-même l'impression n°19a (« Yellow A Alternate cards ») ; la fiche du site n°19a n'a aucun produit rattaché (recensement jumelles-0311)"
-   ],
-   "references": [
-    "voie impression-numero de collecte-cartes/fiches-prouvees.js, rejouée par planifier() à la simulation"
-   ]
-  }
- },
- {
-  "idProduct": 468924,
-  "carteId": 221577,
-  "code": "GRI",
-  "idExpansion": 1800,
-  "slugSet": "Guardians-Rising",
-  "voie": "impression-numero",
-  "tirage": "intl",
-  "expansionImpression": "Yellow A Alternate cards",
-  "numeroFiche": "21a",
-  "ajoutSet": false,
-  "preuve": {
-   "sources": [
-    "Cardmarket (produit 468924, slug Alolan-Vulpix-V2-GRI21a, numéro 21a) sans aucune ligne cartes_produits",
-    "la carte 221577 « Alolan Vulpix » déclare elle-même l'impression n°21a (« Yellow A Alternate cards ») ; la fiche du site n°21a n'a aucun produit rattaché (recensement jumelles-0311)"
-   ],
-   "references": [
-    "voie impression-numero de collecte-cartes/fiches-prouvees.js, rejouée par planifier() à la simulation"
-   ]
-  }
- },
- {
-  "idProduct": 449138,
-  "carteId": 220756,
-  "code": "GRI",
-  "idExpansion": 1800,
-  "slugSet": "Guardians-Rising",
-  "voie": "impression-numero",
-  "tirage": "intl",
-  "expansionImpression": "Yellow A Alternate cards",
-  "numeroFiche": "121a",
-  "ajoutSet": false,
-  "preuve": {
-   "sources": [
-    "Cardmarket (produit 449138, slug Choice-Band-V2-GRI121a, numéro 121a) sans aucune ligne cartes_produits",
-    "la carte 220756 « Choice Band » déclare elle-même l'impression n°121a (« Yellow A Alternate cards ») ; la fiche du site n°121a n'a aucun produit rattaché (recensement jumelles-0311)"
-   ],
-   "references": [
-    "voie impression-numero de collecte-cartes/fiches-prouvees.js, rejouée par planifier() à la simulation"
-   ]
-  }
- },
- {
-  "idProduct": 321171,
-  "carteId": 221742,
-  "code": "GRI",
-  "idExpansion": 1800,
-  "slugSet": "Guardians-Rising",
-  "voie": "impression-numero",
-  "tirage": "intl",
-  "expansionImpression": "Yellow A Alternate cards",
-  "numeroFiche": "51a",
-  "ajoutSet": false,
-  "preuve": {
-   "sources": [
-    "Cardmarket (produit 321171, slug Garbodor-V2-GRI51a, numéro 51a) sans aucune ligne cartes_produits",
-    "la carte 221742 « Garbodor » déclare elle-même l'impression n°51a (« Yellow A Alternate cards ») ; la fiche du site n°51a n'a aucun produit rattaché (recensement jumelles-0311)"
-   ],
-   "references": [
-    "voie impression-numero de collecte-cartes/fiches-prouvees.js, rejouée par planifier() à la simulation"
-   ]
-  }
- },
- {
-  "idProduct": 450308,
-  "carteId": 221788,
-  "code": "GRI",
-  "idExpansion": 1800,
-  "slugSet": "Guardians-Rising",
-  "voie": "impression-numero",
-  "tirage": "intl",
-  "expansionImpression": "Yellow A Alternate cards",
-  "numeroFiche": "130a",
-  "ajoutSet": false,
-  "preuve": {
-   "sources": [
-    "Cardmarket (produit 450308, slug Rescue-Stretcher-V2-GRI130a, numéro 130a) sans aucune ligne cartes_produits",
-    "la carte 221788 « Rescue Stretcher » déclare elle-même l'impression n°130a (« Yellow A Alternate cards ») ; la fiche du site n°130a n'a aucun produit rattaché (recensement jumelles-0311)"
    ],
    "references": [
     "voie impression-numero de collecte-cartes/fiches-prouvees.js, rejouée par planifier() à la simulation"
@@ -182,27 +77,6 @@
    "sources": [
     "Cardmarket (produit 367771, slug Charmander-V2-BUS18a, numéro 18a) sans aucune ligne cartes_produits",
     "la carte 223268 « Charmander » déclare elle-même l'impression n°18a (« Yellow A Alternate cards ») ; la fiche du site n°18a n'a aucun produit rattaché (recensement jumelles-0311)"
-   ],
-   "references": [
-    "voie impression-numero de collecte-cartes/fiches-prouvees.js, rejouée par planifier() à la simulation"
-   ]
-  }
- },
- {
-  "idProduct": 665136,
-  "carteId": 223952,
-  "code": "BUS",
-  "idExpansion": 1824,
-  "slugSet": "Burning-Shadows",
-  "voie": "impression-numero",
-  "tirage": "intl",
-  "expansionImpression": "Yellow A Alternate cards",
-  "numeroFiche": "92a",
-  "ajoutSet": false,
-  "preuve": {
-   "sources": [
-    "Cardmarket (produit 665136, slug Kirlia-V3-BUS92a, numéro 92a) sans aucune ligne cartes_produits",
-    "la carte 223952 « Kirlia » déclare elle-même l'impression n°92a (« Yellow A Alternate cards ») ; la fiche du site n°92a n'a aucun produit rattaché (recensement jumelles-0311)"
    ],
    "references": [
     "voie impression-numero de collecte-cartes/fiches-prouvees.js, rejouée par planifier() à la simulation"
@@ -287,27 +161,6 @@
    "sources": [
     "Cardmarket (produit 364324, slug Altaria-V2-DRM40a, numéro 40a) sans aucune ligne cartes_produits",
     "la carte 228317 « Altaria » déclare elle-même l'impression n°40a (« Yellow A Alternate cards ») ; la fiche du site n°40a n'a aucun produit rattaché (recensement jumelles-0311)"
-   ],
-   "references": [
-    "voie impression-numero de collecte-cartes/fiches-prouvees.js, rejouée par planifier() à la simulation"
-   ]
-  }
- },
- {
-  "idProduct": 371643,
-  "carteId": 148517,
-  "code": "SLG",
-  "idExpansion": 1842,
-  "slugSet": "Shining-Legends",
-  "voie": "impression-numero",
-  "tirage": "intl",
-  "expansionImpression": "Yellow A Alternate cards",
-  "numeroFiche": "68a",
-  "ajoutSet": false,
-  "preuve": {
-   "sources": [
-    "Cardmarket (produit 371643, slug Ultra-Ball-V2-SLG68a, numéro 68a) sans aucune ligne cartes_produits",
-    "la carte 148517 « Ultra Ball » déclare elle-même l'impression n°68a (« Yellow A Alternate cards ») ; la fiche du site n°68a n'a aucun produit rattaché (recensement jumelles-0311)"
    ],
    "references": [
     "voie impression-numero de collecte-cartes/fiches-prouvees.js, rejouée par planifier() à la simulation"
