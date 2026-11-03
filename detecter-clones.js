@@ -40,6 +40,10 @@ function formaterMd(r, le, cache) {
     for (const c of r.clones) { if (vus.has(c.set) && ex.length < 12) continue; vus.add(c.set); ex.push(c); if (ex.length >= 20) break; }
     for (const c of ex) out.push(`- ${c.nomEn ?? '?'} (${c.carteId}) dans ${c.set} [${c.tirageSet}] -> ${c.vraieFiche ? `${c.vraieFiche.slugSet}${c.vraieFiche.numeroFiche ? ' / ' + c.vraieFiche.numeroFiche : ''}` : 'aucune fiche publiée'} · ${c.motif}`);
     const parSet = l => { const m = {}; for (const x of l) m[x.set] = (m[x.set] || 0) + 1; return Object.entries(m).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)); };
+    const ai = r.aInstruire || [], aiRaison = {};
+    for (const x of ai) aiRaison[x.raison] = (aiRaison[x.raison] || 0) + 1;
+    out.push('', `### À INSTRUIRE (jamais supprimés par le lot) : ${ai.length}`, '', Object.entries(aiRaison).map(([k, n]) => `${k} ${n}`).join(' · ') || '—', '');
+    for (const x of ai.slice(0, 20)) out.push(`- ${x.nomEn ?? '?'} (${x.carteId}) dans ${x.set} [${x.tirageSet}] · ${x.motif} · ${x.raison} -> ${x.vraieFiche ? x.vraieFiche.slugSet : 'aucune fiche publiée'}`);
     out.push('', '### jointures-a-faire (PAS des clones) par set', '', parSet(r.jointures).slice(0, 40).map(([s, n]) => `${s} ${n}`).join(' · ') || '—');
     out.push('', '### orphelins (PAS des clones) par set', '', parSet(r.orphelins).slice(0, 40).map(([s, n]) => `${s} ${n}`).join(' · ') || '—');
     out.push('', '### sets sans produit Cardmarket (jamais vidés)', '', r.setsSansProduit.map(s => `${s.set} (${s.cartes})`).join(' · ') || '—', '');
@@ -66,6 +70,6 @@ function formaterMd(r, le, cache) {
     fs.writeFileSync(jsonSortie, JSON.stringify({ le, lectureDu: lecture.le, ...r }));
     fs.writeFileSync(mdSortie, formaterMd(r, le, cacheArg));
     console.log(`clones ${r.clones.length} · par motif ${JSON.stringify(r.parMotif)} · par tirage ${JSON.stringify(r.parTirage)}`);
-    console.log(`jointures-a-faire ${r.jointures.length} · orphelins ${r.orphelins.length} · sets sans produit ${r.setsSansProduit.length}`);
+    console.log(`à instruire (non supprimables) ${r.aInstruire.length} · jointures-a-faire ${r.jointures.length} · orphelins ${r.orphelins.length} · sets sans produit ${r.setsSansProduit.length}`);
     console.log(`écrit ${jsonSortie} et ${mdSortie} · ${Math.round((Date.now() - t0) / 1000)} s`);
 })().catch(e => { console.error(String(e && e.stack || e).replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>')); process.exit(1); });

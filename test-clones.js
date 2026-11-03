@@ -35,7 +35,7 @@ const prodSMP = prod(21, 2, 'Celebi', { classe: 'FICHE_OK', carteId: 'celebi', n
 // ── les 4 exemples du brief
 test('Shining Celebi : set Shining-Legends, ligne dans SM-Black-Star-Promos -> clone produit-ailleurs vers SM79', () => {
     const l = lecture({
-        cartes: [carte('celebi', 'Shining Celebi', ['Shining-Legends'], [imp('jp', 'Shining Legends', '3')])],
+        cartes: [carte('celebi', 'Shining Celebi', ['Shining-Legends', 'SM-Black-Star-Promos'], [imp('jp', 'Shining Legends', '3')])],
         lignes: [ligne('celebi', 901, 'SM-Black-Star-Promos', 'SM79')], produits: [prodSL, prodSMP],
     });
     const r = C.classerClones(l, regles);
@@ -50,13 +50,17 @@ test('composition-autre-region : aucune impression du set, impression de l\'expa
     const l = lecture({
         sets: [SL, SLJP], cartes: [carte('c1', 'Xyz', ['Shining-Legends'], [imp('jp', 'Shining Legends', '3')])], produits: [prodSL, prod(51, 5, 'Autre jp', { carteId: 'y', numero: '1', setId: 'Shining-Legends-JP' })],
     });
-    const c = cl(C.classerClones(l, regles), 'c1');
+    const r = C.classerClones(l, regles);
+    assert.strictEqual(cl(r, 'c1'), undefined, 'jamais dans les clones supprimables');
+    const c = r.aInstruire.find(x => x.carteId === 'c1');
     assert.strictEqual(c.motif, 'composition-autre-region');
     assert.deepStrictEqual(c.vraieFiche, { slugSet: 'Shining-Legends-JP', idProduct: null, numeroFiche: null });
 });
 test('composition-autre-region sans set publié du tirage : vraieFiche null', () => {
     const l = lecture({ cartes: [carte('c1', 'Xyz', ['Shining-Legends'], [imp('jp', 'Shining Legends', '3')])], produits: [prodSL] });
-    const c = cl(C.classerClones(l, regles), 'c1');
+    const r = C.classerClones(l, regles);
+    assert.strictEqual(r.clones.length, 0);
+    const c = r.aInstruire.find(x => x.carteId === 'c1');
     assert.strictEqual(c.motif, 'composition-autre-region');
     assert.strictEqual(c.vraieFiche, null);
 });
@@ -100,7 +104,7 @@ test('garde d\'inclusion : accents et ponctuation normalisés (Pokémon / pokemo
 });
 test('garde d\'inclusion : « Erika » face à « Venusaur & Snivy GX » reste un clone', () => {
     const l = lecture({
-        cartes: [carte('er', 'Erika', ['Shining-Legends'], [])],
+        cartes: [carte('er', 'Erika', ['Shining-Legends', 'SM-Black-Star-Promos'], [])],
         lignes: [ligne('er', 902, 'SM-Black-Star-Promos', 'SM1')], produits: [prodSL, prod(12, 1, 'Venusaur & Snivy GX', { classe: 'SANS_LIGNE' }), prodSMP],
     });
     const r = C.classerClones(l, regles);
@@ -108,14 +112,14 @@ test('garde d\'inclusion : « Erika » face à « Venusaur & Snivy GX » reste u
 });
 test('garde d\'inclusion : un produit rattaché (non SANS_LIGNE) dont le nom contient le nomEn n\'interdit rien', () => {
     const l = lecture({
-        cartes: [carte('sh', 'Shellos', ['Shining-Legends'], [])],
+        cartes: [carte('sh', 'Shellos', ['Shining-Legends', 'SM-Black-Star-Promos'], [])],
         lignes: [ligne('sh', 902, 'SM-Black-Star-Promos', 'SM1')], produits: [prodSL, prod(12, 1, 'Shellos West Sea Lv.25', { classe: 'FICHE_OK', carteId: 'z', numero: '9', setId: 'Shining-Legends' }), prodSMP],
     });
     assert.strictEqual(C.classerClones(l, regles).clones.length, 1);
 });
 test('xASC : carte dont tous les produits du set sont rattachés ailleurs, ligne dans Ascended-Heroes -> clone produit-ailleurs', () => {
     const l = lecture({
-        sets: [ASC, XASC], cartes: [carte('a1', 'Alpha', ['Ascended-Heroes-Additionals'], [imp('intl', 'Ascended Heroes', '5')])],
+        sets: [ASC, XASC], cartes: [carte('a1', 'Alpha', ['Ascended-Heroes-Additionals', 'Ascended-Heroes'], [imp('intl', 'Ascended Heroes', '5')])],
         lignes: [ligne('a1', 903, 'Ascended-Heroes', '5')],
         produits: [prod(31, 3, 'Alpha', { carteId: 'a1', numero: '5', setId: 'Ascended-Heroes' }), prod(41, 4, 'Beta', { carteId: 'b1', numero: '6', setId: 'Ascended-Heroes-Additionals' })],
     });
@@ -158,7 +162,7 @@ test('un set non publié (sans nomAffichage) n\'est jamais audité ni vraie fich
 });
 test('la vraie fiche préfère un set du même tirage', () => {
     const SMPJ = set('SMP-JP', { tirage: 'jp', region: 'jp', idExpansion: [8], bulba: { expansion: ['SMP jp'] } });
-    const l = lecture({ sets: [SL, SMPJ, SMP], cartes: [carte('c', 'Zed', ['Shining-Legends'], [])], lignes: [ligne('c', 1, 'SMP-JP', 'J1'), ligne('c', 2, 'SM-Black-Star-Promos', 'I1')], produits: [prodSL, prodSMP] });
+    const l = lecture({ sets: [SL, SMPJ, SMP], cartes: [carte('c', 'Zed', ['Shining-Legends', 'SMP-JP', 'SM-Black-Star-Promos'], [])], lignes: [ligne('c', 1, 'SMP-JP', 'J1'), ligne('c', 2, 'SM-Black-Star-Promos', 'I1')], produits: [prodSL, prodSMP] });
     assert.strictEqual(cl(C.classerClones(l, regles), 'c').vraieFiche.slugSet, 'SM-Black-Star-Promos');
 });
 test('refus : règle injectée absente, population vide', () => {
@@ -168,7 +172,7 @@ test('refus : règle injectée absente, population vide', () => {
 
 // ── images
 const im = (set, numero, cleR2, o = {}) => ({ set, numero, cleR2, ...o });
-const celebiImages = images => lecture({ cartes: [carte('celebi', 'Shining Celebi', ['Shining-Legends'], [], images)], lignes: [ligne('celebi', 901, 'SM-Black-Star-Promos', 'SM79')], produits: [prodSL, prodSMP] });
+const celebiImages = images => lecture({ cartes: [carte('celebi', 'Shining Celebi', ['Shining-Legends', 'SM-Black-Star-Promos'], [], images)], lignes: [ligne('celebi', 901, 'SM-Black-Star-Promos', 'SM79')], produits: [prodSL, prodSMP] });
 test('images : copiée vers la vraie fiche du MÊME tirage (numéro = numeroFiche), les autres sets intouchés', () => {
     const c = cl(C.classerClones(celebiImages([im('Shining-Legends', '3', 'k/a'), im('Autre', '3', 'k/z')]), regles), 'celebi');
     assert.deepStrictEqual(c.images, [{ cleR2: 'k/a', numero: '3', action: 'copier', vers: { set: 'SM-Black-Star-Promos', numero: 'SM79' } }]);
@@ -179,16 +183,42 @@ test('images : retirée sans copie si la carte a déjà une entrée pour la vrai
 });
 test('images : JAMAIS copiée entre deux tirages différents', () => {
     const SMPJ = set('SMP-JP', { tirage: 'jp', region: 'jp', idExpansion: [8], bulba: { expansion: ['SMP jp'] } });
-    const l = lecture({ sets: [SL, SMPJ], cartes: [carte('c', 'Zed', ['Shining-Legends'], [], [im('Shining-Legends', '3', 'k/a')])], lignes: [ligne('c', 1, 'SMP-JP', 'J1')], produits: [prodSL, prod(61, 8, 'P', { carteId: 'q', numero: '1', setId: 'SMP-JP' })] });
+    const l = lecture({ sets: [SL, SMPJ], cartes: [carte('c', 'Zed', ['Shining-Legends', 'SMP-JP'], [], [im('Shining-Legends', '3', 'k/a')])], lignes: [ligne('c', 1, 'SMP-JP', 'J1')], produits: [prodSL, prod(61, 8, 'P', { carteId: 'q', numero: '1', setId: 'SMP-JP' })] });
     assert.deepStrictEqual(cl(C.classerClones(l, regles), 'c').images, [{ cleR2: 'k/a', numero: '3', action: 'retirer', vers: null }]);
 });
 test('images : plusieurs entrées dans le set -> une seule copiée, toutes comptées', () => {
     const c = cl(C.classerClones(celebiImages([im('Shining-Legends', '3', 'k/a'), im('Shining-Legends', '4', 'k/c')]), regles), 'celebi');
     assert.deepStrictEqual(c.images.map(i => i.action), ['copier', 'retirer']);
 });
-test('images : composition-autre-region sans vraie fiche -> retirée', () => {
+test('composition-autre-region : le document resterait sans aucun set -> pas supprimable (aInstruire)', () => {
     const l = lecture({ cartes: [carte('c1', 'Xyz', ['Shining-Legends'], [imp('jp', 'Shining Legends', '3')], [im('Shining-Legends', '3', 'k/a')])], produits: [prodSL] });
-    assert.deepStrictEqual(cl(C.classerClones(l, regles), 'c1').images.map(i => i.action), ['retirer']);
+    const r = C.classerClones(l, regles);
+    assert.strictEqual(r.clones.length, 0); assert.strictEqual(r.aInstruire.length, 1);
+});
+test('produit-ailleurs dont la vraie fiche n\'est PAS dans cartes.sets de la carte -> aInstruire, pas supprimable', () => {
+    const l = lecture({ cartes: [carte('c', 'Zed', ['Shining-Legends'], [])], lignes: [ligne('c', 2, 'SM-Black-Star-Promos', 'I1')], produits: [prodSL, prodSMP] });
+    const r = C.classerClones(l, regles);
+    assert.strictEqual(r.clones.length, 0);
+    assert.deepStrictEqual(r.aInstruire.map(x => [x.motif, x.raison]), [['produit-ailleurs', 'vraie-fiche-hors-sets']]);
+});
+test('jointure : « Basic Water Energy » face à « Water Energy » (SANS_LIGNE) -> jointure-a-faire (clesNom retire Basic)', () => {
+    const l = lecture({ cartes: [carte('w', 'Basic Water Energy', ['Shining-Legends', 'SM-Black-Star-Promos'], [])], lignes: [ligne('w', 902, 'SM-Black-Star-Promos', 'SM1')], produits: [prodSL, prod(12, 1, 'Water Energy', { classe: 'SANS_LIGNE' }), prodSMP] });
+    const r = C.classerClones(l, regles);
+    assert.strictEqual(r.clones.length, 0); assert.deepStrictEqual(r.jointures.map(j => j.par), ['nom']);
+});
+test('jointure : alias de production (EXP. ALL -> Exp. Share) interdit la suppression', () => {
+    const l = lecture({ cartes: [carte('e', 'Exp. Share', ['Shining-Legends', 'SM-Black-Star-Promos'], [])], lignes: [ligne('e', 902, 'SM-Black-Star-Promos', 'SM1')], produits: [prodSL, prod(12, 1, 'EXP. ALL', { classe: 'SANS_LIGNE' }), prodSMP] });
+    const r = C.classerClones(l, regles);
+    assert.strictEqual(r.clones.length, 0); assert.strictEqual(r.jointures.length, 1);
+});
+test('garde d\'inclusion DANS LES DEUX SENS : le produit « Water Energy » ⊂ la carte « Special Water Energy Plus »', () => {
+    const l = lecture({ cartes: [carte('w', 'Special Water Energy Plus', ['Shining-Legends', 'SM-Black-Star-Promos'], [])], lignes: [ligne('w', 902, 'SM-Black-Star-Promos', 'SM1')], produits: [prodSL, prod(12, 1, 'Water Energy', { classe: 'SANS_LIGNE' }), prodSMP] });
+    assert.deepStrictEqual(C.classerClones(l, regles).jointures.map(j => j.par), ['nom-inclus']);
+});
+test('une carte sans nomEn n\'est pas auditée (cartes affichables, comme audit-sets.js)', () => {
+    const l = lecture({ cartes: [carte('z', '', ['Shining-Legends', 'SM-Black-Star-Promos'], []), carte('y', 'Zed', ['Shining-Legends', 'SM-Black-Star-Promos'], [])], lignes: [ligne('z', 1, 'SM-Black-Star-Promos', '1'), ligne('y', 2, 'SM-Black-Star-Promos', '2')], produits: [prodSL, prodSMP] });
+    const r = C.classerClones(l, regles);
+    assert.deepStrictEqual(r.clones.map(c => c.carteId), ['y']);
 });
 
 // ── appliquer / vérifier / annoncer
@@ -206,12 +236,13 @@ test('appliquer : retire le slug de sets, copie puis retire les images du set, n
 });
 test('verifierEtat : état identique -> aucune erreur', () => {
     const [c] = clonesCelebi([im('Shining-Legends', '3', 'k/a')]);
-    const docs = new Map([['celebi', { _id: 'celebi', sets: ['Shining-Legends'], images: [im('Shining-Legends', '3', 'k/a')] }]]);
+    const docs = new Map([['celebi', { _id: 'celebi', sets: ['Shining-Legends', 'SM-Black-Star-Promos'], images: [im('Shining-Legends', '3', 'k/a')] }]]);
     assert.deepStrictEqual(C.verifierEtat({ clones: [c], docs, lignes: [ligne('celebi', 901, 'SM-Black-Star-Promos', 'SM79')], attendu: 1, attenduImages: 1 }), []);
 });
 test('verifierEtat refuse : nombre attendu, images attendues, set disparu, ligne apparue, ligne ailleurs disparue, entrée image changée', () => {
     const [c] = clonesCelebi([im('Shining-Legends', '3', 'k/a')]);
-    const bon = () => new Map([['celebi', { _id: 'celebi', sets: ['Shining-Legends'], images: [im('Shining-Legends', '3', 'k/a')] }]]);
+    const S2 = ['Shining-Legends', 'SM-Black-Star-Promos'];
+    const bon = () => new Map([['celebi', { _id: 'celebi', sets: S2, images: [im('Shining-Legends', '3', 'k/a')] }]]);
     const L = [ligne('celebi', 901, 'SM-Black-Star-Promos', 'SM79')];
     const err = (o) => C.verifierEtat({ clones: [c], docs: bon(), lignes: L, attendu: 1, attenduImages: 1, ...o });
     assert.ok(err({ attendu: 2 }).length);
@@ -222,6 +253,26 @@ test('verifierEtat refuse : nombre attendu, images attendues, set disparu, ligne
     assert.ok(err({ docs: new Map([['celebi', { _id: 'celebi', sets: ['Shining-Legends'], images: [im('Shining-Legends', '3', 'k/AUTRE')] }]]) }).length);
     assert.ok(err({ docs: new Map([['celebi', { _id: 'celebi', sets: ['Shining-Legends'], images: [im('Shining-Legends', '3', 'k/a'), im('SM-Black-Star-Promos', 'SM79', 'k/b')] }]]) }).length);
     assert.ok(err({ docs: new Map() }).length);
+    // 'k/AUTRE' et 'k/b' ci-dessus portaient sets: ['Shining-Legends'] seul : ils échouent aussi par « vraie fiche hors sets » ; les cas suivants isolent la règle
+    const e0 = C.verifierEtat({ clones: [c], docs: new Map([['celebi', { _id: 'celebi', sets: ['Shining-Legends'], images: [im('Shining-Legends', '3', 'k/a')] }]]), lignes: L, attendu: 1, attenduImages: 1 });
+    assert.ok(e0.some(x => /vraie fiche.*sets|aucun set/.test(x)), e0.join(' | '));
+    assert.ok(err({ clones: [c, c], attendu: 2 }).some(x => /doublon/.test(x)));
+    assert.ok(err({ clones: [{ ...c, motif: 'composition-autre-region' }] }).some(x => /motif/.test(x)));
+});
+test('decisionPerimee : lectureDu absent, illisible ou de plus de 24 h -> périmée ; récent -> non', () => {
+    const t = Date.parse('2026-11-03T12:00:00Z');
+    assert.ok(C.decisionPerimee(undefined, t)); assert.ok(C.decisionPerimee('pas une date', t));
+    assert.ok(C.decisionPerimee('2026-11-02T11:59:00Z', t)); assert.ok(C.decisionPerimee('2026-11-04T12:00:00Z', t), 'date future : refus');
+    assert.strictEqual(C.decisionPerimee('2026-11-03T05:40:28Z', t), null);
+});
+test('planEcriture : copies d\'abord (toutes), puis $pull sets, puis $pull images — trois lots ordonnés, comptes attendus', () => {
+    const [c] = clonesCelebi([im('Shining-Legends', '3', 'k/a'), im('Shining-Legends', '4', 'k/c')]);
+    const doc = { _id: 'celebi', sets: ['Shining-Legends', 'SM-Black-Star-Promos'], images: [im('Shining-Legends', '3', 'k/a'), im('Shining-Legends', '4', 'k/c')] };
+    const p = C.planEcriture(new Map([['celebi', doc]]), [c]);
+    assert.strictEqual(p.copies.length, 1); assert.strictEqual(p.pullSets.length, 1); assert.strictEqual(p.pullImages.length, 1);
+    assert.deepStrictEqual(p.copies[0].updateOne.update.$push.images.set, 'SM-Black-Star-Promos');
+    assert.deepStrictEqual(p.pullSets[0].updateOne.update, { $pull: { sets: 'Shining-Legends' } });
+    assert.deepStrictEqual(p.pullImages[0].updateOne.update, { $pull: { images: { set: 'Shining-Legends' } } });
 });
 test('annoncer : les clés sont celles que la garde compare, et la garde ne trouve AUCUNE baisse non annoncée', () => {
     const doc = { _id: 'celebi', nomEn: 'Shining Celebi', categorie: 'pokemon', sets: ['Shining-Legends', 'Autre'], impressions: [], liens: { idProduct: [] },

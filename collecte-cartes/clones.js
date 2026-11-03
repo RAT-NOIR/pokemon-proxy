@@ -12,7 +12,9 @@
 //    Le nom Cardmarket se décompose par la fonction de PRODUCTION (jointure.js::decomposerNomCardmarket) et se normalise comme elle (normaliserNom).
 //    La règle « produits d'un set » est celle de audit-catalogue/audit-sets.js:76-83 (par idExpansion, à défaut par setId), recopiée sur ordre du brief.
 // Hors périmètre : les annexes (« Yellow A »), qui viennent d'une liste fermée du site et non de cartes.sets.
-const { decomposerNomCardmarket, normaliserNom } = require('./jointure');
+const { decomposerNomCardmarket, nomJointDe, clesNom } = require('./jointure');
+const { aliasDe } = require('./alias-noms');
+const clesCarte = c => clesNom(nomJointDe(c));
 const { compterEtat, comparer, COMPTEURS } = require('./garde-lot');
 
 const MOTIFS = Object.freeze(['produit-ailleurs', 'composition-autre-region']);
@@ -41,9 +43,11 @@ function classerClones(lecture, regles) {
         if (s) prodsParSet.get(s._id).push(p);
     }
     const cibleDe = s => ({ tirage: tirageDuSet(s), expansions: expansionsDuSet(s), deck: s.deck ?? null });
-    const cartesParSet = indexer(cartes.flatMap(c => [...new Set(c.sets || [])].map(s => ({ s, c }))), x => x.s);
+    // cartes « affichables » (nomEn non vide), comme audit-sets.js:67
+    const affichables = cartes.filter(c => typeof c.nomEn === 'string' && c.nomEn !== '');
+    const cartesParSet = indexer(affichables.flatMap(c => [...new Set(c.sets || [])].map(s => ({ s, c }))), x => x.s);
 
-    const clones = [], jointures = [], orphelins = [], setsSansProduit = [];
+    const candidats = [], jointures = [], orphelins = [], setsSansProduit = [];
     let auditees = 0, avecProduit = 0;
     for (const s of publies) {
         const membres = (cartesParSet.get(s._id) || []).map(x => x.c);
@@ -52,8 +56,8 @@ function classerClones(lecture, regles) {
         if (!prods.length) { setsSansProduit.push({ set: s._id, cartes: membres.length }); continue; }
         const cible = cibleDe(s);
         const sansLigne = prods.filter(p => p.fiche && p.fiche.classe === 'SANS_LIGNE');
-        const nomsSansLigne = new Set(sansLigne.map(p => normaliserNom(decomposerNomCardmarket(p.name).nom)));
-        const motsSansLigne = sansLigne.map(p => new Set(motsDe(decomposerNomCardmarket(p.name).nom)));
+        const clesSansLigne = new Set(sansLigne.flatMap(p => { const nom = decomposerNomCardmarket(p.name).nom, alias = aliasDe(nom, p.idExpansion); return [...clesNom(nom), ...(alias ? clesNom(alias) : [])]; }));
+        const motsSansLigne = sansLigne.map(p => { const nom = decomposerNomCardmarket(p.name).nom, alias = aliasDe(nom, p.idExpansion); return new Set([...motsDe(nom), ...(alias ? motsDe(alias) : [])]); });
         const numerosSansLigne = new Set(sansLigne.map(p => numProd.get(p.idProduct)).filter(n => n !== null && n !== undefined));
         for (const c of membres) {
             auditees++;
@@ -62,12 +66,14 @@ function classerClones(lecture, regles) {
             if (lignesC.some(l => l.slugSet === s._id) || (produitsParFiche.get(`${c._id}|${s._id}`) || []).length) { avecProduit++; continue; }
             // 2. un produit SANS_LIGNE du set peut être le sien : c'est une jointure à faire
             const imps = (c.impressions || []).filter(i => impressionDuSet(i, cible));
-            const parNom = typeof c.nomEn === 'string' && c.nomEn !== '' && nomsSansLigne.has(normaliserNom(c.nomEn));
+            // la clé de la PRODUCTION : clesNom(nomJointDe(carte)) (« Basic » retiré) contre clesNom(nom décomposé) ∪ clesNom(alias de l'expansion) — jointure.js:211-220
+            const parNom = clesCarte(c).some(k => clesSansLigne.has(k));
             const parNumero = imps.some(i => { const n = normaliserNumero(i.numero); return n !== null && n !== undefined && numerosSansLigne.has(n); });
             // GARDE D'INCLUSION (jamais une clé d'appariement) : tous les mots du nomEn figurent dans ceux du nom décomposé d'UN produit SANS_LIGNE du set
             // (« Shellos » ⊂ « Shellos West Sea Lv.25 ») : ce produit est probablement le sien, on REFUSE de supprimer.
-            const mots = motsDe(c.nomEn);
-            const parInclusion = !parNom && !parNumero && mots.length > 0 && motsSansLigne.some(m => mots.every(w => m.has(w)));
+            // DANS LES DEUX SENS : le nom de la carte dans celui du produit, ou celui du produit dans celui de la carte (« Water Energy » ⊂ « Basic Water Energy »)
+            const mots = motsDe(nomJointDe(c));
+            const parInclusion = !parNom && !parNumero && mots.length > 0 && motsSansLigne.some(m => m.size > 0 && (mots.every(w => m.has(w)) || [...m].every(w => mots.includes(w))));
             if (parNom || parNumero || parInclusion) { jointures.push({ carteId: c._id, nomEn: nul(c.nomEn), set: s._id, par: parNumero ? 'numero' : parNom ? 'nom' : 'nom-inclus' }); continue; }
             // 3. sa vraie fiche ailleurs
             let motif = null, vraieFiche = null;
@@ -90,8 +96,21 @@ function classerClones(lecture, regles) {
             const images = entrees.map((i, k) => (copiable && k === 0
                 ? { cleR2: i.cleR2, numero: nul(i.numero), action: 'copier', vers: { set: vraieFiche.slugSet, numero: vraieFiche.numeroFiche } }
                 : { cleR2: i.cleR2, numero: nul(i.numero), action: 'retirer', vers: null }));
-            clones.push({ carteId: c._id, nomEn: nul(c.nomEn), set: s._id, tirageSet: cible.tirage, motif, vraieFiche, images });
+            candidats.push({ carteId: c._id, nomEn: nul(c.nomEn), set: s._id, tirageSet: cible.tirage, motif, vraieFiche, images, setsCarte: [...new Set(c.sets || [])] });
         }
+    }
+    // ── n'est SUPPRIMABLE qu'un `produit-ailleurs` dont la vraie fiche est dans cartes.sets de la carte, et qui laisse ≥ 1 set après le retrait de TOUS ses clones.
+    //    Le reste (composition-autre-region : document sans aucun set) est listé « à instruire », jamais retiré.
+    const retraits = new Map();
+    for (const k of candidats) (retraits.get(k.carteId) || retraits.set(k.carteId, new Set()).get(k.carteId)).add(k.set);
+    const clones = [], aInstruire = [];
+    for (const { setsCarte, ...k } of candidats) {
+        let raison = null;
+        if (k.motif !== 'produit-ailleurs') raison = k.motif;
+        else if (!setsCarte.includes(k.vraieFiche.slugSet)) raison = 'vraie-fiche-hors-sets';
+        else if (!setsCarte.some(x => !retraits.get(k.carteId).has(x))) raison = 'aucun-set-restant';
+        if (raison) aInstruire.push({ carteId: k.carteId, nomEn: k.nomEn, set: k.set, tirageSet: k.tirageSet, motif: k.motif, raison, vraieFiche: k.vraieFiche, images: k.images.length });
+        else clones.push(k);
     }
     const parMotif = {}, parTirage = {}, parSet = {};
     for (const c of clones) {
@@ -99,8 +118,8 @@ function classerClones(lecture, regles) {
         (parTirage[c.tirageSet] = parTirage[c.tirageSet] || {})[c.motif] = (parTirage[c.tirageSet][c.motif] || 0) + 1;
         parSet[c.set] = (parSet[c.set] || 0) + 1;
     }
-    return { denominateurs: { sets: sets.length, setsPublies: publies.length, cartes: cartes.length, lignes: lignes.length, produits: produits.length, appartenancesAuditees: auditees, avecProduitDansLeSet: avecProduit },
-        clones, jointures, orphelins, setsSansProduit, parMotif, parTirage, parSet };
+    return { denominateurs: { sets: sets.length, setsPublies: publies.length, cartes: cartes.length, cartesAffichables: affichables.length, lignes: lignes.length, produits: produits.length, appartenancesAuditees: auditees, avecProduitDansLeSet: avecProduit },
+        clones, aInstruire, jointures, orphelins, setsSansProduit, parMotif, parTirage, parSet };
 }
 
 const cleImage = i => `${i.cleR2 ?? ''}|${nul(i.numero)}`;
@@ -123,11 +142,18 @@ function verifierEtat({ clones, docs, lignes, attendu, attenduImages }) {
     const err = [];
     if (clones.length !== attendu) err.push(`nombre de clones ${clones.length} ≠ attendu ${attendu}`);
     let retirees = 0;
+    const vus = new Set(), retraits = new Map();
+    for (const c of clones) (retraits.get(c.carteId) || retraits.set(c.carteId, new Set()).get(c.carteId)).add(c.set);
     for (const c of clones) {
         const q = `${c.carteId} @ ${c.set}`;
+        if (vus.has(q)) err.push(`${q} : doublon (carte, set) dans la décision`);
+        vus.add(q);
+        if (c.motif !== 'produit-ailleurs') err.push(`${q} : motif « ${c.motif} » non supprimable`);
         const d = docs.get(c.carteId);
         if (!d) { err.push(`${q} : carte introuvable`); continue; }
         if (!(d.sets || []).includes(c.set)) err.push(`${q} : la carte n'a plus ce set dans sets`);
+        if (c.vraieFiche && !(d.sets || []).includes(c.vraieFiche.slugSet)) err.push(`${q} : la vraie fiche (${c.vraieFiche.slugSet}) n'est pas dans les sets vivants de la carte`);
+        if (!(d.sets || []).some(x => !retraits.get(c.carteId).has(x))) err.push(`${q} : la carte n'aurait plus aucun set après le retrait`);
         if (lignes.some(l => l.carteId === c.carteId && l.slugSet === c.set)) err.push(`${q} : une ligne cartes_produits existe désormais dans ce set`);
         if (c.motif === 'produit-ailleurs' && !lignes.some(l => l.carteId === c.carteId && l.slugSet === c.vraieFiche?.slugSet)) err.push(`${q} : la ligne de la vraie fiche (${c.vraieFiche?.slugSet}) n'existe plus`);
         const vives = (d.images || []).filter(i => i && i.set === c.set);
@@ -159,4 +185,27 @@ function annoncer(docs, clones) {
     return { annonce, nonAutorisees: verdict.nonAutorisees, annoncesNonRealisees: verdict.annoncesNonRealisees };
 }
 
-module.exports = { classerClones, appliquer, verifierEtat, annoncer, MOTIFS };
+/** Une décision plus vieille que `maxHeures` (ou sans date lisible, ou datée du futur) est périmée : renvoie la raison, sinon null. `lectureDu` = date de la lecture (cache) qui a produit la décision. */
+function decisionPerimee(lectureDu, maintenant = Date.now(), maxHeures = 24) {
+    const t = Date.parse(lectureDu);
+    if (!lectureDu || Number.isNaN(t)) return `lectureDu absent ou illisible (${JSON.stringify(lectureDu ?? null)})`;
+    const h = (maintenant - t) / 3600000;
+    if (h < 0) return `lectureDu est dans le futur (${lectureDu})`;
+    if (h > maxHeures) return `la décision a été faite sur une lecture de ${Math.round(h)} h (> ${maxHeures} h) : relancer audit-sets.js puis detecter-clones.js`;
+    return null;
+}
+
+/** Les opérations d'écriture en TROIS lots ordonnés : toutes les copies d'images d'abord, puis les $pull de sets, puis les $pull d'images ; plus le journal des anciennes valeurs. Pure. */
+function planEcriture(docs, clones) {
+    const copies = [], pullSets = [], pullImages = [], journal = [];
+    for (const c of clones) {
+        const d = docs.get(c.carteId), r = appliquer(d, c);
+        journal.push({ carteId: c.carteId, set: c.set, setsAvant: d.sets, imagesRetirees: r.retirees, imagesCopiees: r.copiees });
+        for (const e of r.copiees) copies.push({ updateOne: { filter: { _id: c.carteId, 'images.set': { $ne: e.set } }, update: { $push: { images: e } } } });
+        pullSets.push({ updateOne: { filter: { _id: c.carteId, sets: c.set }, update: { $pull: { sets: c.set } } } });
+        if (r.retirees.length) pullImages.push({ updateOne: { filter: { _id: c.carteId }, update: { $pull: { images: { set: c.set } } } } });
+    }
+    return { copies, pullSets, pullImages, journal };
+}
+
+module.exports = { classerClones, appliquer, verifierEtat, annoncer, decisionPerimee, planEcriture, MOTIFS };

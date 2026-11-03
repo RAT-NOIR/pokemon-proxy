@@ -15,7 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const { EJSON } = require('mongodb').BSON;
 const { autoriser } = require('./collecte-cartes/garde-ecriture');
-const { verifierEtat, annoncer, appliquer } = require('./collecte-cartes/clones');
+const { verifierEtat, annoncer, decisionPerimee, planEcriture } = require('./collecte-cartes/clones');
 const { validerAnnonces } = require('./collecte-cartes/garde-lot');
 
 const DOSSIER_CLONES = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\clones';
@@ -37,6 +37,8 @@ const morceaux = (l, n) => { const r = []; for (let i = 0; i < l.length; i += n)
 (async () => {
     const decision = JSON.parse(fs.readFileSync(path.resolve(decisionArg), 'utf8'));
     if (!Array.isArray(decision.clones) || !decision.clones.length) throw new Error('décision sans clones (tableau vide ou absent) : rien à faire — un zéro n\'est pas une instruction');
+    const perimee = decisionPerimee(decision.lectureDu);
+    if (perimee) { console.error(`❌ REFUS (code 1, rien d'ouvert) : ${perimee}`); process.exitCode = 1; return; }
     const clones = decision.clones;
     const { ouvrirConnexions } = require('./collecte-cartes/garde');
     const cx = await masquer(() => ouvrirConnexions({ production: false, buckets: [], lectureSeule: simuler }))();
@@ -72,18 +74,26 @@ const morceaux = (l, n) => { const r = []; for (let i = 0; i < l.length; i += n)
 
         // ── écriture : le journal des anciennes valeurs d'abord
         const horodatage = new Date().toISOString().replace(/:/g, '');
-        const journal = clones.map(c => { const d = docs.get(c.carteId), r = appliquer(d, c); return { carteId: c.carteId, set: c.set, setsAvant: d.sets, imagesRetirees: r.retirees, imagesCopiees: r.copiees }; });
+        const plan = planEcriture(docs, clones);
         fs.mkdirSync(DOSSIER_CLONES, { recursive: true });
         const fj = autoriser(path.join(DOSSIER_CLONES, `journal-${horodatage}.json`), [DOSSIER_CLONES]);
-        fs.writeFileSync(fj, EJSON.stringify(journal, { relaxed: false }));
-        console.log(`journal des anciennes valeurs écrit : ${fj} (${journal.length} entrées)`);
-        const ops = [];
-        clones.forEach((c, k) => {
-            ops.push({ updateOne: { filter: { _id: c.carteId, sets: c.set }, update: { $pull: { sets: c.set } } } });
-            for (const e of journal[k].imagesCopiees) ops.push({ updateOne: { filter: { _id: c.carteId, 'images.set': { $ne: e.set } }, update: { $push: { images: e } } } });
-            if (journal[k].imagesRetirees.length) ops.push({ updateOne: { filter: { _id: c.carteId }, update: { $pull: { images: { set: c.set } } } } });
-        });
-        const res = await col.bulkWrite(ops, { ordered: true });
-        console.log(`ÉCRIT : ${ops.length} opérations · modifiés ${res.modifiedCount}`);
+        const ecrireJournal = etat => fs.writeFileSync(fj, EJSON.stringify({ etat, entrees: plan.journal }, { relaxed: false }));
+        ecrireJournal('avant-ecriture');
+        console.log(`journal des anciennes valeurs écrit : ${fj} (${plan.journal.length} entrées)`);
+        // trois lots ordonnés, chacun contrôlé : un écart arrête TOUT (code 1) ; le journal dit où on s'est arrêté
+        const lot = async (nom, ops, champ, attendu) => {
+            if (!ops.length) { console.log(`   ${nom} : 0 opération`); return; }
+            const res = await col.bulkWrite(ops, { ordered: true });
+            const reel = res[champ];
+            if (reel !== attendu) { ecrireJournal(`ARRET apres ${nom} : ${champ} ${reel} au lieu de ${attendu}`); throw new Error(`ARRÊT après le lot « ${nom} » : ${champ} ${reel} au lieu de ${attendu} — rien d'autre n'est écrit ; journal : ${fj}`); }
+            console.log(`   ${nom} : ${ops.length} opérations · ${champ} ${reel} ✅`);
+        };
+        await lot('copies d\'images', plan.copies, 'modifiedCount', plan.copies.length);
+        ecrireJournal('copies-faites');
+        await lot('$pull sets', plan.pullSets, 'matchedCount', plan.pullSets.length);
+        ecrireJournal('sets-retires');
+        await lot('$pull images', plan.pullImages, 'matchedCount', plan.pullImages.length);
+        ecrireJournal('termine');
+        console.log('ÉCRIT : copies, puis retrait des sets, puis retrait des images — tous les contrôles de lot ✅');
     } finally { await cx.fermer(); }
 })().catch(e => { console.error(String(e && e.stack || e).replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>')); process.exitCode = 1; });
