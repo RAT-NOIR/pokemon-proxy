@@ -72,7 +72,10 @@ async function lireBase() {
     const { impressionDuSet, normaliserNumero } = await chargerReglesSite({ lib: 'C:/Users/Yung/Desktop/rat-market-site/lib' });
     const { memeCodeSaufFin } = require(`${OUTILS}/jumeaux-regle`);
     const { exclure } = require(`${OUTILS}/faux-trous-f3`);
-    const regles = { impressionDuSet, normaliserNumero, memeCodeSaufFin, exclure: s => exclure(s) };
+    // les annexes (« Yellow A ») : le site les range dans le set de leur carte parente (lib/annexes.ts) — importées, jamais recopiées ; une fonction absente lève
+    const { annexeDuSet } = await import(require('url').pathToFileURL('C:/Users/Yung/Desktop/rat-market-site/lib/annexes.ts').href);
+    if (typeof annexeDuSet !== 'function') throw new Error('règle du site non importée : annexeDuSet absent de lib/annexes.ts');
+    const regles = { impressionDuSet, normaliserNumero, memeCodeSaufFin, exclure: s => exclure(s), annexeDuSet };
 
     const cache = autoriser(path.join(DOSSIER_CACHE, 'lecture.json'), [DOSSIER]);
     let lecture;

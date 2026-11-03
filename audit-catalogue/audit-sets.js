@@ -40,7 +40,7 @@ const baseNumero = n => { const m = /(\d+)/.exec(String(n ?? '')); return m ? St
 const suffixeLettre = n => /\d[a-z]+$/i.test(String(n ?? ''));
 
 function auditer(lecture, regles) {
-    const { impressionDuSet, normaliserNumero, memeCodeSaufFin, exclure } = regles || {};
+    const { impressionDuSet, normaliserNumero, memeCodeSaufFin, exclure, annexeDuSet = null } = regles || {};   // annexeDuSet : facultatif (lib/annexes.ts du site)
     for (const [k, f] of Object.entries({ impressionDuSet, normaliserNumero, memeCodeSaufFin, exclure })) if (typeof f !== 'function') throw new Error(`auditer : règle injectée absente (${k}) — jamais de repli`);
     const sets = lecture.sets || [], cartes = lecture.cartes || [], lignes = lecture.lignes || [], produits = lecture.produits || [];
     if (!sets.length) throw new Error('auditer : population vide (0 set) — un audit sur zéro set n\'est pas une mesure (§41)');
@@ -88,8 +88,10 @@ function auditer(lecture, regles) {
         const denoms = {};
         for (const c of docs) {
             const imps = (c.impressions || []).filter(i => impressionDuSet(i, cible));
+            // les ANNEXES (« Yellow A », 101a) : le site les affiche dans le set de leur carte parente (lib/annexes.ts) ; sans cette règle injectée, elles sont ignorées
+            const annexes = annexeDuSet ? (c.impressions || []).filter(i => !impressionDuSet(i, cible) && annexeDuSet(i, c._id, cible)) : [];
             for (const i of imps) if (nonVide(i.total)) { const t = Number(String(i.total).replace(/\D/g, '')); if (t) denoms[t] = (denoms[t] || 0) + 1; }
-            const nums = [...new Set(imps.map(i => normaliserNumero(i.numero)).filter(n => n !== null))];
+            const nums = [...new Set(imps.concat(annexes).map(i => normaliserNumero(i.numero)).filter(n => n !== null))];
             if (nums.length) for (const n of nums) entrees.push({ c, numero: n, nEntreesCarte: nums.length });
             else entrees.push({ c, numero: null, nEntreesCarte: 1, causeSansNumero: imps.length ? 'impression-sans-numero' : 'aucune-impression-du-set' });
         }

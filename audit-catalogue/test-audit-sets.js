@@ -128,6 +128,16 @@ test('numéros manquants : set dont aucune impression n est numérotée, le tota
     assert.strictEqual(m.n, 2); assert.strictEqual(m.items[0].cause, 'aucune-impression-numerotee');
 });
 
+test('annexe « Yellow A » affichée dans le set de sa carte parente : 101a entre dans les entrées, en doublon de 101, sans produit', () => {
+    const c = carte('c1', 'Evoli', '101', { images: [img('S1', '101')], impressions: [imp('101'), { tirage: 'intl', expansion: 'Yellow A', numero: '101a', total: 3 }] });
+    const l = lecture({ sets: [set({ totalImprime: 101 })], cartes: [c], lignes: [lig('c1', 500, '101')] });
+    const avec = un(auditer(l, { ...regles, annexeDuSet: (i, id) => id === 'c1' && i.expansion === 'Yellow A' }));
+    assert.strictEqual(avec.affichees, 2);
+    assert.deepStrictEqual(avec.sansProduit.items.map(x => x.numero), ['101a']);
+    assert.strictEqual(avec.doublons.groupes[0].cause, 'doublon-suffixe-lettre');
+    assert.strictEqual(un(auditer(l)).affichees, 1);     // sans la règle injectée : l'annexe n'existe pas
+});
+
 // ── doublons de faits
 test('doublon : même nom/PV/attaques/numéro de base (101 et 101a)', () => {
     const l = lecture({ sets: [set({ totalImprime: 101 })], cartes: [carte('c1', 'Evoli', '101'), carte('c2', 'Evoli', '101a')] });
