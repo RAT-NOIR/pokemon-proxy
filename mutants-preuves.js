@@ -33,6 +33,8 @@ const GROUPES = [
         ['preuve-lue : langue non comparée', "else if (lu.langue !== langueProduit) motifs.push('langue-differente');", ""],
         ['preuve-lue : langue du tirage inconnue acceptée', "if (langueProduit == null) motifs.push('langue-du-tirage-inconnue');", "if (false) motifs.push('langue-du-tirage-inconnue');"],
         ['preuve-lue : numéro lu non comparé', "else if (J.cleNumero(n) !== J.cleNumero(np) && !numeroSansPrefixeAdmis(n, np, produit?.slug) && !demiListe(lu, produit, np)) motifs.push('numero-different');", ""],
+        ['idth : toute langue lue acceptée sur un tirage à deux langues', "return langues.length > 1 && typeof langueLue === 'string' && langues.includes(langueLue) ? langueLue : null;", "return langues.length > 1 && typeof langueLue === 'string' ? langueLue : null;"],
+        ['idth : langue lue prise pour un tirage à UNE langue', "if (langues.length === 1) return langues[0];", "if (langues.length === 1 && !langueLue) return langues[0];"],
         ['demi-liste : lettre du code lu non comparée à celle du produit', "if (!mc || mc[2] !== lettre || !DEMI_LISTES.includes(mc[1])) return null;", "if (!mc || !DEMI_LISTES.includes(mc[1])) return null;"],
         ['demi-liste : table fermée des codes ignorée', "if (!mc || mc[2] !== lettre || !DEMI_LISTES.includes(mc[1])) return null;", "if (!mc || mc[2] !== lettre) return null;"],
         ['demi-liste : slug non confronté', "if (!slug || !new RegExp(`(^|-)${echapper(mc[1])}${lettre}?-?0*${echapper(chiffres)}$`).test(slug)) return null;", ""],

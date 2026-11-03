@@ -36,6 +36,8 @@ const EDITIONS_LOCALES = Object.freeze({ 2361: 'fr', 3354: 'fr' });
 // ➕ 2026-11-03 (testeur : « pose le tirage des sets indonésiens et thaïs, puis les visuels qu'il débloque ») : le tirage DÉCLARÉ de 14 sets est `idth` — les deux langues, prouvées par la page
 // source (§67, 2026-09-26) ; le site admet `id` et `th` sur un set idth (lib/langueDuVisuel.ts). Un tirage à DEUX langues prend donc pour langue du produit celle des siennes qui est LUE sur le scan
 // (`langueLue`) ; une langue lue hors des siennes, ou rien de lu, rend null (refus `langue-du-tirage-inconnue`, inchangé). Un tirage à UNE langue ignore la langue lue (table de production, comme avant).
+// ⚠️ LIMITE (relecture 03/11) : pour idth, la comparaison « langue lue = langue du produit » devient vide (la seconde dérive de la première) : la langue DÉCLARÉE par le manifeste choisit id ou th. Rien dans le code
+// ne lit la langue sur les pixels (même confiance que th / zh-hans, en tête de ce fichier) ; la planche de validation du coordinateur regarde la langue des lots idth — c'est la barrière, et elle est humaine.
 function langueDuProduit({ idExpansion, tirage, langueLue } = {}) {
     if (Number.isInteger(idExpansion) && Object.hasOwn(EDITIONS_LOCALES, idExpansion)) return EDITIONS_LOCALES[idExpansion];
     const langues = CO.languesDuTirage(tirage);
