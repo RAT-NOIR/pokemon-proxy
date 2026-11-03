@@ -114,6 +114,23 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.strictEqual(PV.langueDuProduit({ idExpansion: 2361, tirage: 'idth', langueLue: 'id' }), 'fr', 'l\'édition locale énumérée l\'emporte toujours');
         assert.strictEqual(PV.langueDuProduit({ idExpansion: 1, tirage: 'constructor', langueLue: 'constructor' }), null);
     });
+    // ➕ 2026-11-03 : DEMI-LISTES indonésiennes/thaïes (AC3, AS1–AS4, tpc-sets.js) — le produit porte « a229 », la carte imprime « 229/205 » et le code « AC3a », le slug Cardmarket finit par « AC3a229 »
+    await test('P2 (03/11) : demi-liste (table fermée AC3, AS1–AS4) : « a229 » du produit = « 229 » lu + code « AC3a » lu + slug « …-AC3a229 » ; toute discordance refuse', () => {
+        const p = produit({ tirage: 'id', numero: 'a229', slug: 'Gengar-Mimikyu-GX-V3-AC3a229', slugSet: 'Tag-Team-Collection', nomEn: 'Gengar & Mimikyu GX' });
+        const l = (o = {}) => entree({ attendu: { ...entree().attendu, numero: 'a229' }, lu: { ...entree().lu, nom: 'Gengar & Mimikyu GX', numero: '229', total: '205', langue: 'id', codeSet: 'AC3a', ...o } });
+        const m = (e, pp = p) => lue(e, pp).motifs;
+        const sansNumeroNiCode = ms => !ms.includes('numero-different') && !ms.includes('code-set-different');
+        assert.ok(sansNumeroNiCode(m(l())), m(l()).join(','));
+        assert.ok(m(l({ codeSet: 'AC3b' })).includes('numero-different'), 'lettre du code lue ≠ lettre du numéro du produit');
+        assert.ok(m(l({ codeSet: 'AC3' })).includes('numero-different'), 'code lu sans lettre');
+        assert.ok(m(l({ numero: '228' })).includes('numero-different'), 'chiffres différents');
+        assert.ok(m(l(), produit({ ...p, slug: 'Gengar-Mimikyu-GX-V3-XY229' })).includes('numero-different'), 'le slug ne porte pas le code');
+        assert.ok(m(l(), produit({ ...p, slug: null })).includes('numero-different'), 'sans slug : rien ne confronte');
+        assert.ok(m(l({ codeSet: 'XX1a' }), produit({ ...p, slug: 'Gengar-XX1a229' })).includes('numero-different'), 'code hors de la table fermée');
+        assert.ok(sansNumeroNiCode(m(l({ numero: '013', codeSet: 'AS3a' }), produit({ ...p, numero: 'a013', slug: 'Shaymin-AS3013' }))), 'slug sans la lettre (AS3013) : admis, la lettre vient du code lu et du produit');
+        assert.ok(m(l({ numero: '13', codeSet: 'AS3a' }), produit({ ...p, numero: 'b013', slug: 'Shaymin-AS3013' })).includes('numero-different'), 'produit « b », code lu « a »');
+        assert.ok(m(l(), produit({ ...p, numero: '229' })).length >= 0 && !m(l(), produit({ ...p, numero: '229' })).includes('numero-different'), 'produit sans lettre : la règle ordinaire (229 = 229)');
+    });
     await test('P2 : une preuve complète passe (numéro 013 = 13 par la clé de la jointure)', () => {
         assert.deepStrictEqual(lue(entree()), { ok: true, motifs: [] });
         assert.strictEqual(lue(entree({ lu: { ...entree().lu, numero: '013' } })).ok, true);
