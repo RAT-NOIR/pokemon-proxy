@@ -140,6 +140,9 @@ const motifDeNom = (lu, produit, langueProduit, drapeaux = []) => {
     // a-reste (japonais) : un nom lu en japonais se compare au nom JAPONAIS de la carte désignée par la ligne (`produit.nomJa`, témoin de lecture, jamais écrit en public), SEULEMENT pour un tirage japonais ; jamais au nom anglais.
     // Une carte qui A un nomJa s'en tient là (un nom qui diffère est un désaccord, jamais un repli) ; sans nomJa, le nom traduit se juge par ce qui ne se traduit pas (ci-dessous).
     if (lu.langue === 'ja' && langueProduit === 'ja' && (texte(produit?.nomJa) || !porteUnTemoinTraduit(lu))) return memeNomJaponais(lu.nom, produit?.nomJa) ? null : 'nom-different';
+    // ➕ 2026-11-03 : les cartes INDONÉSIENNES impriment le nom ANGLAIS des Pokémon (les Dresseurs sont traduits, « Tukar Pokémon », §75) : un nom lu en indonésien IDENTIQUE au nom anglais du produit témoigne
+    // seul, exactement comme l'anglais (même fonction). Thaï, chinois, japonais : autre écriture, jamais ouvert ; un nom indonésien DIFFÉRENT suit la règle traduite ci-dessous (témoins ou refus).
+    if (lu.langue === 'id' && langueProduit === 'id' && memeNomQueLeProduit(lu.nom, produit?.nomEn)) return null;
     if (LANGUES_A_NOM_TRADUIT.includes(lu.langue) && lu.langue === langueProduit && porteUnTemoinTraduit(lu)) return motifDeNomTraduit(lu, produit, numeroDuProduit(produit), drapeaux);
     return 'nom-langue-non-anglaise';
 };
