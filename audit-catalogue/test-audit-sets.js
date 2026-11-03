@@ -88,6 +88,10 @@ test('numéros normalisés : 006 et 6 sont la même entrée / image', () => {
     assert.strictEqual(un(auditer(l)).sansVisuel.n, 0);
 });
 
+test('numéros normalisés : 006 et 6 d une même carte font UNE entrée', () => {
+    assert.strictEqual(un(auditer(lecture({ cartes: [carte('c1', 'A', ['006', '6'], { images: [img('S1', '6')] })] }))).affichees, 1);
+});
+
 // ── sans numéro
 test('sans numéro : impression du set sans numéro', () => {
     const l = lecture({ cartes: [carte('c1', 'A', [null], { images: [img('S1')] })] });
