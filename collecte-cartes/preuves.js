@@ -92,6 +92,25 @@ const finitParLeNumero = (slug, n) => {
     return s.endsWith(k) && !/\d/.test(s.charAt(s.length - k.length - 1));
 };
 const numeroSansPrefixeAdmis = (n, np, slug) => PREFIXE_ALPHABETIQUE.test(n) && /^\d/.test(np) && texte(slug) && J.cleNumero(n.replace(/^[A-Za-z]+/, '')) === J.cleNumero(np) && finitParLeNumero(slug, n);
+/**
+ * ➕ 2026-11-03 — DEMI-LISTES indonésiennes/thaïes (tpc-sets.js : « AS1–AS4 servis par DEMI-LISTES expansionCodes=<code>a|b ; notre numeroFiche porte la lettre »). Le PRODUIT porte « a229 » ; la carte imprime
+ * « 229/205 » et le code « AC3a » ; le slug Cardmarket finit par « AC3a229 » (ou « AS3013 » sans la lettre). Table FERMÉE des codes. Admis SEULEMENT si les TROIS témoins concordent : la lettre du numéro du produit,
+ * la lettre FINALE du code imprimé lu (même code de base, dans la table), le slug qui finit par <code><lettre ?><chiffres> ; et les chiffres lus = les chiffres du produit (clé de la jointure). Tout le reste = null.
+ * @returns {{lettre: string, code: string}|null}
+ */
+const DEMI_LISTES = Object.freeze(['ac3', 'as1', 'as2', 'as3', 'as4']);
+function demiListe(lu, produit, np) {
+    const m = /^([ab])(\d+)$/i.exec(String(np ?? '').trim());
+    if (!m) return null;
+    const lettre = m[1].toLowerCase(), chiffres = m[2];
+    const c = norm(lu?.codeSet);
+    const mc = c ? /^([a-z0-9]+)([ab])$/.exec(c) : null;
+    if (!mc || mc[2] !== lettre || !DEMI_LISTES.includes(mc[1])) return null;
+    if (!texte(lu?.numero) || J.cleNumero(String(lu.numero).trim()) !== J.cleNumero(chiffres)) return null;
+    const slug = texte(produit?.slug) ? produit.slug.trim().toLowerCase() : null;
+    if (!slug || !new RegExp(`(^|-)${echapper(mc[1])}${lettre}?-?0*${echapper(chiffres)}$`).test(slug)) return null;
+    return { lettre, code: mc[1] };
+}
 /** Tour 4 (3) : le numéro en FIN de slug Cardmarket (« …-PPS8MEG-114 » -> « 114 »), frontière non alphanumérique avant ; null si le slug n'en porte pas (« …-CIN71 » : collé à des lettres, ce n'est pas un numéro). */
 const numeroFinDeSlug = slug => { const m = /(?:^|[^A-Za-z0-9])(\d+[A-Za-z]*)$/.exec(String(slug ?? '').trim()); return m ? m[1] : null; };
 // Tour 4 (5) : la variante nommée d'un produit sans numéro (« Blue Border » / « standard ») se compare à la finition LUE, par table fermée ; une autre valeur de `attendu.variante` (V1, V2…) n'entre pas ici.
@@ -147,6 +166,7 @@ const CODES_IMPRIMES_ALIAS = Object.freeze({ mEEv: 'mEE', sKV: 'sK' });
 function motifDeCode(lu, produit, np, drapeaux = []) {
     const code = norm(lu.codeSet);
     if (!code) return 'code-set-non-lu';
+    if (demiListe(lu, produit, np)) return null;   // (03/11) demi-liste : le code lu « AC3a » EST le code du produit « a229 » — les trois témoins concordent (table fermée, lettre, slug)
     const ligne = norm(produit?.codeSet);
     const n = String(np).trim().toLowerCase().replace(/^0+(?=\d)/, '');
     const slug = texte(produit?.slug) ? produit.slug.trim().toLowerCase() : null;
@@ -385,7 +405,8 @@ function evaluerPreuveLue({ entree, produit, langueProduit, sansTotalAutorise = 
         // tour 2 (1) : une promo (« XY150a », « SM30a ») n'imprime aucun total — il n'est exigé que pour un numéro purement numérique (+ suffixe) ; un préfixe alphabétique se juge sans total
         const sansTotalTolere = sansTotalAutorise === true && t === '' && sansTotalAdmis(lu, produit, np);   // décision 5 : deux sources + liste fermée
         if (n === '' || (t === '' && !PREFIXE_ALPHABETIQUE.test(n) && !sansTotalTolere)) motifs.push('numero-ou-total-absent');
-        else if (J.cleNumero(n) !== J.cleNumero(np) && !numeroSansPrefixeAdmis(n, np, produit?.slug)) motifs.push('numero-different');
+        else if (J.cleNumero(n) !== J.cleNumero(np) && !numeroSansPrefixeAdmis(n, np, produit?.slug) && !demiListe(lu, produit, np)) motifs.push('numero-different');
+        else if (J.cleNumero(n) !== J.cleNumero(np) && demiListe(lu, produit, np)) drapeaux.push(`demi-liste:${demiListe(lu, produit, np).lettre}`);   // (03/11) les trois témoins concordent : dit au coordinateur
         const mn = motifDeNom(lu, produit, langueProduit, drapeaux); if (mn) motifs.push(mn);       // tour 4 (1) : le nom aussi, avec numéro
     } else {
         if (entree.attendu?.numero != null && String(entree.attendu.numero).trim() !== '') motifs.push('numero-attendu-non-null');
