@@ -200,6 +200,13 @@ test('jumeaux : total de la paire ramené à la moitié', () => {
 // ── garde de population, causes fermées
 test('lecture sans set : lève (un audit sur zéro set n est pas une mesure)', () => assert.throws(() => auditer(lecture({ sets: [] })), /population vide/));
 test('lecture sans carte alors qu il y a des sets : lève (§41)', () => assert.throws(() => auditer(lecture({ cartes: [], lignes: [lig('c1', 1)], produits: [] })), /cartes/));
+test('lignes qui ne désignent aucune carte lue : lève (jointure vide sur populations non vides)', () => assert.throws(() => auditer(lecture({ cartes: [carte('c1', 'A', '1')], lignes: [lig('absente', 1)] })), /aucune des/));
+test('pas un doublon : aucun groupe de 1 listé', () => assert.strictEqual(un(auditer(lecture({ cartes: [carte('c1', 'A', '1'), carte('c2', 'A', '90')] }))).doublons.groupes.length, 0));
+test('écart : un set déjà à 100 % avant n est pas « passé à 100 % »', () => {
+    const s = { set: 'A', trous: 0, causes: {} };
+    const e = A.ecart({ sets: [s], parCause: {}, totaux: {}, denominateurs: {} }, { sets: [s], parCause: {}, totaux: {}, denominateurs: {} });
+    assert.deepStrictEqual(e.setsPassesA100, []);
+});
 test('une cause hors liste fermée lève', () => assert.throws(() => A.verifierCause('sansVisuel', 'inventee'), /cause/));
 test('set non publié ignoré et compté', () => {
     const a = auditer(lecture({ sets: [set(), set({ _id: 'S2', nomAffichage: null })], cartes: [carte('c1', 'A', '1')] }));
