@@ -1302,8 +1302,9 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.deepStrictEqual(lue(idn({ nom: ' mareep' }), pid), { ok: true, motifs: [] }, 'casse et espaces indifférents');
         assert.deepStrictEqual(lue(idn(), ptrad({ tirage: 'idth', nomEn: 'Mareep' })), { ok: true, motifs: [] }, 'sur un set idth lu en indonésien : passe');
         assert.deepStrictEqual(lue(idn({ dex: 179, pv: 60 }), pid), { ok: true, motifs: [] }, 'des témoins en plus ne gênent pas');
-        assert.match(mt(idn({ nom: 'Flaaffy' }), pid), /nom-traduit-sans-temoin/, 'un autre nom : la règle traduite, sans témoin = refus');
-        assert.match(mt(idn({ langue: 'th' }), ptrad({ tirage: 'th', nomEn: 'Mareep' })), /nom-traduit-sans-temoin/, 'thaï : une carte thaïe n\'imprime pas le nom anglais, la règle ne s\'ouvre pas');
+        assert.match(mt(idn({ nom: 'Flaaffy' }), pid), /nom-langue-non-anglaise/, 'un autre nom sans témoin : refus comme avant (la règle traduite ne s\'ouvre qu\'avec un témoin)');
+        assert.match(mt(idn({ nom: 'Flaaffy', codeSet: 'svAL' }), pid), /nom-traduit-sans-temoin|pokedex|nom-different/, 'un autre nom avec témoin : la règle traduite juge, elle n\'accepte pas');
+        assert.match(mt(idn({ langue: 'th' }), ptrad({ tirage: 'th', nomEn: 'Mareep' })), /nom-langue-non-anglaise/, 'thaï : une carte thaïe n\'imprime pas le nom anglais, la règle ne s\'ouvre pas');
         assert.match(mt(idn(), ptrad({ tirage: 'jp', nomEn: 'Mareep' })), /langue-differente/, 'indonésien sur un set japonais : langue refusée');
         assert.match(mt(idn(), ptrad({ tirage: 'jp', nomEn: 'Mareep' })), /nom-langue-non-anglaise/, '… et le nom ne témoigne pas pour un autre tirage');
     });
