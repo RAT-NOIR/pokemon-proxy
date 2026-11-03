@@ -58,8 +58,8 @@ const morceaux = (l, n) => { const r = []; for (let i = 0; i < l.length; i += n)
             if (erreurs.length > 25) console.error(`   … (+${erreurs.length - 25})`);
             process.exitCode = 1; return;
         }
-        const nImages = clones.reduce((a, c) => a + c.images.length, 0), nCopies = clones.reduce((a, c) => a + c.images.filter(i => i.action === 'copier').length, 0);
-        console.log(`conditions rejouées : ✅ ${clones.length} clones (attendu ${attendu}) · ${nImages} entrées d'images retirées (attendu ${attenduImages}), dont ${nCopies} copiées d'abord`);
+        const nImages = clones.reduce((a, c) => a + c.images.length, 0);
+        console.log(`conditions rejouées : ✅ ${clones.length} clones (attendu ${attendu}) · ${nImages} entrées d'images retirées (attendu ${attenduImages}), aucune copie`);
 
         if (simuler) {
             const { annonce, nonAutorisees } = annoncer(docs, clones);
@@ -88,12 +88,10 @@ const morceaux = (l, n) => { const r = []; for (let i = 0; i < l.length; i += n)
             if (reel !== attendu) { ecrireJournal(`ARRET apres ${nom} : ${champ} ${reel} au lieu de ${attendu}`); throw new Error(`ARRÊT après le lot « ${nom} » : ${champ} ${reel} au lieu de ${attendu} — rien d'autre n'est écrit ; journal : ${fj}`); }
             console.log(`   ${nom} : ${ops.length} opérations · ${champ} ${reel} ✅`);
         };
-        await lot('copies d\'images', plan.copies, 'modifiedCount', plan.copies.length);
-        ecrireJournal('copies-faites');
         await lot('$pull sets', plan.pullSets, 'matchedCount', plan.pullSets.length);
         ecrireJournal('sets-retires');
         await lot('$pull images', plan.pullImages, 'matchedCount', plan.pullImages.length);
         ecrireJournal('termine');
-        console.log('ÉCRIT : copies, puis retrait des sets, puis retrait des images — tous les contrôles de lot ✅');
+        console.log('ÉCRIT : retrait des sets, puis retrait des images (aucune copie) — tous les contrôles de lot ✅');
     } finally { await cx.fermer(); }
 })().catch(e => { console.error(String(e && e.stack || e).replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>')); process.exitCode = 1; });

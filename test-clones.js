@@ -173,9 +173,9 @@ test('refus : règle injectée absente, population vide', () => {
 // ── images
 const im = (set, numero, cleR2, o = {}) => ({ set, numero, cleR2, ...o });
 const celebiImages = images => lecture({ cartes: [carte('celebi', 'Shining Celebi', ['Shining-Legends', 'SM-Black-Star-Promos'], [], images)], lignes: [ligne('celebi', 901, 'SM-Black-Star-Promos', 'SM79')], produits: [prodSL, prodSMP] });
-test('images : copiée vers la vraie fiche du MÊME tirage (numéro = numeroFiche), les autres sets intouchés', () => {
+test('images : AUCUNE copie, même vers la vraie fiche du MÊME tirage (cas Pecharunt : réimpression tamponnée) — retirée seulement, les autres sets intouchés', () => {
     const c = cl(C.classerClones(celebiImages([im('Shining-Legends', '3', 'k/a'), im('Autre', '3', 'k/z')]), regles), 'celebi');
-    assert.deepStrictEqual(c.images, [{ cleR2: 'k/a', numero: '3', action: 'copier', vers: { set: 'SM-Black-Star-Promos', numero: 'SM79' } }]);
+    assert.deepStrictEqual(c.images, [{ cleR2: 'k/a', numero: '3', action: 'retirer', vers: null }]);
 });
 test('images : retirée sans copie si la carte a déjà une entrée pour la vraie fiche', () => {
     const c = cl(C.classerClones(celebiImages([im('Shining-Legends', '3', 'k/a'), im('SM-Black-Star-Promos', 'SM79', 'k/b')]), regles), 'celebi');
@@ -186,9 +186,9 @@ test('images : JAMAIS copiée entre deux tirages différents', () => {
     const l = lecture({ sets: [SL, SMPJ], cartes: [carte('c', 'Zed', ['Shining-Legends', 'SMP-JP'], [], [im('Shining-Legends', '3', 'k/a')])], lignes: [ligne('c', 1, 'SMP-JP', 'J1')], produits: [prodSL, prod(61, 8, 'P', { carteId: 'q', numero: '1', setId: 'SMP-JP' })] });
     assert.deepStrictEqual(cl(C.classerClones(l, regles), 'c').images, [{ cleR2: 'k/a', numero: '3', action: 'retirer', vers: null }]);
 });
-test('images : plusieurs entrées dans le set -> une seule copiée, toutes comptées', () => {
+test('images : plusieurs entrées dans le set -> toutes retirées, aucune copiée', () => {
     const c = cl(C.classerClones(celebiImages([im('Shining-Legends', '3', 'k/a'), im('Shining-Legends', '4', 'k/c')]), regles), 'celebi');
-    assert.deepStrictEqual(c.images.map(i => i.action), ['copier', 'retirer']);
+    assert.deepStrictEqual(c.images.map(i => i.action), ['retirer', 'retirer']);
 });
 test('composition-autre-region : le document resterait sans aucun set -> pas supprimable (aInstruire)', () => {
     const l = lecture({ cartes: [carte('c1', 'Xyz', ['Shining-Legends'], [imp('jp', 'Shining Legends', '3')], [im('Shining-Legends', '3', 'k/a')])], produits: [prodSL] });
@@ -223,14 +223,13 @@ test('une carte sans nomEn n\'est pas auditée (cartes affichables, comme audit-
 
 // ── appliquer / vérifier / annoncer
 const clonesCelebi = images => C.classerClones(celebiImages(images), regles).clones;
-test('appliquer : retire le slug de sets, copie puis retire les images du set, ne touche rien d\'autre', () => {
+test('appliquer : retire le slug de sets et les images du set, ne copie rien, ne touche rien d\'autre', () => {
     const doc = { _id: 'celebi', nomEn: 'Shining Celebi', sets: ['Shining-Legends', 'Autre'], impressions: [{ tirage: 'jp' }], images: [im('Shining-Legends', '3', 'k/a', { vignette: { cleR2: 'v' }, sha256: 'h' }), im('Autre', '3', 'k/z')] };
     const [c] = clonesCelebi([im('Shining-Legends', '3', 'k/a')]);
     const r = C.appliquer(doc, c);
     assert.deepStrictEqual(r.doc.sets, ['Autre']);
-    assert.deepStrictEqual(r.doc.images.map(i => `${i.set}|${i.numero}|${i.cleR2}`), ['Autre|3|k/z', 'SM-Black-Star-Promos|SM79|k/a']);
-    assert.strictEqual(r.doc.images[1].sha256, 'h'); assert.deepStrictEqual(r.doc.images[1].vignette, { cleR2: 'v' });
-    assert.strictEqual(r.retirees.length, 1); assert.strictEqual(r.copiees.length, 1);
+    assert.deepStrictEqual(r.doc.images.map(i => `${i.set}|${i.numero}|${i.cleR2}`), ['Autre|3|k/z']);
+    assert.strictEqual(r.retirees.length, 1); assert.strictEqual(r.copiees, undefined);
     assert.deepStrictEqual(doc.sets, ['Shining-Legends', 'Autre']);   // pure
     assert.deepStrictEqual(r.doc.impressions, doc.impressions);
 });
@@ -251,7 +250,6 @@ test('verifierEtat refuse : nombre attendu, images attendues, set disparu, ligne
     assert.ok(err({ lignes: [...L, ligne('celebi', 11, 'Shining-Legends', '3')] }).length);
     assert.ok(err({ lignes: [] }).length);
     assert.ok(err({ docs: new Map([['celebi', { _id: 'celebi', sets: ['Shining-Legends'], images: [im('Shining-Legends', '3', 'k/AUTRE')] }]]) }).length);
-    assert.ok(err({ docs: new Map([['celebi', { _id: 'celebi', sets: ['Shining-Legends'], images: [im('Shining-Legends', '3', 'k/a'), im('SM-Black-Star-Promos', 'SM79', 'k/b')] }]]) }).length);
     assert.ok(err({ docs: new Map() }).length);
     // 'k/AUTRE' et 'k/b' ci-dessus portaient sets: ['Shining-Legends'] seul : ils échouent aussi par « vraie fiche hors sets » ; les cas suivants isolent la règle
     const e0 = C.verifierEtat({ clones: [c], docs: new Map([['celebi', { _id: 'celebi', sets: ['Shining-Legends'], images: [im('Shining-Legends', '3', 'k/a')] }]]), lignes: L, attendu: 1, attenduImages: 1 });
@@ -265,12 +263,12 @@ test('decisionPerimee : lectureDu absent, illisible ou de plus de 24 h -> périm
     assert.ok(C.decisionPerimee('2026-11-02T11:59:00Z', t)); assert.ok(C.decisionPerimee('2026-11-04T12:00:00Z', t), 'date future : refus');
     assert.strictEqual(C.decisionPerimee('2026-11-03T05:40:28Z', t), null);
 });
-test('planEcriture : copies d\'abord (toutes), puis $pull sets, puis $pull images — trois lots ordonnés, comptes attendus', () => {
+test('planEcriture : aucune copie ; $pull sets puis $pull images — deux lots ordonnés, comptes attendus', () => {
     const [c] = clonesCelebi([im('Shining-Legends', '3', 'k/a'), im('Shining-Legends', '4', 'k/c')]);
     const doc = { _id: 'celebi', sets: ['Shining-Legends', 'SM-Black-Star-Promos'], images: [im('Shining-Legends', '3', 'k/a'), im('Shining-Legends', '4', 'k/c')] };
     const p = C.planEcriture(new Map([['celebi', doc]]), [c]);
-    assert.strictEqual(p.copies.length, 1); assert.strictEqual(p.pullSets.length, 1); assert.strictEqual(p.pullImages.length, 1);
-    assert.deepStrictEqual(p.copies[0].updateOne.update.$push.images.set, 'SM-Black-Star-Promos');
+    assert.strictEqual(p.copies, undefined); assert.strictEqual(p.pullSets.length, 1); assert.strictEqual(p.pullImages.length, 1);
+    assert.ok(!JSON.stringify(p).includes('$push'));
     assert.deepStrictEqual(p.pullSets[0].updateOne.update, { $pull: { sets: 'Shining-Legends' } });
     assert.deepStrictEqual(p.pullImages[0].updateOne.update, { $pull: { images: { set: 'Shining-Legends' } } });
 });

@@ -90,12 +90,8 @@ function classerClones(lecture, regles) {
                 }
             }
             if (!motif) { orphelins.push({ carteId: c._id, nomEn: nul(c.nomEn), set: s._id }); continue; }
-            // 4. les images du set : copiées vers la vraie fiche du MÊME tirage (une seule entrée), sinon retirées
-            const entrees = (c.images || []).filter(i => i.set === s._id);
-            const copiable = vraieFiche && setPublie.has(vraieFiche.slugSet) && tirageDuSet(setPublie.get(vraieFiche.slugSet)) === cible.tirage && !(c.images || []).some(i => i.set === vraieFiche.slugSet);
-            const images = entrees.map((i, k) => (copiable && k === 0
-                ? { cleR2: i.cleR2, numero: nul(i.numero), action: 'copier', vers: { set: vraieFiche.slugSet, numero: vraieFiche.numeroFiche } }
-                : { cleR2: i.cleR2, numero: nul(i.numero), action: 'retirer', vers: null }));
+            // 4. les images du set : RETIRÉES, JAMAIS copiées (une réimpression tamponnée n'a jamais le scan du tirage normal — aucun visuel emprunté à un autre tirage)
+            const images = (c.images || []).filter(i => i.set === s._id).map(i => ({ cleR2: i.cleR2, numero: nul(i.numero), action: 'retirer', vers: null }));
             candidats.push({ carteId: c._id, nomEn: nul(c.nomEn), set: s._id, tirageSet: cible.tirage, motif, vraieFiche, images, setsCarte: [...new Set(c.sets || [])] });
         }
     }
@@ -124,17 +120,10 @@ function classerClones(lecture, regles) {
 
 const cleImage = i => `${i.cleR2 ?? ''}|${nul(i.numero)}`;
 
-/** Applique UN clone à un document carte COMPLET : pure (ne modifie pas `doc`). @returns {{doc, retirees: object[], copiees: object[]}} */
+/** Applique UN clone à un document carte COMPLET : pure (ne modifie pas `doc`). AUCUNE copie d'image, jamais. @returns {{doc, retirees: object[]}} */
 function appliquer(doc, clone) {
     const retirees = (doc.images || []).filter(i => i && i.set === clone.set);
-    const copiees = [];
-    for (const a of clone.images || []) {
-        if (a.action !== 'copier') continue;
-        const e = retirees.find(i => cleImage(i) === cleImage(a));
-        if (!e) throw new Error(`appliquer : l'entrée ${cleImage(a)} du set ${clone.set} n'existe plus sur la carte ${clone.carteId}`);
-        copiees.push({ ...structuredClone(e), set: a.vers.set, numero: a.vers.numero });
-    }
-    return { doc: { ...doc, sets: (doc.sets || []).filter(s => s !== clone.set), images: [...(doc.images || []).filter(i => !(i && i.set === clone.set)), ...copiees] }, retirees, copiees };
+    return { doc: { ...doc, sets: (doc.sets || []).filter(s => s !== clone.set), images: (doc.images || []).filter(i => !(i && i.set === clone.set)) }, retirees };
 }
 
 /** Les conditions de la décision, rejouées sur l'état VIVANT. Une seule qui change = refus (liste d'erreurs non vide). docs : Map carteId -> document complet ; lignes : cartes_produits vivantes des cartes de la décision. */
@@ -161,7 +150,7 @@ function verifierEtat({ clones, docs, lignes, attendu, attenduImages }) {
         if (vives.length !== c.images.length) err.push(`${q} : ${vives.length} entrées d'images vives, ${c.images.length} décidées`);
         for (const a of c.images) {
             if (!vives.some(i => cleImage(i) === cleImage(a))) err.push(`${q} : l'entrée d'image ${cleImage(a)} a changé`);
-            if (a.action === 'copier' && (d.images || []).some(i => i && i.set === a.vers.set)) err.push(`${q} : la carte a désormais une entrée d'image pour ${a.vers.set}`);
+            if (a.action !== 'retirer') err.push(`${q} : action d'image « ${a.action} » non autorisée (aucune copie, jamais)`);
         }
     }
     if (retirees !== attenduImages) err.push(`entrées d'images retirées ${retirees} ≠ attendu ${attenduImages}`);
@@ -195,17 +184,16 @@ function decisionPerimee(lectureDu, maintenant = Date.now(), maxHeures = 24) {
     return null;
 }
 
-/** Les opérations d'écriture en TROIS lots ordonnés : toutes les copies d'images d'abord, puis les $pull de sets, puis les $pull d'images ; plus le journal des anciennes valeurs. Pure. */
+/** Les opérations d'écriture en DEUX lots ordonnés : les $pull de sets, puis les $pull d'images ; plus le journal des anciennes valeurs. Aucune copie. Pure. */
 function planEcriture(docs, clones) {
-    const copies = [], pullSets = [], pullImages = [], journal = [];
+    const pullSets = [], pullImages = [], journal = [];
     for (const c of clones) {
         const d = docs.get(c.carteId), r = appliquer(d, c);
-        journal.push({ carteId: c.carteId, set: c.set, setsAvant: d.sets, imagesRetirees: r.retirees, imagesCopiees: r.copiees });
-        for (const e of r.copiees) copies.push({ updateOne: { filter: { _id: c.carteId, 'images.set': { $ne: e.set } }, update: { $push: { images: e } } } });
+        journal.push({ carteId: c.carteId, set: c.set, setsAvant: d.sets, imagesRetirees: r.retirees });
         pullSets.push({ updateOne: { filter: { _id: c.carteId, sets: c.set }, update: { $pull: { sets: c.set } } } });
         if (r.retirees.length) pullImages.push({ updateOne: { filter: { _id: c.carteId }, update: { $pull: { images: { set: c.set } } } } });
     }
-    return { copies, pullSets, pullImages, journal };
+    return { pullSets, pullImages, journal };
 }
 
 module.exports = { classerClones, appliquer, verifierEtat, annoncer, decisionPerimee, planEcriture, MOTIFS };
