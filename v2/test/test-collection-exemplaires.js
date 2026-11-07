@@ -206,6 +206,23 @@ const attendre = ms => new Promise(r => setTimeout(r, ms));
         let r3; try { r3 = await put(T, 'Set-E', '10|001', { possedee: true, quantite: 3 }); } finally { db.brancher(dbReelle); }
         H.v('   r3 : la lecture du détail lève APRÈS une écriture réussie : 200 de succès minimal { success, possedees } (jamais un 503 qui ferait croire à un échec)', [r3.statut, r3.json], [200, { success: true, possedees: 1 }]);
         H.v('   ... et l\'écriture a bien eu lieu (quantité 3)', (await lire(T, 'Set-E')).json.quantites['10|001'], 3);
+        // mineur (relecture 3, tour 2) : un `[]` qui ne retire rien ne touche pas `majLe` (ni sur une fiche sans détail dans un document qui en porte un autre, ni sur un document sans détail)
+        const Z = await compte();
+        await put(Z, 'Set-E', '10|001', { possedee: true, quantite: 2 }); await put(Z, 'Set-E', '11|002', { possedee: true, quantite: 2 });
+        await putEx(Z, 'Set-E', '10|001', { exemplaires: [el('NM', 'fr')] });
+        const m0 = (await docs(Z))[0].majLe.getTime(); await attendre(20);
+        const vide1 = await putEx(Z, 'Set-E', '11|002', { exemplaires: [] });
+        H.v('   un [] sur une fiche SANS détail, dans un document qui en porte un autre : 200, majLe INCHANGÉ, le détail de l\'autre fiche intact', [vide1.statut, (await docs(Z))[0].majLe.getTime() === m0, (await lire(Z, 'Set-E')).json.exemplaires['10|001'].length], [200, true, 2]);
+        const Y = await compte(); await put(Y, 'Set-E', '10|001', { possedee: true, quantite: 2 });
+        const my = (await docs(Y))[0].majLe.getTime(); await attendre(20);
+        await putEx(Y, 'Set-E', '10|001', { exemplaires: [] });
+        H.v('   un [] sur un document sans aucun détail : majLe INCHANGÉ', (await docs(Y))[0].majLe.getTime() === my, true);
+        // la clé d'une fiche porte des caractères d'expression régulière (« | », « ( », « . ») : l'effacement ne confond pas deux clés
+        const K = await compte(); await put(K, 'Set-Hors', '99|SWSH155 (Top Left)', { possedee: true, quantite: 2 }); await put(K, 'Set-Hors', '99|SWSH155 (Top Right)', { possedee: true, quantite: 2 });
+        await putEx(K, 'Set-Hors', '99|SWSH155 (Top Left)', { exemplaires: [el('NM', 'fr')] }); await putEx(K, 'Set-Hors', '99|SWSH155 (Top Right)', { exemplaires: [el('EX', 'en')] });
+        await putEx(K, 'Set-Hors', '99|SWSH155 (Top Left)', { exemplaires: [] });
+        const gk = (await lire(K, 'Set-Hors')).json.exemplaires;
+        H.v('   effacer le détail d\'une clé à caractères spéciaux n\'efface pas celui d\'une clé voisine', [Object.keys(gk), gk['99|SWSH155 (Top Right)'][0]], [['99|SWSH155 (Top Right)'], el('EX', 'en')]);
     }
     await sv.fermer();
     await mongoose.disconnect();

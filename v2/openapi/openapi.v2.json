@@ -2967,7 +2967,7 @@
         "tags": [
           "collection"
         ],
-        "summary": "Ma collection : les fiches cochées d'un set (et leurs cotes, `{}` dans cette version)",
+        "summary": "Ma collection : les fiches cochées d'un set (quantités et détail par exemplaire ; aucune cote ni valeur Cardmarket)",
         "security": [
           {
             "session": []
@@ -2980,7 +2980,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Les clés cochées du set (triées), `cotes` toujours `{}` dans cette version (voir CONTRAT-API-V2.md §1.8), `majLe` nul si rien n'est coché.",
+            "description": "Les clés cochées du set (triées), `quantites` et `exemplaires` quand il y en a, `majLe` nul si rien n'est coché. Aucune cote ni valeur Cardmarket n'est servie (décision du 31/10) : le champ `cotes` n'existe plus dans la réponse.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3192,36 +3192,6 @@
           },
           "503": {
             "description": "INDISPONIBLE (index manquants, base injoignable, bits du set illisibles contre son registre). Avec `detail: \"reessayer\"` (et `reessayerDans`, `Retry-After`) : trois essais perdus contre des écritures simultanées sur la fiche — RIEN n'est écrit à moitié, le détail d'avant est intact, réessayer (ce n'est pas un refus de fond).",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } }
-          }
-        }
-      }
-    },
-    "/api/collection/valeur": {
-      "get": {
-        "operationId": "valeurDeMaCollection",
-        "x-conditionnel": "V2_COLLECTION_COTES=1",
-        "tags": ["collection"],
-        "summary": "Ma collection : la valeur totale — NON MONTÉE par défaut (404 natif) : aucune valeur Cardmarket tant que l'accord n'existe pas",
-        "description": "DÉCISION DE L'UTILISATEUR (31/10, maintenue le 07/11) : aucune valeur issue de Cardmarket dans la collection. Cette route n'est montée que si `V2_COLLECTION_COTES=1`, drapeau ÉTEINT par défaut et REFUSÉ hors d'une base de banc : en production elle n'existe pas (404 natif). Quand elle est montée (bancs) : propriétaire connecté seulement, session (cookie), `Cache-Control: no-store`, limiteur de lecture de 30 par heure et cache de 60 s par compte invalidé à chaque écriture. Σ(tendance du guide × quantité) des fiches qui ont une cote ; les exemplaires sans cote sont comptés à part (`sansCote`), jamais estimés. Aucune écriture.",
-        "security": [{ "session": [] }],
-        "responses": {
-          "200": {
-            "description": "La valeur et ses dénominateurs.",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseValeur" } } },
-            "headers": { "Cache-Control": { "schema": { "type": "string", "enum": ["no-store"] } } }
-          },
-          "401": {
-            "description": "SESSION (cookie absent, expiré ou révoqué) : aucune valeur, aucun prix dans le corps.",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } }
-          },
-          "429": {
-            "description": "DEBIT : plus de 30 lectures par heure pour ce compte (plafond écrit dans routes.js, posé sans mesure d'usage réel), avec `reessayerDans` et `Retry-After`. La réponse est de plus mise en cache 60 s par compte, invalidée à chaque écriture de la collection de ce compte.",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } },
-            "headers": { "Retry-After": { "schema": { "type": "integer", "minimum": 0 } } }
-          },
-          "503": {
-            "description": "INDISPONIBLE (index manquants, base injoignable, bits illisibles).",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } }
           }
         }
@@ -6872,24 +6842,6 @@
         ],
         "additionalProperties": false
       },
-      "CoteFiche": {
-        "type": "object",
-        "description": "La cote du GUIDE d'une fiche : la tendance et la date du guide. Règle au contrat (§1.8) ; le serveur n'en sert pas encore.",
-        "properties": {
-          "tendance": {
-            "type": "number",
-            "minimum": 0
-          },
-          "date": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "tendance",
-          "date"
-        ],
-        "additionalProperties": false
-      },
       "ReponseCollectionSet": {
         "type": "object",
         "properties": {
@@ -6922,20 +6874,6 @@
               "type": "array",
               "maxItems": 99,
               "items": { "$ref": "#/components/schemas/ExemplaireDetail" }
-            }
-          },
-          "cotes": {
-            "type": "object",
-            "description": "ABSENT par défaut — DÉCISION DE L'UTILISATEUR (31/10, maintenue le 07/11) : aucune valeur issue de Cardmarket dans les routes de la collection, même pour les cartes possédées, tant que l'accord de Cardmarket n'existe pas. Le champ n'existe que lorsque le drapeau `V2_COLLECTION_COTES=1` est posé, ce que seule une base de banc admet (config.js) : jamais en production. Quand il existe : par clé de fiche, sa cote, ou `null`. Une fiche absente vaut `null`. `{}` tant qu'aucun chargement n'a réussi (l'état « sans visuel ») ou pour un set sans lien fiche → produits. Au-delà de 5 000 produits dans un set, les cotes sont PARTIELLES : les fiches qui ne tiennent pas dans la borne sont absentes (= `null`).",
-            "additionalProperties": {
-              "oneOf": [
-                {
-                  "type": "null"
-                },
-                {
-                  "$ref": "#/components/schemas/CoteFiche"
-                }
-              ]
             }
           },
           "majLe": {
@@ -7008,20 +6946,6 @@
           "exemplaires": { "type": "array", "maxItems": 99, "items": { "$ref": "#/components/schemas/ExemplaireDetail" } }
         },
         "required": ["success", "exemplaires"],
-        "additionalProperties": false
-      },
-      "ReponseValeur": {
-        "type": "object",
-        "description": "La valeur de MA collection : Σ(tendance du guide × quantité) des fiches qui ont une cote (la règle de la cote d'une fiche : §1.8). Réservée au propriétaire connecté (session), jamais dans une réponse sans session.",
-        "properties": {
-          "success": { "const": true },
-          "valeurTotale": { "type": "number", "minimum": 0, "description": "En euros, arrondie au centime." },
-          "devise": { "const": "EUR" },
-          "nbExemplaires": { "type": "integer", "minimum": 0, "description": "Σ des quantités des fiches cochées (sets lus)." },
-          "sansCote": { "type": "integer", "minimum": 0, "description": "Les exemplaires SANS cote : comptés à part, jamais estimés." },
-          "partielle": { "type": "boolean", "description": "true quand plus de 200 sets sont cochés ou que le guide n'a pas répondu pour un set : la somme ne porte alors que sur les sets lus." }
-        },
-        "required": ["success", "valeurTotale", "devise", "nbExemplaires", "sansCote", "partielle"],
         "additionalProperties": false
       },
       "LangueExemplaire": {

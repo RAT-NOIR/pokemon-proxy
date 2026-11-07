@@ -31,6 +31,10 @@ const IP = () => { nIp++; return `10.81.${Math.floor(nIp / 250)}.${nIp % 250 + 1
     H.vrai('   allumé hors d\'une base de banc : configuration INVALIDE (aucun accord de Cardmarket n\'existe)', Boolean(refus) && /V2_COLLECTION_COTES/.test(refus) && /Cardmarket/.test(refus));
     let refus2 = null; try { lireConfig({ V2_COLLECTION_COTES: '1' }); } catch (e) { refus2 = e.message; }
     H.vrai('   ... et sans base nommée non plus', Boolean(refus2));
+    // mineur (relecture 3, tour 2) : la garde « banc » lit l'ENVIRONNEMENT INJECTÉ (BANC_ISOLE posé dans l'objet passé), pas seulement process.env
+    let refus4 = null; try { lireConfig({ MONGODB_BASE: 'test_scratch', BANC_ISOLE: '0', V2_COLLECTION_COTES: '1' }); } catch (e) { refus4 = e.message; }
+    H.vrai('   allumé avec une base « test_scratch » MAIS un environnement injecté qui ne pose pas BANC_ISOLE=1 : refusé (le nom d\'une base n\'est pas une preuve)', Boolean(refus4) && /V2_COLLECTION_COTES/.test(refus4));
+    H.v('   ... et admis quand l\'environnement injecté pose BANC_ISOLE=1', lireConfig({ MONGODB_BASE: 'test_scratch', BANC_ISOLE: '1', V2_COLLECTION_COTES: '1' }).collection.cotes, true);
     let refus3 = null; try { lireConfig({ MONGODB_BASE: 'test_scratch', V2_COLLECTION_COTES: 'oui' }); } catch (e) { refus3 = e.message; }
     H.vrai('   une valeur mal formée est refusée (0 ou 1 seulement)', Boolean(refus3));
 

@@ -89,7 +89,9 @@ function lireConfig(env = process.env) {
     // DÉCISION DE L'UTILISATEUR (31/10, maintenue le 07/11) : AUCUNE valeur issue de Cardmarket dans les routes de la collection (ni `cotes` par fiche, ni valeur totale), même pour les cartes possédées, tant que l'accord de
     // Cardmarket n'existe pas. Le code qui les sert reste derrière CE drapeau, ÉTEINT par défaut, et V2_COLLECTION_COTES=1 est REFUSÉ hors d'une base de banc : aucun accord n'existe, on ne l'allume pas en production.
     const collectionCotes = booleen('V2_COLLECTION_COTES', env.V2_COLLECTION_COTES, false);
-    if (collectionCotes && !banc) throw new Error('configuration invalide : V2_COLLECTION_COTES=1 n\'est accepté que sur une base de banc (MONGODB_BASE=test_scratch ET BANC_ISOLE=1) : aucune valeur Cardmarket dans la collection tant que l\'accord de Cardmarket n\'existe pas');
+    // La garde « banc » de CE drapeau lit l'environnement INJECTÉ (BANC_ISOLE dans l'objet passé) avant process.env : en production les deux sont le même objet ; un banc peut ainsi prouver le refus sans toucher au processus.
+    const bancCotes = base === 'test_scratch' && (env.BANC_ISOLE !== undefined ? env.BANC_ISOLE : process.env.BANC_ISOLE) === '1';
+    if (collectionCotes && !bancCotes) throw new Error('configuration invalide : V2_COLLECTION_COTES=1 n\'est accepté que sur une base de banc (MONGODB_BASE=test_scratch ET BANC_ISOLE=1) : aucune valeur Cardmarket dans la collection tant que l\'accord de Cardmarket n\'existe pas');
     const cookieSecure = booleen('V2_COOKIE_SECURE', env.V2_COOKIE_SECURE, true);
     if (actif && !cookieSecure && !banc) throw new Error('configuration invalide : V2_COOKIE_SECURE=0 n\'est accepté que sur une base de banc (MONGODB_BASE=test_scratch ET BANC_ISOLE=1)');
     // BANC-12 (décision du testeur, 2026-10-11) : le lien contribution ↔ compte dure 12 mois AU PLUS, puis anonymisation définitive. Au-delà de 12 (ou de la durée de l'image) : configuration invalide.

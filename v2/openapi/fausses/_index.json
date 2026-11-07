@@ -563,12 +563,6 @@
     "schema": "ReponseErreur",
     "description": "K5 : la borne de 5 000 entrées de détail distinctes par compte (CONFLIT, detail borne-exemplaires), posée sans mesure d'usage réel."
   },
-  "collection-valeur.json": {
-    "route": "GET /api/collection/valeur",
-    "statut": 200,
-    "schema": "ReponseValeur",
-    "description": "L6 : la valeur totale de MA collection (propriétaire connecté seulement), ses dénominateurs (exemplaires, sans cote) et `partielle`. Valeurs fictives."
-  },
   "collection-sets-doublons.json": {
     "route": "GET /api/collection",
     "statut": 200,
@@ -586,12 +580,6 @@
     "statut": 200,
     "schema": "ReponseCocherProduit",
     "description": "C4 : le PUT par produit d'une fiche qui porte un détail : set, clé, quantité totale et détail (complété par des { null, null } jusqu'à la quantité)."
-  },
-  "collection-valeur-limite.json": {
-    "route": "GET /api/collection/valeur",
-    "statut": 429,
-    "schema": "ReponseErreur",
-    "description": "La valeur totale est limitée à 30 lectures par heure et par compte (DEBIT, reessayerDans, Retry-After) ; aucun prix dans le corps."
   },
   "collection-exemplaires-concurrence.json": {
     "route": "PUT /api/collection/sets/{slug}/fiches/{cle}/exemplaires",

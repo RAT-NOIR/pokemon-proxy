@@ -377,7 +377,8 @@ async function remplacerExemplaires({ compteId, slug, cle, elements, cfg, mainte
     const entrees = [...groupes].map(([k, q]) => { const [etat, langue] = k.split('\n'); return { etat, langue, q }; }).sort(cmpEx);
     const n = elements.length;
     if (n === 0) {                                                                                           // r2 : EFFACER le détail ne demande aucune fiche cochée (et ne lit pas le registre) : un détail orphelin s'efface aussi
-        const avant = await c.findOneAndUpdate({ compteId, set: slug, ex: { $exists: true } }, [{ $set: { ex: exOuAbsent(exSans(cle)), majLe: { $literal: maintenant } } }], { returnDocument: 'before', projection: { ex: 1 }, ...LECTURE });
+        // le filtre exige qu'un élément du détail porte CETTE clé (« cle\n… », caractères spéciaux échappés) : un [] qui ne retire rien ne touche ni le document ni `majLe`
+        const avant = await c.findOneAndUpdate({ compteId, set: slug, ex: { $regex: `^${cle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\n` } }, [{ $set: { ex: exOuAbsent(exSans(cle)), majLe: { $literal: maintenant } } }], { returnDocument: 'before', projection: { ex: 1 }, ...LECTURE });
         if (avant) {
             const tout = (avant.ex || []).map(C.lireElementEx), retire = tout.filter(x => x.cle === cle).length;
             if (retire) await rendre(retire * C.exemplaire(cle) + (retire === tout.length ? C.EX_BASE : 0));
