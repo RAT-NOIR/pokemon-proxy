@@ -16,6 +16,7 @@
 //   lignes[{carteId,idProduct,slugSet,numeroFiche}], produits[{idProduct,idExpansion,name,setId,fiche{classe,motifs,carteId,numero,setId},visuel{classe,motifs}}],
 //   numerosProduits[{idProduct,numero}], offresParExpansion{idExpansion:n}, trousNommes{idProduct:motif}, restesParSet{set:{type:n}}
 
+const { numerosAttendus } = require('./numeros-attendus');
 const TYPES = Object.freeze(['sansVisuel', 'sansNumero', 'sansProduit', 'doublons', 'produitsSansFiche', 'manquants']);
 const CAUSES = Object.freeze({
     sansVisuel: ['regle-bloquante', 'aucune-image-en-base', 'image-d-un-autre-set-seulement', 'image-refusee-par-la-garde-de-langue', 'image-d-un-autre-numero', 'cause-inconnue'],
@@ -173,8 +174,10 @@ function auditer(lecture, regles) {
             if (total % 2 === 0 && (denominateurModal === null || denominateurModal <= total / 2)) attendu = total / 2; else attendu = null;
         }
         const manquants = []; let exclusPasUnTrou = [];
+        // le total imprimé compte les sous-séries à numéro préfixé (TG, GG, SV, H, RC…) : règle pure numeros-attendus.js, les préfixés présents ne sont jamais « manquants »
+        const attenduDetail = numerosAttendus({ totalImprime: attendu, numerosPresents: nums });
         if (attendu && parNumeros) {
-            const liste = [...Array(attendu).keys()].map(i => String(i + 1)).filter(n => !nums.has(n));
+            const liste = attenduDetail.manquants;
             const ex = exclure({ set: s._id, trous: liste, manque: liste.length });
             exclusPasUnTrou = ex.exclus;
             const numerosProdSansFiche = new Set(produitsSansFiche.map(p => numProd.get(p.idProduct)).filter(Boolean));
@@ -202,7 +205,7 @@ function auditer(lecture, regles) {
             const p = imps.find(i => i.tirage === cible.tirage) || imps[0] || null;
             return { carteId: x.carteId, nom: x.nom, plusProche: p ? { tirage: p.tirage ?? null, expansion: p.expansion ?? null, numero: p.numero ?? null } : null };
         }) } : null;
-        resultats.push({ set: s._id, code: s.code ?? null, nom: s.nomAffichage, tirage: cible.tirage, type: s.type ?? null, attendu, totalImprime: total, affichees: entrees.length, cartesDocuments: docs.length, produitsCardmarket: prods.length, offres,
+        resultats.push({ set: s._id, code: s.code ?? null, nom: s.nomAffichage, tirage: cible.tirage, type: s.type ?? null, attendu, attenduDetail, totalImprime: total, affichees: entrees.length, cartesDocuments: docs.length, produitsCardmarket: prods.length, offres,
             ...entree, exclusPasUnTrou, diagnosticExpansion, trous, causes });
     }
     const sorted = trier(resultats);
@@ -273,6 +276,7 @@ function formaterMd(audit, ec, { lignes = 150, detail = 40, parSet = 8 } = {}) {
     out.push('', `## Détail des ${Math.min(detail, troues.length)} premiers sets (causes, ${parSet} exemples par défaut)`, '');
     for (const s of troues.slice(0, detail)) {
         out.push(`### ${s.nom} — ${s.set}${s.code ? ' (' + s.code + ')' : ''} · score ${s.score.toFixed(0)} · attendu ${s.attendu ?? '—'} · affichées ${s.affichees}`, '');
+        if (s.attenduDetail && s.attenduDetail.totalImprime !== null) out.push(`_${s.attenduDetail.libelle}_`, '');
         for (const t of TYPES) {
             if (!s[t].n) continue;
             const causes = Object.entries(s.causes).filter(([k]) => k.startsWith(t + '/')).map(([k, n]) => `${k.slice(t.length + 1)} ${n}`).join(' · ');
