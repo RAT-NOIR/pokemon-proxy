@@ -119,6 +119,52 @@ async function demarrerAvecCors(cfg) {
     H.v('V2_TURNSTILE=off (banc) : passe sans appeler le vérificateur', [off.statut, vus.length - avantOff], [202, 0]);
     await srvOff.fermer();
 
+    // Exemption ÉTROITE des outils de mesure : essai seulement + secret >= 32 + en-tête égal ; dispense du DÉFI et de rien d'autre
+    {
+        const SEC = 'secret-de-mesure-' + 'x'.repeat(20);   // 37 caractères
+        const cas = async (env, entetes, route = '/api/compte/connexion', corps = { email: 'bob@exemple.fr', motDePasse: MDP }) => {
+            A.registre.vider(); A.registre.fournir('courrier', courrier); A.registre.fournir('turnstile', turnstile);
+            const s = await A.demarrer(lireConfig({ MONGODB_BASE: 'test_scratch', ...env }));
+            const r = await H.appel(s.url, route, { methode: 'POST', corps, sansDefi: true, entetes: { ...A.SITE, ...A.ip(++n + 3000), ...entetes } });
+            await s.fermer(); return r;
+        };
+        const ESSAI = { V2_CIBLE: 'essai', V2_SECRET_MESURE: SEC }, EN = { 'x-rat-market-mesure': SEC };
+        const st = r => [r.statut, r.json && r.json.erreur && r.json.erreur.detail];
+        H.v('mesure : sans en-tête => 422 defi-anti-robot', st(await cas(ESSAI, {})), [422, 'defi-anti-robot']);
+        H.v('mesure : en-tête faux => 422', st(await cas(ESSAI, { 'x-rat-market-mesure': SEC + 'z' })), [422, 'defi-anti-robot']);
+        H.v('mesure : en-tête vide => 422', st(await cas(ESSAI, { 'x-rat-market-mesure': '' })), [422, 'defi-anti-robot']);
+        H.v('mesure : secret trop court (31) => inerte, 422 même avec le bon en-tête', st(await cas({ V2_CIBLE: 'essai', V2_SECRET_MESURE: 'y'.repeat(31) }, { 'x-rat-market-mesure': 'y'.repeat(31) })), [422, 'defi-anti-robot']);
+        H.v('mesure : secret absent, en-tête vide ou absent => 422', [st(await cas({ V2_CIBLE: 'essai' }, EN))[0], st(await cas({ V2_CIBLE: 'essai' }, { 'x-rat-market-mesure': 'undefined' }))[0]], [422, 422]);
+        H.v('mesure : cible prod (V2_CIBLE=prod) => 422 même avec le bon en-tête', st(await cas({ V2_CIBLE: 'prod', V2_SECRET_MESURE: SEC }, EN)), [422, 'defi-anti-robot']);
+        H.v('mesure : V2_CIBLE absente => 422 même avec le bon en-tête', st(await cas({ V2_SECRET_MESURE: SEC }, EN)), [422, 'defi-anti-robot']);
+        H.v('mesure : V2_CIBLE « Essai » (casse) => 422', st(await cas({ V2_CIBLE: 'Essai', V2_SECRET_MESURE: SEC }, EN)), [422, 'defi-anti-robot']);
+        const bon = await cas(ESSAI, EN);
+        H.v('mesure : bon en-tête sur l\'essai => défi sauté, connexion 200 + cookie', [bon.statut, /^rm_session=/.test(bon.entetes['set-cookie'] || '')], [200, true]);
+        H.v('mesure : le mot de passe reste vérifié (401, même corps qu\'ailleurs)', (await cas(ESSAI, EN, '/api/compte/connexion', { email: 'bob@exemple.fr', motDePasse: 'faux-faux-faux' })).statut, 401);
+        H.v('mesure : l\'origine reste vérifiée (403 sans l\'Origin du site)', (await cas(ESSAI, { ...EN, origin: 'https://evil.fr' })).statut, 403);
+        H.v('mesure : oubli et renvoi dispensés aussi (202)', [(await cas(ESSAI, EN, '/api/compte/mot-de-passe-oublie', { email: 'bob@exemple.fr' })).statut, (await cas(ESSAI, EN, '/api/compte/renvoyer-verification', { email: 'bob@exemple.fr' })).statut], [202, 202]);
+        const prod = await cas({ V2_CIBLE: 'prod', V2_SECRET_MESURE: SEC }, EN, '/api/compte/mot-de-passe-oublie', { email: 'bob@exemple.fr' });
+        H.v('mesure : oubli en prod avec le bon en-tête => 422', prod.statut, 422);
+        H.v('mesure : l\'inscription n\'est PAS dispensée (essai, bon en-tête, sans jeton) => 422', st(await cas(ESSAI, EN, '/api/compte/inscription', { email: 'nouveau@exemple.fr' })), [422, 'defi-anti-robot']);
+        H.v('configuration : secretMesure null hors essai / trop court, le secret sur l\'essai', [lireConfig({ MONGODB_BASE: 'test_scratch', V2_CIBLE: 'prod', V2_SECRET_MESURE: SEC }).secretMesure, lireConfig({ MONGODB_BASE: 'test_scratch', ...ESSAI }).secretMesure], [null, SEC]);
+    }
+
+    // Les outils de mesure portent l'en-tête (secret lu par NOM, jamais imprimé) quand le secret existe, et rien sinon
+    {
+        const CE = require('../mesures/connexion-essai'); const PT = require('../admin/abonnements/parcours-test');
+        const SEC = 'secret-de-mesure-' + 'x'.repeat(20);
+        const ids0 = CE.lireIdentifiants({ V2_ESSAI_BANC_IDENTIFIANT: 'a@b.fr', V2_ESSAI_BANC_MOT_DE_PASSE: 'mdp' }, null);
+        const ids1 = CE.lireIdentifiants({ V2_ESSAI_BANC_IDENTIFIANT: 'a@b.fr', V2_ESSAI_BANC_MOT_DE_PASSE: 'mdp', V2_SECRET_MESURE: SEC }, null);
+        H.v('outil : sans V2_SECRET_MESURE les identifiants gardent leur forme', ids0, { identifiant: 'a@b.fr', motDePasse: 'mdp' });
+        H.v('outil : avec V2_SECRET_MESURE, le secret accompagne les identifiants', ids1.secretMesure, SEC);
+        const vusEntetes = []; const appeler = async (chemin, init) => { vusEntetes.push(init.headers); return { statut: 200, cookie: 'rm_session=abc' }; };
+        await CE.ouvrirSession({ appeler, ids: ids1 }); await CE.ouvrirSession({ appeler, ids: ids0 });
+        H.v('outil connexion-essai : l\'en-tête X-Rat-Market-Mesure n\'est posé qu\'avec le secret', [vusEntetes[0]['X-Rat-Market-Mesure'], vusEntetes[1]['X-Rat-Market-Mesure']], [SEC, undefined]);
+        const enteteParcours = []; const fetchF = async (u, o) => { enteteParcours.push(o.headers); return { status: 200, headers: { get: () => 'rm_session=zz', getSetCookie: () => ['rm_session=zz'] } }; };
+        await PT.connecter('https://x', { role: 'r', email: 'a@b.fr', motDePasse: 'm' }, fetchF, SEC); await PT.connecter('https://x', { role: 'r', email: 'a@b.fr', motDePasse: 'm' }, fetchF);
+        H.v('outil parcours-test : l\'en-tête n\'est posé qu\'avec le secret', [enteteParcours[0]['x-rat-market-mesure'], enteteParcours[1]['x-rat-market-mesure']], [SEC, undefined]);
+    }
+
     // hostname du jeton : liste fermée (rat-market.fr, www.rat-market.fr)
     const hote = h => async () => ({ ok: true, json: async () => ({ success: true, ...(h === undefined ? {} : { hostname: h }) }) });
     const juge = async h => verifierTurnstile('tok', '1.2.3.4', { fetch: hote(h), secret: 'S' });

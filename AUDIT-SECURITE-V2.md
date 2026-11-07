@@ -188,7 +188,8 @@ Source de la liste : `v2/config.js` (les 30 variables sont DÉRIVÉES du fichier
 | `V2_MARCHES` | 16 marchés Vinted | défaut | texte libre : un marché mal écrit = aucun marché réel (422 pour tous) | oui (tout refuse) |
 | `V2_VERSION_MIN_EXTENSION` | `2.0.0` | `2.0.0` | illisible = 400 pour tous | oui |
 | `V2_ORIGINE_EXTENSION_DEV` | aucune | ignorée | honorée SEULEMENT en mode banc, ignorée en production même posée | oui |
-| `TURNSTILE_SECRET` | aucun | le pilote réel lève `turnstile-non-configure` : l'inscription répond 503, jamais « accepté » | — | oui |
+| `TURNSTILE_SECRET` | aucun | le pilote réel lève `turnstile-non-configure` : l'inscription, la connexion, l'oubli et le renvoi répondent 503, jamais « accepté » (L1) | — | oui |
+| `V2_SECRET_MESURE` (+ `V2_CIBLE=essai`) | aucun | exemption inerte | L1 : dispense du seul défi Turnstile des outils de mesure (en-tête `X-Rat-Market-Mesure`, temps constant) ; active seulement si `V2_CIBLE` vaut exactement `essai` ET le secret fait ≥ 32 caractères ; jamais en prod | oui (à poser dans Render sur l'essai) |
 | `BREVO_API_KEY` | aucune | pilote MÉMOIRE : aucun courrier ne part, borné à 1 000 entrées (D5) ; avec la clé et sans pilote écrit : 503 | — | oui (mais voir l'encadré BLOQUANTS) |
 | `V2_BANC_SEL`, `V2_BANC_BUCKET` | aucun | banc réel désactivé pour le processus, aucune écriture, dit une fois (`banc/routes.js`, banc `test-banc-ecriture`) | — | oui |
 | `V2_BANC_LIEN_MOIS` | `12` | le lien entre une contribution du banc et un compte dure 12 mois ; `retention.analysesMois` s'y aligne (une seule source) | entier ≥ 3 et ≤ 12 ; `13`, `2`, `0`, `abc`, `1.5` = configuration invalide (jamais plus de 12, jamais plus que la durée de l'image ; au moins 3 : la cohorte bascule (lien − 2) mois après le début de son mois) | oui (BANC-12, `test-banc-lien-config.js`) |

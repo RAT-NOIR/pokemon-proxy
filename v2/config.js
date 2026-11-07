@@ -332,6 +332,8 @@ function lireConfig(env = process.env) {
         // STRIPE-V2 : les abonnements Pro et Fondateurs. ÉTEINTS par défaut (V2_ABONNEMENTS=1 les allume) ; ne lève JAMAIS (voir abonnements/config.js).
         abonnements: require('./abonnements/config').lireAbonnements(env),
         turnstile,
+        // L1 : exemption ÉTROITE du défi pour les outils de mesure. Écrite par ce qu'elle autorise : V2_CIBLE exactement « essai » ET V2_SECRET_MESURE d'au moins 32 caractères ; sinon null (inerte).
+        secretMesure: (env.V2_CIBLE === 'essai' && typeof env.V2_SECRET_MESURE === 'string' && env.V2_SECRET_MESURE.length >= 32) ? env.V2_SECRET_MESURE : null,
         cookieSecure
     });
 }

@@ -21,9 +21,17 @@ const courrierDe = () => { try { return registre.obtenir('courrier'); } catch { 
 /** L1 : le défi Turnstile en garde de route (connexion, mot-de-passe-oublie, renvoyer-verification), avec la MÊME fonction `defi` et le MÊME refus que l'inscription
  *  (422 ENTREE `defi-anti-robot`, 503 si le pilote manque ou tombe). Il se place APRÈS l'origine et la limite par IP, AVANT tout budget par adresse et toute lecture de compte :
  *  un robot sans jeton ne consomme ni le budget d'un titulaire ni un hachage. `avecCourrier` : l'oubli et le renvoi n'ont pas de sens sans courrier (503 d'abord, comme l'inscription). */
+/** Exemption des outils de mesure : cfg.secretMesure (essai + secret >= 32, sinon null) égal à l'en-tête X-Rat-Market-Mesure, comparaison à temps constant (SHA-256 des deux, même longueur). */
+function mesureAutorisee(cfg, req) {
+    const secret = cfg.secretMesure, recu = req.get('x-rat-market-mesure');
+    if (typeof secret !== 'string' || secret.length < 32 || typeof recu !== 'string') return false;
+    const crypto = require('crypto'), h = x => crypto.createHash('sha256').update(x).digest();
+    return crypto.timingSafeEqual(h(secret), h(recu));
+}
 const exigerDefi = (cfg, { avecCourrier = false } = {}) => async (req, res, next) => {
     try {
         if (avecCourrier && !courrierDe()) return indispo(res);
+        if (mesureAutorisee(cfg, req)) return next();   // dispense du DÉFI seulement : origine, limites et mot de passe restent
         const d = await defi(cfg, objet(req.body) ? req.body : {}, req.ip);
         if (d === 'indispo') return indispo(res);
         if (d === 'refuse') return repondreErreur(res, 'ENTREE', 'Vérification anti-robot échouée', { detail: 'defi-anti-robot' }, 422);
