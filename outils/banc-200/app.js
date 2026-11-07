@@ -76,9 +76,26 @@
             });
             $('zoneCandidats').hidden = false;
         },
+        // les 5 candidats, tels que servis (ordre aléatoire du serveur) : même taille, mêmes libellés pour chacun, aucun prix, aucune mise en avant
+        montrerCinq: function (liste) {
+            var z = $('cinq'); z.textContent = '';
+            $('zoneCinq').hidden = !liste; $('zoneSaisie').hidden = !!liste;
+            if (!liste) return;
+            liste.forEach(function (c) {
+                var b = document.createElement('button'); b.type = 'button'; b.className = 'act';
+                var v = document.createElement('div'); v.className = 'vis';
+                if (c.visuel) { var im = document.createElement('img'); im.alt = ''; im.src = c.visuel; v.appendChild(im); } else v.textContent = 'pas de visuel';
+                var t = document.createElement('div'); t.textContent = c.nom + ' — ' + c.set.nom + ' n° ' + (c.numero || '?') + (c.version ? ' (' + c.version + ')' : '');
+                b.appendChild(v); b.appendChild(t);
+                b.addEventListener('click', function () { ctrl.choisirCinq(c); });
+                z.appendChild(b);
+            });
+        },
+        autre: function () { $('zoneSaisie').hidden = false; $('entree').focus(); },
         dire: function (texte, classe) { var m = $('message'); m.textContent = texte || ''; m.className = classe || 'doux'; }
     };
-    ctrl = RMControleur.creer({ api: api, ui: ui });
+    ctrl = RMControleur.creer({ api: api, ui: ui, modeCinq: true });
+    $('autre').addEventListener('click', function () { ui.autre(); });
 
     $('entree').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); ctrl.entrer($('entree').value); } });
     $('confirmer').addEventListener('click', function () { ctrl.confirmer(); });
@@ -96,6 +113,7 @@
         if (!e.altKey) return;
         var k = e.key.toLowerCase();
         if (k >= '1' && k <= '8' && scanCourant && Number(k) <= scanCourant.photos) { e.preventDefault(); photoCourante = Number(k) - 1; afficherPhoto(); }
+        else if (k === 'a') { e.preventDefault(); ui.autre(); }
         else if (k === 'c') { e.preventDefault(); ctrl.voirCandidats(); }
         else if (k === 'o') { e.preventDefault(); ctrl.photoSuffisante(true); }
         else if (k === 'x') { e.preventDefault(); ctrl.photoSuffisante(false); }

@@ -28,6 +28,10 @@
   #photoSuffisante { margin: 10px 0; }
   button.act:hover { border-color: var(--accent); } button.principal { background: var(--ok); color: #06210f; border-color: var(--ok); font-weight: 600; }
   #candidats button { display: block; width: 100%; text-align: left; margin: 4px 0; }
+  #cinq { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 6px; }
+  #cinq button { display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 230px; padding: 6px; text-align: center; }
+  #cinq .vis { width: 130px; height: 182px; background: #000; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--doux); font-size: 12px; }
+  #cinq .vis img { width: 130px; height: 182px; object-fit: contain; }
   #message { min-height: 1.4em; } .erreur { color: var(--alerte); } .bon { color: var(--ok); }
   kbd { background: #2a2f38; border-radius: 4px; padding: 1px 5px; font-size: 12px; }
   [hidden] { display: none !important; }
@@ -70,7 +74,14 @@
         <button class="act" id="photoOui" type="button" aria-pressed="false"><kbd>Alt+O</kbd> Oui</button>
         <button class="act" id="photoNon" type="button" aria-pressed="false"><kbd>Alt+X</kbd> Non</button>
       </div>
+      <div id="zoneCinq" hidden>
+        <p><strong>Laquelle est la carte ?</strong> <span class="doux">(ordre aléatoire ; un clic enregistre la vérité)</span></p>
+        <div id="cinq"></div>
+        <button class="act" id="autre" type="button"><kbd>Alt+A</kbd> Autre…</button>
+      </div>
+      <div id="zoneSaisie">
       <input type="text" id="entree" autocomplete="off" spellcheck="false" placeholder="https://www.cardmarket.com/…  ou  123456">
+      </div>
       <div id="attente" hidden>
         <p><span class="doux">Vérité à confirmer :</span> <strong id="libelle"></strong></p>
         <button class="act principal" id="confirmer">Confirmer (Entrée)</button>

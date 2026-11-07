@@ -127,7 +127,7 @@ async function exporterSeau({ seauId, usage, dossier, colFn, stockage, base, san
 }
 // la vérité EFFECTIVE : la valeur du dernier erratum s'il y en a (la vérité d'origine, intacte en base, est rendue sous `origine`), sinon la saisie
 const veriteDe = (v, errata = []) => {
-    const base = { idProduct: v.idProduct ?? null, aucune: v.aucune ?? null, via: v.via, candidatsVus: v.candidatsVus === true, photoSuffisante: typeof v.photoSuffisante === 'boolean' ? v.photoSuffisante : null, aveugle: v.candidatsVus !== true, rev: v.rev, saisieLe: v.saisieLe, corrections: Array.isArray(v.historique) ? v.historique.length : 0 };
+    const base = { idProduct: v.idProduct ?? null, aucune: v.aucune ?? null, via: v.via, candidatsVus: v.candidatsVus === true, photoSuffisante: typeof v.photoSuffisante === 'boolean' ? v.photoSuffisante : null, aveugle: v.candidatsVus !== true, mode: v.mode ?? null, ordreAffiche: Array.isArray(v.ordreAffiche) ? v.ordreAffiche : null, rev: v.rev, saisieLe: v.saisieLe, corrections: Array.isArray(v.historique) ? v.historique.length : 0 };
     if (!errata.length) return { ...base, errata: [] };
     const dernier = errata[errata.length - 1];
     return { ...base, idProduct: dernier.nouveau.idProduct ?? null, aucune: dernier.nouveau.aucune ?? null, origine: { idProduct: v.idProduct ?? null, aucune: v.aucune ?? null },

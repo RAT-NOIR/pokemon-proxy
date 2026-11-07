@@ -52,9 +52,25 @@
             ui.montrerCandidats(null); attendre(null);
             etat.photoSuffisante = null; montrerPhoto();                 // une réponse ne passe jamais d'une carte à la suivante
             if (ui.montrerAvis) ui.montrerAvis(etat.scan && etat.autres > 0 ? phraseAutres(etat.autres) : '');
-            if (!etat.scan) { ui.montrerVide(phraseVide()); return; }
+            etat.cinqVu = false; if (ui.montrerCinq) ui.montrerCinq(null);
+            if (!etat.scan) { ui.montrerVide(phraseVide()); return Promise.resolve(); }
             etat.carte = Math.min(etat.scan.etiquetees, Math.max(0, etat.scan.cartes - 1));
             ui.montrerScan(etat.scan, etat.carte);
+            return o.modeCinq ? voirCinq() : Promise.resolve();
+        }
+        // JUGE RAPIDE : les 5 meilleurs du modèle, mélangés PAR LE SERVEUR ; la page les montre tels que servis (aucun tri, aucun prix, aucun rang) et ne renvoie jamais l'ordre : le serveur le connaît
+        function voirCinq() {
+            var scanId = etat.scan.scanId, carte = etat.carte;
+            return api('POST', '/api/banc/seau/candidats-5', { scanId: scanId, carte: carte }).then(function (r) {
+                if (!etat.scan || etat.scan.scanId !== scanId) return;
+                if (r.statut !== 200 || !r.json || !Array.isArray(r.json.candidats)) { ui.dire('Les 5 candidats sont indisponibles (' + detailDe(r) + ') : saisissez l\'adresse ou l\'idProduct.', 'erreur'); return; }
+                etat.cinqVu = true; if (ui.montrerCinq) ui.montrerCinq(r.json.candidats);
+            });
+        }
+        function choisirCinq(c) {
+            if (!etat.scan || !etat.cinqVu) return Promise.resolve();
+            attendre({ libelle: c.nom + ' — ' + c.set.nom + ' — n° ' + (c.numero || '?') + ' (' + c.idProduct + ')', corps: { idProduct: c.idProduct }, via: 'candidat5' });
+            return confirmer();                     // un clic = la vérité (la réponse « photo suffisante » reste obligatoire : sans elle, la confirmation attend)
         }
         function charger() {
             return api('GET', '/api/banc/seau/courant').then(function (r) {
@@ -80,7 +96,7 @@
                 etat.scans.forEach(function (s) { fait += Math.min(s.etiquetees, s.cartes); total += s.cartes; });
                 ui.montrerProgres({ fait: fait, total: total, seau: etat.seau });
                 etat.scan = etat.scans.filter(function (s) { return s.scanId === r.json.prochain; })[0] || null;
-                afficher();
+                return afficher();
             });
         }
         function demarrer() {
@@ -104,6 +120,7 @@
             etat.occupe = true;
             var corps = { scanId: etat.scan.scanId, carte: etat.carte, via: etat.attente.via, photoSuffisante: etat.photoSuffisante };
             Object.keys(etat.attente.corps).forEach(function (k) { corps[k] = etat.attente.corps[k]; });
+            if (o.modeCinq) corps.mode = etat.cinqVu ? 'candidats-5' : 'saisie';          // le mode de la page, jugé par le serveur (candidats-5 exige que les 5 aient été servis)
             return api('POST', '/api/banc/seau/verite', corps).then(function (r) {
                 etat.occupe = false;
                 if (r.statut !== 200) { ui.dire('Refusé : ' + detailDe(r), 'erreur'); attendre(null); return; }
@@ -169,7 +186,7 @@
             });
         }
         function arreter() { return api('POST', '/_arreter', {}).then(function () { if (ui.montrerArret) ui.montrerArret(); }, function () { if (ui.montrerArret) ui.montrerArret(); }); }
-        return { lier: lier, arreter: arreter, demarrer: demarrer, charger: charger, entrer: entrer, confirmer: confirmer, annuler: function () { attendre(null); }, voirCandidats: voirCandidats, choisirCandidat: choisirCandidat, aucune: aucune, photoSuffisante: photoSuffisante, poserJeton: poserJeton, etat: function () { return etat; } };
+        return { lier: lier, arreter: arreter, demarrer: demarrer, charger: charger, entrer: entrer, confirmer: confirmer, annuler: function () { attendre(null); }, voirCandidats: voirCandidats, choisirCinq: choisirCinq, choisirCandidat: choisirCandidat, aucune: aucune, photoSuffisante: photoSuffisante, poserJeton: poserJeton, etat: function () { return etat; } };
     }
     return { creer: creer, trierParPrix: trierParPrix };
 });

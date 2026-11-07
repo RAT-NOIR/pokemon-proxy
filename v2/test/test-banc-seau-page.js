@@ -74,7 +74,8 @@ const essayer = async (nom, f) => { try { await f(); } catch (e) { H.v(`${nom} (
             const x = await brut(m, c, { csrf: S.csrf, corps: m === 'GET' ? undefined : '{}' });
             H.v(`3. ${m} ${c} : non relayé (404), l'API n'est pas touchée`, [x.statut, recus.length === avant], [404, true]);
         }
-        H.v('3. la liste fermée est exactement celle qui est écrite', RELAIS.length, 7);
+        H.v('3. la liste fermée est exactement celle qui est écrite', RELAIS.length, 8);
+        H.v('3. JUGE RAPIDE : la route des 5 candidats est relayée (POST)', RELAIS.some(([m, c]) => m === 'POST' && c === '/api/banc/seau/candidats-5'), true);
         const avantQ = recus.length;
         H.v('3. une chaîne de requête hors des caractères d\'identifiant : 400, rien relayé', [(await brut('GET', '/api/banc/seau/photo?scanId=../../x%00&photo=0')).statut, recus.length === avantQ], [400, true]);
         H.v('3. un corps qui n\'est pas du JSON : 400, rien relayé', [(await brut('POST', '/api/banc/seau/verite', { csrf: S.csrf, corps: '{pas du json' })).statut, recus.length === avantQ], [400, true]);

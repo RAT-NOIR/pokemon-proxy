@@ -6,7 +6,8 @@
 //   POST /photo?scanId=&photo=0..7&seau=[&annonce=]  (octets bruts JPEG/PNG/WebP)  → { etat, rang, seauId }
 //   POST /mesures?scanId=&seau=  (JSON, Content-Type application/octet-stream, 512 Kio au plus)  → { etat }
 //   GET  /a-etiqueter[?seau=]  → { scans:[{scanId,rang,photos,cartes,etiquetees}], prochain }    GET /photo?scanId=&photo=  → les octets d'origine
-//   POST /candidats { scanId, carte? }  → { candidats }  (à la demande ; la vue est enregistrée)     POST /verite { scanId, carte?, idProduct | aucune, via }  → { rev, candidatsVus }
+//   POST /candidats { scanId, carte? }  → { candidats }  (à la demande ; la vue est enregistrée)     POST /verite { scanId, carte?, idProduct | aucune, via, photoSuffisante?, mode? }  → { rev, candidatsVus }
+//   POST /candidats-5 { scanId, carte? }  → { mode, candidats }  (JUGE RAPIDE : les 5 meilleurs du modèle, ordre ALÉATOIRE, ni rang ni score ni prix ; via 'candidat5' + mode 'candidats-5' sur /verite, le clic doit tomber dans ces 5)
 const { repondreErreur } = require('../erreurs');
 const { resoudrePorteur, exigerInstallation } = require('../porteur');
 const { exigerAdministrateur } = require('./etiquette');
@@ -73,10 +74,16 @@ function monter(router, cfg, seaux) {
         if (!cleStr(b, ['scanId', 'carte']) || typeof b.scanId !== 'string' || !FORME_ID.test(b.scanId)) return refuse(res, 'corps');
         try { return res.status(200).json({ success: true, ...await seaux.candidats({ scanId: b.scanId, carte: b.carte === undefined ? 0 : b.carte, porteur: porteurDe(req) }) }); } catch (e) { return repondre(res, e, 'candidats'); }
     });
+    // JUGE RAPIDE : les 5 meilleurs candidats du modèle, en ORDRE ALÉATOIRE, sans rang ni score ni prix (la vue servie est enregistrée)
+    router.post('/api/banc/seau/candidats-5', ...base, async (req, res) => {
+        const b = req.body;
+        if (!cleStr(b, ['scanId', 'carte']) || typeof b.scanId !== 'string' || !FORME_ID.test(b.scanId)) return refuse(res, 'corps');
+        try { return res.status(200).json({ success: true, ...await seaux.candidats5({ scanId: b.scanId, carte: b.carte === undefined ? 0 : b.carte, porteur: porteurDe(req) }) }); } catch (e) { return repondre(res, e, 'candidats-5'); }
+    });
     router.post('/api/banc/seau/verite', ...base, async (req, res) => {
         const b = req.body;
-        if (!cleStr(b, ['scanId', 'carte', 'idProduct', 'aucune', 'via', 'photoSuffisante']) || typeof b.scanId !== 'string' || !FORME_ID.test(b.scanId)) return refuse(res, 'corps');
-        try { return res.status(200).json({ success: true, ...await seaux.saisirVerite({ scanId: b.scanId, carte: b.carte === undefined ? 0 : b.carte, idProduct: b.idProduct, aucune: b.aucune, via: b.via, photoSuffisante: b.photoSuffisante, porteur: porteurDe(req) }) }); } catch (e) { return repondre(res, e, 'verite'); }
+        if (!cleStr(b, ['scanId', 'carte', 'idProduct', 'aucune', 'via', 'photoSuffisante', 'mode']) || typeof b.scanId !== 'string' || !FORME_ID.test(b.scanId)) return refuse(res, 'corps');
+        try { return res.status(200).json({ success: true, ...await seaux.saisirVerite({ scanId: b.scanId, carte: b.carte === undefined ? 0 : b.carte, idProduct: b.idProduct, aucune: b.aucune, via: b.via, photoSuffisante: b.photoSuffisante, mode: b.mode, porteur: porteurDe(req) }) }); } catch (e) { return repondre(res, e, 'verite'); }
     });
 
     // L'ERRATUM : la seule correction d'une vérité d'un juge SCELLÉ ; ajouté à la chaîne, jamais une réécriture (seau.js).

@@ -16,7 +16,7 @@ const path = require('path');
 const ESSAI = 'https://rat-market-api-essai.onrender.com';
 const RELAIS = Object.freeze([
     ['GET', '/api/banc/seau/courant'], ['GET', '/api/banc/seau/a-etiqueter'], ['GET', '/api/banc/seau/photo'], ['GET', '/api/banc/seau/verifier'],
-    ['POST', '/api/banc/seau/candidats'], ['POST', '/api/banc/seau/verite'], ['POST', '/api/banc/resoudre-cardmarket']
+    ['POST', '/api/banc/seau/candidats'], ['POST', '/api/banc/seau/candidats-5'], ['POST', '/api/banc/seau/verite'], ['POST', '/api/banc/resoudre-cardmarket']
 ]);
 const REQUETE_OK = /^[A-Za-z0-9=&_-]{0,200}$/;          // la chaîne de requête relayée : des identifiants, rien d'autre
 const CORPS_MAX = 8 * 1024, REPONSE_MAX = 8 * 1024 * 1024, DELAI_MS = 20000;

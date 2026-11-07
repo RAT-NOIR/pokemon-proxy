@@ -118,6 +118,46 @@ const nCandidats = appels => appels.filter(a => a.chemin === '/api/banc/seau/can
         H.v('6. une valeur qui n\'est ni oui ni non est ignorée', ctrl.etat().photoSuffisante, true);
     });
 
+    // JUGE RAPIDE : le mode « 5 candidats mélangés + autre » (opt-in : le comportement classique ci-dessus ne bouge pas)
+    await essayer('mode cinq', async () => {
+        const cinq = [3, 1, 5, 2, 4].map(id => ({ idProduct: id, nom: 'N' + id, set: { nom: 'S' }, numero: String(id), visuel: null, version: null }));
+        const appels = [], vus = [];
+        const scans = [{ scanId: 'a'.repeat(24), rang: 1, photos: 1, cartes: 1, etiquetees: 0 }];
+        const api = async (m, chemin, corps) => {
+            appels.push({ chemin, corps });
+            if (chemin === '/_etat') return { statut: 200, json: { jeton: true } };
+            if (chemin === '/api/banc/seau/courant') return { statut: 200, json: { seau: { id: '0123456789abcdef', nom: 'j', type: 'juge', cible: 1, n: 1 } } };
+            if (chemin.startsWith('/api/banc/seau/a-etiqueter')) { const p = scans.find(s => s.etiquetees < s.cartes); return { statut: 200, json: { scans: scans.map(s => ({ ...s })), prochain: p ? p.scanId : null } }; }
+            if (chemin === '/api/banc/seau/candidats-5') return { statut: 200, json: { mode: 'candidats-5', candidats: cinq } };
+            if (chemin === '/api/banc/seau/verite') { scans[0].etiquetees++; return { statut: 200, json: { rev: 1 } }; }
+            if (chemin === '/api/banc/resoudre-cardmarket') return { statut: 200, json: { idProduct: 9, nom: 'X', set: { nom: 'S' }, numero: '9' } };
+            return { statut: 404, json: null };
+        };
+        const ui = { montrerPhotoSuffisante() {}, montrerScan() {}, montrerAttente() {}, montrerCandidats() {}, dire() {}, montrerVide() {}, montrerSession() {}, montrerProgres() {}, montrerCinq: l => vus.push(l && l.map(c => c.idProduct)) };
+        const ctrl = creer({ api, ui, modeCinq: true });
+        await ctrl.demarrer();
+        H.v('7. au scan : les 5 sont demandés tout seuls et montrés TELS QUE SERVIS (aucun retri, aucun prix)', [appels.filter(a => a.chemin === '/api/banc/seau/candidats-5').length, vus[vus.length - 1]], [1, [3, 1, 5, 2, 4]]);
+        H.v('7. l\'appel porte le scan et la carte', appels.find(a => a.chemin === '/api/banc/seau/candidats-5').corps, { scanId: 'a'.repeat(24), carte: 0 });
+        await ctrl.choisirCinq(cinq[2]);
+        H.v('7. un clic SANS réponse « photo suffisante » : rien d\'écrit', appels.some(a => a.chemin === '/api/banc/seau/verite'), false);
+        ctrl.photoSuffisante(true);
+        await ctrl.confirmer();
+        H.v('7. 🔑 après la réponse : vérité écrite, via candidat5, mode candidats-5, aucun ordre envoyé par le client', appels.find(a => a.chemin === '/api/banc/seau/verite').corps, { scanId: 'a'.repeat(24), carte: 0, via: 'candidat5', photoSuffisante: true, idProduct: 5, mode: 'candidats-5' });
+        scans[0].etiquetees = 0; await ctrl.charger();
+        ctrl.photoSuffisante(false);
+        await ctrl.entrer('https://www.cardmarket.com/fr/Pokemon/Products/Singles/S/X');
+        await ctrl.entrer('');
+        const v2 = appels.filter(a => a.chemin === '/api/banc/seau/verite')[1];
+        H.v('7. « Autre » (saisie actuelle) : via url, mode candidats-5 (les 5 ont été montrés)', [v2.corps.via, v2.corps.mode, v2.corps.idProduct], ['url', 'candidats-5', 9]);
+        // les 5 indisponibles : la saisie reste possible, mode saisie
+        const appels2 = [];
+        const api2 = async (m, chemin, corps) => { appels2.push({ chemin, corps }); if (chemin === '/api/banc/seau/candidats-5') return { statut: 503, json: null }; return api(m, chemin, corps); };
+        const ctrl2 = creer({ api: api2, ui, modeCinq: true });
+        scans[0].etiquetees = 0; await ctrl2.demarrer(); ctrl2.photoSuffisante(true);
+        await ctrl2.entrer('123'); await ctrl2.entrer('');
+        H.v('7. les 5 indisponibles : la saisie marche, mode « saisie » déclaré', appels2.find(a => a.chemin === '/api/banc/seau/verite').corps.mode, 'saisie');
+    });
+
     H.bilan();
     process.exit(process.exitCode || 0);
 })().catch(e => { console.error('❌', e); process.exit(1); });

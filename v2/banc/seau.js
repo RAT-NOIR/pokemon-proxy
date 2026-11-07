@@ -19,7 +19,12 @@ const TYPES = Object.freeze(['juge', 'entrainement']);
 const CIBLE_JUGE = 200, CIBLE_MAX = 500, NOTE_MAX = 200, PHOTOS_MAX = 8, MESURES_OCTETS_MAX = 512 * 1024;
 const SCAN_FRAIS_MS = 15 * 60e3;
 const AUCUNE = Object.freeze(['pas-une-carte', 'hors-catalogue']);
-const VIA = Object.freeze(['url', 'idProduct', 'candidat', 'manuel']);       // `manuel` : « pas une carte » / « hors catalogue » (aucun idProduct n'a été désigné)
+const VIA = Object.freeze(['url', 'idProduct', 'candidat', 'candidat5', 'manuel']);       // `manuel` : « pas une carte » / « hors catalogue » (aucun idProduct n'a été désigné) ; `candidat5` : un clic sur l'un des 5 candidats MÉLANGÉS
+// JUGE RAPIDE : le mode de la page, enregistré par le serveur sur CHAQUE vérité ; `candidats-5` n'existe que si les 5 candidats ont été servis pour ce scan (sinon refus)
+const MODES = Object.freeze(['candidats-5', 'saisie']);
+const NB_CINQ = 5;
+/** Fisher-Yates avec crypto.randomInt : aucune place ne ressort plus qu'une autre. Injectable (`melanger`) pour que les bancs fixent une graine. */
+const melangerAlea = liste => { const a = liste.slice(); for (let i = a.length - 1; i > 0; i--) { const j = crypto.randomInt(0, i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const GENESE = '0'.repeat(64);
 const EXT = Object.freeze({ 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' });
 const MOTIF_MIN = 5, MOTIF_MAX = 200;
@@ -132,7 +137,7 @@ async function verifierChaineSeau(colFn, seauId, { ancre = null, stockage = null
     return { ok: problemes.length === 0, lignes: lignes.length, tete, errata: errata.length, ancre: etatAncre, objets, problemes };
 }
 
-function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = process.env, horloge = () => new Date(), catalogue = null, ancresDir = require('./ancre').DOSSIER } = {}) {
+function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = process.env, horloge = () => new Date(), catalogue = null, ancresDir = require('./ancre').DOSSIER, melanger = melangerAlea } = {}) {
     const col = n => colFn(COLLECTIONS[n]);
     const analyses = () => colFn('analyses');
     let indexes = null, stockagePret = null;
@@ -400,11 +405,33 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
         return { candidats: liste };
     }
 
-    /** La vérité d'une carte d'un scan rangé. `candidatsVus` est CALCULÉ ici (une vue enregistrée pour ce scan et cette carte) : le client ne le déclare jamais. */
-    async function saisirVerite({ scanId, carte = 0, idProduct, aucune, via, photoSuffisante, porteur }) {
+    /**
+     * JUGE RAPIDE — les 5 MEILLEURS candidats du modèle pour ce scan (l'ordre du modèle : la carte retenue, puis les choix de sa question, puis les produits de l'analyse), servis dans un ORDRE ALÉATOIRE.
+     * Aucun indice : ni rang, ni score, ni prix, ni statut ; mêmes champs pour chacun. L'ordre SERVI est enregistré (vue de mode `candidats-5`) : c'est lui que la vérité reprend, et c'est la liste fermée où le clic doit tomber.
+     */
+    async function candidats5({ scanId, carte = 0, porteur }) {
+        const ligne = await ligneDe(scanId, porteur);
+        if (!Number.isSafeInteger(carte) || carte < 0) throw erreur('ENTREE', 'carte');
+        const { an, c } = await carteDe(scanId, carte);
+        const pool = [...new Set([c.idProduct, ...((c.question && Array.isArray(c.question.choix)) ? c.question.choix.map(x => x && x.idProduct) : []), ...((Array.isArray(an.cartes) && an.cartes.length === 1 && Array.isArray(an.produits)) ? an.produits.map(p => p && p.idProduct) : [])].filter(idOk))].slice(0, 20);
+        let table; try { table = await catalogueDe().lire(pool); } catch (e) { console.error(`❌ [v2 banc-seau] catalogue (${(e && (e.code || e.name)) || 'erreur'})`); throw erreur('INDISPONIBLE', 'catalogue', 503); }
+        const cinq = pool.filter(id => table.has(id)).slice(0, NB_CINQ);
+        let ordre = melanger(cinq.slice());
+        if (!Array.isArray(ordre) || ordre.length !== cinq.length || ordre.slice().sort((a, b) => a - b).join() !== cinq.slice().sort((a, b) => a - b).join()) ordre = melangerAlea(cinq);       // un mélangeur qui perdrait ou inventerait un candidat est ignoré
+        await col('vues').insertOne({ scanId, carte, seauId: ligne.seauId, le: horloge(), mode: 'candidats-5', ids: ordre });
+        return { mode: 'candidats-5', candidats: ordre.map(id => { const p = table.get(id); return { idProduct: p.idProduct, nom: p.nomCardmarket, set: { slug: p.set.slug, nom: p.set.nom }, numero: p.numero ?? null, visuel: p.visuel ? p.visuel.url : null, version: p.version ?? null }; }) };
+    }
+
+    /** La vérité d'une carte d'un scan rangé. `candidatsVus` est CALCULÉ ici (une vue enregistrée pour ce scan et cette carte) : le client ne le déclare jamais. `mode` est déclaré par la page, jugé ici ; l'ordre affiché vient du serveur. */
+    async function saisirVerite({ scanId, carte = 0, idProduct, aucune, via, photoSuffisante, mode, porteur }) {
         // « la photo suffit-elle à un expert pour trancher l'impression exacte ? » : vrai/faux de l'éditeur, enregistré avec la vérité ; absent = on ne touche pas à la valeur déjà posée
         if (photoSuffisante !== undefined && typeof photoSuffisante !== 'boolean') throw erreur('ENTREE', 'photo-suffisante');
-        const p = { ...await preparerVerite({ scanId, carte, idProduct, aucune, via, porteur }), photoSuffisante };
+        if (mode !== undefined && !MODES.includes(mode)) throw erreur('ENTREE', 'mode');
+        const modeVerite = mode === undefined ? 'saisie' : mode;
+        if (via === 'candidat5' && modeVerite !== 'candidats-5') throw erreur('ENTREE', 'mode-via');
+        const prep = await preparerVerite({ scanId, carte, idProduct, aucune, via, porteur });
+        if (modeVerite === 'candidats-5' && !prep.derniereCinq) throw erreur('CONFLIT', 'mode-sans-vue');
+        const p = { ...prep, photoSuffisante, mode: modeVerite, ordreAffiche: modeVerite === 'candidats-5' ? prep.derniereCinq : null };
         // 🔑 un JUGE scellé (ou en cours de scellement) ne reçoit plus AUCUNE vérité : une erreur humaine s'ajoute en ERRATUM (ajouterErratum), jamais par réécriture
         const seau = await col('seaux').findOne({ _id: p.ligne.seauId });
         if (!seau) throw erreur('CONFLIT', 'seau-illisible');
@@ -425,27 +452,31 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
         if ((idProduct === undefined) === (aucune === undefined)) throw erreur('ENTREE', 'id-product-ou-aucune');
         if (aucune !== undefined && !AUCUNE.includes(aucune)) throw erreur('ENTREE', 'aucune');
         if (idProduct !== undefined && !idOk(idProduct)) throw erreur('ENTREE', 'id-product');
-        if (via === 'candidat' && idProduct === undefined) throw erreur('ENTREE', 'candidat-sans-id');
+        if ((via === 'candidat' || via === 'candidat5') && idProduct === undefined) throw erreur('ENTREE', 'candidat-sans-id');
         await carteDe(scanId, carte);
         const vues = await col('vues').find({ scanId, carte }).toArray();
         if (via === 'candidat' && !vues.some(v => Array.isArray(v.ids) && v.ids.includes(idProduct))) throw erreur('CONFLIT', 'candidat-non-vu');
+        // JUGE RAPIDE : la liste fermée est la DERNIÈRE vue de mode `candidats-5` de ce scan et de cette carte ; un clic hors de cette liste est refusé, avant tout accès au catalogue
+        const cinq = vues.filter(v => v.mode === 'candidats-5' && Array.isArray(v.ids)).sort((a, b) => (b.le - a.le) || (String(b._id) < String(a._id) ? -1 : 1))[0];
+        const derniereCinq = cinq ? cinq.ids.slice() : null;
+        if (via === 'candidat5' && !(derniereCinq && derniereCinq.includes(idProduct))) throw erreur('CONFLIT', 'candidat-hors-liste');
         if (idProduct !== undefined) {
             let table; try { table = await catalogueDe().lire([idProduct]); } catch (e) { console.error(`❌ [v2 banc-seau] catalogue (${(e && (e.code || e.name)) || 'erreur'})`); throw erreur('INDISPONIBLE', 'catalogue', 503); }
             if (!(table instanceof Map) || !table.has(idProduct)) throw erreur('ENTREE', 'id-product-inconnu', 422);
         }
-        return { ligne, scanId, carte, idProduct: idProduct ?? null, aucune: aucune ?? null, via, candidatsVus: vues.length > 0, vuesN: vues.length };
+        return { ligne, scanId, carte, idProduct: idProduct ?? null, aucune: aucune ?? null, via, candidatsVus: vues.length > 0, vuesN: vues.length, derniereCinq };
     }
 
-    async function ecrireVerite({ ligne, scanId, carte, idProduct, aucune, via, candidatsVus, vuesN, photoSuffisante }) {
+    async function ecrireVerite({ ligne, scanId, carte, idProduct, aucune, via, candidatsVus, vuesN, photoSuffisante, mode, ordreAffiche }) {
         const id = `${scanId}:${carte}`, now = horloge();
-        const contenu = { idProduct, aucune, via, candidatsVus, vuesN, saisieLe: now };
+        const contenu = { idProduct, aucune, via, candidatsVus, vuesN, saisieLe: now, mode: mode || 'saisie', ordreAffiche: ordreAffiche || null };
         for (let essai = 0; essai < 3; essai++) {
             const e = await col('verites').findOne({ _id: id });
             if (!e) {
                 try { await col('verites').insertOne({ _id: id, seauId: ligne.seauId, scanId, carte, ...contenu, photoSuffisante: photoSuffisante ?? null, rev: 1, historique: [] }); return { rev: 1, candidatsVus }; }
                 catch (x) { if (x && x.code === 11000) continue; throw x; }
             }
-            const ancien = { rev: e.rev, idProduct: e.idProduct, aucune: e.aucune, via: e.via, candidatsVus: e.candidatsVus, photoSuffisante: e.photoSuffisante ?? null, saisieLe: e.saisieLe };
+            const ancien = { rev: e.rev, idProduct: e.idProduct, aucune: e.aucune, via: e.via, candidatsVus: e.candidatsVus, photoSuffisante: e.photoSuffisante ?? null, mode: e.mode ?? null, ordreAffiche: e.ordreAffiche ?? null, saisieLe: e.saisieLe };
             const r = await col('verites').updateOne({ _id: id, rev: e.rev }, { $set: { ...contenu, photoSuffisante: photoSuffisante ?? e.photoSuffisante ?? null, candidatsVus: candidatsVus || e.candidatsVus === true, rev: e.rev + 1 }, $push: { historique: ancien } });
             if (r && r.matchedCount === 1) return { rev: e.rev + 1, candidatsVus: candidatsVus || e.candidatsVus === true };
         }
@@ -481,7 +512,7 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
         return verifierChaineSeau(colFn, seauId, { ancre: id => require('./ancre').lireAncre(id, ancresDir), ...(relireR2 ? { relireR2: true, stockage: await stock() } : {}) });
     }
 
-    return { preparer, courant, declarer, sceller, enregistrerPhoto, enregistrerMesures, aEtiqueter, lirePhoto, candidats, saisirVerite, ajouterErratum, verifierChaine, cadre };
+    return { preparer, courant, declarer, sceller, enregistrerPhoto, enregistrerMesures, aEtiqueter, lirePhoto, candidats, candidats5, saisirVerite, ajouterErratum, verifierChaine, cadre };
 }
 
 module.exports = { creerSeaux, verifierChaineSeau, empreintePhotos, empreinteVerites, empreinteScellee, cibleParDefaut, INDEX_SEAU, COLLECTIONS, TYPES, AUCUNE, VIA, CIBLE_JUGE, CIBLE_MAX, SCAN_FRAIS_MS, PHOTOS_MAX, MESURES_OCTETS_MAX, FORME_ID, FORME_SEAU, FORME_SHA, erreur };
