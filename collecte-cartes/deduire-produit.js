@@ -438,6 +438,7 @@ async function deduireEtEcrire(sansId, exclus, { numeros, catalogue, decoderCode
     res.nonDeduites = sansId.length - res.deduites;
     res.idsDeduits = w.ecrites.map(d => ({ idProduct: d.idProduct, slug: d.carte.slug, slugSet: d.carte.slugSet }));
     res.ecritures = { inserees: w.inserees, completees: w.completees };
+    res.expansionLueDansLaPage = w.ecrites.some(d => d.expansionLueDansLaPage);
     if (w.erreur) {
         res.erreur = `écriture interrompue au produit ${w.erreur.idProduct} : ${res.deduites} ligne(s) écrite(s), ${w.nonTentees.length} non tentée(s) (voir la console du serveur)`;
         journal.error(`❌ [apprendre-lot] ${res.erreur} — ${w.erreur.message}`);
@@ -551,7 +552,8 @@ async function apprendreLot(cartesBrutes, { numeros, catalogue, decoderCodeSet, 
     }
     // Expansion NEUVE (aucune ligne apprise, aucune carte lue au catalogue) : si TOUTES les vignettes sans image du lot viennent de pages
     // dont l'adresse porte le MÊME idExpansion, c'est lui — pour que la couverture soit rendue au panneau (« exp ? » sinon). Une seule, sinon rien.
-    if (!idExpansions.length && sansId.length) {
+    // Garde (coordinateur, 07/11) : seulement si au moins une vignette a été DÉDUITE ET ÉCRITE par cette voie ; sinon « exp ? » comme avant.
+    if (!idExpansions.length && sansId.length && deduction.expansionLueDansLaPage) {
         const e = expansionParLaPage(sansId.map(avecExpansionDePage));
         if (e != null) idExpansions = [e];
     }

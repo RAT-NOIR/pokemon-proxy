@@ -93,7 +93,10 @@ async function lot(cartes, appris = []) {
 
     // 6. l'expansion est DÉJÀ apprise (une ligne idExpansion 6704) → la page ne prouve rien (règle existante)
     const { r: r6, numeros: n6 } = await lot([vignette('Heracross', URL_6704), vignette('Surskit', URL_6704)], [{ idProduct: 99, idExpansion: 6704, slugSet: null, slug: null, numero: '5', source: 'cardmarket', certitude: 'exacte' }]);
-    verifier('6. expansion déjà apprise → 0 déduite, « la page ne prouve rien »', [r6.deduites, n6.docs.length, Object.keys(r6.raisonsNonDeduites).some(k => /la page ne prouve rien/.test(k))], [0, 1, true]);
+    verifier('6. expansion déjà apprise → 0 déduite, « la page ne prouve rien », et la réponse reste « exp ? » (idExpansion null, pas de couverture)', [r6.deduites, n6.docs.length, Object.keys(r6.raisonsNonDeduites).some(k => /la page ne prouve rien/.test(k)), r6.idExpansion, r6.couverture], [0, 1, true, null, null]);
+    // 3d. rien déduit malgré une page valide (nom inconnu du catalogue) → pas d'idExpansion non plus
+    const { r: r7 } = await lot([vignette('Inconnu', URL_6704)]);
+    verifier('7. page valide mais rien de déduit → idExpansion null (garde : au moins une déduite par la page)', [r7.deduites, r7.idExpansion, r7.couverture], [0, null, null]);
 
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Rat-Market — Apprentissage manuel Cardmarket
 // @namespace    rat-market
-// @version      1.12
+// @version      1.13
 // @description  Apprend chaque page de galerie Singles dès son chargement — une vignette sans image comprise, par son lien et son titre —, te donne la liste ORDONNÉE des seules PAGES UTILES (celles qui portent un produit à apprendre), et tient un JOURNAL par page (📥 pour l'exporter). Lit UNIQUEMENT la page ouverte — ne navigue jamais.
 // @match        https://www.cardmarket.com/*/Pokemon/Products/Singles*
 // @grant        GM_xmlhttpRequest
@@ -161,7 +161,7 @@
   'use strict';
 
   // La version, écrite UNE fois (égale à l'en-tête @version) : l'export, le journal et le panneau la lisent — le panneau ne la disait pas.
-  const VERSION = '1.12';
+  const VERSION = '1.13';
   // ===================== À CONFIGURER =====================
   const URL_API = 'https://pokemon-proxy-ratnoir666.onrender.com';
   const JETON = 'K10-Sr7izvo-CG3bSRfCbhSnw8KTNrbJ';
@@ -793,7 +793,9 @@
     const fCibles = lire('rm_ciblesFaites', {});
     const cibleOuverte = cartesPage.some(x => CIBLE.has(x.idProduct) && !fCibles[x.idProduct]);
     if (!forcer && marqueDeLaPage() && !cibleOuverte) { majPanneau(); vider(); return; }
-    enfiler({ cle: ctx.cle, slugSet: ctx.slugSet, cartes: cartesPage, le: Date.now(), derniere: !ctx.hrefSuivant });
+    // 1.13 (07/11) : chaque carte porte l'adresse de sa page. Cas Delta Reign (expansion 6704, 141 vignettes sans image, 01/11) : le
+    // serveur a refusé les 141 « porté par 0 expansions apprises » ; l'idExpansion de l'adresse la prouve (le serveur borne et relit).
+    enfiler({ cle: ctx.cle, slugSet: ctx.slugSet, cartes: cartesPage.map(c => ({ ...c, urlPage: ctx.cle })), le: Date.now(), derniere: !ctx.hrefSuivant });
     bloque = null;
     vider();
   }
