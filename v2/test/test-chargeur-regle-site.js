@@ -10,7 +10,7 @@ const sha = b => crypto.createHash('sha256').update(b).digest('hex');
     const dossier = C.DOSSIER;
     const emp = JSON.parse(fs.readFileSync(path.join(dossier, 'empreintes.json'), 'utf8'));
     H.v('les dix sources du site sont empreintées', Object.keys(emp.sources).sort(), ['annexes.json', 'annexes.ts', 'cardmarket.ts', 'expressionsSures.ts', 'imageDeLImpression.ts', 'impressionDuSet.ts', 'impressionsDuSet.ts', 'langueDuVisuel.ts', 'visuels-anglais-regardes.json', 'visuels-japonais-sur-sets-intl.json']);
-    H.v('le commit NOMMÉ est écrit dans les empreintes (29d2c0f, forme complète de 40 caractères)', [/^29d2c0f[0-9a-f]{33}$/.test(emp.commit || ''), C.COMMIT], [true, '29d2c0f']);
+    H.v('le commit NOMMÉ est écrit dans les empreintes (6012f72, forme complète de 40 caractères)', [/^6012f72[0-9a-f]{33}$/.test(emp.commit || ''), C.COMMIT], [true, '6012f72']);
     // la copie n'a pas été retouchée à la main : chaque fichier produit porte l'empreinte écrite
     for (const [nom, h] of Object.entries(emp.produits)) H.v(`   ${nom} : empreinte de la copie conforme au fichier`, sha(fs.readFileSync(path.join(dossier, nom))), h);
     H.v('   aucune copie ne cite encore un fichier .ts (imports réécrits en .mjs)', Object.keys(emp.produits).filter(n => n.endsWith('.mjs')).filter(n => /from\s+["'][^"']+\.ts["']/.test(fs.readFileSync(path.join(dossier, n), 'utf8'))), []);

@@ -1,5 +1,5 @@
 {
-  "genereLe": "2026-10-26",
+  "genereLe": "2026-11-07",
   "expansions": [
     "Yellow A Alternate cards"
   ],
@@ -45,14 +45,6 @@
       "parent": "Guardians Rising"
     },
     {
-      "carteId": 148517,
-      "nom": "Ultra Ball",
-      "numero": "68a",
-      "tirage": "intl",
-      "expansionAnnexe": "Yellow A Alternate cards",
-      "parent": "Shining Legends"
-    },
-    {
       "carteId": 152570,
       "nom": "Enhanced Hammer",
       "numero": "124a",
@@ -69,14 +61,6 @@
       "parent": "XY Black Star Promos"
     },
     {
-      "carteId": 187684,
-      "nom": "Professor's Letter",
-      "numero": "146a",
-      "tirage": "intl",
-      "expansionAnnexe": "Yellow A Alternate cards",
-      "parent": "BREAKthrough"
-    },
-    {
       "carteId": 200781,
       "nom": "Acro Bike",
       "numero": "123a",
@@ -91,14 +75,6 @@
       "tirage": "intl",
       "expansionAnnexe": "Yellow A Alternate cards",
       "parent": "Roaring Skies"
-    },
-    {
-      "carteId": 204351,
-      "nom": "Jirachi",
-      "numero": "XY67a",
-      "tirage": "intl",
-      "expansionAnnexe": "Yellow A Alternate cards",
-      "parent": "XY Black Star Promos"
     },
     {
       "carteId": 214539,
@@ -133,14 +109,6 @@
       "parent": "Guardians Rising"
     },
     {
-      "carteId": 220756,
-      "nom": "Choice Band",
-      "numero": "121a",
-      "tirage": "intl",
-      "expansionAnnexe": "Yellow A Alternate cards",
-      "parent": "Guardians Rising"
-    },
-    {
       "carteId": 221222,
       "nom": "Tapu Koko",
       "numero": "SM30a",
@@ -157,14 +125,6 @@
       "parent": "Guardians Rising"
     },
     {
-      "carteId": 221577,
-      "nom": "Alolan Vulpix",
-      "numero": "21a",
-      "tirage": "intl",
-      "expansionAnnexe": "Yellow A Alternate cards",
-      "parent": "Guardians Rising"
-    },
-    {
       "carteId": 221654,
       "nom": "Tapu Fini-GX",
       "numero": "39a",
@@ -173,25 +133,9 @@
       "parent": "Burning Shadows"
     },
     {
-      "carteId": 221742,
-      "nom": "Garbodor",
-      "numero": "51a",
-      "tirage": "intl",
-      "expansionAnnexe": "Yellow A Alternate cards",
-      "parent": "Guardians Rising"
-    },
-    {
       "carteId": 221756,
       "nom": "Metagross-GX",
       "numero": "157a",
-      "tirage": "intl",
-      "expansionAnnexe": "Yellow A Alternate cards",
-      "parent": "Guardians Rising"
-    },
-    {
-      "carteId": 221788,
-      "nom": "Rescue Stretcher",
-      "numero": "130a",
       "tirage": "intl",
       "expansionAnnexe": "Yellow A Alternate cards",
       "parent": "Guardians Rising"
@@ -253,30 +197,6 @@
       "parent": "Burning Shadows"
     },
     {
-      "carteId": 223952,
-      "nom": "Kirlia",
-      "numero": "92a",
-      "tirage": "intl",
-      "expansionAnnexe": "Yellow A Alternate cards",
-      "parent": "Burning Shadows"
-    },
-    {
-      "carteId": 224077,
-      "nom": "M Camerupt-EX",
-      "numero": "XY198a",
-      "tirage": "intl",
-      "expansionAnnexe": "Yellow A Alternate cards",
-      "parent": "XY Black Star Promos"
-    },
-    {
-      "carteId": 224087,
-      "nom": "M Sharpedo-EX",
-      "numero": "XY200a",
-      "tirage": "intl",
-      "expansionAnnexe": "Yellow A Alternate cards",
-      "parent": "XY Black Star Promos"
-    },
-    {
       "carteId": 224120,
       "nom": "Entei-GX",
       "numero": "10a",
@@ -307,14 +227,6 @@
       "tirage": "intl",
       "expansionAnnexe": "Yellow A Alternate cards",
       "parent": "Ultra Prism"
-    },
-    {
-      "carteId": 226511,
-      "nom": "Lunala-GX",
-      "numero": "SM103a",
-      "tirage": "intl",
-      "expansionAnnexe": "Yellow A Alternate cards",
-      "parent": "SM Black Star Promos"
     },
     {
       "carteId": 226512,
@@ -421,14 +333,6 @@
       "parent": "Lost Thunder"
     },
     {
-      "carteId": 230506,
-      "nom": "Sightseer",
-      "numero": "189a",
-      "tirage": "intl",
-      "expansionAnnexe": "Yellow A Alternate cards",
-      "parent": "Lost Thunder"
-    },
-    {
       "carteId": 231209,
       "nom": "Net Ball",
       "numero": "187a",
@@ -464,14 +368,6 @@
       "carteId": 236775,
       "nom": "Reset Stamp",
       "numero": "206a",
-      "tirage": "intl",
-      "expansionAnnexe": "Yellow A Alternate cards",
-      "parent": "Unified Minds"
-    },
-    {
-      "carteId": 237806,
-      "nom": "Jirachi-GX",
-      "numero": "79a",
       "tirage": "intl",
       "expansionAnnexe": "Yellow A Alternate cards",
       "parent": "Unified Minds"
@@ -637,6 +533,123 @@
       "tirage": "intl",
       "expansionAnnexe": "Yellow A Alternate cards",
       "raison": "parents-multiples:Forbidden Light | McDonald's Collection 2019"
+    },
+    {
+      "carteId": 148517,
+      "nom": "Ultra Ball",
+      "numero": "68a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Shining Legends",
+      "raison": "sans-produit"
+    },
+    {
+      "carteId": 221577,
+      "nom": "Alolan Vulpix",
+      "numero": "21a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Guardians Rising",
+      "raison": "sans-produit"
+    },
+    {
+      "carteId": 221788,
+      "nom": "Rescue Stretcher",
+      "numero": "130a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Guardians Rising",
+      "raison": "sans-produit"
+    },
+    {
+      "carteId": 223952,
+      "nom": "Kirlia",
+      "numero": "92a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Burning Shadows",
+      "raison": "sans-produit"
+    },
+    {
+      "carteId": 230506,
+      "nom": "Sightseer",
+      "numero": "189a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Lost Thunder",
+      "raison": "sans-produit"
+    },
+    {
+      "carteId": 204351,
+      "nom": "Jirachi",
+      "numero": "XY67a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "XY Black Star Promos",
+      "raison": "sans-produit"
+    },
+    {
+      "carteId": 226511,
+      "nom": "Lunala-GX",
+      "numero": "SM103a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "SM Black Star Promos",
+      "raison": "sans-produit"
+    },
+    {
+      "carteId": 237806,
+      "nom": "Jirachi-GX",
+      "numero": "79a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Unified Minds",
+      "raison": "sans-produit"
+    },
+    {
+      "carteId": 224077,
+      "nom": "M Camerupt-EX",
+      "numero": "XY198a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "XY Black Star Promos",
+      "raison": "sans-produit"
+    },
+    {
+      "carteId": 224087,
+      "nom": "M Sharpedo-EX",
+      "numero": "XY200a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "XY Black Star Promos",
+      "raison": "sans-produit"
+    },
+    {
+      "carteId": 221742,
+      "nom": "Garbodor",
+      "numero": "51a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Guardians Rising",
+      "raison": "sans-produit"
+    },
+    {
+      "carteId": 220756,
+      "nom": "Choice Band",
+      "numero": "121a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "Guardians Rising",
+      "raison": "sans-produit"
+    },
+    {
+      "carteId": 187684,
+      "nom": "Professor's Letter",
+      "numero": "146a",
+      "tirage": "intl",
+      "expansionAnnexe": "Yellow A Alternate cards",
+      "parent": "BREAKthrough",
+      "raison": "sans-produit"
     }
   ]
 }

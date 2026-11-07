@@ -13,7 +13,8 @@ const REPO_SITE = path.dirname(SITE_LIB);
 // LE COMMIT NOMMÉ du site dont la copie est tirée (RESYNC-REGLE-SITE-27 : 29d2c0f, relecture du lot 1 du site, après af48557, règles a-d de la nuit du 27/10 — `editionLocale` en liste fermée dans
 // langueDuVisuel.ts, Yellow A par annexes.ts/annexes.json importés par impressionsDuSet.ts ; avant eux 4d1344d, cardmarket.ts, puis 35ed580, lot 2-A, le filtre par deck). Les sources se lisent par `git show <commit>:lib/<fichier>` (octets du commit, jamais ceux de l'arbre de travail, que les fins de ligne du poste changent).
 // Le changer est un geste volontaire : on relance l'outil, on relit le diff des .mjs, et empreintes.json porte le commit (forme complète).
-const COMMIT = '29d2c0f';
+// RESYNC 07/11 : 6012f72 (site, « Annexes Yellow A : seules celles qui ont un produit Cardmarket restent », 13 retirees sur 61) — seul annexes.json change depuis 29d2c0f.
+const COMMIT = '6012f72';
 // la fermeture TRANSITIVE des imports des modules dont la décision a besoin (fichesDuDocument/setParImpression/impressionDuSet, produitsDeLaFiche/cardmarketUrl, visuelAdmisPourLaRegion, normaliserNumero)
 const TS = Object.freeze(['imageDeLImpression.ts', 'impressionDuSet.ts', 'impressionsDuSet.ts', 'cardmarket.ts', 'langueDuVisuel.ts', 'expressionsSures.ts', 'annexes.ts']);
 const JSONS = Object.freeze(['visuels-japonais-sur-sets-intl.json', 'visuels-anglais-regardes.json', 'annexes.json']);

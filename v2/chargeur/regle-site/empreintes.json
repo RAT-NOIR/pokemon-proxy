@@ -1,6 +1,6 @@
 {
-  "commentaire": "sha256 des fichiers SOURCE du site (rat-market-site/lib, lus au commit 29d2c0f par git show) et des fichiers produits ici ; refait par v2/chargeur/copier-regle-site.js",
-  "commit": "29d2c0f78fd7d1e0cfc0f2beda7a3cba826e675c",
+  "commentaire": "sha256 des fichiers SOURCE du site (rat-market-site/lib, lus au commit 6012f72 par git show) et des fichiers produits ici ; refait par v2/chargeur/copier-regle-site.js",
+  "commit": "6012f7263e788e6ffa7fe8d0f558924b199eb279",
   "sources": {
     "imageDeLImpression.ts": "e6f06c44d7eb98a18be7cc56929b3c0253123ac460853b99db2dfdf3a1de89ed",
     "impressionDuSet.ts": "ed1a78021c1814589a6eced8ec9c360c83f41bb65d2062f9d2c043dbb92b3503",
@@ -11,7 +11,7 @@
     "annexes.ts": "dc06bf1eea98a7a0c1d605183308db50144f9af0f790aef93979b1bc7b278f20",
     "visuels-japonais-sur-sets-intl.json": "75d2fb8fdeb6925d1359c9b4218e63990c48040c4aae03b624ed5ecba562a06a",
     "visuels-anglais-regardes.json": "4b2766460157e06edf2781c168e10f8efd018465e61027d9915e49d3dc3977a4",
-    "annexes.json": "fc41c92c17bb3922b5b513b1efc60cc0921f63a55df4d3cfa6affef8519367d4"
+    "annexes.json": "9526bbfb0c3dccffc2ac8734916b67ac71d27a734585ffab6d12318e8641f955"
   },
   "produits": {
     "imageDeLImpression.mjs": "13bd64c51f228a299d54c6be0a8e7c51c6eb17c60a8dda5dc362569f3ea89591",
@@ -23,6 +23,6 @@
     "annexes.mjs": "9db5d8c8a63a2b3b5eb0d46e3de0c7dd3f2c106d32c4273d1cdbecdf837a0969",
     "visuels-japonais-sur-sets-intl.json": "75d2fb8fdeb6925d1359c9b4218e63990c48040c4aae03b624ed5ecba562a06a",
     "visuels-anglais-regardes.json": "4b2766460157e06edf2781c168e10f8efd018465e61027d9915e49d3dc3977a4",
-    "annexes.json": "fc41c92c17bb3922b5b513b1efc60cc0921f63a55df4d3cfa6affef8519367d4"
+    "annexes.json": "9526bbfb0c3dccffc2ac8734916b67ac71d27a734585ffab6d12318e8641f955"
   }
 }
