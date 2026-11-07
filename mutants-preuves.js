@@ -200,6 +200,16 @@ const GROUPES = [
         ['codes imprimés admis : slugSet non exigé', "produit?.slugSet === CODES_IMPRIMES_ADMIS[k].slugSet && ", ""],
         ['codes imprimés admis : liste de numéros non exigée', "&& i.numeros.some(x => J.cleNumero(String(x)) === J.cleNumero(String(np)))", ""]
     ] },
+    // ➕ 07/11 : la table fermée POSITIONS_RONDES (Intro Pack Squirtle : numéro dans un rond seul) — banc à part (test-preuves-position-ronde.js) ; filtre : --mutant="position ronde"
+    { module: 'collecte-cartes/preuves.js', bancs: ['test-preuves-position-ronde.js'], mutants: [
+        ['position ronde : table vidée', "Object.freeze({ 'Intro-Pack-Squirtle': Object.freeze({ nomUnique: true, deuxSources: true }) })", "Object.freeze({})"],
+        ['position ronde : condition deux sources retirée', "if (regle.deuxSources && sansTotalAutorise !== true) m.push('position-ronde-source-unique');", ""],
+        ['position ronde : condition nom unique retirée', "if (regle.nomUnique) {", "if (false) {"],
+        ['position ronde : nom répété toléré', "else if (n !== 1) m.push('nom-non-unique-dans-le-set');", ""],
+        ['position ronde : liste inconnue tolérée', "if (n === null || n === 0) m.push('noms-du-set-inconnus');", "if (false) m.push('noms-du-set-inconnus');"],
+        ['position ronde : comparaison rond / numéro retirée', "if (J.cleNumero(String(lu.position).trim()) !== J.cleNumero(np)) m.push('numero-different');", ""],
+        ['position ronde : première lecture non jugée', "|| (positionRonde(produit?.slugSet) && entree.lu?.position != null)) {", ") {"]
+    ] },
     // ➕ 03/11 : la TABLE CROISÉE des noms japonais (nom lu prouvé par une AUTRE carte de même nomEn) — jeu complet en mémoire : node mutants-nomja.js
     { module: 'collecte-cartes/preuves.js', bancs: ['test-preuves-table-croisee.js'], mutants: [
         ['table croisée : fiche simple (_id < 0) admise dans la table', "if (!(c?._id > 0) || !texte(c.nomEn) || !texte(c.nomJa)) continue;", "if (!texte(c.nomEn) || !texte(c.nomJa)) continue;"],

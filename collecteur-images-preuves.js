@@ -118,6 +118,10 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
         const autresParSet = new Map();
         const slugsTraduit = [...new Set(aTraduit.flatMap(a => (lignesDe.get(a.entree.idProduct) ?? []).map(l => l.slugSet)).filter(Boolean))];
         if (slugsTraduit.length && lire.produitsDuSet) for (const l of await lire.produitsDuSet(slugsTraduit)) (autresParSet.get(l.slugSet) || autresParSet.set(l.slugSet, []).get(l.slugSet)).push({ idProduct: l.idProduct, numero: l.numeroFiche ?? null, nomEn: etatDe.get(l.idProduct)?.name ?? null });
+        // (07/11) numéro dans un rond (POSITIONS_RONDES) : les noms de TOUS les produits du set, lus en base (jamais le manifeste) ; un nom absent de l'état reste null -> la règle refuse « noms-du-set-inconnus »
+        const nomsParSetRond = new Map();
+        const slugsRonds = [...new Set([...lignesDe.values()].flat().map(l => l.slugSet).filter(s => PV.POSITIONS_RONDES && Object.hasOwn(PV.POSITIONS_RONDES, s)))];
+        if (slugsRonds.length && lire.produitsDuSet) for (const l of await lire.produitsDuSet(slugsRonds)) (nomsParSetRond.get(l.slugSet) || nomsParSetRond.set(l.slugSet, []).get(l.slugSet)).push(etatDe.get(l.idProduct)?.name ?? null);
         const servies = new Map();
         const carteIdsRemplacement = [...new Set(r.appariees.filter(a => a.entree.regle === PV.REGLE_MEME_DESSIN).flatMap(a => (lignesDe.get(a.entree.idProduct) ?? []).map(l => l.carteId)).filter(c => c != null))];
         if (carteIdsRemplacement.length) {
@@ -152,6 +156,7 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
                 produit.autresDuSet = autresParSet.get(L.slugSet) ?? [];
                 if (e.lu?.langue === 'ja') produit.tableJaCroisee = await tableCroisee();
             }
+            if (nomsParSetRond.has(L.slugSet)) produit.nomsDuSet = nomsParSetRond.get(L.slugSet);
             if (e.regle === PV.REGLE_MEME_DESSIN) { const s = servies.get(L.carteId); produit.imagesServies = s?.images ?? []; produit.documentsServis = s?.documents ?? new Map(); }
             // tour 4 (2) : pour une position (Battle Academy, Trainer Kit), la règle a besoin de TOUS les produits de ces sets et des impressions de la carte (lecture seule)
             if (PV.setAdmisPourPosition(L.slugSet)) {

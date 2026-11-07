@@ -121,6 +121,36 @@ const numeroFinDeSlug = slug => { const m = /(?:^|[^A-Za-z0-9])(\d+[A-Za-z]*)$/.
 const FINITIONS_ATTENDUES = Object.freeze({ 'blue border': 'blue-border', standard: 'standard' });
 /** Les seuls sets où une position lue vaut preuve : slugSet `Battle-Academy*` (préfixe) et slugSet contenant `Trainer-Kit`. */
 const setAdmisPourPosition = slug => typeof slug === 'string' && (slug.startsWith('Battle-Academy') || slug.includes('Trainer-Kit'));
+/**
+ * (07/11) DÉCISION DE L'UTILISATEUR — « INTRO PACK SQUIRTLE (38 scans propres, numéro dans un rond seulement) : ADMIS si, dans ce produit, chaque nom n'apparaît qu'une fois (le nom suffit alors à identifier la
+ * carte), que le numéro rond concorde avec la liste du produit, et qu'il y a deux sources. Liste fermée. Sinon, en attente. »
+ * ARBITRAGE DU COORDINATEUR (07/11) : « chaque nom n'apparaît qu'une fois » se juge PAR CARTE — le nom de LA carte jugée n'apparaît qu'une fois parmi les produits du set ; une carte dont le nom est porté par
+ * plusieurs cartes du set (Growlithe n°1 et n°26, Squirtle, Wartortle, les Énergies) reste refusée (« en attente »), car le nom doit suffire à identifier la carte.
+ * Table FERMÉE, slugSet exact (jamais un préfixe) -> conditions. Le rond lu (`lu.position`) est le numéro de la liste du produit ; pas de total. Les gardes communes (nom, langue, tampon, contradictions, marques) s'appliquent.
+ */
+const POSITIONS_RONDES = Object.freeze({ 'Intro-Pack-Squirtle': Object.freeze({ nomUnique: true, deuxSources: true }) });
+const positionRonde = slug => typeof slug === 'string' && Object.hasOwn(POSITIONS_RONDES, slug);
+/** Combien de produits du set portent le nom de celui-ci ? null si la liste est inconnue (absente, vide, ou un nom manquant) : « je ne sais pas » n'est jamais « tout va bien ». */
+function occurrencesDuNomDansLeSet(produit) {
+    const noms = produit?.nomsDuSet;
+    if (!Array.isArray(noms) || noms.length === 0 || !noms.every(texte) || !texte(produit?.nomEn)) return null;
+    const mien = J.decomposerNomCardmarket(produit.nomEn).nom;
+    return noms.filter(n => memeNomQueLeProduit(mien, n)).length;
+}
+/** @returns {string[]} les motifs de refus d'un rond lu pour un set de POSITIONS_RONDES (vide = conforme) */
+function motifsDePositionRonde(lu, produit, np, sansTotalAutorise) {
+    const regle = POSITIONS_RONDES[produit.slugSet], m = [];
+    if (regle.deuxSources && sansTotalAutorise !== true) m.push('position-ronde-source-unique');
+    if (!texte(lu.position)) return [...m, 'position-vide'];
+    if (np == null) return [...m, 'position-sans-numero-produit'];
+    if (regle.nomUnique) {
+        const n = occurrencesDuNomDansLeSet(produit);
+        if (n === null || n === 0) m.push('noms-du-set-inconnus');
+        else if (n !== 1) m.push('nom-non-unique-dans-le-set');
+    }
+    if (J.cleNumero(String(lu.position).trim()) !== J.cleNumero(np)) m.push('numero-different');
+    return m;
+}
 /** Le nom lu sur le scan est-il celui du produit ? Nom Cardmarket décomposé (avant « [ ») puis `clesNom` de la jointure ; l'un ou l'autre côté vide = non. */
 const memeNomQueLeProduit = (lu, nomProduit) => {
     if (!texte(lu) || !texte(nomProduit)) return false;
@@ -456,7 +486,8 @@ function evaluerPreuveLue({ entree, produit, langueProduit, sansTotalAutorise = 
     if (lu.position != null) {
         // tour 2 (2) : la POSITION lue sur un symbole (deck, rond Battle Academy, moitié de kit) désigne le produit quand son numéro est une position ; elle remplace le numéro imprimé (qui reste écrit tel quel),
         // le total n'est pas exigé. Liste FERMÉE de sets : ailleurs une position n'a aucune valeur de preuve.
-        if (!setAdmisPourPosition(produit?.slugSet)) motifs.push('position-hors-liste');
+        if (positionRonde(produit?.slugSet)) motifs.push(...motifsDePositionRonde(lu, produit, np, sansTotalAutorise));   // (07/11) numéro dans un rond : liste fermée POSITIONS_RONDES
+        else if (!setAdmisPourPosition(produit?.slugSet)) motifs.push('position-hors-liste');
         else if (!texte(lu.position)) motifs.push('position-vide');
         else if (np == null) motifs.push('position-sans-numero-produit');
         else if (J.cleNumero(String(lu.position).trim()) !== J.cleNumero(np)) motifs.push('numero-different');
@@ -517,7 +548,8 @@ async function evaluerDeuxSources({ entree, produit, langueProduit, octets, deci
     if (!objet(s.lu)) return non('seconde-sans-lecture');
     // décision 5 : pour un set de la liste fermée CODES_SANS_TOTAL, la PREMIÈRE lecture (jusqu'ici non jugée par cette voie) est jugée aussi quand elle n'a pas de total — les deux lectures portent code et numéro
     const sansTotal = lu => lu?.total == null || String(lu.total).trim() === '';
-    if (Object.hasOwn(CODES_SANS_TOTAL, produit?.slugSet) && sansTotal(entree.lu)) {
+    // (07/11) idem pour un rond seul (POSITIONS_RONDES) : la première lecture porte aussi un rond, jugé avec ses conditions (nom unique dans le set, rond = numéro)
+    if ((Object.hasOwn(CODES_SANS_TOTAL, produit?.slugSet) && sansTotal(entree.lu)) || (positionRonde(produit?.slugSet) && entree.lu?.position != null)) {
         const l1 = evaluerPreuveLue({ entree: { lu: entree.lu, attendu: entree.attendu, contradictions: entree.contradictions }, produit, langueProduit, sansTotalAutorise: true });
         if (!l1.ok) return non(`premiere-lecture:${l1.motifs[0]}`);
     }
@@ -777,5 +809,5 @@ function trousDuManifeste({ trous, recus, famille }) {
     return { trous: gardes, ecartes };
 }
 
-module.exports = { CODES_IMPRIMES_ADMIS, CODES_SANS_TOTAL, sansTotalAdmis, SOURCE, LOT, SRC, LANGUE_PREUVE, EDITIONS_LOCALES, REGLES, REGLE_MEME_DESSIN, LANGUES_NON_LATINES, MOYENS_DE_LECTURE, MOYENS_DE_LANGUE, SEUIL_PLANCHER, SCORE_PLANCHER, VIDE_PLANCHER, lienAvecLEntree, evaluerRemplacementMemeDessin, langueDuProduit, formeEntree, lireManifeste, lireValidations, rapprocher, evaluerPreuveLue, evaluerDeuxSources, evaluerEntree,
+module.exports = { POSITIONS_RONDES, CODES_IMPRIMES_ADMIS, CODES_SANS_TOTAL, sansTotalAdmis, SOURCE, LOT, SRC, LANGUE_PREUVE, EDITIONS_LOCALES, REGLES, REGLE_MEME_DESSIN, LANGUES_NON_LATINES, MOYENS_DE_LECTURE, MOYENS_DE_LANGUE, SEUIL_PLANCHER, SCORE_PLANCHER, VIDE_PLANCHER, lienAvecLEntree, evaluerRemplacementMemeDessin, langueDuProduit, formeEntree, lireManifeste, lireValidations, rapprocher, evaluerPreuveLue, evaluerDeuxSources, evaluerEntree,
     verifierCache, setAdmisPourPosition, preuvesDe, motifDeNom, motifDeNomTraduit, construireTableJaCroisee, preuveParTableCroisee, porteUnTemoinTraduit, CHAMPS_TEMOIN_TRADUIT, LANGUES_A_NOM_TRADUIT, TAMPONS_ATTENDUS, tamponAttendu, cleFiche, grouperUnites, MOTIFS_DE_TROU, motifDeTrou, trousDuManifeste, sha256De, racineDe };
