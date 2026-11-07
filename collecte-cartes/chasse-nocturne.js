@@ -148,8 +148,52 @@ function numeroDuTitre(s) {
     return d ? { numero: d[1], total: null } : { numero: null, total: null };
 }
 const nomNu = s => String(s ?? '').split(/\s\(|\s#\d|\s-\s/)[0].trim();
+// 07/11 : une base de cartes écrit « Pok&eacute;mon » ; le décodage général ne connaît que les cinq entités de base.
+const decoderPlus = s => decoder(s).replace(/&eacute;/g, 'é').replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n));
+const compacte = s => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+const CODE_SIMPLE = /^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/;
 function itemsDepuis(html, cfg, base) {
     const sortie = [];
+    if (cfg.type === 'grille-cartes') {
+        // w-scx : une ancre par carte ET par variante (data-id = <code>-<n>) ; l'adresse de la liste dit le code attendu : une carte d'un autre set n'est pas une entrée ; le même id lu deux fois n'est qu'une carte.
+        let attendu = null; try { attendu = compacte(new URL(base).pathname.split('/').filter(Boolean).pop()); } catch { /* base illisible : aucun code attendu */ }
+        const vus = new Set();
+        for (const m of String(html).matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)) {
+            const a = attributs(m[1]); const u = a.href ? absolue(a.href, base) : null; if (!u) continue;
+            let chemin; try { chemin = new URL(u).pathname; } catch { continue; }
+            if (cfg.motifLien && !new RegExp(cfg.motifLien).test(chemin)) continue;
+            const id = /data-id="([^"]*)"/.exec(m[2])?.[1]; if (!id) continue;
+            const sep = id.lastIndexOf('-'), codeId = sep > 0 ? id.slice(0, sep) : id, numero = sep > 0 ? id.slice(sep + 1) : '';
+            if (attendu && compacte(codeId) !== attendu) continue;
+            if (vus.has(id)) continue;
+            vus.add(id);
+            const texte = [...m[2].matchAll(/<span\b[^>]*>([^<]*)<\/span>/g)].map(x => decoderPlus(x[1]).trim()).find(t => t && !t.startsWith('$')) || '';
+            const nom = nomNu(texte);
+            if (!numero && !nom) continue;
+            let src = attributs(/<img\b([^>]*)>/i.exec(m[2])?.[1] || '').src || null;
+            if (src && cfg.pleine) src = src.replace(cfg.pleine[0], cfg.pleine[1]);
+            sortie.push({ position: sortie.length + 1, nom, titre: texte, numero: numero || null, total: null, url: u, image: src ? absolue(src, base) : null });
+        }
+        return sortie;
+    }
+    if (cfg.type === 'lignes-serie') {
+        // w-srb : une ligne par carte ; la 1re cellule porte « <n> / <code> » (« <code> » seul si non numérotée ; un second champ chiffré est le TOTAL) ; vignette -> scan plein par `pleine`.
+        const morceaux = String(html).split(/<td class="cen"><a href="\/card\/[^"]*">/).slice(1);
+        const motifVignette = cfg.pleine ? new RegExp(`src="([^"]*${cfg.pleine[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^"]*)"`) : /src="([^"]*)"/;
+        for (const [i, c] of morceaux.entries()) {
+            const tete = /^[^<]*<\/a><br \/>\s*(?:([^\s/<]+)\s*\/\s*)?([^\s<]+)/.exec(c); if (!tete) continue;
+            let numero = tete[1] ?? null, total = null, codeSet = null;
+            if (numero != null) { if (/^\d+$/.test(tete[2])) total = tete[2]; else codeSet = tete[2]; }
+            else if (/^\d+[A-Za-z]?$/.test(tete[2])) numero = tete[2]; else codeSet = tete[2];
+            const nom = decoderPlus((/<font size="2">([\s\S]*?)<\/font>/.exec(c)?.[1] || '').replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim();
+            if (!numero && !nom) continue;
+            let src = motifVignette.exec(c)?.[1] || null;
+            if (src && cfg.pleine) src = src.replace(cfg.pleine[0], cfg.pleine[1]);
+            const lien = /<a href="([^"]*\.shtml)"/.exec(c)?.[1] || null;
+            sortie.push({ position: i + 1, nom, titre: nom, numero, total, codeSet, url: lien ? absolue(lien, base) : null, image: src ? absolue(src, base) : null });
+        }
+        return sortie;
+    }
     if (cfg.type === 'jsonld-itemlist') {
         const t = String(html).replace(/\\"/g, '"');
         const vus = new Set();                              // 07/11 : le flux répète le JSON-LD ; une même annonce (même url) lue deux fois n'est pas deux items (sinon « partage » refuse toute carte)
@@ -250,10 +294,24 @@ async function explorerSite({ site, sets, registre, lirePage, lireImage, fermerH
                 if (!d.suivante) break;
             }
         }
-        stats.collectionsEnumerees = collections.size;
+        // a'. énumération PAR CODE (w-scx) : l'adresse d'un set se construit du code du set troué (le modèle du registre ; le site ignore le segment de nom). Aucun index lu, donc aucune requête d'énumération.
+        let parCodes = 0;
+        if (site.parCodes?.url) {
+            const tiragesAdmis = site.tirages || null;
+            for (const s of sets) {
+                parCodes++;
+                if (tiragesAdmis && !tiragesAdmis.includes(s.tirage)) { refuser('collection:tirage-non-admis'); continue; }
+                if (!CODE_SIMPLE.test(String(s.code ?? ''))) { refuser('collection:code-composite'); continue; }
+                const url = site.parCodes.url.replace('{code}', compacte(s.code));
+                if (!hotesPages.has(hoteDe(url))) { refuser('index:hote-non-declare'); continue; }
+                if (!collections.has(url)) collections.set(url, { url, slug: compacte(s.code), titre: null, code: s.code, parCode: true, set: s });
+            }
+        }
+        stats.collectionsEnumerees = collections.size + (parCodes - [...collections.values()].filter(c => c.parCode).length);
         // b. apparier aux sets troués
         const aLire = [];
         for (const c of collections.values()) {
+            if (c.parCode) { aLire.push({ c, set: c.set }); continue; }
             const a = apparierCollection(c, sets.map(s => ({ set: s.set, code: s.code, nom: s.nom, tirage: s.tirage, _s: s })), { tirages: c.idx.tirages || site.tirages, retirerMots: c.idx.retirerMots || site.retirerMots || [], connus: setsConnus || sets });
             if (!a.ok) { refuser(`collection:${a.raison}`); continue; }
             aLire.push({ c, set: sets.find(s => s.set === a.set) });
@@ -271,7 +329,10 @@ async function explorerSite({ site, sets, registre, lirePage, lireImage, fermerH
                 if (!d.suivante) break;
             }
             stats.itemsLus += items.length;
-            const { retenus, refus } = apparierItems(items, set.produits);
+            // le code lu sur la ligne (w-srb) doit être celui du set : une page d'un autre set de même nom n'attribue rien (07/11)
+            const memeSet = items.filter(i => i.codeSet == null || compacte(i.codeSet) === compacte(set.code));
+            for (let k = items.length - memeSet.length; k > 0; k--) refuser('item:code-autre-set');
+            const { retenus, refus } = apparierItems(memeSet, set.produits);
             for (const r of refus) refuser(`item:${r.raison}`);
             for (const { item, produit, nomTemoin, via } of retenus) {
                 if (!item.image) { refuser('item:sans-image'); continue; }
@@ -279,6 +340,7 @@ async function explorerSite({ site, sets, registre, lirePage, lireImage, fermerH
                 if (via === 'nom') stats.surNomSeul++;                                    // apparié sur le seul nom : aucun numéro des deux côtés, la validation à l'œil le sait
                 if (dejaCouverts.has(produit.idProduct)) { refuser('item:deja-couvert'); continue; }
                 const h = hoteDe(item.image);
+                if (/cardmarket/i.test(h || '')) { refuser('image:cardmarket'); continue; }      // jamais une image Cardmarket (règle du chantier)
                 if (!hotesImages.has(h)) { refuser('image:hote-non-declare'); continue; }
                 let obj = registre.objets[item.image];
                 if (!imageDejaObtenue(registre, item.image)) {
@@ -288,6 +350,7 @@ async function explorerSite({ site, sets, registre, lirePage, lireImage, fermerH
                 }
                 const def = meilleureDefinition([{ url: item.image, w: obj.w, h: obj.h }]);
                 if (!def.choix) { refuser(`image:${def.refus}`); continue; }
+                if (site.largeurMin && obj.w < site.largeurMin) { refuser('image:trop-petit'); continue; }      // plancher propre au site (registre) : 255 px pour w-scx et w-srb
                 const e = construireEntree({ site, set, produit, item, image: { url: item.image, fichier: obj.fichier, sha256: obj.sha256, w: obj.w, h: obj.h }, collection: c.url, pageUrl: c.url, nomTemoin, via, definition: def, maintenant: maintenant() });
                 const deja = parProduit.get(produit.idProduct);
                 if (deja) { if (e.largeur > deja.largeur) entrees[entrees.indexOf(deja)] = e, parProduit.set(produit.idProduct, e); continue; }

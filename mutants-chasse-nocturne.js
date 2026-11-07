@@ -48,7 +48,18 @@ const GROUPES = [
         ['lecture : le placeholder compte comme une image', "const vide = !img || (cfg.placeholder && img.includes(cfg.placeholder));", "const vide = !img;"],
         ['entrée : la basse définition n\'est plus notée', "basseDefinition: Boolean(definition?.basseDefinition)", "basseDefinition: false"],
         ['entrée : la lecture est annoncée faite', "regle: 'a-lire', url: image.url", "regle: 'preuve-lue', url: image.url"],
-        ['famille : le deuxième hôte ne compte pas', "hotes.get(e.idProduct).size >= 2", "false"]
+        ['famille : le deuxième hôte ne compte pas', "hotes.get(e.idProduct).size >= 2", "false"],
+        // 07/11 nuit : w-scx (grille par set, énumération par code) et w-srb (lignes par set)
+        ['w-scx grille : la même carte lue par variante double les items', "if (vus.has(id)) continue;", "if (false) continue;"],
+        ['w-scx grille : une carte d\'un autre set (id hors du code de l\'adresse) est gardée', "if (attendu && compacte(codeId) !== attendu) continue;", ""],
+        ['w-scx grille : l\'image reste la vignette (pas de « large »)', "if (src && cfg.pleine) src = src.replace(cfg.pleine[0], cfg.pleine[1]);\n            sortie.push({ position: sortie.length + 1", "if (false) src = src.replace(cfg.pleine[0], cfg.pleine[1]);\n            sortie.push({ position: sortie.length + 1"],
+        ['w-scx grille : une ancre sans numéro ni nom est une entrée', "if (!numero && !nom) continue;\n            let src = attributs(", "if (false) continue;\n            let src = attributs("],
+        ['w-srb : le code lu sur la ligne ne compte plus (page d\'un autre set acceptée)', "i.codeSet == null || compacte(i.codeSet) === compacte(set.code)", "true"],
+        ['w-srb : un second champ chiffré est pris pour un code, plus pour un total', "if (/^\\d+$/.test(tete[2])) total = tete[2]; else codeSet = tete[2];", "codeSet = tete[2];"],
+        ['site : le plancher propre au site (255 px) est ignoré', "if (site.largeurMin && obj.w < site.largeurMin)", "if (false)"],
+        ['image : une image Cardmarket d\'un hôte déclaré est téléchargée', "if (/cardmarket/i.test(h || '')) {", "if (false) {"],
+        ['par code : le tirage du set n\'est pas contrôlé (un set id demandé au site jp)', "if (tiragesAdmis && !tiragesAdmis.includes(s.tirage)) {", "if (false) {"],
+        ['par code : un code composite (S-P/TH) est demandé tel quel', "if (!CODE_SIMPLE.test(String(s.code ?? ''))) {", "if (false) {"]
     ] },
     { module: 'collecte-cartes/comblement.js', mutants: [
         ['gardes : --chasse hors des modes gardés', "'--ecrire', '--nuit', '--chasse']);", "'--ecrire', '--nuit']);"],

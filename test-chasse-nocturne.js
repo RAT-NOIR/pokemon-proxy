@@ -275,6 +275,74 @@ const vrai = (nom, cond) => v(nom, Boolean(cond), true);
     for (const [nom, args] of [['--chasse avec --nuit', ['--chasse', '--nuit']], ['--chasse --limite', ['--chasse', '--limite=5']], ['--chasse --attendu', ['--chasse', '--attendu=1']], ['--chasse --a-blanc', ['--chasse', '--a-blanc']], ['--chasse argument inconnu', ['--chasse', '--tout']], ['--chasse --plafond=0', ['--chasse', '--plafond=0']], ['--plafond avec --plan', ['--plan', '--plafond=5']], ['--plafond avec --decider', ['--decider', '--plafond=5']]])
         vrai(`grammaire : refus — ${nom}`, typeof ga(...args) === 'string');
 
+    // ───────────── 10. w-scx et w-srb (07/11, nuit) : listes par set japonaises. Extraits RÉELS (page de liste d'un set de promos, page de set d'une base de cartes), ANONYMISÉS : hôtes en h.test, convention des extraits w-tcs ci-dessus ─────────────
+    // Grille par set : une ancre par carte et par variante (la même carte revient en « normal » puis « holofoil » : 428 ancres pour 250 cartes), data-id = <code>-<n>, image « medium » dont la pleine définition s'écrit « large ».
+    const carteGrille = (slug, id, variante, texte, vignette = `https://img.h.test/pokemon/${id}/medium`) => `<a data-turbo-frame="_top" class="min-w-[138px] transition-all group cursor-pointer p-2" href="/pokemon/cards/${slug}/${id}?variant=${variante}"><div class="flex flex-col justify-center items-center card" data-id="${id}"><div class="max-w-[245px] rounded-lg relative " style="view-transition-name: card-image-${id}-${variante};"><img id="${id}-" class="max-w-[245px] w-full " loading="lazy" src="${vignette}" /></div><div class="w-full max-w-[245px] text-white text-body-12 pt-2 flex flex-col justify-center"><span class="text-body-12 text-white text-center">${texte}</span><span class="text-center"></span><div class="flex flex-row gap-x-1 items-center justify-center"><span class="text-body-12 font-bold text-center">$59.99 (DM)</span></div></div></div></a>`;
+    const GRILLE = '<div id="search-results"><div class="grid grid-cols-2">'
+        + carteGrille('pikachu', 'xyp_ja-1', 'normal', 'Pikachu #1') + carteGrille('noivern', 'xyp_ja-9', 'holofoil', 'Noivern #9')
+        + carteGrille('garchomp-ex', 'xyp_ja-10', 'normal', 'Garchomp ex #10') + carteGrille('garchomp-ex', 'xyp_ja-10', 'holofoil', 'Garchomp ex #10')
+        + carteGrille('autre-carte', 'sm_ja-3', 'normal', 'Autre #3')                                // une carte d'un AUTRE set (l'adresse ne désigne pas le set attendu)
+        + '</div></div><a href="/pokemon/expansions/x/xyp_ja?page=2">2</a>';
+    const CFG_GRILLE = { type: 'grille-cartes', motifLien: '^/pokemon/cards/', pleine: ['/medium', '/large'] };
+    const BASE_GRILLE = 'https://h.test/pokemon/expansions/x/xyp_ja';
+    const gr = CN.itemsDepuis(GRILLE, CFG_GRILLE, BASE_GRILLE);
+    v('w-scx grille : 3 cartes (variantes dédoublonnées, carte d\'un autre set écartée)', gr.length, 3);
+    v('w-scx grille : nom nu, numéro (par l\'id) et image « large » des 3 cartes', gr.map(i => [i.nom, i.numero, i.image]), [['Pikachu', '1', 'https://img.h.test/pokemon/xyp_ja-1/large'], ['Noivern', '9', 'https://img.h.test/pokemon/xyp_ja-9/large'], ['Garchomp ex', '10', 'https://img.h.test/pokemon/xyp_ja-10/large']]);
+    v('w-scx grille : la page suivante est vue (page=2)', [CN.pageSuivante(GRILLE, 'page', 1), CN.pageSuivante(GRILLE, 'page', 2)], [true, false]);
+    v('w-scx grille : une page de la 2e position garde le code attendu (?page=2)', CN.itemsDepuis(GRILLE, CFG_GRILLE, `${BASE_GRILLE}?page=2`).length, 3);
+    v('w-scx grille : une ancre sans numéro (id sans suffixe) ni nom n\'est pas une entrée', CN.itemsDepuis(carteGrille('x', 'xyp_ja', 'normal', ''), CFG_GRILLE, BASE_GRILLE).length, 0);
+    // Page de set d'une base de cartes : une ligne par carte, la 1re cellule porte « <n> / <code> » (« <code> » seul pour une carte non numérotée), vignette /card/th/<set>/<f>.jpg, scan plein /card/<set>/<f>.jpg.
+    const ligneSerie = (num, code, f, nom, chemin = 'xypromo') => `<tr>\n\t\t<td class="cen"><a href="/card/${chemin}/">XY Promo</a><br />${num ? `${num} / ` : ''}${code}  <img src="/card/image/promo.png" loading="lazy" /></a></td>\n\t\t<td width="142" class="cen"><a href="/card/${chemin}/${f}.shtml"><img src="/card/th/${chemin}/${f.replace(/^0+/, '')}.jpg" loading="lazy" border="0" /></a></td>\n\t\t<td class="cen" width="20%"><a href="/card/${chemin}/${f}.shtml"> <font size="2">${nom}</font> </a></td>\n\t\t<td align="right" class="fooinfo" width="300"><table border="0"><tr><td align="right" colspan="3"><b>60HP</b></td></tr></table></td></tr>`;
+    const SERIE = '<table>' + ligneSerie('41', 'XY-P', '041', 'Meowstic') + ligneSerie(null, 'XY-P', 'u001', 'Inkay') + ligneSerie('42', 'XY-P', '042', 'Pok&eacute;mon Fan Club') + ligneSerie(null, 'XY-P', 'u002', '') + '</table>';
+    const CFG_SERIE = { type: 'lignes-serie', pleine: ['/card/th/', '/card/'] };
+    const sr = CN.itemsDepuis(SERIE, CFG_SERIE, 'https://h.test/card/xypromo/');
+    v('w-srb série : 3 cartes (la ligne sans numéro ni nom n\'est pas une entrée)', sr.length, 3);
+    v('w-srb série : nom, numéro (null si non numérotée) et scan plein des 3 cartes', sr.map(i => [i.nom, i.numero, i.image]), [['Meowstic', '41', 'https://h.test/card/xypromo/41.jpg'], ['Inkay', null, 'https://h.test/card/xypromo/u001.jpg'], ['Pokémon Fan Club', '42', 'https://h.test/card/xypromo/42.jpg']]);
+    v('w-srb série : le code du set lu sur la ligne', sr.map(i => i.codeSet), ['XY-P', 'XY-P', 'XY-P']);
+    v('w-srb série : un second champ chiffré est un TOTAL, pas un code', CN.itemsDepuis(ligneSerie('041', '078', '041', 'Meowstic', 'zz'), CFG_SERIE, 'https://h.test/card/zz/').map(i => [i.numero, i.total, i.codeSet]), [['041', '078', null]]);
+
+    // bout en bout w-scx : l'énumération se fait PAR CODE (aucun index), l'adresse est le modèle du registre
+    const PROD_XYP = [{ idProduct: 501, name: 'Pikachu', numero: '001', nomEn: 'Pikachu' }, { idProduct: 502, name: 'Noivern', numero: '9', nomEn: 'Noivern' }, { idProduct: 503, name: 'Garchomp ex', numero: '010', nomEn: 'Garchomp ex' }];
+    const SETS_XYP = [{ set: 'XY-Promos', code: 'XY-P', nom: 'XY Promos', tirage: 'jp', produits: PROD_XYP },
+        { set: 'SV-Promos-ID', code: 'SV-P/ID', nom: 'SV Promos ID', tirage: 'id', produits: PROD_XYP }, { set: 'Promos-composite', code: 'S-P/TH', nom: 'Promos composite', tirage: 'jp', produits: PROD_XYP }];
+    const SITE_C = { code: 'w-c', hotes: ['h.test'], hotesImages: ['img.h.test'], petit: false, tirages: ['jp'], filigrane: false, largeurMin: 255, parCodes: { url: 'https://h.test/pokemon/expansions/x/{code}_ja' }, pages: { param: 'page', max: 3 }, items: CFG_GRILLE };
+    const PAGE2 = '<div id="search-results">' + carteGrille('x', 'xyp_ja-11', 'normal', 'Skiddo #11') + '</div>';
+    const pagesC = { [BASE_GRILLE]: GRILLE, [`${BASE_GRILLE}?page=2`]: PAGE2 };
+    function mondeC(opt = {}) { const m = monde(opt); m.lirePage = async (u) => { m.requetes.push(['page', u]); if (pagesC[u] !== undefined) return pagesC[u]; throw Object.assign(new Error('HTTP 404'), { status: 404 }); }; return m; }
+    const mC = mondeC();
+    const rC = await CN.explorerSite({ site: SITE_C, sets: SETS_XYP, registre: { objets: {}, pages: {} }, ...mC, budget: 50 });
+    v('w-scx : pages demandées = adresse par CODE du seul set jp à code simple, puis la page 2', mC.requetes.filter(r => r[0] === 'page').map(r => r[1]), [BASE_GRILLE, `${BASE_GRILLE}?page=2`]);
+    v('w-scx : 3 entrées (Pikachu 1 = produit 001 par cleNumero, Noivern 9, Garchomp ex 10 = 010) ; Skiddo sans produit refusé', [rC.entrees.map(e => e.idProduct).sort(), rC.stats.refus['item:numero-absent']], [[501, 502, 503], 1]);
+    v('w-scx : image « large » demandée, langue attendue ja (tirage jp)', [rC.entrees[0].url, rC.entrees[0].attendu.langue], ['https://img.h.test/pokemon/xyp_ja-1/large', 'ja']);
+    v('w-scx : le set d\'un autre tirage n\'est jamais demandé, le code composite est refusé nommé', [rC.stats.refus['collection:tirage-non-admis'], rC.stats.refus['collection:code-composite']], [1, 1]);
+    v('w-scx : aucun index énuméré, une collection lue', [rC.stats.collectionsEnumerees, rC.stats.collectionsLues], [3, 1]);
+    const mC2 = mondeC({ largeur: 250 });
+    const rC2 = await CN.explorerSite({ site: SITE_C, sets: SETS_XYP, registre: { objets: {}, pages: {} }, ...mC2, budget: 50 });
+    v('image : 250 px passe le plancher général mais pas celui du site (255) : refus trop-petit', [rC2.entrees.length, rC2.stats.refus['image:trop-petit']], [0, 3]);
+    const mC3 = mondeC({ largeur: 255 });
+    v('image : 255 px passe', (await CN.explorerSite({ site: SITE_C, sets: SETS_XYP, registre: { objets: {}, pages: {} }, ...mC3, budget: 50 })).entrees.length, 3);
+    // aucune image Cardmarket, même d'un hôte déclaré
+    const GRILLE_CM = '<div>' + carteGrille('pikachu', 'xyp_ja-1', 'normal', 'Pikachu #1', 'https://img.cardmarket.test/pokemon/xyp_ja-1/medium') + '</div>';
+    const mC4 = mondeC(); const pagesC4 = { [BASE_GRILLE]: GRILLE_CM };
+    mC4.lirePage = async (u) => { mC4.requetes.push(['page', u]); if (pagesC4[u] !== undefined) return pagesC4[u]; throw Object.assign(new Error('HTTP 404'), { status: 404 }); };
+    const rC4 = await CN.explorerSite({ site: { ...SITE_C, hotesImages: ['img.cardmarket.test'] }, sets: SETS_XYP, registre: { objets: {}, pages: {} }, ...mC4, budget: 50 });
+    v('image Cardmarket : refusée, jamais téléchargée', [rC4.entrees.length, mC4.requetes.filter(r => r[0] === 'image').length, rC4.stats.refus['image:cardmarket']], [0, 0, 1]);
+
+    // bout en bout w-srb : index des sets (liens), page de set, garde du code lu sur la ligne
+    const SITE_B = { code: 'w-b', hotes: ['h.test'], petit: false, tirages: ['jp'], filigrane: false, largeurMin: 255,
+        index: [{ url: 'https://h.test/card/japanese.shtml', extracteur: { type: 'liens', motifLien: '^/card/[a-z0-9]+/?$' }, pages: { param: 'page', max: 1 } }],
+        pages: { param: 'page', max: 1 }, items: CFG_SERIE };
+    const SETS_B = [{ set: 'XY-Promos', code: 'XY-P', nom: 'XY Promo', tirage: 'jp', produits: [{ idProduct: 601, name: 'Meowstic', numero: '41', nomEn: 'Meowstic' }, { idProduct: 602, name: 'Inkay', numero: null, nomEn: 'Inkay' }, { idProduct: 603, name: 'Pokémon Fan Club', numero: '042', nomEn: 'Pokémon Fan Club' }] }];
+    const INDEX_B = '<ul><li><a href="/card/dex/">Cardex</a></li><li><a href="/card/xypromo/">-XY Promo</a></li></ul>';
+    function mondeB(pageSet) { const m = monde(); m.lirePage = async (u) => { m.requetes.push(['page', u]); if (u === 'https://h.test/card/japanese.shtml') return INDEX_B; if (u === 'https://h.test/card/xypromo/') return pageSet; throw Object.assign(new Error('HTTP 404'), { status: 404 }); }; return m; }
+    const mB = mondeB(SERIE);
+    const rB = await CN.explorerSite({ site: SITE_B, sets: SETS_B, registre: { objets: {}, pages: {} }, ...mB, budget: 50, ...{ lireImage: async (url) => { mB.requetes.push(['image', url]); return { fichier: 'C:\\x\\a.jpg', sha256: 'sha-' + url, w: 748, h: 1044 }; } } });
+    v('w-srb : collection appariée par le nom de l\'index, 3 entrées (41 = 41, Inkay au nom seul, 042 = 42)', [rB.stats.collectionsAppariees, rB.entrees.map(e => e.idProduct).sort(), rB.stats.surNomSeul], [1, [601, 602, 603], 1]);
+    v('w-srb : le scan plein est demandé, pas la vignette', rB.entrees.map(e => e.url).sort(), ['https://h.test/card/xypromo/41.jpg', 'https://h.test/card/xypromo/42.jpg', 'https://h.test/card/xypromo/u001.jpg']);
+    const mB2 = mondeB(SERIE.replace(/XY-P/g, 'XY'));
+    const rB2 = await CN.explorerSite({ site: SITE_B, sets: SETS_B, registre: { objets: {}, pages: {} }, ...mB2, budget: 50 });
+    v('w-srb : une page dont le code lu n\'est pas celui du set est refusée entière (aucune image)', [rB2.entrees.length, rB2.stats.refus['item:code-autre-set'], mB2.requetes.filter(r => r[0] === 'image').length], [0, 3, 0]);
+
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
 })().catch(e => { console.error('ERREUR', e); process.exit(1); });
