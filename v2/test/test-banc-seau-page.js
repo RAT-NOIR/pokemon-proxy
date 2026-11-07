@@ -56,6 +56,25 @@ const essayer = async (nom, f) => { try { await f(); } catch (e) { H.v(`${nom} (
         H.v('2. 🔑 la page ne montre aucune réponse du modèle à côté de la case (aucun champ de réponse, de rang ou de confiance dans la page)', /reponse-modele|r[ée]ponse du mod[èe]le|confiance|ia-propose/i.test(html), false);
     });
 
+    // JUGE RAPIDE : la CSP laisse passer les visuels des candidats (hébergés hors de l'origine locale) — l'hôte EXACT, lu dans la configuration, jamais un joker
+    await essayer('visuels et mode 5', async () => {
+        const p = await brut('GET', '/');
+        const html = p.corps.toString('utf8');
+        const csp = p.entetes['content-security-policy'];
+        const { lireConfig } = require('../config');
+        const hoteVisuels = lireConfig({}).images.hotesPublics[0];
+        const img = (/img-src ([^;]+)/.exec(csp) || [, ''])[1].trim().split(/\s+/);
+        H.v('2. 🔑 la CSP autorise l\'origine locale ET l\'hôte exact des visuels (config.images.hotesPublics[0])', [img.includes('\'self\''), img.includes(`https://${hoteVisuels}`), img.length], [true, true, 2]);
+        H.v('2. aucun joker, aucun schéma nu dans la CSP', [/\*/.test(csp), /(^|[ ;])(https?|data|blob):(\s|;|$)/.test(csp)], [false, false]);
+        H.v('2. la CSP ne s\'ouvre ni aux scripts ni à la connexion externes (script-src, connect-src restent \'self\')', [/script-src 'self';/.test(csp), /connect-src 'self';/.test(csp)], [true, true]);
+        const balise = id => (new RegExp(`<[^>]*id="${id}"[^>]*>`).exec(html) || [''])[0];
+        H.v('2. 🔑 « Voir les candidats » (liste triée) est MASQUÉ dans la page du mode 5', /\shidden(\s|>|=)/.test(balise('voir')), true);
+        const ordre = ['questionPhoto', 'zoneCinq', 'zoneSaisie'].map(id => html.indexOf(`id="${id}"`));
+        H.v('2. 🔑 la question « photo suffisante » est AU-DESSUS des 5 candidats, eux-mêmes au-dessus de la saisie', ordre.every(i => i > 0) && ordre[0] < ordre[1] && ordre[1] < ordre[2], true);
+        const app = fs.readFileSync(path.join(__dirname, '..', '..', 'outils', 'banc-200', 'app.js'), 'utf8');
+        H.v('2. la page ne rouvre pas le bouton des candidats triés (Alt+C sans effet en mode 5, pas de .hidden = false sur #voir)', /\$\('voir'\)\.hidden\s*=\s*false/.test(app), false);
+    });
+
     await essayer('relais', async () => {
         recus.length = 0;
         let r = await brut('GET', '/api/banc/seau/courant');

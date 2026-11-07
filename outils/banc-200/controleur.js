@@ -64,13 +64,16 @@
             return api('POST', '/api/banc/seau/candidats-5', { scanId: scanId, carte: carte }).then(function (r) {
                 if (!etat.scan || etat.scan.scanId !== scanId) return;
                 if (r.statut !== 200 || !r.json || !Array.isArray(r.json.candidats)) { ui.dire('Les 5 candidats sont indisponibles (' + detailDe(r) + ') : saisissez l\'adresse ou l\'idProduct.', 'erreur'); return; }
-                etat.cinqVu = true; if (ui.montrerCinq) ui.montrerCinq(r.json.candidats);
+                etat.cinqVu = true; etat.cinq = r.json.candidats; rendreCinq();
             });
         }
+        // les candidats ne sont cliquables qu'une fois « photo suffisante » répondue (oui ou non) : la question est au-dessus d'eux
+        function rendreCinq() { if (ui.montrerCinq && etat.cinqVu) ui.montrerCinq(etat.cinq, etat.photoSuffisante === true || etat.photoSuffisante === false); }
         function choisirCinq(c) {
-            if (!etat.scan || !etat.cinqVu) return Promise.resolve();
+            if (!etat.scan || !etat.cinqVu || etat.occupe) return Promise.resolve();
+            if (etat.photoSuffisante !== true && etat.photoSuffisante !== false) { ui.dire(PHRASE_PHOTO, 'erreur'); return Promise.resolve(); }
             attendre({ libelle: c.nom + ' — ' + c.set.nom + ' — n° ' + (c.numero || '?') + ' (' + c.idProduct + ')', corps: { idProduct: c.idProduct }, via: 'candidat5' });
-            return confirmer();                     // un clic = la vérité (la réponse « photo suffisante » reste obligatoire : sans elle, la confirmation attend)
+            return confirmer();                     // un clic = la vérité, sans « Confirmer » en plus
         }
         function charger() {
             return api('GET', '/api/banc/seau/courant').then(function (r) {
@@ -120,7 +123,7 @@
             etat.occupe = true;
             var corps = { scanId: etat.scan.scanId, carte: etat.carte, via: etat.attente.via, photoSuffisante: etat.photoSuffisante };
             Object.keys(etat.attente.corps).forEach(function (k) { corps[k] = etat.attente.corps[k]; });
-            if (o.modeCinq) corps.mode = etat.cinqVu ? 'candidats-5' : 'saisie';          // le mode de la page, jugé par le serveur (candidats-5 exige que les 5 aient été servis)
+            if (o.modeCinq) corps.mode = etat.attente.via === 'candidat5' ? 'candidats-5' : 'saisie';          // un clic sur l'un des 5 = candidats-5 ; « Autre » (adresse, idProduct), « pas une carte » = saisie
             return api('POST', '/api/banc/seau/verite', corps).then(function (r) {
                 etat.occupe = false;
                 if (r.statut !== 200) { ui.dire('Refusé : ' + detailDe(r), 'erreur'); attendre(null); return; }
@@ -148,7 +151,7 @@
             return Promise.resolve();
         }
         function voirCandidats() {
-            if (!etat.scan) return Promise.resolve();
+            if (!etat.scan || o.modeCinq) return Promise.resolve();       // en mode 5, la liste triée est fermée : elle fuit la préférence du modèle
             return api('POST', '/api/banc/seau/candidats', { scanId: etat.scan.scanId, carte: etat.carte }).then(function (r) {
                 if (r.statut !== 200) { ui.dire('Candidats indisponibles : ' + detailDe(r), 'erreur'); return; }
                 ui.montrerCandidats(trierParPrix(r.json.candidats));
@@ -161,7 +164,7 @@
             if (!etat.scan) return;
             attendre({ libelle: type === 'pas-une-carte' ? 'Pas une carte' : 'Hors catalogue', corps: { aucune: type }, via: 'manuel' });
         }
-        function photoSuffisante(v) { if (v !== true && v !== false) return; etat.photoSuffisante = v; montrerPhoto(); }      // modifiable jusqu'à la confirmation (la dernière réponse gagne)
+        function photoSuffisante(v) { if (v !== true && v !== false) return; etat.photoSuffisante = v; montrerPhoto(); rendreCinq(); }      // modifiable jusqu'à la confirmation (la dernière réponse gagne)
         function poserJeton(jeton) {
             return api('POST', '/_session', { jeton: jeton }).then(function (r) { if (r.statut === 200) { ui.montrerSession(false); return charger(); } ui.dire('Jeton refusé.', 'erreur'); });
         }

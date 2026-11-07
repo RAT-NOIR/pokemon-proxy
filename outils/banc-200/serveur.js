@@ -21,6 +21,11 @@ const RELAIS = Object.freeze([
 const REQUETE_OK = /^[A-Za-z0-9=&_-]{0,200}$/;          // la chaîne de requête relayée : des identifiants, rien d'autre
 const CORPS_MAX = 8 * 1024, REPONSE_MAX = 8 * 1024 * 1024, DELAI_MS = 20000;
 const erreur = (code, message) => Object.assign(new Error(message || code), { code });
+// Les visuels des candidats sont servis par l'hôte public des images (v2/config : images.hotesPublics[0], celui dont visuels.js fabrique les adresses), hors de l'origine locale :
+// la CSP l'autorise par son nom EXACT (liste fermée, jamais de joker). Un hôte illisible ou de forme douteuse n'ouvre rien (la page garde alors « pas de visuel »).
+function hoteDesVisuels() {
+    try { const h = require('../../v2/config').lireConfig({}).images.hotesPublics[0]; return typeof h === 'string' && /^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/i.test(h) && !h.includes('..') ? h : null; } catch { return null; }
+}
 
 /** L'adresse de l'API est jugée par ce qu'elle AUTORISE : l'essai, ou la boucle locale. */
 function baseAutorisee(base) {
@@ -45,7 +50,7 @@ function creerServeur({ apiBase = process.env.RM_API_BASE || ESSAI, jeton = proc
     const hotes = () => [`127.0.0.1:${port}`, `localhost:${port}`];
     const origines = () => hotes().map(h => `http://${h}`);
     const entetesSurs = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY',
-        'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" };
+        'Content-Security-Policy': `default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'${hoteDesVisuels() ? ` https://${hoteDesVisuels()}` : ''}; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'` };
     const repondre = (res, statut, corps, type = 'application/json; charset=utf-8', extra = {}) => { res.writeHead(statut, { 'Content-Type': type, ...entetesSurs, ...extra }); res.end(corps); };
     const json = (res, statut, o) => repondre(res, statut, JSON.stringify(o));
     const fichier = nom => fs.readFileSync(path.join(dossier, nom));

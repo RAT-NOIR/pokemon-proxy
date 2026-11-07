@@ -77,12 +77,13 @@
             $('zoneCandidats').hidden = false;
         },
         // les 5 candidats, tels que servis (ordre aléatoire du serveur) : même taille, mêmes libellés pour chacun, aucun prix, aucune mise en avant
-        montrerCinq: function (liste) {
+        montrerCinq: function (liste, cliquable) {
             var z = $('cinq'); z.textContent = '';
             $('zoneCinq').hidden = !liste; $('zoneSaisie').hidden = !!liste;
             if (!liste) return;
             liste.forEach(function (c) {
                 var b = document.createElement('button'); b.type = 'button'; b.className = 'act';
+                b.disabled = !cliquable; b.title = cliquable ? '' : 'Répondez d\'abord à « La photo suffit-elle… ? » ci-dessus';       // cliquables seulement une fois oui ou non choisi
                 var v = document.createElement('div'); v.className = 'vis';
                 if (c.visuel) { var im = document.createElement('img'); im.alt = ''; im.src = c.visuel; v.appendChild(im); } else v.textContent = 'pas de visuel';
                 var t = document.createElement('div'); t.textContent = c.nom + ' — ' + c.set.nom + ' n° ' + (c.numero || '?') + (c.version ? ' (' + c.version + ')' : '');

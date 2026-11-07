@@ -121,7 +121,7 @@ const nCandidats = appels => appels.filter(a => a.chemin === '/api/banc/seau/can
     // JUGE RAPIDE : le mode « 5 candidats mélangés + autre » (opt-in : le comportement classique ci-dessus ne bouge pas)
     await essayer('mode cinq', async () => {
         const cinq = [3, 1, 5, 2, 4].map(id => ({ idProduct: id, nom: 'N' + id, set: { nom: 'S' }, numero: String(id), visuel: null, version: null }));
-        const appels = [], vus = [];
+        const appels = [], vus = [], cliquable = [];
         const scans = [{ scanId: 'a'.repeat(24), rang: 1, photos: 1, cartes: 1, etiquetees: 0 }];
         const api = async (m, chemin, corps) => {
             appels.push({ chemin, corps });
@@ -133,22 +133,26 @@ const nCandidats = appels => appels.filter(a => a.chemin === '/api/banc/seau/can
             if (chemin === '/api/banc/resoudre-cardmarket') return { statut: 200, json: { idProduct: 9, nom: 'X', set: { nom: 'S' }, numero: '9' } };
             return { statut: 404, json: null };
         };
-        const ui = { montrerPhotoSuffisante() {}, montrerScan() {}, montrerAttente() {}, montrerCandidats() {}, dire() {}, montrerVide() {}, montrerSession() {}, montrerProgres() {}, montrerCinq: l => vus.push(l && l.map(c => c.idProduct)) };
+        const ui = { montrerPhotoSuffisante() {}, montrerScan() {}, montrerAttente() {}, montrerCandidats() {}, dire() {}, montrerVide() {}, montrerSession() {}, montrerProgres() {}, montrerCinq: (l, ok) => { vus.push(l && l.map(c => c.idProduct)); cliquable.push(ok); } };
         const ctrl = creer({ api, ui, modeCinq: true });
         await ctrl.demarrer();
         H.v('7. au scan : les 5 sont demandés tout seuls et montrés TELS QUE SERVIS (aucun retri, aucun prix)', [appels.filter(a => a.chemin === '/api/banc/seau/candidats-5').length, vus[vus.length - 1]], [1, [3, 1, 5, 2, 4]]);
         H.v('7. l\'appel porte le scan et la carte', appels.find(a => a.chemin === '/api/banc/seau/candidats-5').corps, { scanId: 'a'.repeat(24), carte: 0 });
         await ctrl.choisirCinq(cinq[2]);
-        H.v('7. un clic SANS réponse « photo suffisante » : rien d\'écrit', appels.some(a => a.chemin === '/api/banc/seau/verite'), false);
+        H.v('7. 🔑 un clic SANS réponse « photo suffisante » : rien d\'écrit, aucune confirmation en attente (les candidats ne sont pas cliquables)', [appels.some(a => a.chemin === '/api/banc/seau/verite'), ctrl.etat().attente], [false, null]);
+        H.v('7. les candidats sont montrés comme non cliquables tant que la réponse manque', cliquable[cliquable.length - 1], false);
         ctrl.photoSuffisante(true);
-        await ctrl.confirmer();
-        H.v('7. 🔑 après la réponse : vérité écrite, via candidat5, mode candidats-5, aucun ordre envoyé par le client', appels.find(a => a.chemin === '/api/banc/seau/verite').corps, { scanId: 'a'.repeat(24), carte: 0, via: 'candidat5', photoSuffisante: true, idProduct: 5, mode: 'candidats-5' });
+        H.v('7. la réponse donnée : les candidats deviennent cliquables', cliquable[cliquable.length - 1], true);
+        await ctrl.choisirCinq(cinq[2]);
+        H.v('7. 🔑 UN clic enregistre directement (pas de « Confirmer » en plus) : vérité écrite, via candidat5, mode candidats-5, aucun ordre envoyé par le client', [appels.filter(a => a.chemin === '/api/banc/seau/verite').length, appels.find(a => a.chemin === '/api/banc/seau/verite').corps], [1, { scanId: 'a'.repeat(24), carte: 0, via: 'candidat5', photoSuffisante: true, idProduct: 5, mode: 'candidats-5' }]);
+        await ctrl.voirCandidats();
+        H.v('7. 🔑 en mode 5, « Voir les candidats » (liste triée, qui fuit la préférence du modèle) ne fait AUCUN appel', appels.filter(a => a.chemin === '/api/banc/seau/candidats').length, 0);
         scans[0].etiquetees = 0; await ctrl.charger();
         ctrl.photoSuffisante(false);
         await ctrl.entrer('https://www.cardmarket.com/fr/Pokemon/Products/Singles/S/X');
         await ctrl.entrer('');
         const v2 = appels.filter(a => a.chemin === '/api/banc/seau/verite')[1];
-        H.v('7. « Autre » (saisie actuelle) : via url, mode candidats-5 (les 5 ont été montrés)', [v2.corps.via, v2.corps.mode, v2.corps.idProduct], ['url', 'candidats-5', 9]);
+        H.v('7. 🔑 « Autre » (saisie actuelle) : via url, mode « saisie » (même après avoir vu les 5)', [v2.corps.via, v2.corps.mode, v2.corps.idProduct], ['url', 'saisie', 9]);
         // les 5 indisponibles : la saisie reste possible, mode saisie
         const appels2 = [];
         const api2 = async (m, chemin, corps) => { appels2.push({ chemin, corps }); if (chemin === '/api/banc/seau/candidats-5') return { statut: 503, json: null }; return api(m, chemin, corps); };

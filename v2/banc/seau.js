@@ -23,8 +23,18 @@ const VIA = Object.freeze(['url', 'idProduct', 'candidat', 'candidat5', 'manuel'
 // JUGE RAPIDE : le mode de la page, enregistré par le serveur sur CHAQUE vérité ; `candidats-5` n'existe que si les 5 candidats ont été servis pour ce scan (sinon refus)
 const MODES = Object.freeze(['candidats-5', 'saisie']);
 const NB_CINQ = 5;
+// Les vues servies (banc_seau_vues) sont BORNÉES : les N dernières par seau. 2000 = ~10 vues par scan pour un juge de 200 (chaque scan affiché en sert une ; un rechargement de page en ressert une) ; les vérités gardent
+// leur propre copie de l'ordre affiché : une vue retirée ne perd aucune mesure, elle ne sert qu'à juger le clic qui suit, toujours sur une vue récente.
+const VUES_MAX_PAR_SEAU = 2000;
 /** Fisher-Yates avec crypto.randomInt : aucune place ne ressort plus qu'une autre. Injectable (`melanger`) pour que les bancs fixent une graine. */
-const melangerAlea = liste => { const a = liste.slice(); for (let i = a.length - 1; i > 0; i--) { const j = crypto.randomInt(0, i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+/** Le mode d'une vérité : « candidats-5 » ⇔ un clic sur l'un des 5 (via candidat5) ; « Autre » (url, idProduct) et « pas une carte » sont toujours « saisie ». Défaut : saisie. */
+const jugerMode = (mode, via) => {
+    if (mode !== undefined && !MODES.includes(mode)) throw erreur('ENTREE', 'mode');
+    const m = mode === undefined ? 'saisie' : mode;
+    if ((m === 'candidats-5') !== (via === 'candidat5')) throw erreur('ENTREE', 'mode-via');
+    return m;
+};
+const melangerAlea =liste => { const a = liste.slice(); for (let i = a.length - 1; i > 0; i--) { const j = crypto.randomInt(0, i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const GENESE = '0'.repeat(64);
 const EXT = Object.freeze({ 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' });
 const MOTIF_MIN = 5, MOTIF_MAX = 200;
@@ -61,7 +71,8 @@ const empreinteLigne = l => hacher({ prec: l.prec, seauId: l.seauId, rang: l.ran
 const empreintePhotos = photos => sha256(photos.map(p => `${p.scanId}:${p.index}:${p.sha256}`).sort().join('\n'));
 // le scellé couvre aussi les VÉRITÉS du juge (veritesEmpreinte) : `undefined` pour un seau qui n'en porte pas (l'empreinte ne change pas pour un seau non juge)
 const empreinteScellee = s => hacher({ seauEmpreinte: s.empreinte, tete: s.tete, n: s.n, photosEmpreinte: s.photosEmpreinte, scelleLe: iso(s.scelleLe), ...(s.veritesEmpreinte ? { veritesEmpreinte: s.veritesEmpreinte } : {}) });
-const empreinteVerites = verites => sha256(verites.map(v => `${v.scanId}:${v.carte}:${v.idProduct ?? ''}|${v.aucune ?? ''}:${v.rev}`).sort().join('\n'));
+// JUGE RAPIDE : `mode` et `ordreAffiche` n'entrent dans l'empreinte QUE s'ils sont présents ; une ligne saisie avant le mode des 5 garde son empreinte à l'octet
+const empreinteVerites = verites => sha256(verites.map(v => `${v.scanId}:${v.carte}:${v.idProduct ?? ''}|${v.aucune ?? ''}:${v.rev}${v.mode ? `|${v.mode}|${Array.isArray(v.ordreAffiche) ? v.ordreAffiche.join(',') : ''}` : ''}`).sort().join('\n'));
 const valeurDe = v => ({ idProduct: v.idProduct ?? null, aucune: v.aucune ?? null });
 // un erratum est une maille d'une SECONDE chaîne, accrochée à l'empreinte du scellé : il garde l'ancienne valeur, la nouvelle, la date et le motif
 const empreinteErratum = e => hacher({ prec: e.prec, seauId: e.seauId, n: e.n, scanId: e.scanId, carte: e.carte, ancien: canon(valeurDe(e.ancien)), nouveau: canon(valeurDe(e.nouveau)), via: e.via, motif: e.motif, le: iso(e.le) });
@@ -137,8 +148,15 @@ async function verifierChaineSeau(colFn, seauId, { ancre = null, stockage = null
     return { ok: problemes.length === 0, lignes: lignes.length, tete, errata: errata.length, ancre: etatAncre, objets, problemes };
 }
 
-function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = process.env, horloge = () => new Date(), catalogue = null, ancresDir = require('./ancre').DOSSIER, melanger = melangerAlea } = {}) {
+function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = process.env, horloge = () => new Date(), catalogue = null, ancresDir = require('./ancre').DOSSIER, melanger = melangerAlea, vuesMax = VUES_MAX_PAR_SEAU } = {}) {
     const col = n => colFn(COLLECTIONS[n]);
+    /** Retire les vues les plus anciennes du seau au-delà de `vuesMax` (jamais une vérité, jamais la chaîne : la table des vues n'est pas scellée). */
+    async function elaguerVues(seauId) {
+        const n = await col('vues').countDocuments({ seauId });
+        if (n <= vuesMax) return;
+        const vieilles = await col('vues').find({ seauId }, { projection: { _id: 1 } }).sort({ _id: 1 }).limit(n - vuesMax).toArray();
+        if (vieilles.length) await col('vues').deleteMany({ _id: { $in: vieilles.map(x => x._id) } });
+    }
     const analyses = () => colFn('analyses');
     let indexes = null, stockagePret = null;
     const preparer = () => (indexes = indexes || (async () => { for (const i of INDEX_SEAU) await colFn(i.c).createIndex(i.cle, i.opts); })().catch(e => { indexes = null; throw e; }));
@@ -402,6 +420,7 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
             .map(p => ({ idProduct: p.idProduct, nom: p.nomCardmarket, set: { slug: p.set.slug, nom: p.set.nom }, numero: p.numero ?? null,
                 prix: p.prixGuide ? { trend: p.prixGuide.trend ?? null, low: p.prixGuide.low ?? null } : null, visuel: p.visuel ? p.visuel.url : null, version: p.version ?? null }));
         await col('vues').insertOne({ scanId, carte, seauId: ligne.seauId, le: horloge(), ids: liste.map(x => x.idProduct) });
+        await elaguerVues(ligne.seauId);
         return { candidats: liste };
     }
 
@@ -419,6 +438,7 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
         let ordre = melanger(cinq.slice());
         if (!Array.isArray(ordre) || ordre.length !== cinq.length || ordre.slice().sort((a, b) => a - b).join() !== cinq.slice().sort((a, b) => a - b).join()) ordre = melangerAlea(cinq);       // un mélangeur qui perdrait ou inventerait un candidat est ignoré
         await col('vues').insertOne({ scanId, carte, seauId: ligne.seauId, le: horloge(), mode: 'candidats-5', ids: ordre });
+        await elaguerVues(ligne.seauId);
         return { mode: 'candidats-5', candidats: ordre.map(id => { const p = table.get(id); return { idProduct: p.idProduct, nom: p.nomCardmarket, set: { slug: p.set.slug, nom: p.set.nom }, numero: p.numero ?? null, visuel: p.visuel ? p.visuel.url : null, version: p.version ?? null }; }) };
     }
 
@@ -426,11 +446,8 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
     async function saisirVerite({ scanId, carte = 0, idProduct, aucune, via, photoSuffisante, mode, porteur }) {
         // « la photo suffit-elle à un expert pour trancher l'impression exacte ? » : vrai/faux de l'éditeur, enregistré avec la vérité ; absent = on ne touche pas à la valeur déjà posée
         if (photoSuffisante !== undefined && typeof photoSuffisante !== 'boolean') throw erreur('ENTREE', 'photo-suffisante');
-        if (mode !== undefined && !MODES.includes(mode)) throw erreur('ENTREE', 'mode');
-        const modeVerite = mode === undefined ? 'saisie' : mode;
-        if (via === 'candidat5' && modeVerite !== 'candidats-5') throw erreur('ENTREE', 'mode-via');
+        const modeVerite = jugerMode(mode, via);
         const prep = await preparerVerite({ scanId, carte, idProduct, aucune, via, porteur });
-        if (modeVerite === 'candidats-5' && !prep.derniereCinq) throw erreur('CONFLIT', 'mode-sans-vue');
         const p = { ...prep, photoSuffisante, mode: modeVerite, ordreAffiche: modeVerite === 'candidats-5' ? prep.derniereCinq : null };
         // 🔑 un JUGE scellé (ou en cours de scellement) ne reçoit plus AUCUNE vérité : une erreur humaine s'ajoute en ERRATUM (ajouterErratum), jamais par réécriture
         const seau = await col('seaux').findOne({ _id: p.ligne.seauId });
@@ -487,9 +504,10 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
      * L'ERRATUM : la seule façon de corriger la vérité d'un juge SCELLÉ. Une maille de plus dans la chaîne des errata (accrochée à l'empreinte du scellé) : elle garde l'ancienne valeur, la nouvelle, la date et le motif.
      * La vérité d'origine n'est jamais réécrite ; la valeur EFFECTIVE est celle du dernier erratum (l'export la rend avec la liste des errata).
      */
-    async function ajouterErratum({ scanId, carte = 0, idProduct, aucune, via, motif, porteur }) {
+    async function ajouterErratum({ scanId, carte = 0, idProduct, aucune, via, motif, mode, porteur }) {
         const m = typeof motif === 'string' ? motif.trim() : '';
         if (m.length < MOTIF_MIN || m.length > MOTIF_MAX) throw erreur('ENTREE', 'motif');
+        const modeErratum = jugerMode(mode, via);
         const p = await preparerVerite({ scanId, carte, idProduct, aucune, via, porteur });
         const seau = await col('seaux').findOne({ _id: p.ligne.seauId });
         if (!seau || seau.type !== 'juge' || seau.etat !== 'scelle') throw erreur('CONFLIT', 'pas-un-juge-scelle');
@@ -499,7 +517,7 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
             const dernier = (await col('errata').find({ seauId: seau._id }).sort({ n: -1 }).limit(1).toArray())[0] || null;
             const duScan = (await col('errata').find({ seauId: seau._id, scanId, carte: p.carte }).sort({ n: -1 }).limit(1).toArray())[0] || null;
             const e = { _id: `${seau._id}:${dernier ? dernier.n + 1 : 1}`, seauId: seau._id, n: dernier ? dernier.n + 1 : 1, scanId, carte: p.carte,
-                ancien: duScan ? valeurDe(duScan.nouveau) : valeurDe(base), nouveau: { idProduct: p.idProduct, aucune: p.aucune }, via, candidatsVus: p.candidatsVus, motif: m, le: horloge(), prec: dernier ? dernier.empreinte : seau.empreinteScellee };
+                ancien: duScan ? valeurDe(duScan.nouveau) : valeurDe(base), nouveau: { idProduct: p.idProduct, aucune: p.aucune }, via, candidatsVus: p.candidatsVus, mode: modeErratum, ordreAffiche: modeErratum === 'candidats-5' ? p.derniereCinq : null, motif: m, le: horloge(), prec: dernier ? dernier.empreinte : seau.empreinteScellee };
             e.empreinte = empreinteErratum(e);
             try { await col('errata').insertOne(e); return { erratum: e.n }; }
             catch (x) { if (x && x.code === 11000) continue; throw x; }
@@ -515,4 +533,4 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
     return { preparer, courant, declarer, sceller, enregistrerPhoto, enregistrerMesures, aEtiqueter, lirePhoto, candidats, candidats5, saisirVerite, ajouterErratum, verifierChaine, cadre };
 }
 
-module.exports = { creerSeaux, verifierChaineSeau, empreintePhotos, empreinteVerites, empreinteScellee, cibleParDefaut, INDEX_SEAU, COLLECTIONS, TYPES, AUCUNE, VIA, CIBLE_JUGE, CIBLE_MAX, SCAN_FRAIS_MS, PHOTOS_MAX, MESURES_OCTETS_MAX, FORME_ID, FORME_SEAU, FORME_SHA, erreur };
+module.exports = { VUES_MAX_PAR_SEAU, creerSeaux, verifierChaineSeau, empreintePhotos, empreinteVerites, empreinteScellee, cibleParDefaut, INDEX_SEAU, COLLECTIONS, TYPES, AUCUNE, VIA, CIBLE_JUGE, CIBLE_MAX, SCAN_FRAIS_MS, PHOTOS_MAX, MESURES_OCTETS_MAX, FORME_ID, FORME_SEAU, FORME_SHA, erreur };

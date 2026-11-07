@@ -128,7 +128,7 @@ const melangeurGraine = s => { const r = graine(s); return liste => { const a = 
         H.v('3. via candidat5 avec le mode « saisie » : 400', (await verite({ scanId: s1, idProduct: 2003, via: 'candidat5', mode: 'saisie' })).statut, 400);
         H.v('3. un mode inconnu : 400', (await verite({ scanId: s1, idProduct: 2003, via: 'idProduct', mode: 'rapide' })).statut, 400);
         H.v('3. 🔑 le client ne déclare pas l\'ordre affiché : 400', (await verite({ scanId: s1, idProduct: 2003, via: 'candidat5', mode: 'candidats-5', ordreAffiche: [2003] })).statut, 400);
-        H.v('3. mode candidats-5 sans que les 5 aient été montrés pour ce scan (s3) : 409 mode-sans-vue', detail(await verite({ scanId: s3, idProduct: 2001, via: 'idProduct', mode: 'candidats-5' })), 'mode-sans-vue');
+        H.v('3. 🔑 mode candidats-5 avec une autre voie que le clic (via idProduct ou url, « Autre ») : 400 mode-via — « Autre » est toujours le mode saisie', [(await verite({ scanId: s1, idProduct: 2001, via: 'idProduct', mode: 'candidats-5' })).statut, detail(await verite({ scanId: s1, idProduct: 2001, via: 'url', mode: 'candidats-5' }))], [400, 'mode-via']);
         H.v('3. un administrateur non propriétaire du scan : 404', (await verite({ scanId: s1, idProduct: 2003, via: 'candidat5', mode: 'candidats-5' }, ADM2)).statut, 404);
         H.v('3. un simple utilisateur : 404 natif', (await post(sv, USR, '/api/banc/seau/verite', { scanId: s1, idProduct: 2003, via: 'candidat5', mode: 'candidats-5' })).statut, (await H.appel(sv.url, '/api/banc/route-qui-nexiste-pas', { entetes: auth(ADM) })).statut);
         // le clic sur un des 5
@@ -140,14 +140,12 @@ const melangeurGraine = s => { const r = graine(s); return liste => { const a = 
         r = await verite({ scanId: s2, idProduct: 2007, via: 'idProduct', photoSuffisante: false });
         v = await db.col('banc_seau_verites').findOne({ scanId: s2, carte: 0 });
         H.v('3. une vérité sans `mode` (saisie classique) : mode « saisie », aucun ordre affiché', [r.statut, v.mode, v.ordreAffiche], [200, 'saisie', null]);
-        const ordre2 = (await db.col('banc_seau_vues').find({ scanId: s2 }).sort({ le: -1 }).limit(1).toArray())[0].ids;
-        r = await verite({ scanId: s2, idProduct: 2007, via: 'url', mode: 'candidats-5', photoSuffisante: false });
+        r = await verite({ scanId: s2, idProduct: 2007, via: 'url', mode: 'saisie', photoSuffisante: false });
         v = await db.col('banc_seau_verites').findOne({ scanId: s2, carte: 0 });
-        H.v('3. « Autre » après avoir vu les 5 : via url, mode candidats-5, ordre vu gardé, rev 2', [r.statut, r.json.rev, v.mode, v.via, v.ordreAffiche], [200, 2, 'candidats-5', 'url', ordre2]);
+        H.v('3. 🔑 « Autre » après avoir vu les 5 : via url, mode « saisie », aucun ordre affiché, rev 2', [r.statut, r.json.rev, v.mode, v.via, v.ordreAffiche], [200, 2, 'saisie', 'url', null]);
         H.v('3. l\'historique garde le mode et l\'ordre de la saisie précédente', [v.historique[0].mode, v.historique[0].ordreAffiche], ['saisie', null]);
-        // « pas une carte » dans le mode des 5
-        r = await verite({ scanId: s2, aucune: 'pas-une-carte', via: 'manuel', mode: 'candidats-5' });
-        H.v('3. « pas une carte » dans le mode des 5 : écrit, mode candidats-5', [r.statut, (await db.col('banc_seau_verites').findOne({ scanId: s2, carte: 0 })).mode], [200, 'candidats-5']);
+        r = await verite({ scanId: s2, aucune: 'pas-une-carte', via: 'manuel', mode: 'saisie' });
+        H.v('3. « pas une carte » : écrit, mode saisie', [r.statut, (await db.col('banc_seau_verites').findOne({ scanId: s2, carte: 0 })).mode], [200, 'saisie']);
         // le second appel de candidats-5 remplace la liste proposée : le dernier ordre servi est celui qui est enregistré
         const r2 = await post(sv, ADM, '/api/banc/seau/candidats-5', { scanId: s1 });
         const ordre1b = r2.json.candidats.map(c => c.idProduct);
@@ -170,6 +168,38 @@ const melangeurGraine = s => { const r = graine(s); return liste => { const a = 
         H.v('4. la chaîne du juge scellé se relit sans problème', [ver.statut, ver.json.problemes.map(p => p.cause).filter(c => c !== 'non-ancre'), (ver.json.lignes || 0) >= 0], [200, [], true]);       // 'non-ancre' : l'ancre d'un juge vit hors de ce banc
         const apres = await post(sv, ADM, '/api/banc/seau/verite', { scanId: s1, idProduct: 2002, via: 'candidat5', mode: 'candidats-5' });
         H.v('4. 🔑 une vérité dans un juge scellé : 409 juge-scelle (le mode des 5 n\'ouvre rien)', [apres.statut, detail(apres)], [409, 'juge-scelle']);
+        // l'erratum enregistre le mode comme les vérités (hors de son empreinte : la chaîne des errata ne change pas de forme)
+        const ordreS1 = (await db.col('banc_seau_vues').find({ scanId: s1, mode: 'candidats-5' }).sort({ le: -1, _id: -1 }).limit(1).toArray())[0].ids;
+        const cible = ordreS1.find(id => id !== 2004);
+        let er = await post(sv, ADM, '/api/banc/seau/erratum', { scanId: s1, idProduct: cible, via: 'candidat5', mode: 'candidats-5', motif: 'clic sur le mauvais candidat' });
+        H.v('4. erratum par un clic sur les 5 : accepté, il garde le mode et l\'ordre affiché', [er.statut, (await db.col('banc_seau_errata').findOne({ scanId: s1 })) && (({ mode, ordreAffiche }) => [mode, ordreAffiche])(await db.col('banc_seau_errata').findOne({ scanId: s1 }))], [200, ['candidats-5', ordreS1]]);
+        er = await post(sv, ADM, '/api/banc/seau/erratum', { scanId: s1, idProduct: 2002, via: 'idProduct', motif: 'saisie a la main' });
+        H.v('4. erratum par la saisie : mode « saisie », aucun ordre', [er.statut, (await db.col('banc_seau_errata').find({ scanId: s1 }).sort({ n: -1 }).limit(1).toArray())[0].mode, (await db.col('banc_seau_errata').find({ scanId: s1 }).sort({ n: -1 }).limit(1).toArray())[0].ordreAffiche], [200, 'saisie', null]);
+        H.v('4. un erratum avec un mode incohérent (candidats-5 sans clic) : 400', (await post(sv, ADM, '/api/banc/seau/erratum', { scanId: s1, idProduct: 2002, via: 'idProduct', mode: 'candidats-5', motif: 'incoherent' })).statut, 400);
+    });
+
+    // ══ 5. l'empreinte des vérités : mode et ordre n'y entrent que s'ils sont présents (un juge déjà saisi garde son empreinte à l'octet)
+    await essayer('empreinte', async () => {
+        const { empreinteVerites } = require('../banc/seau');
+        const ancienne = [{ scanId: 'a'.repeat(24), carte: 0, idProduct: 2001, aucune: null, rev: 1 }, { scanId: 'b'.repeat(24), carte: 0, idProduct: null, aucune: 'pas-une-carte', rev: 2 }];
+        const formeAvant = require('crypto').createHash('sha256').update(ancienne.map(v => `${v.scanId}:${v.carte}:${v.idProduct ?? ''}|${v.aucune ?? ''}:${v.rev}`).sort().join('\n')).digest('hex');
+        H.v('5. 🔑 des lignes SANS mode ni ordre : l\'empreinte est celle d\'avant, à l\'octet', empreinteVerites(ancienne), formeAvant);
+        H.v('5. une ligne AVEC mode et ordre : l\'empreinte change', empreinteVerites([{ ...ancienne[0], mode: 'candidats-5', ordreAffiche: [3, 1, 2] }, ancienne[1]]) !== formeAvant, true);
+        H.v('5. l\'ordre affiché est couvert : deux ordres, deux empreintes', empreinteVerites([{ ...ancienne[0], mode: 'candidats-5', ordreAffiche: [3, 1, 2] }]) !== empreinteVerites([{ ...ancienne[0], mode: 'candidats-5', ordreAffiche: [1, 3, 2] }]), true);
+    });
+
+    // ══ 6. les vues servies sont BORNÉES (les N dernières par seau) ; les plus anciennes sont retirées
+    await essayer('vues bornées', async () => {
+        const { VUES_MAX_PAR_SEAU } = require('../banc/seau');
+        H.v('6. la borne par défaut est une constante écrite (>= 1000)', Number.isInteger(VUES_MAX_PAR_SEAU) && VUES_MAX_PAR_SEAU >= 1000, true);
+        const petit = creerSeaux({ cfg: cfgOn, stockage: memoire, horloge: () => new Date(), catalogue: reel, ancresDir: ancres, vuesMax: 3 });
+        const avant = await db.col('banc_seau_vues').countDocuments({ seauId: juge.id });
+        for (let i = 0; i < 6; i++) await petit.candidats5({ scanId: s2, carte: 0, porteur: ADM.porteur });
+        const restantes = await db.col('banc_seau_vues').find({ seauId: juge.id }).sort({ _id: 1 }).toArray();
+        H.v('6. avant la borne la table avait des vues (le banc est bien dans le cas à borner)', avant > 3, true);
+        H.v('6. 🔑 après 6 appels avec une borne de 3 : exactement 3 vues, les 3 DERNIÈRES (toutes de ce dernier scan)', [restantes.length, restantes.every(x => x.scanId === s2)], [3, true]);
+        await petit.candidats({ scanId: s2, carte: 0, porteur: ADM.porteur });
+        H.v('6. la vue de /candidats (liste triée) est bornée de la même façon', await db.col('banc_seau_vues').countDocuments({ seauId: juge.id }), 3);
     });
 
     await sv.fermer(); await svOff.fermer(); await svAlea.fermer();

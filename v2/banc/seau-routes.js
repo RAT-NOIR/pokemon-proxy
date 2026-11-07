@@ -89,8 +89,8 @@ function monter(router, cfg, seaux) {
     // L'ERRATUM : la seule correction d'une vérité d'un juge SCELLÉ ; ajouté à la chaîne, jamais une réécriture (seau.js).
     router.post('/api/banc/seau/erratum', ...base, async (req, res) => {
         const b = req.body;
-        if (!cleStr(b, ['scanId', 'carte', 'idProduct', 'aucune', 'via', 'motif']) || typeof b.scanId !== 'string' || !FORME_ID.test(b.scanId)) return refuse(res, 'corps');
-        try { return res.status(200).json({ success: true, ...await seaux.ajouterErratum({ scanId: b.scanId, carte: b.carte === undefined ? 0 : b.carte, idProduct: b.idProduct, aucune: b.aucune, via: b.via, motif: b.motif, porteur: porteurDe(req) }) }); } catch (e) { return repondre(res, e, 'erratum'); }
+        if (!cleStr(b, ['scanId', 'carte', 'idProduct', 'aucune', 'via', 'motif', 'mode']) || typeof b.scanId !== 'string' || !FORME_ID.test(b.scanId)) return refuse(res, 'corps');
+        try { return res.status(200).json({ success: true, ...await seaux.ajouterErratum({ scanId: b.scanId, carte: b.carte === undefined ? 0 : b.carte, idProduct: b.idProduct, aucune: b.aucune, via: b.via, motif: b.motif, mode: b.mode, porteur: porteurDe(req) }) }); } catch (e) { return repondre(res, e, 'erratum'); }
     });
 
     // ── les corps BINAIRES : la même discipline que POST /api/banc/photo — tout est jugé AVANT de lire un octet du corps
