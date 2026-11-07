@@ -8,6 +8,7 @@
 // Additif strict : updateOne({_id, dateSortie:null, dateSortieEn:null, dateSortieJa:null, dateSortieMois absent [, periodeDistribution absente]}, {$set}) ; jamais d'upsert.
 // Une garde s'écrit par ce qu'elle autorise : argument inconnu = refus AVANT toute connexion.
 // ============================================================
+require('dotenv').config();
 const fs = require('fs');
 const AUTORISES = [/^--preuves=.+\.json$/, /^--simuler$/, /^--ecrire$/, /^--attendu=\d+$/, /^--etat=.+\.json$/];
 const args = process.argv.slice(2);
