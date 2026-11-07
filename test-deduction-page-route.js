@@ -98,6 +98,82 @@ async function lot(cartes, appris = []) {
     const { r: r7 } = await lot([vignette('Inconnu', URL_6704)]);
     verifier('7. page valide mais rien de déduit → idExpansion null (garde : au moins une déduite par la page)', [r7.deduites, r7.idExpansion, r7.couverture], [0, null, null]);
 
+    // ══ CAS ADVERSES (second relecteur, 2026-11-07) : le client peut mentir sur `urlPage` — chaque cas DOIT finir en 0 ligne écrite ══
+    const Q = '/en/Pokemon/Products/Singles';
+    let adverses = 0;
+    const rien = async (nom, cartes, appris = [], attenduSupp = null) => {
+        adverses++;
+        const { r, numeros } = await lot(cartes, appris);
+        verifier(`ADV ${nom} → 0 déduite, 0 ligne ajoutée, aucune ligne déduite`,
+            [r.deduites, numeros.docs.length - appris.length, numeros.docs.some(d => d.certitude === 'deduite' || d.source === 'cardmarket-deduit')], [0, 0, false]);
+        if (attenduSupp) verifier(`ADV ${nom} (précision)`, attenduSupp(r), true);
+    };
+    const deux = u => [vignette('Heracross', u), vignette('Surskit', u)];
+    // (a) l'expansion désignée a déjà des lignes apprises
+    await rien('a1. expansion 6704 déjà apprise (idExpansion)', deux(URL_6704), [{ idProduct: 99, idExpansion: 6704, slugSet: 'Autre', slug: 'X', numero: '5', source: 'cardmarket', certitude: 'exacte' }]);
+    await rien('a2. expansion déjà apprise par une ligne idExpansion=6704 sans slugSet', deux(URL_6704), [{ idProduct: 98, idExpansion: 6704, slugSet: null, slug: null, numero: '1', source: 'tcgdex', certitude: null }]);
+    // (b) le slugSet de la vignette a déjà des lignes sous une AUTRE expansion
+    await rien('b1. slugSet déjà appris sous l\'expansion 9999', deux(URL_6704), [{ idProduct: 97, idExpansion: 9999, slugSet: 'Delta-Reign', slug: 'Autre', numero: '5', source: 'cardmarket', certitude: 'exacte' }]);
+    await rien('b2. slugSet déjà appris par une ligne à idExpansion null', deux(URL_6704), [{ idProduct: 96, idExpansion: null, slugSet: 'Delta-Reign', slug: 'Autre', numero: '5', source: 'cardmarket', certitude: 'exacte' }]);
+    // (c) deux vignettes du même slugSet, deux expansions de page différentes
+    await rien('c. deux pages d\'expansions différentes', [vignette('Heracross', URL_6704), vignette('Surskit', URL_6704.replace('6704', '6705'))]);
+    await rien('c2. même vignette vue sous deux pages — l\'une sans preuve', [vignette('Heracross', URL_6704), vignette('Surskit', Q + '?idCategory=1&idExpansion=6704')]);
+    // (d) une vignette avec urlPage, une autre du même slugSet sans
+    await rien('d. une avec urlPage, une sans', [vignette('Heracross', URL_6704), vignette('Surskit')]);
+    // (e) adresses malformées ou hors périmètre (toutes les vignettes du lot les portent)
+    for (const [nom, u] of [
+        ['e1. idExpansion doublé (même valeur)', Q + '?idCategory=51&idExpansion=6704&idExpansion=6704'],
+        ['e2. idCategory=1', Q + '?idCategory=1&idExpansion=6704'],
+        ['e3. idCategory=51 doublée', Q + '?idCategory=51&idCategory=51&idExpansion=6704'],
+        ['e4. chemin Magic', '/en/Magic/Products/Singles?idExpansion=6704'],
+        ['e5. segment slugSet différent', Q + '/Autre-Set?idExpansion=6704'],
+        ['e6. page de produit (deux segments)', Q + '/Delta-Reign/Heracross?idExpansion=6704'],
+        ['e7. URL absolue https', 'https://www.cardmarket.com' + Q + '?idExpansion=6704'],
+        ['e8. URL sans hôte « // »', '//www.cardmarket.com' + Q + '?idExpansion=6704'],
+        ['e9. défi __cf_chl_', Q + '?idExpansion=6704&__cf_chl_tk=abc'],
+        ['e10. défi __cf_chl_ encodé en clé', Q + '?__cf_chl_rt_tk=x&idExpansion=6704'],
+        ['e11. sans query', Q],
+        ['e12. idExpansion=0', Q + '?idExpansion=0'],
+        ['e13. idExpansion non numérique', Q + '?idExpansion=67a4'],
+        ['e14. idExpansion géant', Q + '?idExpansion=99999999999999999999']
+    ]) await rien(nom, deux(u));
+    // (f) le slug est déjà porté par un produit appris d'une autre expansion
+    await rien('f1. slug déjà porté ailleurs (idExpansion 7000)', deux(URL_6704), [{ idProduct: 95, idExpansion: 7000, slugSet: 'Delta-Reign', slug: 'Heracross', numero: '3', source: 'cardmarket', certitude: 'exacte' }]);
+    await rien('f2. slug déjà porté par une ligne à idExpansion null', deux(URL_6704), [{ idProduct: 94, idExpansion: null, slugSet: 'Delta-Reign', slug: 'Heracross', numero: '3', source: 'cardmarket', certitude: 'exacte' }]);
+    // (g) nom désignant deux produits non appris
+    await rien('g1. Masquerain sans variante (2 produits)', [vignette('Masquerain', URL_6704)], [], r => Object.keys(r.raisonsNonDeduites).some(k => /lien sans variante|# produits non appris/.test(k)));
+    await rien('g2. Masquerain-V1 (2 produits non appris)', [vignette('Masquerain-V1', URL_6704)]);
+    // (h) deux vignettes désignant le même produit
+    await rien('h. deux vignettes pour Heracross', [vignette('Heracross', URL_6704), vignette('Heracross', URL_6704)], [], r => Object.keys(r.raisonsNonDeduites).some(k => /vignettes désignent le produit/.test(k)));
+    // (j) urlPage trop longue ou non-chaîne : normaliserCarte la rend null, le slugSet ne reçoit aucune preuve
+    await rien('j1. urlPage de 513 caractères', deux(URL_6704 + '&x=' + 'a'.repeat(513 - URL_6704.length - 3)));
+    await rien('j2. urlPage nombre', deux(6704));
+    await rien('j3. urlPage objet', deux({ toString: () => URL_6704 }));
+    await rien('j4. urlPage tableau', deux([URL_6704]));
+    verifier('ADV j5. 513 caractères pile → null ; 512 pile → gardée', [normaliserCarte({ ...base, urlPage: URL_6704 + '&x=' + 'a'.repeat(513 - URL_6704.length - 3) }).urlPage, normaliserCarte({ ...base, urlPage: URL_6704 + '&x=' + 'a'.repeat(512 - URL_6704.length - 3) }).urlPage !== null], [null, true]);
+    adverses++;
+
+    // (i) une carte LUE avec image dans le même lot, à côté d'une vignette prouvée par la page : elle s'écrit normalement, la déduction aussi
+    {
+        adverses++;
+        const numeros = collection([]);
+        numeros.bulkWrite = async ops => { for (const { updateOne: { filter, update, upsert } } of ops) { let d = numeros.docs.find(x => x.idProduct === filter.idProduct); if (!d && upsert) { d = { idProduct: filter.idProduct }; numeros.docs.push(d); } if (d) Object.assign(d, update.$set); } };
+        const catalogue = collection(CAT.map(d => ({ ...d })));
+        const lue = { idProduct: 500, numero: '5', codeSet: 'XX', slug: 'Autre-Carte', slugSet: 'Autre-Set', nomFr: 'Autre' };
+        const r = await apprendreLot([lue, vignette('Heracross', URL_6704)], { numeros, catalogue, decoderCodeSet, memoriserCodeSet: async () => {}, journal: silence, userId: 'banc' });
+        const d500 = numeros.docs.find(d => d.idProduct === 500), d11 = numeros.docs.find(d => d.idProduct === 11);
+        verifier('ADV i. carte lue écrite normalement (exacte), déduction par la page à côté (deduite)',
+            [r.nouvelles, r.deduites, d500 && d500.certitude, d500 && d500.source, d500 && d500.numero, d11 && d11.certitude], [1, 1, 'exacte', 'cardmarket', '5', 'deduite']);
+    }
+    // (k) une déduction par la page : jamais « exacte », et l'adresse n'est écrite nulle part dans la ligne
+    {
+        adverses++;
+        const { r, numeros } = await lot(deux(URL_6704));
+        verifier('ADV k. lignes déduites par la page : certitude « deduite » seulement, source « cardmarket-deduit », aucune « exacte », aucun champ urlPage ni adresse',
+            [r.deduites, numeros.docs.every(d => d.certitude === 'deduite' && d.source === 'cardmarket-deduit'), numeros.docs.some(d => d.certitude === 'exacte'), numeros.docs.some(d => 'urlPage' in d || JSON.stringify(d).includes('idCategory'))], [2, true, false, false]);
+    }
+    console.log(`(cas adverses : ${adverses} blocs)`);
+
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(2); });
