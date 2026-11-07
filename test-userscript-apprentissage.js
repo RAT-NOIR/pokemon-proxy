@@ -228,6 +228,11 @@ ${dri(826050, 'Aaa-DRI001', 'Aaa', '001')}${dri(826051, 'Bbb-DRI002', 'Bbb', '00
             [new RegExp(`cette page est la n°${o1}\\b`).test(R1.panneau), new RegExp(`0/${ids1.length} cible`).test(R1.panneau), new RegExp(`page ${s1 + 1}`).test(R1.panneau), new RegExp(`page ${s1 - 1}`).test(R1.panneau), R1.store.rm_pagesUtilesFaites?.[cleDe(pA)]?.absentes?.length, new RegExp(`prochaine : n°${suivanteDe(o1)}\\b`).test(R1.panneau)],
             [true, true, true, true, ids1.length, true]);
         verifier('   (1.11) l\'envoi DÉCLARE qu\'il sait lire le 202 (fileServeur: true)', R1.appels.filter(x => x.chemin === '/api/apprendre-lot').map(l => l.corps.fileServeur), [true]);
+        // (1.13, 2026-11-07) chaque carte envoyée porte `urlPage` = pathname + search de la page : le serveur en tire l'idExpansion d'une
+        //     expansion NEUVE (cas 6704 du 01/11 : 141 vignettes sans image refusées « porté par 0 expansions »).
+        const pageR1 = new URL(`https://www.cardmarket.com${url1}`), cleR1 = pageR1.pathname + pageR1.search;
+        const cartesR1 = R1.appels.filter(x => x.chemin === '/api/apprendre-lot').flatMap(l => l.corps.cartes);
+        verifier('   (1.13) chaque carte POSTée porte urlPage = pathname+search de la page', [cartesR1.length > 0, cartesR1.every(c => c.urlPage === cleR1)], [true, true]);
         // 26. (1.10) une page HORS de la liste (la galerie 30th Celebration, sans tri par nom) : dite hors liste, la prochaine est la n°1
         const H1 = await charger(navigateur, {}, [OK(3)], 1500);
         verifier('26. (1.10) page hors liste : dite, la prochaine est la n°1, aucune page utile marquée', [/n'est pas dans la liste/.test(H1.panneau), /prochaine : n°1\b/.test(H1.panneau), H1.store.rm_pagesUtilesFaites || {}], [true, true, {}]);

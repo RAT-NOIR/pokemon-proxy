@@ -374,7 +374,17 @@ function normaliserCarte(brute) {
     const slug = (chaine(c.slug) || '').split('?')[0] || null;
     const codeSet = chaine(c.codeSet) || null;
     return { idProduct: Number.isInteger(id) && id > 0 ? id : null, numero: chaine(c.numero) || null, codeSet, nomFr: chaine(c.nomFr) || null,
-        slug, slugSet: chaine(c.slugSet) || null, numeroUrl: numeroDepuisSlug(slug, codeSet), variante: varianteDuSlug(slug), sansImage: c.sansImage === true };
+        slug, slugSet: chaine(c.slugSet) || null, numeroUrl: numeroDepuisSlug(slug, codeSet), variante: varianteDuSlug(slug), sansImage: c.sansImage === true,
+        // 2026-11-07 (userscript 1.13) : l'ADRESSE de la page où la vignette a été lue. Le client ne décide de rien d'autre que cette
+        // chaîne (relative, bornée) : `expansionDeLAdresse` en tire l'idExpansion, ou null sur tout ce qu'elle n'autorise pas.
+        urlPage: typeof c.urlPage === 'string' && c.urlPage.startsWith('/') && c.urlPage.length <= 512 ? c.urlPage : null };
+}
+
+/** Une vignette sans image portant l'expansion que PROUVE l'adresse de sa page (`[e]`), ou `[]` si l'adresse ne la prouve pas — un
+ *  tableau vide fait refuser tout le slugSet par `expansionParLaPage` (« TOUTES doivent le porter »). */
+function avecExpansionDePage(c) {
+    const e = expansionDeLAdresse(c.urlPage, c.slugSet);
+    return { ...c, expansionsDePage: e != null ? [e] : [] };
 }
 
 /** Les lecteurs de la déduction sur Mongo (pilote) : ceux de la route, et ceux que le banc exerce. */
@@ -411,7 +421,7 @@ async function deduireEtEcrire(sansId, exclus, { numeros, catalogue, decoderCode
     const compter = raison => { const k = String(raison).replace(/«[^»]*»/g, '«…»').replace(/\d+/g, '#'); res.raisons[k] = (res.raisons[k] || 0) + 1; };
     let r;
     try {
-        const cartesSans = sansId.map(c => ({ ...c, codeSet: decoderCodeSet(c.codeSet) || null }));
+        const cartesSans = sansId.map(c => avecExpansionDePage({ ...c, codeSet: decoderCodeSet(c.codeSet) || null }));
         const lecteurs = lecteursMongo({ numeros, catalogue });
         r = await deduireLot(cartesSans, { ...lecteurs, ...(expansionsDuSlugSet ? { expansionsDuSlugSet } : {}), exclus });
     } catch (e) {
@@ -538,6 +548,12 @@ async function apprendreLot(cartesBrutes, { numeros, catalogue, decoderCodeSet, 
         const parSlugSet = [];
         for (const s of new Set(cartes.filter(c => c.slugSet && (c.idProduct || c.sansImage)).map(c => c.slugSet))) { const x = await expansionsDuSlugSet(s); if (x.length === 1) parSlugSet.push(x[0]); }
         idExpansions = [...new Set(parSlugSet)];
+    }
+    // Expansion NEUVE (aucune ligne apprise, aucune carte lue au catalogue) : si TOUTES les vignettes sans image du lot viennent de pages
+    // dont l'adresse porte le MÊME idExpansion, c'est lui — pour que la couverture soit rendue au panneau (« exp ? » sinon). Une seule, sinon rien.
+    if (!idExpansions.length && sansId.length) {
+        const e = expansionParLaPage(sansId.map(avecExpansionDePage));
+        if (e != null) idExpansions = [e];
     }
     const idExpansion = idExpansions.length === 1 ? idExpansions[0] : null;
     // COUVERTURE DE L'EXPANSION : sans elle, l'utilisateur qui tourne les pages d'une galerie ne sait pas quand il a fini.
