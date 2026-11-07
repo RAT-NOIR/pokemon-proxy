@@ -22,7 +22,7 @@ if (inconnus.length || !val('preuves') || simuler === ecrire || (ecrire && (atte
 }
 if (ecrire && !process.env.LOT_ADDITIF_PID) { console.error('❌ --ecrire refusé hors lot-additif.js (LOT_ADDITIF_PID absent) : sauvegarde, garde et journal passent par le lot. Rien n\'a été ouvert.'); process.exit(2); }
 
-const { planDesDates } = require('./collecte-cartes/date-prouvee');
+const { planDesDates, lignePosee } = require('./collecte-cartes/date-prouvee');
 const masquer = e => String(e && e.stack || e).replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>');
 const PROJECTION = { _id: 1, region: 1, tirage: 1, dateSortie: 1, dateSortieEn: 1, dateSortieJa: 1, dateSortieMois: 1, periodeDistribution: 1 };
 
@@ -33,7 +33,7 @@ function lirePreuves() {
 }
 function imprimer(plan) {
     console.log(`entrées du fichier : ${plan.entrees} · à poser ${plan.posees.length} · refusées ${plan.refus.length}`);
-    for (const d of plan.posees) console.log(`   POSÉ   ${d.slugSet} → ${d.champs.join(',')} = ${JSON.stringify(d.set[d.champs[0]])} · ${d.set.dateSortiePreuves.filter(x => !x.note).map(x => x.code).join('+')}${d.set.dateSortiePreuves.some(x => x.note) ? ` · notes : ${d.set.dateSortiePreuves.filter(x => x.note).map(x => `${x.code} « ${x.note} »`).join(' ; ')}` : ''}`);
+    for (const d of plan.posees) console.log(lignePosee(d));
     for (const r of plan.refus) console.log(`   REFUS  ${r.slugSet} : ${r.refus}${r.detail ? ` (${r.detail})` : ''}`);
 }
 async function lireEtat(cx, preuves) {

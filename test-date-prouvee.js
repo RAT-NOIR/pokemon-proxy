@@ -1,7 +1,7 @@
 'use strict';
 // Banc pur de collecte-cartes/date-prouvee.js (aucune base, aucun réseau).   node test-date-prouvee.js
 const assert = require('assert');
-const { dateAPoser, planDesDates, ecartsRegionTirage, datesDansTexte, filtreEcriture, SOURCE_LOT } = require('./collecte-cartes/date-prouvee');
+const { dateAPoser, planDesDates, ecartsRegionTirage, datesDansTexte, filtreEcriture, lignePosee, SOURCE_LOT } = require('./collecte-cartes/date-prouvee');
 const NOW = new Date('2026-11-07T10:00:00Z');
 const src = (code, rang = 'wiki', phrase = 'sortie confirmee par la source', extra = {}) => ({ code, rang, phrase, adresse: 'https://exemple.test/x', site: 'site-' + code, ...extra });
 const preuve = (o = {}) => ({ slugSet: 'Premium-Trainer-Box-VSTAR', date: { valeur: '2022-01-14', precision: 'jour', sources: [src('S1'), src('S2')], ...o }, introuvable: null });
@@ -197,5 +197,83 @@ cas('ecartsRegionTirage : région ou tirage changés, ou set absent', () => {
 cas('planDesDates porte region et tirage du set', () => {
     const p = planDesDates([preuve()], new Map([[jp._id, { ...jp, tirage: 'jp' }]]));
     assert.strictEqual(p.posees[0].region, 'jp'); assert.strictEqual(p.posees[0].tirage, 'jp');
+});
+// ── tour 3 : une source OFFICIELLE l'emporte sur une divergence, et la divergence est NOTÉE (décision de l'utilisateur, 2026-11-07)
+const off = (code, extra = {}) => src(code, 'officielle', 'sortie confirmee par la source officielle', extra);
+cas('D (a) officielle + contre : posée, divergence notée (codes, valeurs)', () => {
+    const r = dateAPoser(jp, preuve({ sources: [off('S1')], contre: [{ code: 'S3', valeur: '2022-01-20' }] }), { maintenant: NOW });
+    assert.ok(r.set, JSON.stringify(r));
+    assert.strictEqual(r.set.dateSortieJa, 'January 14, 2022');
+    assert.deepStrictEqual(r.set.dateSortieDivergence, { codes: ['S3'], valeurs: ['2022-01-20'], le: NOW });
+});
+cas('D (a) contre en simples dates : valeurs notées, codes vides', () => {
+    const r = dateAPoser(jp, preuve({ sources: [off('S1')], contre: ['2022-01-20'] }), { maintenant: NOW });
+    assert.deepStrictEqual(r.set.dateSortieDivergence, { codes: [], valeurs: ['2022-01-20'], le: NOW });
+});
+cas('D (b) officielle + autre source wiki divergente : posée, notée, la divergente n\'est pas une preuve écrite', () => {
+    const r = dateAPoser(jp, preuve({ sources: [off('S1'), src('S2', 'wiki', 'sortie annoncee', { valeur: '2022-01-20' })] }), { maintenant: NOW });
+    assert.ok(r.set, JSON.stringify(r));
+    assert.deepStrictEqual(r.set.dateSortieDivergence, { codes: ['S2'], valeurs: ['2022-01-20'], le: NOW });
+    assert.deepStrictEqual(r.set.dateSortiePreuves.map(p => p.code), ['S1']);
+    assert.ok(!/S2/.test(r.set.dateSortieJaSource));
+});
+cas('D (b) la divergente peut nommer sa propre date dans sa phrase : elle n\'est pas écrite', () => {
+    const r = dateAPoser(jp, preuve({ sources: [off('S1'), src('S2', 'wiki', 'sortie le January 20, 2022', { valeur: '2022-01-20' })] }));
+    assert.ok(r.set, JSON.stringify(r));
+});
+cas('D (b) officielle qui porte la valeur posée + wiki divergente : posée', () => {
+    assert.ok(dateAPoser(jp, preuve({ sources: [off('S1', { valeur: '2022-01-14' }), src('S2', 'wiki', 'x', { valeur: '2022-01-20' })] })).set);
+});
+cas('D (c) deux officielles divergentes : refus divergence', () => {
+    refus(dateAPoser(jp, preuve({ sources: [off('S1'), off('S2', { valeur: '2022-01-20' })] })), 'divergence');
+    refus(dateAPoser(jp, preuve({ sources: [off('S1', { valeur: '2022-01-14' }), off('S2', { valeur: '2022-01-20' })] })), 'divergence');
+    refus(dateAPoser(jp, preuve({ sources: [off('S1')], contre: [{ code: 'S3', rang: 'officielle', valeur: '2022-01-20' }] })), 'divergence');
+});
+cas('D une officielle qui contredit la valeur posée n\'est jamais écartée par une wiki', () => {
+    refus(dateAPoser(jp, preuve({ sources: [off('S1', { valeur: '2022-01-20' }), src('S2'), src('S3')] })), 'divergence');
+});
+cas('D (d) sans officielle + contre ou source divergente : refus divergence (inchangé)', () => {
+    refus(dateAPoser(jp, preuve({ contre: [{ code: 'S3', valeur: '2022-01-20' }] })), 'divergence');
+    refus(dateAPoser(jp, preuve({ sources: [src('S1'), src('S2'), src('S3', 'boutique', 'x', { valeur: '2022-01-20' })] })), 'divergence');
+    refus(dateAPoser(jp, preuve({ sources: [src('S1'), src('S2', 'wiki', 'x', { valeur: '2022-01-20' })], contre: ['2022-01-20'] })), 'divergence');
+});
+cas('D un témoin « base » n\'est pas une officielle : divergence refusée', () => {
+    refus(dateAPoser(jp, preuve({ sources: [src('S1'), src('S2', 'base'), src('S3', 'wiki', 'x', { valeur: '2022-01-20' })] })), 'divergence');
+});
+cas('D sans divergence : aucun champ dateSortieDivergence', () => {
+    assert.strictEqual(dateAPoser(jp, preuve({ sources: [off('S1')] })).set.dateSortieDivergence, undefined);
+    assert.strictEqual(dateAPoser(jp, preuve()).set.dateSortieDivergence, undefined);
+});
+cas('D contre illisible ou à code non neutre : refus (rien d\'inventé en base)', () => {
+    refus(dateAPoser(jp, preuve({ sources: [off('S1')], contre: [{ code: 'SEREBII', valeur: '2022-01-20' }] })), 'code-non-neutre');
+    refus(dateAPoser(jp, preuve({ sources: [off('S1')], contre: ['pas une date'] })), 'divergence');
+    refus(dateAPoser(jp, preuve({ sources: [off('S1')], contre: [{ code: 'S3' }] })), 'divergence');
+});
+cas('D (e) la divergence notée ne porte ni adresse ni hôte', () => {
+    const r = dateAPoser(jp, preuve({ sources: [off('S1'), src('S2', 'wiki', 'x', { valeur: '2022-01-20' })], contre: [{ code: 'S3', valeur: '2022-02-02', adresse: 'https://exemple.test/y' }] }), { maintenant: NOW });
+    const s = JSON.stringify(r.set);
+    assert.ok(!/https?:|exemple\.test|\/\/|adresse|site-S/.test(s), s);
+    assert.deepStrictEqual(r.set.dateSortieDivergence, { codes: ['S2', 'S3'], valeurs: ['2022-01-20', '2022-02-02'], le: NOW });
+});
+cas('D la divergence suit aussi les précisions mois et période', () => {
+    assert.ok(dateAPoser(jp, preuve({ valeur: '2006-03', precision: 'mois', sources: [off('S1')], contre: ['2006-04'] })).set.dateSortieDivergence.valeurs.includes('2006-04'));
+    assert.ok(dateAPoser(jp, preuve({ valeur: '2002-12', precision: 'periode', fin: '2003-07', sources: [off('S1')], contre: ['2002-11'] })).set.dateSortieDivergence);
+});
+cas('D filtreEcriture inchangé avec une divergence (champ de date toujours en tête)', () => {
+    const p = planDesDates([preuve({ sources: [off('S1')], contre: ['2022-01-20'] })], new Map([[jp._id, jp]]), { maintenant: NOW });
+    assert.strictEqual(p.posees.length, 1);
+    assert.deepStrictEqual(p.posees[0].champs, ['dateSortieJa']);
+    assert.strictEqual(filtreEcriture(p.posees[0].set, p.posees[0]).dateSortieJa, null);
+});
+cas('D (f) la ligne de simulation montre la divergence ; le CLI imprime par cette fonction', () => {
+    const p = planDesDates([preuve({ sources: [off('S1')], contre: [{ code: 'S3', valeur: '2022-01-20' }] })], new Map([[jp._id, jp]]), { maintenant: NOW });
+    const l = lignePosee(p.posees[0]);
+    assert.ok(/POSÉ\s+Premium-Trainer-Box-VSTAR/.test(l) && /dateSortieJa/.test(l) && /S1/.test(l), l);
+    assert.ok(/divergence/.test(l) && /S3/.test(l) && /2022-01-20/.test(l), l);
+    assert.ok(!/https?:|exemple\.test/.test(l), l);
+    const sans = lignePosee(planDesDates([preuve()], new Map([[jp._id, jp]]), { maintenant: NOW }).posees[0]);
+    assert.ok(!/divergence/.test(sans), sans);
+    const cli = require('fs').readFileSync(require('path').join(__dirname, 'poser-dates-prouvees.js'), 'utf8');
+    assert.ok(/lignePosee\(d\)/.test(cli) && /\{ planDesDates, lignePosee \}/.test(cli));
 });
 console.log(`${n} cas passés`);

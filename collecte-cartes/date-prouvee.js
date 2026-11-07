@@ -9,7 +9,8 @@
 //   • jamais d'écrasement : un set qui porte déjà un dateSortie* (même vide : '' est une valeur) est refusé ;
 //   • deux sources distinctes de rang >= wiki (officielle, boutique, wiki), ou une officielle seule ; `base` = témoin sans voix ;
 //   • codes neutres S1, S2… seuls en base ; aucune phrase ne nomme une autre date complète que celle posée ;
-//   • une divergence (une source ou `contre` donne un autre jour) n'écrit rien ;
+//   • une divergence (une source ou `contre` donne un autre jour) n'écrit rien, SAUF si une source OFFICIELLE porte la date posée : elle l'emporte et la divergence
+//     est notée dans `dateSortieDivergence` { codes, valeurs, le } (décision de l'utilisateur, 2026-11-07) ; deux officielles divergentes = refus ;
 //   • la base ne reçoit que des CODES de sources et leurs phrases — jamais d'adresse ni de nom d'hôte.
 // ============================================================
 const SOURCE_LOT = 'chasse-2026-11-07';
@@ -97,10 +98,28 @@ function dateAPoser(set, preuve, opts = {}) {
         if (typeof s.site !== 'string' || !s.site) { sansSite++; continue; }
         if (!vues.has(s.site)) vues.set(s.site, s);
     }
-    const sources = [...vues.values()];
+    let sources = [...vues.values()];
     const temoins = toutes.filter(s => s.rang === 'base').length;
     if (!(sources.length >= 2 || sources.some(s => s.rang === 'officielle'))) return R(sansSite ? 'site-absent' : 'sources-insuffisantes', `${sources.length} source(s) de rang >= wiki ; ${temoins} source(s) de rang base = témoins sans voix (il faut 2 sources >= wiki concordantes, ou 1 officielle)`);
-    if ((Array.isArray(d.contre) && d.contre.length) || toutes.some(s => present(s.valeur) && s.valeur !== d.valeur)) return R('divergence');
+    // DIVERGENCE (décision de l'utilisateur, 2026-11-07) : une source OFFICIELLE qui porte la valeur posée l'emporte, et la divergence est NOTÉE ;
+    // sans officielle, ou si une officielle contredit (une officielle ne l'emporte pas sur une officielle) : refus.
+    const contres = Array.isArray(d.contre) ? d.contre : [];
+    const divergentes = toutes.filter(s => present(s.valeur) && s.valeur !== d.valeur);
+    let divergence = null;
+    if (contres.length || divergentes.length) {
+        if (divergentes.some(s => s.rang === 'officielle') || contres.some(c => c && typeof c === 'object' && c.rang === 'officielle')) return R('divergence', 'deux sources officielles divergent');
+        if (!sources.some(s => s.rang === 'officielle')) return R('divergence');
+        const codes = divergentes.map(s => s.code), valeurs = divergentes.map(s => s.valeur);
+        for (const c of contres) {
+            const v = typeof c === 'string' ? c : c && typeof c === 'object' ? c.valeur : null;
+            if (c && typeof c === 'object' && present(c.code)) { if (typeof c.code !== 'string' || !RE_CODE_NEUTRE.test(c.code)) return R('code-non-neutre', 'contre'); codes.push(c.code); }
+            valeurs.push(v);
+        }
+        if (valeurs.some(v => !isoValide(v))) return R('divergence', 'valeur divergente illisible');
+        divergence = { codes: [...new Set(codes)], valeurs: [...new Set(valeurs)], le: maintenant };
+        // une source divergente n'est pas une preuve de la date posée : elle n'est notée que dans la divergence
+        sources = sources.filter(s => !(present(s.valeur) && s.valeur !== d.valeur));
+    }
     if (sources.some(s => RE_HOTE.test(s.code) || RE_HOTE.test(s.phrase))) return R('adresse-dans-la-phrase');
     // une phrase écrite en base ne nomme jamais une autre date complète que celle posée
     const permises = new Set([d.valeur, d.fin].filter(x => typeof x === 'string' && x.length === 10));
@@ -114,7 +133,7 @@ function dateAPoser(set, preuve, opts = {}) {
     }
     const preuves = [...sources.map(s => ({ code: s.code, rang: s.rang, phrase: s.phrase.trim() })), ...notes.map(n => ({ code: n.code, rang: n.rang, phrase: n.phrase.trim(), note: n.note.trim() }))];
     const source = `${SOURCE_LOT} · ${sources.map(s => s.code).join('+')}`;
-    const commun = { dateSortieSource: SOURCE_LOT, dateSortiePreuves: preuves, dateSortiePoseeLe: maintenant };
+    const commun = { dateSortieSource: SOURCE_LOT, dateSortiePreuves: preuves, dateSortiePoseeLe: maintenant, ...(divergence ? { dateSortieDivergence: divergence } : {}) };
     if (d.precision === 'jour') {
         return { set: { [champ]: texteDeIso(d.valeur), [`${champ}Source`]: source, ...commun }, champs: [champ] };
     }
@@ -123,6 +142,12 @@ function dateAPoser(set, preuve, opts = {}) {
     }
     const debut = texteDeIso(d.valeur), fin = texteDeIso(d.fin);
     return { set: { periodeDistribution: { texte: `${debut} - ${fin}`, debut, fin, debutIso: d.valeur, source, le: maintenant }, ...commun }, champs: ['periodeDistribution'] };
+}
+
+/** La ligne imprimée par la simulation pour une date à poser (le CLI imprime par cette fonction) ; la divergence notée y figure, codes et valeurs seulement. */
+function lignePosee(d) {
+    const p = d.set.dateSortiePreuves, v = d.set.dateSortieDivergence;
+    return `   POSÉ   ${d.slugSet} → ${d.champs.join(',')} = ${JSON.stringify(d.set[d.champs[0]])} · ${p.filter(x => !x.note).map(x => x.code).join('+')}${p.some(x => x.note) ? ` · notes : ${p.filter(x => x.note).map(x => `${x.code} « ${x.note} »`).join(' ; ')}` : ''}${v ? ` · divergence notée : ${v.codes.join('+') || '—'} → ${v.valeurs.join(', ')}` : ''}`;
 }
 
 /** Le plan sur tout le fichier. Dénominateur = entrées. Un slugSet répété ne se pose qu'une fois. */
@@ -162,4 +187,4 @@ function ecartsRegionTirage(plan, vivantsParId) {
     return ecarts;
 }
 
-module.exports = { dateAPoser, planDesDates, filtreEcriture, ecartsRegionTirage, datesDansTexte, texteDeIso, isoValide, SOURCE_LOT, RANGS, VOIX };
+module.exports = { dateAPoser, planDesDates, lignePosee, filtreEcriture, ecartsRegionTirage, datesDansTexte, texteDeIso, isoValide, SOURCE_LOT, RANGS, VOIX };
