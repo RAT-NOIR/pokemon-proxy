@@ -440,8 +440,10 @@ function verifierGardes({ dossier, existe, lancerFileArret }) {
 }
 
 // ── 8. La ligne de commande : grammaire écrite par ce qu'elle AUTORISE (argument inconnu -> code 2 avant toute connexion) ───────
-const AUTORISES = [/^--plan$/, /^--telecharger$/, /^--decider$/, /^--ecrire$/, /^--nuit$/, /^--a-blanc$/, /^--limite=[1-9]\d{0,3}$/, /^--plafond=[1-9]\d{0,3}$/, /^--attendu=\d{1,5}$/, /^--dossier=.+$/];
-const MODES = ['--plan', '--telecharger', '--decider', '--ecrire', '--nuit'];
+const AUTORISES = [/^--plan$/, /^--telecharger$/, /^--decider$/, /^--ecrire$/, /^--nuit$/, /^--chasse$/, /^--a-blanc$/, /^--limite=[1-9]\d{0,3}$/, /^--plafond=[1-9]\d{0,3}$/, /^--attendu=\d{1,5}$/, /^--dossier=.+$/];
+const MODES = ['--plan', '--telecharger', '--decider', '--ecrire', '--nuit', '--chasse'];
+/** Les modes qui passent par les gardes (fichier STOP, file à l'arrêt) : la chasse y est aussi (relecture 07/11). */
+const MODES_AVEC_GARDES = Object.freeze(['--telecharger', '--ecrire', '--nuit', '--chasse']);
 function verifierArguments(args) {
     const inconnus = args.filter(a => !AUTORISES.some(r => r.test(a)));
     if (inconnus.length) return `argument inconnu : ${inconnus.join(' ')}`;
@@ -451,7 +453,7 @@ function verifierArguments(args) {
     if (mode === '--telecharger' && !a('plafond')) return '--telecharger exige --plafond=<N>';
     if (mode === '--ecrire' && !a('attendu')) return '--ecrire exige --attendu=<N>';
     if (a('attendu') && mode !== '--ecrire') return '--attendu ne va qu\'avec --ecrire';
-    if (a('plafond') && !['--telecharger', '--nuit'].includes(mode)) return '--plafond ne va qu\'avec --telecharger ou --nuit';
+    if (a('plafond') && !['--telecharger', '--nuit', '--chasse'].includes(mode)) return '--plafond ne va qu\'avec --telecharger, --nuit ou --chasse';
     if (a('limite') && !['--plan', '--nuit'].includes(mode)) return '--limite ne va qu\'avec --plan ou --nuit';
     if (args.includes('--a-blanc') && mode !== '--nuit') return '--a-blanc ne va qu\'avec --nuit';
     return null;
@@ -491,4 +493,4 @@ function redigerCompteRendu({ date, aBlanc, etat, population, comptesPlan, rappo
 
 module.exports = { FOURNISSEURS, chargerFournisseurs, MOTIFS, motifAdmis, INSTRUMENT, construireTrou, ecrireTrous, LANGUE_DU_TIRAGE, langueDuTirage, LANGUES_DU_TIRAGE, languesDuTirage, reduireNumero, tirageProduit, tirageCandidat,
     PLAFOND_PAR_DEFAUT, synchroniserFournisseurs, choisirPopulation, calculerNeufs, regrouperUnites, candidatsDuProduit, classerProduit, planifier, recolterUnites, telechargerPlan, choisirGagnant, jugerProduit, assembler, executerEcriture,
-    bilanTrous, lireBilanTrous, existeStrict, choisirNouvelEtat, regenererEtat, comparerTrous, trousResolus, ETAT_AGE_MAX_JOURS, etatTropVieux, verifierGardes, AUTORISES, MODES, verifierArguments, DOSSIER_PAR_DEFAUT, DOSSIER_COMPTEURS, dossierDe, dernierEtat, redigerCompteRendu };
+    bilanTrous, lireBilanTrous, existeStrict, choisirNouvelEtat, regenererEtat, comparerTrous, trousResolus, ETAT_AGE_MAX_JOURS, etatTropVieux, verifierGardes, AUTORISES, MODES, MODES_AVEC_GARDES, verifierArguments, DOSSIER_PAR_DEFAUT, DOSSIER_COMPTEURS, dossierDe, dernierEtat, redigerCompteRendu };

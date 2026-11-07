@@ -7,6 +7,8 @@
 //   node comblement-nocturne.js --decider                    0 requête, 0 écriture -> decisions-comblement.json + l'--attendu par fournisseur et le total
 //   node comblement-nocturne.js --ecrire --attendu=N         SEULEMENT sous lot-additif.js : les gagnants (un RC.ecrire par fournisseur), puis les trous nommés ; refus si --attendu ≠ réel
 //   node comblement-nocturne.js --nuit [--a-blanc] [--limite=N] [--plafond=N]   gardes -> plan -> téléchargement -> décision -> (sauf --a-blanc) lot-additif.js -> compte rendu nuit-<date>.md
+//   node comblement-nocturne.js --chasse [--plafond=N]       la CHASSE seule (aucune base) : explore les sites admis du registre privé -> famille PHASE4 NUIT-<date> (preuves « a-lire » + planches), journal chasse-<date>.md ; N = requêtes par site (800 par défaut)
+//                                                            (--nuit la lance aussi, après le lot ; cœur testé : collecte-cartes/chasse-nocturne.js)
 //   --dossier=<dossier>   (bancs) un autre dossier de sorties ; jamais un dossier d'apports manuels
 //
 // `--plafond=N` est un BUDGET de requêtes de CE lancement, par fournisseur (le plafond de recolte-hote.js est un total pour le dossier de cache ; le cache du comblement vit d'une nuit à l'autre, on lui ajoute donc ce qu'il contient déjà).
@@ -180,6 +182,94 @@ async function etapeEcrire({ dossier, attendu }) {
     } finally { await fermer(); }
 }
 
+// ── 4 bis. LA CHASSE (07/11) : ne rejoue pas les fournisseurs connus, elle EXPLORE les sites admis du registre privé ───────────────────────────────
+// Aucune base, aucune écriture hors du dossier de travail : elle PRÉPARE (preuves « a-lire » + images + planches) ; la lecture et la validation restent aux agents et au coordinateur.
+// La recherche par moteur n'est pas à sa portée (la porte n'a ni « chercher » ni « liste ») : elle prépare seulement les requêtes du protocole pour les agents.
+const FILE_CHASSE = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\chasse\\B-0311\\FILE.json';
+const BUDGET_CHASSE_PAR_SITE = 800;
+async function etapeChasse({ dossier, plan = null, budget = BUDGET_CHASSE_PAR_SITE }) {
+    const CN = require('./collecte-cartes/chasse-nocturne'), P = require('./collecte-cartes/porte-reseau'), RH = require('./collecte-cartes/reponse-hote'), sharp = require('sharp');
+    const av = [], date = jour(), maintenant = () => new Date();
+    // 1. la population : le FILE (au visuel manquant le 03/11) ∩ ce qui manque ENCORE au plan du jour ; le dénominateur est imprimé, un zéro sur une population non vide est une clé fausse (§41)
+    const file = RC.lireJson(FILE_CHASSE, null);
+    if (!file?.sets?.length) throw new Error(`${FILE_CHASSE} absent ou sans sets : la chasse n'a pas de population`);
+    const nFile = file.sets.reduce((n, s) => n + s.produits.length, 0);
+    if (!plan) {                                  // --chasse seul : le plan lu sur disque ne doit pas être périmé
+        plan = RC.lireJson(path.join(dossier, 'plan-comblement.json'), null);
+        if (plan && CN.planTropVieux(plan)) throw new Error(`plan-comblement.json de plus de 24 h (${plan.le ?? 'date illisible'}) : relancer --plan avant --chasse`);
+    }
+    let manquants = null;
+    if (plan?.cibles) manquants = new Set([...plan.cibles.map(c => c.idProduct), ...(plan.sansOffre || [])]);
+    else av.push('plan-comblement.json absent : la population est celle du FILE, sans retrait des produits déjà comblés depuis le 03/11');
+    const sets = file.sets.map(s => ({ ...s, produits: s.produits.filter(p => !manquants || manquants.has(p.idProduct)) })).filter(s => s.produits.length);
+    const encore = sets.reduce((n, s) => n + s.produits.length, 0);
+    if (manquants && nFile && !encore) throw new Error(`FILE ${nFile} produits, 0 encore MANQUANTS au plan (${manquants.size} ids) : clé fausse ou plan vide — la chasse s'arrête`);
+    note(`CHASSE : FILE ${nFile} produits (${file.le}) · encore manquants au plan ${encore} dans ${sets.length} sets`);
+    // 2. le registre privé des sites, et l'état de reprise
+    const regSites = RC.lireJson(path.join(dossier, 'registre-chasse-sites.json'), null);
+    if (!regSites?.sites?.length) throw new Error('registre-chasse-sites.json absent : la chasse n\'a aucun site');
+    const etatDir = path.join(dossier, 'chasse-nocturne'), fichierEtat = path.join(etatDir, 'registre.json');
+    fs.mkdirSync(etatDir, { recursive: true });
+    const registre = fs.existsSync(fichierEtat) ? JSON.parse(fs.readFileSync(fichierEtat, 'utf8')) : { objets: {}, pages: {}, sites: {} };
+    registre.sites ||= {};
+    // 3. les produits déjà préparés par les familles PHASE4 d'avant ne se retéléchargent pas
+    const phase4 = path.join(dossier, '..', 'PHASE4'), dejaCouverts = new Set(), nomFamille = `NUIT-${date.replace(/-/g, '')}`;
+    if (fs.existsSync(phase4)) for (const d of fs.readdirSync(phase4, { withFileTypes: true })) {
+        if (!d.isDirectory() || d.name === nomFamille || !fs.existsSync(path.join(phase4, d.name, 'preuves.json'))) continue;
+        try { for (const e of JSON.parse(fs.readFileSync(path.join(phase4, d.name, 'preuves.json'), 'utf8')).entrees || []) dejaCouverts.add(e.idProduct); }
+        catch (e) { av.push(`famille ${d.name} : preuves.json illisible (${e.message}) — ses produits ne sont pas retirés`); }
+    }
+    // 4. l'exploration, un flux par site (les hôtes sont distincts d'un site à l'autre)
+    const crypto = require('crypto'), h12 = u => crypto.createHash('sha1').update(u).digest('hex').slice(0, 12);
+    // TOUS les sets connus (tables de jointure : à la main, auto, sans page) + les troués : un jumeau d'un autre tirage, même non troué, rend un nom ambigu
+    const TS = require('./collecte-cartes/table-sets');
+    const tirageDe = l => l.tirageCorrige ?? l.bulba?.tirage ?? (/japon/i.test(l.region || '') ? 'jp' : 'intl');
+    const connus = new Map(sets.map(s => [s.set, { set: s.set, code: s.code, nom: s.nom, tirage: s.tirage }]));
+    for (const l of [...TS.TABLE, ...(TS.TABLE_AUTO || []), ...(TS.TABLE_SANS_PAGE || [])]) if (l.slugSet && l.nom && l.code && !connus.has(l.slugSet)) connus.set(l.slugSet, { set: l.slugSet, code: l.code, nom: l.nom, tirage: tirageDe(l) });
+    const setsConnus = [...connus.values()];
+    note(`   sets connus pour la détection des jumeaux : ${setsConnus.length} (dont ${sets.length} troués)`);
+    const actifs = regSites.sites.filter(s => s.actif), inactifs = regSites.sites.filter(s => !s.actif).map(s => ({ code: s.code, actif: false, raison: s.raison }));
+    const resultats = await Promise.all(actifs.map(async site => {
+        const lirePage = async (url) => {
+            const sortie = path.join(etatDir, 'pages', site.code, `${h12(url)}-${date}.html`);
+            if (!fs.existsSync(sortie)) await P.lire(url, { mode: 'page', sortie });
+            return fs.readFileSync(sortie, 'utf8');
+        };
+        const lireImage = async (url) => {
+            const ext = (/\.(jpe?g|png|webp)(?:$|\?)/i.exec(url)?.[1] || 'img').toLowerCase();
+            const fichier = path.join(etatDir, 'images', site.code, `${h12(url)}.${ext}`);
+            if (!fs.existsSync(fichier)) { const r = await P.lire(url, { mode: 'image', sortie: fichier }); if (!r.sortie) throw Object.assign(new Error(`image redirigée (${r.redirige}) : non suivie`), { status: 3 }); }
+            const octets = fs.readFileSync(fichier), m = await sharp(octets).metadata();
+            return { fichier, sha256: crypto.createHash('sha256').update(octets).digest('hex'), w: m.width, h: m.height };
+        };
+        const fermerHote = (hote, motif) => RH.arretHote(hote, motif, { dossier: P.DOSSIER_ARRETS_FIXE });
+        let r;
+        try { r = await CN.explorerSite({ site, sets, registre, lirePage, lireImage, fermerHote, maintenant, budget, dejaCouverts, setsConnus }); }
+        catch (e) { av.push(`site ${site.code} : ${e.message}`); return { stats: { code: site.code, actif: true, requetes: 0, collectionsEnumerees: 0, collectionsAppariees: 0, collectionsLues: 0, itemsLus: 0, surNumeroSeul: 0, produitsCouverts: 0, refus: {}, ferme: `ÉCHEC ${e.message}` }, entrees: [] }; }
+        registre.sites[site.code] = { dernierPassage: maintenant().toISOString(), requetesCeSoir: r.stats.requetes, requetesCumulees: (registre.sites[site.code]?.requetesCumulees || 0) + r.stats.requetes, robots: site.robots ?? 'lu par la porte (cache 24 h)', ferme: r.stats.ferme };
+        fs.writeFileSync(fichierEtat, JSON.stringify(registre, null, 1), 'utf8');
+        note(`   ${site.code} : ${r.stats.requetes} requête(s) · collections ${r.stats.collectionsEnumerees} énumérées / ${r.stats.collectionsAppariees} appariées / ${r.stats.collectionsLues} lues · cartes ${r.stats.itemsLus} · produits couverts ${r.stats.produitsCouverts}${r.stats.ferme ? ` · FERMÉ ${r.stats.ferme}` : ''}`);
+        return r;
+    }));
+    // 5. la famille PHASE4, les planches, la liste des restes pour les agents, le journal du matin
+    const entrees = resultats.flatMap(r => r.entrees), nom = nomFamille;
+    const famille = CN.construireFamille(nom, entrees, maintenant());
+    const dirFam = path.join(phase4, nom);
+    fs.mkdirSync(dirFam, { recursive: true });
+    fs.writeFileSync(path.join(dirFam, 'preuves.json'), JSON.stringify(famille, null, 1), 'utf8');
+    if (entrees.length && fs.existsSync(path.join(phase4, 'planche-validation.js'))) {
+        const pl = spawnSync(process.execPath, ['planche-validation.js', nom], { cwd: phase4, encoding: 'utf8', timeout: 20 * 60 * 1000 });
+        if (pl.status !== 0) av.push(`planches : code ${pl.status} ${String(pl.stderr || '').slice(0, 200)}`);
+    }
+    const couverts = new Set(entrees.map(e => e.idProduct));
+    const restes = sets.flatMap(s => s.produits.filter(p => !couverts.has(p.idProduct)).map(p => ({ idProduct: p.idProduct, name: p.name, set: s.set, code: s.code, tirage: s.tirage, offres: s.offres, requetes: CN.requetesDeCarte(p, s) })));
+    fs.writeFileSync(path.join(dossier, `a-chasser-par-agents-${date}.json`), JSON.stringify({ le: new Date().toISOString(), note: 'produits sans entrée ce soir ; requêtes du protocole BRIEF-B (recherche par moteur : agents seulement)', total: restes.length, produits: restes }, null, 1), 'utf8');
+    const md = CN.redigerJournal({ date, sites: [...resultats.map(r => r.stats), ...inactifs], population: { fichier: nFile, encoreManquants: encore }, entrees: entrees.length, famille: nom, avertissements: av });
+    fs.writeFileSync(path.join(dossier, `chasse-${date}.md`), md, 'utf8');
+    note(`CHASSE : ${entrees.length} entrée(s) à lire dans ${dirFam} · restes pour les agents ${restes.length} · journal ${path.join(dossier, `chasse-${date}.md`)}`);
+    return { entrees: entrees.length, famille: nom, restes: restes.length, journal: path.join(dossier, `chasse-${date}.md`), avertissements: av };
+}
+
 // ── 5. LA NUIT ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
 async function assurerCollectionTrous() {
     // lot-additif.js SAUVEGARDE les collections nommées et refuse une collection qui n'existe pas (backup-collections.js : « collection(s) introuvable(s) »).
@@ -200,7 +290,7 @@ async function bilanAvantLot(plan, decisions) {
         return await CO.lireBilanTrous(lecture.cartes.db, decisions.trous.map(t => CO.construireTrou({ ...t, le })), { classeVisuelParId: new Map(etatDuJour.map(p => [p.idProduct, p.classeVisuel])), visuels: decisions.total });
     } finally { await lecture.fermer(); }
 }
-async function nuit({ dossier, aBlanc, limite, budget }) {
+async function nuit({ dossier, aBlanc, limite, budget, budgetChasse = BUDGET_CHASSE_PAR_SITE }) {
     const debut = new Date();                                  // M4 : « neuf » se mesure depuis le DÉBUT du passage (un produit ajouté pendant le passage reste neuf au suivant)
     const date = jour();
     const av = [];
@@ -242,8 +332,13 @@ async function nuit({ dossier, aBlanc, limite, budget }) {
     } catch (e) {
         console.error('❌', e.message); process.exitCode = process.exitCode || 1; av.push(`ÉCHEC : ${e.message}`);
     } finally {
-        const md = CO.redigerCompteRendu({ date, aBlanc, etat: plan ? { fichier: plan.etat.fichier, le: new Date(plan.etat.le) } : null, population: plan?.population ?? { base: 0, cibles: 0, sansOffre: 0, reportes: 0 }, comptesPlan: plan?.comptes ?? {},
+        // 07/11 : la chasse tourne APRÈS le lot (indépendante de lui : aucune base) ; son échec est dit, il n'invalide rien
+        let chasse = null;
+        // l'à blanc ne chasse pas (la chasse télécharge et prépare des preuves : ce n'est pas « à blanc »)
+        if (plan && !aBlanc) { try { chasse = await etapeChasse({ dossier, plan, budget: budgetChasse }); } catch (e) { console.error('❌ chasse :', e.message); av.push(`CHASSE : ${e.message}`); } }
+        let md = CO.redigerCompteRendu({ date, aBlanc, etat: plan ? { fichier: plan.etat.fichier, le: new Date(plan.etat.le) } : null, population: plan?.population ?? { base: 0, cibles: 0, sansOffre: 0, reportes: 0 }, comptesPlan: plan?.comptes ?? {},
             rapportsTelechargement: rapports, bloquees: (plan?.fournisseurs ?? []).filter(f => f.bloquee).map(f => f.code), ecrit, trous: decisions?.trous ?? [], reportes: decisions?.reportes ?? [], visuels: decisions?.total ?? 0, attendu: decisions?.total ?? null, trousEcrits, avertissements: av });
+        if (chasse) md += `\n## Chasse\n- ${chasse.entrees} entrée(s) à lire (famille PHASE4 ${chasse.famille}) · ${chasse.restes} produit(s) restants pour les agents · journal par site : ${chasse.journal}\n`;
         fs.mkdirSync(dossier, { recursive: true });
         fs.writeFileSync(path.join(dossier, `nuit-${date}.md`), md, 'utf8');
         note(`COMPTE RENDU → ${path.join(dossier, `nuit-${date}.md`)}`);
@@ -259,16 +354,17 @@ async function main(args = process.argv.slice(2)) {
     try { dossier = CO.dossierDe(args); } catch (e) { console.error('❌', e.message); process.exitCode = 2; return; }
     try {
         if (mode === '--ecrire') require('./collecte-cartes/images-empruntees').garderSousLot(process.env, process.ppid);       // AVANT tout, même avant les gardes : hors lot-additif.js, rien ne s'ouvre
-        if (['--telecharger', '--ecrire', '--nuit'].includes(mode) && !appliquerGardes(dossier)) return;
+        if (CO.MODES_AVEC_GARDES.includes(mode) && !appliquerGardes(dossier)) return;
         const limite = val('limite') ? Number(val('limite')) : CO.PLAFOND_PAR_DEFAUT;
         const budget = val('plafond') ? Number(val('plafond')) : 400;
         if (mode === '--plan') await etapePlan({ dossier, limite });
         else if (mode === '--telecharger') await etapeTelecharger({ dossier, budget });
         else if (mode === '--decider') await etapeDecider({ dossier });
         else if (mode === '--ecrire') await etapeEcrire({ dossier, attendu: Number(val('attendu')) });
-        else await nuit({ dossier, aBlanc: args.includes('--a-blanc'), limite, budget });
+        else if (mode === '--chasse') await etapeChasse({ dossier, budget: val('plafond') ? Number(val('plafond')) : BUDGET_CHASSE_PAR_SITE });
+        else await nuit({ dossier, aBlanc: args.includes('--a-blanc'), limite, budget, budgetChasse: val('plafond') ? Number(val('plafond')) : BUDGET_CHASSE_PAR_SITE });
     } catch (e) { console.error('❌', e.message); process.exitCode = process.exitCode || 1; }
 }
 
 if (require.main === module) main();
-module.exports = { main, etapePlan, etapeTelecharger, etapeDecider, etapeEcrire, nuit };
+module.exports = { main, etapePlan, etapeTelecharger, etapeDecider, etapeEcrire, etapeChasse, nuit };
