@@ -76,4 +76,71 @@ ok('les attaques en chaînes du cache sont lues', () => {
     assert.ok(cas(bulbi, [prod(10, 'Ivysaur [Vine Whip]', '1')]).ligne);
 });
 
+// ── voie set+nom+attaques (nom-ambigu) — 2026-11-07
+const pikA = carte(50, 'Pikachu', null, ['Thunder Shock']), pikB = carte(51, 'Pikachu', null, ['Quick Attack']);
+const cartesPik = [...cartesDuSet, pikA, pikB];
+const pA = prod(60, 'Pikachu [Thunder Shock]', null), pB = prod(61, 'Pikachu [Quick Attack]', null);
+ok('ACCEPTÉ par nom+attaques : deux cartes, deux produits, les attaques départagent', () => {
+    const r = cas(pikA, [pA, pB], [], cartesPik);
+    assert.ok(r.ligne, JSON.stringify(r));
+    assert.strictEqual(r.ligne.preuve, 'set+nom+attaques'); assert.strictEqual(r.ligne.idProduct, 60); assert.strictEqual(r.ligne.numeroFiche, null);
+    assert.ok(/2 cartes du nom/.test(r.ligne.detail) && /2 produits du nom/.test(r.ligne.detail), r.ligne.detail);
+    assert.strictEqual(cas(pikB, [pA, pB], [], cartesPik).ligne.idProduct, 61);
+});
+ok('ACCEPTÉ par nom+attaques : un seul produit mais deux cartes (la garde du nom seul refuse)', () => assert.strictEqual(cas(pikA, [pA], [], cartesPik).ligne.preuve, 'set+nom+attaques'));
+ok('REFUSÉ : une autre carte du nom porte aussi toutes les attaques (comparatif)', () => {
+    const pikC = carte(52, 'Pikachu', null, ['Thunder Shock', 'Growl']);
+    assert.deepStrictEqual(cas(pikA, [pA, pB], [], [...cartesPik, pikC]), { refus: 'nom-ambigu' });
+});
+ok('REFUSÉ : produits sans crochets (jamais par cette voie)', () => assert.deepStrictEqual(cas(pikA, [prod(62, 'Pikachu', null), prod(63, 'Pikachu', null)], [], cartesPik), { refus: 'nom-ambigu' }));
+ok('REFUSÉ : un seul produit SANS crochets face à deux cartes du nom', () => assert.deepStrictEqual(cas(pikA, [prod(72, 'Pikachu', null)], [], cartesPik), { refus: 'nom-ambigu' }));
+ok('REFUSÉ : un Dresseur sans attaque ne se désigne pas par cette voie', () => {
+    const t1 = carte(70, 'Potion', null), t2 = carte(71, 'Potion', null);
+    assert.deepStrictEqual(cas(t1, [prod(64, 'Potion', null)], [], [...cartesDuSet, t1, t2]), { refus: 'nom-ambigu' });
+});
+ok('REFUSÉ : les attaques du produit ne sont pas toutes dans la carte', () => assert.deepStrictEqual(cas(pikA, [prod(65, 'Pikachu [Thunder Shock | Growl]', null)], [], cartesPik), { refus: 'nom-ambigu' }));
+ok('REFUSÉ : un autre produit du nom porte les mêmes attaques', () => assert.deepStrictEqual(cas(pikA, [pA, prod(66, 'Pikachu [Thunder Shock]', null)], [], cartesPik), { refus: 'nom-ambigu' }));
+ok('REFUSÉ : numéro du produit contredit celui de la carte', () => {
+    const cN = carte(53, 'Pikachu', '009', ['Thunder Shock']);
+    assert.deepStrictEqual(cas(cN, [prod(67, 'Pikachu [Thunder Shock]', '77'), pB], [], [...cartesDuSet, cN, pikB]), { refus: 'nom-ambigu' });
+});
+ok('REFUSÉ : produit déjà joint (nom+attaques)', () => assert.deepStrictEqual(cas(pikA, [pA, pB], [{ carteId: 99, idProduct: 60 }], cartesPik), { refus: 'nom-ambigu' }));
+ok('attaques comparées sans l\'ordre des mots (Gather Snow / Snow Gather)', () => {
+    const vA = carte(54, 'Vulpix', null, ['Snow Gather']), vB = carte(55, 'Vulpix', null, ['Ember']);
+    assert.strictEqual(cas(vA, [prod(68, 'Vulpix [Gather Snow]', null), prod(69, 'Vulpix [Ember]', null)], [], [...cartesDuSet, vA, vB]).ligne.idProduct, 68);
+});
+ok('un produit NU voisin ne bloque pas, ni ne se joint : seul le produit à crochets est désigné', () => {
+    const x = carte(56, 'Raichu', null, ['Zap']);
+    const r = cas(x, [prod(75, 'Raichu', null), prod(76, 'Raichu [Zap]', null)], [], [...cartesDuSet, x, carte(57, 'Raichu', null, ['Zap', 'Spark'])]);
+    assert.deepStrictEqual(r, { refus: 'nom-ambigu' });   // l'autre Raichu porte aussi 'Zap' : comparatif
+    const seul = cas(x, [prod(75, 'Raichu', null), prod(76, 'Raichu [Zap]', null)], [], [...cartesDuSet, x]);
+    assert.strictEqual(seul.ligne.idProduct, 76);
+});
+ok('REFUSÉ : un homonyme du set sans aucune attaque connue', () => {
+    const x = carte(58, 'Eevee', null, ['Zap']), y = carte(59, 'Eevee', null, []);
+    assert.deepStrictEqual(cas(x, [prod(77, 'Eevee [Zap]', null), prod(78, 'Eevee [Bite]', null)], [], [...cartesDuSet, x, y]), { refus: 'nom-ambigu' });
+});
+ok('REFUSÉ : carte sans numéro dans le set, produit numéroté dont le numéro est celui d\'une AUTRE carte', () => {
+    const x = carte(60, 'Meowth', null, ['Zap']), y = carte(61, 'Meowth', null, ['Bite']);
+    assert.deepStrictEqual(cas(x, [prod(79, 'Meowth [Zap]', '1'), prod(80, 'Meowth [Bite]', null)], [], [...cartesDuSet, x, y]), { refus: 'nom-ambigu' });
+});
+// ── énergies : « Speed Lightning Energy » n'est PAS « Lightning Energy » ; « Basic X » = « X » reste joint par le nom seul
+ok('Basic Water Energy / Water Energy : joint par le nom (clé « Basic » existante), pas par une voie neuve', () => {
+    const e = carte(80, 'Water Energy', null); const r = cas(e, [prod(90, 'Basic Water Energy', null)], [], [...cartesDuSet, e]);
+    assert.strictEqual(r.ligne.preuve, 'set+nom-seul');
+});
+ok('énergie spéciale : « Speed Lightning Energy » refusée face à « Lightning Energy »', () => {
+    const e = carte(81, 'Speed Lightning Energy', null);
+    assert.deepStrictEqual(cas(e, [prod(91, 'Lightning Energy', null)], [], [...cartesDuSet, e]), { refus: 'nom-inclus-seulement' });
+});
+ok('deux produits « Basic X Energy » : refusé', () => {
+    const e = carte(82, 'Water Energy', null);
+    assert.deepStrictEqual(cas(e, [prod(92, 'Basic Water Energy', null), prod(93, 'Basic Water Energy', null)], [], [...cartesDuSet, e]), { refus: 'nom-ambigu' });
+});
+ok('candidatsDuRefus : égalité ou inclusion de mots, rien d\'autre', () => {
+    const { candidatsDuRefus } = require('./collecte-cartes/jointure-sans-ligne');
+    const e = carte(83, 'Lightning Energy', null);
+    assert.deepStrictEqual(candidatsDuRefus(e, [prod(1, 'Speed Lightning Energy', null), prod(2, 'Charizard', null)]).map(p => p.idProduct), [1]);
+});
+
 console.log(process.exitCode ? 'ÉCHEC' : `${n} OK`);

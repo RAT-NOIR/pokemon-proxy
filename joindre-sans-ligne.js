@@ -25,7 +25,7 @@ if (ecrire && !process.env.LOT_ADDITIF_PID) { console.error('❌ --ecrire refus�
 
 const { autoriser } = require('./collecte-cartes/garde-ecriture');
 const { lireMongo } = require('./collecte-cartes/lecture-sure');
-const { jugerJointure, RAISONS } = require('./collecte-cartes/jointure-sans-ligne');
+const { jugerJointure, RAISONS, candidatsDuRefus } = require('./collecte-cartes/jointure-sans-ligne');
 const DOSSIER = 'C:\\Users\\Yung\\rat-market-travail\\catalogue';
 const DOSSIER_LIENS = path.join(DOSSIER, 'liens');
 const LIB_SITE = 'C:/Users/Yung/Desktop/rat-market-site/lib';
@@ -61,7 +61,7 @@ async function lancerSimulation() {
     for (const c of cartes) if (typeof c.nomEn === 'string' && c.nomEn !== '') for (const s of new Set(c.sets || [])) (cartesParSet.get(s) || cartesParSet.set(s, []).get(s)).push(c);
     const lignesParSet = new Map();
     for (const l of lignes) if (l.slugSet) (lignesParSet.get(l.slugSet) || lignesParSet.set(l.slugSet, []).get(l.slugSet)).push({ carteId: l.carteId, idProduct: l.idProduct });
-    const aEcrire = [], refus = {}, parSet = {};
+    const aEcrire = [], refus = {}, parSet = {}, preuves = {}, refusDetail = [];
     for (const r of RAISONS) refus[r] = 0;
     let auditees = 0, avecLigne = 0, jugees = 0;
     for (const s of publies) {
@@ -78,7 +78,12 @@ async function lancerSimulation() {
             if (avec.has(c._id)) { avecLigne++; continue; }
             jugees++;
             const r = jugerJointure({ carte: c, set: s, produitsSansLigne: sansLigne, produitsDuSet: prods, cartesDuSet: membres, lignesDuSet, regles });
-            if (r.refus) { refus[r.refus]++; continue; }
+            if (r.refus) {
+                refus[r.refus]++;
+                if (r.refus === 'nom-ambigu' || r.refus === 'nom-inclus-seulement') refusDetail.push({ carteId: c._id, set: s._id, raison: r.refus, nomCarte: c.nomEn, produitsCandidats: candidatsDuRefus(c, sansLigne).map(p => ({ idProduct: p.idProduct, name: p.name, numero: p.numero })) });
+                continue;
+            }
+            preuves[r.ligne.preuve] = (preuves[r.ligne.preuve] || 0) + 1;
             lignesDuSet.push({ carteId: r.ligne.carteId, idProduct: r.ligne.idProduct });
             avec.add(c._id);
             aEcrire.push({ ...r.ligne, set: s._id, nomEn: c.nomEn });
@@ -89,7 +94,7 @@ async function lancerSimulation() {
     if (jugees !== aEcrire.length + Object.values(refus).reduce((a, b) => a + b, 0)) throw new Error('concordance rompue : jugées ≠ à écrire + refus');
     if (!jugees) throw new Error('aucune appartenance sans ligne jugée : une simulation sur zéro n\'est pas une mesure (§41)');
     console.log(`dénominateurs : ${JSON.stringify(denominateurs)}`);
-    console.log(`À ÉCRIRE ${aEcrire.length} · refus par raison ${JSON.stringify(refus)}`);
+    console.log(`À ÉCRIRE ${aEcrire.length} · par preuve ${JSON.stringify(preuves)} · refus par raison ${JSON.stringify(refus)}`);
     console.log('par set (top 30) :');
     for (const [s, n] of Object.entries(parSet).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).slice(0, 30)) console.log(`   ${s} : ${n}`);
     const dejaDoublon = new Set(), doublons = aEcrire.filter(l => { const k = l._id; if (dejaDoublon.has(k)) return true; dejaDoublon.add(k); return false; });
@@ -99,7 +104,10 @@ async function lancerSimulation() {
     console.log(`produits visés par plusieurs lignes du plan (même produit dans plusieurs sets exclus : un produit n'a qu'un set) : ${plusieurs}`);
     fs.mkdirSync(DOSSIER_LIENS, { recursive: true });
     const f = autoriser(path.join(DOSSIER_LIENS, 'plan-jointures.json'), [DOSSIER_LIENS]);
-    fs.writeFileSync(f, JSON.stringify({ le: new Date().toISOString(), lectureDu: lecture.le, denominateurs, lignes: aEcrire, refus, parSet }));
+    fs.writeFileSync(f, JSON.stringify({ le: new Date().toISOString(), lectureDu: lecture.le, denominateurs, lignes: aEcrire, refus, preuves, parSet }));
+    const fd = autoriser(path.join(DOSSIER_LIENS, 'refus-detail.json'), [DOSSIER_LIENS]);
+    fs.writeFileSync(fd, JSON.stringify({ le: new Date().toISOString(), lectureDu: lecture.le, n: refusDetail.length, refusDetail }));
+    console.log(`refus-detail : ${refusDetail.length} refus (nom-ambigu / nom-inclus-seulement) écrits dans ${fd}`);
     console.log(`SIMULATION (rien d'écrit en base) · écrit ${f} · ${Math.round((Date.now() - t0) / 1000)} s`);
 }
 
@@ -151,6 +159,7 @@ async function lancerEcriture() {
             slugsPoses++;
             return { ...l, slug: r.set.slug, verifieLe: new Date(l.verifieLe) };
         });
+        console.log(`lignes écrites SANS slug : ${docs.length - slugsPoses} (voulu : le lien viendra d'un apprentissage)`);
         console.log(`slug posé sur ${slugsPoses}/${docs.length} lignes · slug null par raison : ${JSON.stringify(refusSlug)}`);
         let inseres = 0;
         for (const m of morceaux(docs, 500)) {
