@@ -164,6 +164,12 @@ function exclusion(hote, mode) {
 }
 const normNom = s => String(s || '').trim().toLowerCase().replace(/\.+$/, '');
 const NOM_HOTE = /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/;      // un nom de domaine plausible (au moins deux labels)
+/** I3 : les entrées VALIDES de `sauf` d'un arrêt dont le fichier se nomme `nomFichier` : chaînes, nom d'hôte plausible, de la racine du fichier, jamais le nom du fichier lui-même. */
+function saufValides(j, nomFichier) {
+    if (!j || !Array.isArray(j.sauf)) return [];
+    const base = normNom(nomFichier), racine = racineDe(base);
+    return j.sauf.filter(x => typeof x === 'string').map(normNom).filter(x => NOM_HOTE.test(x) && x !== base && racineDe(x) === racine);
+}
 /** D7 : un ARRET-HOTE ferme son nom de fichier et son champ `hote` (chacun avec sa racine), ET l'hôte EXACT de son champ `url`. */
 function hoteFerme(hote, dossier) {
     let noms;
@@ -182,6 +188,8 @@ function hoteFerme(hote, dossier) {
             if (ferme(m[1])) return `hôte fermé (${n}, racine ${racine}) : fichier illisible, on ne sait pas ce qu'il dit, l'arrêt tient — aucune requête tant que le coordinateur ne l'a pas levé`;
             continue;
         }
+        // I3 : `sauf` rouvre des hôtes EXACTS (jamais par racine) ; ne vaut que pour CE fichier, la boucle continue sur les autres arrêts
+        if (saufValides(j, m[1]).includes(normNom(hote))) continue;
         let urlHote = null;
         try { urlHote = j.url ? normNom(new URL(j.url).hostname) : null; } catch { /* url illisible */ }
         if (ferme(m[1]) || (typeof j.hote === 'string' && ferme(j.hote)) || (urlHote && urlHote === hote)) {
@@ -458,18 +466,48 @@ async function lever(hote, motif, o = {}) {
     return { ok: true, de, vers };
 }
 
+// ── I3 : scinder un arrêt : la racine reste fermée, UN sous-hôte nommé est rouvert (`sauf`, trace dans `scissions` et JOURNAL-HOTES.md) ──────────────
+/** @returns {{ok: true, fichier: string, sauf: string[]}} — LÈVE (refus) selon la liste fermée du brief. */
+async function scinder(racineHote, sousHote, motif, o = {}) {
+    const c = configurer(o);
+    if (typeof motif !== 'string' || !motif.trim()) throw erreurRefus('scinder : un motif est obligatoire');
+    const r = normNom(racineHote), s = normNom(sousHote);
+    if (!NOM_HOTE.test(s)) throw erreurRefus(`scinder : sous-hôte illisible ou pas un nom d'hôte (${String(sousHote).slice(0, 80)})`);
+    if (!NOM_HOTE.test(r)) throw erreurRefus(`scinder : hôte racine illisible (${String(racineHote).slice(0, 80)})`);
+    if (s === r) throw erreurRefus(`scinder : ${s} est la racine elle-même (rien à scinder)`);
+    if (racineDe(s) !== r) throw erreurRefus(`scinder : la racine de ${s} n'est pas ${r}`);
+    const fichier = path.join(c.dossierArrets, `ARRET-HOTE-${r}.json`);
+    if (!fs.existsSync(fichier)) throw erreurRefus(`scinder : l'arrêt de ${r} n'existe pas (${fichier})`);
+    let contenu;
+    try { contenu = lireJson(fichier); if (!contenu || typeof contenu !== 'object' || Array.isArray(contenu)) throw new Error('pas un objet'); }
+    catch { throw erreurRefus(`scinder : ${fichier} illisible : à réparer avant de scinder`); }
+    if (fs.existsSync(path.join(c.dossierArrets, `ARRET-HOTE-${s}.json`))) throw erreurRefus(`scinder : ${s} a son propre arrêt (ARRET-HOTE-${s}.json) : il se lève, il ne se scinde pas`);
+    const dejaDans = Array.isArray(contenu.sauf) ? contenu.sauf.filter(x => typeof x === 'string').map(normNom) : [];
+    if (dejaDans.includes(s)) throw erreurRefus(`scinder : ${s} est déjà dans \`sauf\` de ${r}`);
+    const iso = new Date(c.maintenant()).toISOString(), m = motif.trim();
+    const nouveau = { ...contenu, sauf: [...(Array.isArray(contenu.sauf) ? contenu.sauf : []), s], scissions: [...(Array.isArray(contenu.scissions) ? contenu.scissions : []), { hote: s, le: iso, motif: m }] };
+    const tmp = path.join(c.dossierArrets, `~scission-${process.pid}-${Date.now()}.tmp`);
+    fs.writeFileSync(tmp, JSON.stringify(nouveau, null, 1), { flag: 'wx' });
+    try { fs.renameSync(tmp, fichier); } catch (e) { try { fs.unlinkSync(tmp); } catch { /* déjà retiré */ } throw e; }
+    fs.appendFileSync(path.join(c.dossierArrets, 'JOURNAL-HOTES.md'), `${iso} SCISSION ${r} : ${s} rouvert — ${m}\n`);
+    return { ok: true, fichier, sauf: nouveau.sauf };
+}
+
 // ── CLI ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 async function cli(argv) {
-    const usage = () => { console.error('usage : porte-reseau.js verifier <url> [--image] | lire <url> --sortie=<fichier> [--texte] [--image] | fermer <hôte> --motif="…" | lever <hôte> --motif="…"'); return 2; };
-    const [cmd, cible, ...opts] = argv;
+    const usage = () => { console.error('usage : porte-reseau.js verifier <url> [--image] | lire <url> --sortie=<fichier> [--texte] [--image] | fermer <hôte> --motif="…" | lever <hôte> --motif="…" | scinder <hôte-racine> <sous-hôte> --motif="…"'); return 2; };
+    const cmd = argv[0], cible = argv[1];
+    const sous = cmd === 'scinder' ? argv[2] : undefined;
+    const opts = argv.slice(cmd === 'scinder' ? 3 : 2);
     const drapeaux = {};
     for (const a of opts) {
         const m = /^--(image|texte|sortie|motif)(?:=(.*))?$/.exec(a);
         if (!m) { console.error(`option inconnue : ${a}`); return usage(); }
         drapeaux[m[1]] = m[2] === undefined ? true : m[2];
     }
-    if (!cible || !['verifier', 'lire', 'fermer', 'lever'].includes(cmd)) return usage();
-    const permis = { verifier: ['image'], lire: ['image', 'texte', 'sortie'], fermer: ['motif'], lever: ['motif'] }[cmd];
+    if (!cible || !['verifier', 'lire', 'fermer', 'lever', 'scinder'].includes(cmd)) return usage();
+    if (cmd === 'scinder' && (!sous || sous.startsWith('--'))) return usage();
+    const permis = { verifier: ['image'], lire: ['image', 'texte', 'sortie'], fermer: ['motif'], lever: ['motif'], scinder: ['motif'] }[cmd];
     for (const k of Object.keys(drapeaux)) if (!permis.includes(k)) { console.error(`option --${k} non admise pour « ${cmd} »`); return usage(); }
     const mode = drapeaux.image ? 'image' : 'page';
     // B2 : seul le banc (variable PORTE_RESEAU_BANC = un module qui exporte dossierArrets, dossierPorte ET un transport FACTICE) change les dossiers ; pourBanc refuse un transport réel
@@ -483,6 +521,11 @@ async function cli(argv) {
     if (cmd === 'lever') {
         if (typeof drapeaux.motif !== 'string' || !drapeaux.motif.trim()) { console.error('--motif="…" est obligatoire'); return usage(); }
         try { const r = await lever(cible, drapeaux.motif, banc); console.log(`levé : ${cible} (${r.de} -> ${r.vers})`); return 0; }
+        catch (e) { console.error(`REFUSÉ : ${e.message}`); return 3; }
+    }
+    if (cmd === 'scinder') {
+        if (typeof drapeaux.motif !== 'string' || !drapeaux.motif.trim()) { console.error('--motif="…" est obligatoire'); return usage(); }
+        try { const r = await scinder(cible, sous, drapeaux.motif, banc); console.log(`scindé : ${cible} reste fermé, ${sous} rouvert (${r.fichier}) ; sauf = ${r.sauf.join(', ')}`); return 0; }
         catch (e) { console.error(`REFUSÉ : ${e.message}`); return 3; }
     }
     if (cmd === 'verifier') {
@@ -505,4 +548,4 @@ if (require.main === module) {
     cli(process.argv.slice(2)).then(code => process.exit(code), e => { console.error(`porte-reseau en panne, refusé par prudence : ${e && e.message}`); process.exit(3); });
 }
 
-module.exports = { verdict, lire, lever, pourBanc, configurer, DOSSIER_ARRETS_FIXE, DOSSIER_PORTE_FIXE, htmlEnTexte, gardeSimple, exclusion, hoteFerme, racineDe, normaliser, formesDuChemin, sortiePermise, fabriquerTransportReel, AGENTS, SUFFIXES2, ROBOTS_MAX_MS, CADENCE_MIN_MS, CRAWL_MAX_S, SAUTS_MAX, BORNE_OCTETS, UA };
+module.exports = { verdict, lire, lever, scinder,pourBanc, configurer, DOSSIER_ARRETS_FIXE, DOSSIER_PORTE_FIXE, htmlEnTexte, gardeSimple, exclusion, hoteFerme, racineDe, normaliser, formesDuChemin, sortiePermise, fabriquerTransportReel, AGENTS, SUFFIXES2, ROBOTS_MAX_MS, CADENCE_MIN_MS, CRAWL_MAX_S, SAUTS_MAX, BORNE_OCTETS, UA };

@@ -35,7 +35,7 @@ function appliquerGardes(dossier) {
 }
 const fichiersDe = (dossier) => (code) => require('./collecte-cartes/recolte-cli').fichiersDe(code, dossier);
 const fichiersRecolte = (def) => require('./collecte-cartes/recolte-cli').fichiersDe(def.CODE, def.DOSSIER);
-const arretDe = (hote) => { const RH = require('./collecte-cartes/reponse-hote'); return RH.hoteArrete(RH.hoteRacine(hote)); };
+const arretDe = (hote) => { const RH = require('./collecte-cartes/reponse-hote'); return RH.hoteArrete(RH.hoteRacine(hote), undefined, { hoteExact: hote }); };
 async function lectureOuRefus() {
     const l = await require('./collecte-cartes/ouvrir-lecture').ouvrirLecture();
     if (!l) throw new Error('MONGODB_CARTES_LECTURE_URI absente : le plan ne lit que par la connexion de lecture seule — refus, aucune connexion ouverte');
