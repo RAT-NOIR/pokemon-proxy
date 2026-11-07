@@ -12,6 +12,8 @@
 // ⚠️ LIMITE CONNUE (nom traduit, 2026-11-02) : la LANGUE du scan n'est vérifiée que par la saisie du chasseur (`lu.langue`) ; rien, dans ce module, ne la lit sur l'image. Elle est comparée à la langue du tirage du
 // produit, jamais à l'image. De même, le nom traduit ne témoigne que par Pokédex + règle (+ PV quand la carte existe) : deux cartes de même espèce et même règle dans un set (« jumeaux ») ne se séparent
 // que par le numéro lu — la preuve porte alors `jumeau-dans-le-set`, et le coordinateur le vérifie sur une rognure.
+// ⚠️ LIMITE (table croisée, 03/11) : pour un Dresseur / une Énergie japonais sans nomJa, UNE seule autre carte de même nomEn portant ce nomJa suffit (décision du coordinateur) si aucun autre nomEn ne le porte ; la raison :
+// numéro, code et total restent exigés et la planche du coordinateur reste la barrière. Une erreur de nomJa dans NOTRE base (une seule carte) passerait donc — la planche est la seule garde.
 const crypto = require('crypto');
 const fs = require('fs');
 const J = require('./jointure');
@@ -221,6 +223,38 @@ function aUnJumeauDansLeSet(produit, cleDuProduit, np) {
     if (!cleDuProduit || !Array.isArray(produit?.autresDuSet)) return false;
     return produit.autresDuSet.some(a => a && a.idProduct !== produit.idProduct && a.numero != null && J.cleNumero(String(a.numero)) !== J.cleNumero(String(np)) && cleDuTemoin(a.nomEn) === cleDuProduit);
 }
+// ── La TABLE CROISÉE des noms japonais (2026-11-03) : nomEn <-> nomJa sur TOUTES les cartes à page, pour prouver un nom japonais lu sur un produit sans nomJa par une AUTRE carte de même nomEn ──
+// Égalité (jamais inclusion) : nomEn = TOUTES les clés de `clesNom` de la jointure (nom Cardmarket décomposé, sans accents) triées et jointes, donc « Basic X Energy » ≠ « X Energy » (sens sûr : un refus de plus, jamais une
+// confusion) ; nomJa par `nomCompare` de tpc.js (NFKC, ponctuation, « ・ » : la normalisation de production).
+// DÉCISION DU COORDINATEUR (03/11) : UNE carte source suffit (la table interne en exigeait deux) — raison : l'unicité nomJa -> nomEn sur TOUTES les cartes à page est la barrière, le numéro, le code et le total restent exigés
+// par l'appelant, et la planche du coordinateur reste la barrière humaine. Périmètre : Dresseurs et Énergies (un Pokémon garde Pokédex / PV / règle).
+const cleNomEnCroisee = nom => (texte(nom) ? J.clesNom(SANS_ACCENTS(J.decomposerNomCardmarket(nom).nom)).sort().join('|') : '');
+/** @param {{_id: number, nomEn: string, nomJa: string}[]} cartes  toutes les cartes à page (_id > 0) qui portent un nomJa. @returns {{parNomEn: Map<string, Map<string, number>>, parNomJa: Map<string, Set<string>>}} */
+function construireTableJaCroisee(cartes) {
+    const parNomEn = new Map(), parNomJa = new Map();
+    for (const c of Array.isArray(cartes) ? cartes : []) {
+        if (!(c?._id > 0) || !texte(c.nomEn) || !texte(c.nomJa)) continue;
+        const en = cleNomEnCroisee(c.nomEn), ja = TPC.nomCompare(c.nomJa);
+        if (!en || !ja) continue;
+        if (!parNomEn.has(en)) parNomEn.set(en, new Map());
+        if (!parNomEn.get(en).has(ja)) parNomEn.get(en).set(ja, c._id);
+        if (!parNomJa.has(ja)) parNomJa.set(ja, new Set());
+        parNomJa.get(ja).add(en);
+    }
+    return { parNomEn, parNomJa };
+}
+/** Le nom japonais lu est le nomJa d'une autre carte de même nomEn, et ce nomJa ne désigne QUE ce nomEn. @returns {{carteId: number}|null} */
+function preuveParTableCroisee(nomLu, nomEn, table, carteIdProduit = null) {
+    if (!table?.parNomEn || !table?.parNomJa) return null;
+    const en = cleNomEnCroisee(nomEn), ja = TPC.nomCompare(nomLu);
+    if (!en || !ja) return null;
+    const noms = table.parNomEn.get(en);
+    if (!noms || !noms.has(ja)) return null;
+    const ens = table.parNomJa.get(ja);
+    if (!ens || ens.size !== 1 || !ens.has(en)) return null;
+    const carteId = noms.get(ja);
+    return carteId === carteIdProduit ? null : { carteId };
+}
 function motifDeNomTraduit(lu, produit, np, drapeaux = []) {
     if (!texte(lu.nom)) return 'nom-different';
     if (np == null) return 'nom-traduit-numero-absent';
@@ -239,6 +273,13 @@ function motifDeNomTraduit(lu, produit, np, drapeaux = []) {
         if (!(lue !== '' && lue === TPC.nomCompare(t.noms[0]))) return 'nom-different';
         drapeaux.push('table-ja-interne');
         return null;
+    }
+    // ➕ 2026-11-03 : une table d'UNE seule carte ne suffit pas seule ; elle suffit si le nom lu est le nomJa d'une AUTRE carte de même nomEn ET qu'aucune carte d'un autre nomEn ne le porte (table croisée, construite une fois)
+    // Périmètre : Dresseurs et Énergies seulement (catégorie connue non-pokemon, ou catégorie inconnue ET nom sans Pokédex) ; un Pokémon garde ses témoins Pokédex / PV / règle (revue 03/11).
+    const horsPokemon = produit?.categorie != null ? produit.categorie !== 'pokemon' : !(nom && TPC.dexDuNom(nom));
+    if (tableUtilisable && horsPokemon) {
+        const p = preuveParTableCroisee(lu.nom, nom, produit?.tableJaCroisee, produit?.carteId);
+        if (p) { drapeaux.push(`nom-ja-par-table-d-un-autre-set:${p.carteId}`); return null; }
     }
     const sansTemoin = tableUtilisable ? 'table-ja-insuffisante' : 'nom-traduit-sans-temoin';
     // sinon seul un Pokémon a de quoi témoigner : un Dresseur ou une Énergie au nom traduit n'a ni Pokédex ni PV
@@ -721,4 +762,4 @@ function trousDuManifeste({ trous, recus, famille }) {
 }
 
 module.exports = { CODES_SANS_TOTAL, sansTotalAdmis, SOURCE, LOT, SRC, LANGUE_PREUVE, EDITIONS_LOCALES, REGLES, REGLE_MEME_DESSIN, LANGUES_NON_LATINES, MOYENS_DE_LECTURE, MOYENS_DE_LANGUE, SEUIL_PLANCHER, SCORE_PLANCHER, VIDE_PLANCHER, lienAvecLEntree, evaluerRemplacementMemeDessin, langueDuProduit, formeEntree, lireManifeste, lireValidations, rapprocher, evaluerPreuveLue, evaluerDeuxSources, evaluerEntree,
-    verifierCache, setAdmisPourPosition, preuvesDe, motifDeNom, motifDeNomTraduit, porteUnTemoinTraduit, CHAMPS_TEMOIN_TRADUIT, LANGUES_A_NOM_TRADUIT, TAMPONS_ATTENDUS, tamponAttendu, cleFiche, grouperUnites, MOTIFS_DE_TROU, motifDeTrou, trousDuManifeste, sha256De, racineDe };
+    verifierCache, setAdmisPourPosition, preuvesDe, motifDeNom, motifDeNomTraduit, construireTableJaCroisee, preuveParTableCroisee, porteUnTemoinTraduit, CHAMPS_TEMOIN_TRADUIT, LANGUES_A_NOM_TRADUIT, TAMPONS_ATTENDUS, tamponAttendu, cleFiche, grouperUnites, MOTIFS_DE_TROU, motifDeTrou, trousDuManifeste, sha256De, racineDe };

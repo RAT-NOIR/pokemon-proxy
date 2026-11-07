@@ -80,6 +80,9 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
         if (!impressionsCache.has(carteId)) impressionsCache.set(carteId, lire.impressions ? ((await lire.impressions([carteId]))[0]?.impressions ?? []) : []);
         return impressionsCache.get(carteId);
     };
+    // ➕ 03/11 : la TABLE CROISÉE nomEn <-> nomJa de TOUTES les cartes à page (lecture seule, UNE fois, à la demande) — preuve d'un nom japonais lu pour un produit sans nomJa
+    let tableCroiseeCache;
+    const tableCroisee = async () => (tableCroiseeCache !== undefined ? tableCroiseeCache : (tableCroiseeCache = lire.cartesAvecNomJa ? PV.construireTableJaCroisee(await lire.cartesAvecNomJa()) : null));
     const refus = [], unitesBrutes = [], jugements = {}, empreintes = {}, parRegle = {}, entreesParFamille = {}, avertissements = [], trousAuto = [], jumeauxDansLeSet = [];
     const MOTIFS_ANNEE = ['position-ambigue', 'numero-imprime-hors-carte'];
     for (const famille of noms) {
@@ -147,6 +150,7 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
                 const nomDeLaTable = produit.nomEnCarte ?? produit.nomEn;
                 produit.tableJaInterne = temoinNomJa && nomDeLaTable ? temoinNomJa(J.decomposerNomCardmarket(nomDeLaTable).nom) : null;
                 produit.autresDuSet = autresParSet.get(L.slugSet) ?? [];
+                if (e.lu?.langue === 'ja') produit.tableJaCroisee = await tableCroisee();
             }
             if (e.regle === PV.REGLE_MEME_DESSIN) { const s = servies.get(L.carteId); produit.imagesServies = s?.images ?? []; produit.documentsServis = s?.documents ?? new Map(); }
             // tour 4 (2) : pour une position (Battle Academy, Trainer Kit), la règle a besoin de TOUS les produits de ces sets et des impressions de la carte (lecture seule)
@@ -250,6 +254,7 @@ function lireDepuisLaBase(db, prodDb) {
         // nom traduit (lecture seule) : le code du set d'une expansion (codes_set, base de production) et les cartes à page qui portent un nomJa pour un nomEn donné (la table officielle)
         codesSet: ids => lots(ids, lot => par(prodDb.collection('codes_set'), { idExpansion: { $in: lot } }, { _id: 0, idExpansion: 1, codeSet: 1 })),
         cartesDeNomEn: noms => lots(noms, lot => par(db.collection('cartes'), { nomEn: { $in: lot }, nomJa: { $nin: [null, ''] }, _id: { $gt: 0 } }, { nomEn: 1, nomJa: 1 })),
+        cartesAvecNomJa: () => par(db.collection('cartes'), { nomJa: { $nin: [null, ''] }, _id: { $gt: 0 } }, { nomEn: 1, nomJa: 1 }),
         produitsDuSet: slugs => par(db.collection('cartes_produits'), { slugSet: { $in: slugs } }, { _id: 0, idProduct: 1, slugSet: 1, numeroFiche: 1 }),
         // tour 4 (2) : tous les produits des sets à position, et les impressions des cartes (le numéro imprimé lu doit en être une)
         positions: () => par(db.collection('cartes_produits'), { slugSet: { $regex: '^Battle-Academy|Trainer-Kit' } }, { _id: 0, idProduct: 1, slugSet: 1, numeroFiche: 1 }),

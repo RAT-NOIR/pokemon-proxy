@@ -192,6 +192,14 @@ const GROUPES = [
         ['nom traduit : ce que le chasseur a lu non écrit dans la preuve', "...Object.fromEntries(CHAMPS_TEMOIN_TRADUIT.filter(", "...Object.fromEntries([].filter("],
         ['alias de code : table des alias retirée', "Object.freeze({ mEEv: 'mEE', sKV: 'sK' })", "Object.freeze({})"]
     ] },
+    // ➕ 03/11 : la TABLE CROISÉE des noms japonais (nom lu prouvé par une AUTRE carte de même nomEn) — jeu complet en mémoire : node mutants-nomja.js
+    { module: 'collecte-cartes/preuves.js', bancs: ['test-preuves-table-croisee.js'], mutants: [
+        ['table croisée : fiche simple (_id < 0) admise dans la table', "if (!(c?._id > 0) || !texte(c.nomEn) || !texte(c.nomJa)) continue;", "if (!texte(c.nomEn) || !texte(c.nomJa)) continue;"],
+        ['table croisée : nomJa partagé par deux nomEn accepté', "if (!ens || ens.size !== 1 || !ens.has(en)) return null;", "if (!ens || !ens.has(en)) return null;"],
+        ['table croisée : table ignorée', "const p = preuveParTableCroisee(lu.nom, nom, produit?.tableJaCroisee, produit?.carteId);", "const p = null;"],
+        ['table croisée : preuve sans source', "drapeaux.push(`nom-ja-par-table-d-un-autre-set:${p.carteId}`); return null;", "return null;"],
+        ['table croisée : la carte du produit comptée comme une autre', "return carteId === carteIdProduit ? null : { carteId };", "return { carteId };"]
+    ] },
     // ➕ HD-ZH : chaque condition de « remplacement-meme-dessin » retirée doit faire échouer son banc
     { module: 'collecte-cartes/preuves.js', bancs: ['test-preuves-remplacement.js'], mutants: [
         ['même dessin : liste des langues élargie (en)', "Object.freeze(['zh-hans', 'zh-hant', 'th'])", "Object.freeze(['zh-hans', 'zh-hant', 'th', 'en'])"],
