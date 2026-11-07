@@ -64,6 +64,12 @@ function appIntegration(cfg) {
         const bearer = await H.appel(srv.url, '/api/installation', { methode: 'POST', corps: { versionExtension: '2.0.0' }, entetes: { ...e, origin: SITE, 'x-rat-market': '1', cookie: banc, authorization: `Bearer ${J.genererJeton()}` } });
         H.v('CORS-2c. avec un Bearer : pas d\'exemption', [bearer.statut], [429]);
         const etrangere = await H.appel(srv.url, '/api/installation', { methode: 'POST', corps: { versionExtension: '2.0.0' }, entetes: { ...e, origin: 'https://exemple.invalid', 'x-rat-market': '1', cookie: banc } });
+        // L1 (M8) : une session du compte de mesure ouverte depuis www.rat-market.fr est exemptée comme celle de l'apex (une seule définition des origines du site)
+        const e2 = await sature(); const avant2 = await db.col('installations').countDocuments({});
+        const www = await H.appel(srv.url, '/api/installation', { methode: 'POST', corps: { versionExtension: '2.0.0' }, entetes: { ...e2, origin: 'https://www.rat-market.fr', 'x-rat-market': '1', cookie: banc } });
+        H.v('CORS-2e. POST /api/installation depuis https://www.rat-market.fr avec la session banc (IP au plafond) : 201, exemptée, CORS posé', [www.statut, await db.col('installations').countDocuments({}) - avant2, www.entetes[ACAO]], [201, 1, 'https://www.rat-market.fr']);
+        const wwwVoisine = await H.appel(srv.url, '/api/installation', { methode: 'POST', corps: { versionExtension: '2.0.0' }, entetes: { ...(await sature()), origin: 'https://www.rat-market.fr.evil.invalid', 'x-rat-market': '1', cookie: banc } });
+        H.v('CORS-2f. une origine voisine de www : refusée (403)', wwwVoisine.statut, 403);
         H.v('CORS-2d. le même POST depuis une origine quelconque : refusé (403), aucune installation', [etrangere.statut, ACAO in etrangere.entetes], [403, false]);
     }
 

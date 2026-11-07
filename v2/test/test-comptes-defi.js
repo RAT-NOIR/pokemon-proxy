@@ -206,8 +206,10 @@ async function demarrerAvecCors(cfg) {
             refus.push([m !== null && m.includes('V2_SECRET_MESURE') && !m.includes(SEC)]);
         }
         H.v('F2 parcours-test : hôte autre que l\'essai + secret => refus local nommant la variable, aucune requête', [refus.every(r => r[0]), enteteParcours.length - avantF2], [true, 0]);
-        let ouvre = null; try { await CE.ouvrirSession({ appeler, ids: ids1, base: 'https://rat-market-api.onrender.com' }); } catch (e) { ouvre = e.message; }
-        H.vrai('F2 connexion-essai : la base de l\'outil est déjà bornée à l\'essai (baseAutorisee)', CE.baseAutorisee('https://rat-market-api-essai.onrender.com') !== undefined);
+        // T2-2 : la base de l'outil est l'hôte EXACT de l'essai, rien d'autre (le secret ne peut partir qu'à celui-là)
+        const refusBase = []; for (const u of ['https://rat-market-api.onrender.com', 'https://api-v2.rat-market.fr', 'https://rat-market-api-essai.onrender.com.evil.fr', 'https://evil.fr/rat-market-api-essai.onrender.com', 'http://rat-market-api-essai.onrender.com', 'https://rat-market-api-essai.onrender.com:8443', 'https://user:pw@rat-market-api-essai.onrender.com', 'https://rat-market-api-essai.onrender.com/api', 'https://RAT-MARKET-API-ESSAI.onrender.com.x', 'pas une adresse']) { let m = null; try { CE.baseAutorisee(u); } catch (e) { m = e.name; } refusBase.push(m); }
+        H.v('F2 connexion-essai : baseAutorisee refuse toute base autre que l\'hôte exact de l\'essai (10 voisines)', refusBase.every(m => m === 'Arret'), true);
+        H.v('F2 connexion-essai : seul https://rat-market-api-essai.onrender.com (avec ou sans « / ») passe, normalisé', [CE.baseAutorisee('https://rat-market-api-essai.onrender.com'), CE.baseAutorisee('https://rat-market-api-essai.onrender.com/')], ['https://rat-market-api-essai.onrender.com', 'https://rat-market-api-essai.onrender.com']);
         // message clair : 422 defi-anti-robot => la variable est NOMMÉE, le secret jamais imprimé
         const a422 = async () => ({ statut: 422, corps: { success: false, erreur: { code: 'ENTREE', detail: 'defi-anti-robot' } }, cookie: null });
         for (const [nom, ids] of [['sans secret', ids0], ['avec secret', ids1]]) {
@@ -222,8 +224,10 @@ async function demarrerAvecCors(cfg) {
     }
 
     // hostname du jeton : liste fermée (rat-market.fr, www.rat-market.fr)
-    const hote = h => async () => ({ ok: true, json: async () => ({ success: true, ...(h === undefined ? {} : { hostname: h }) }) });
-    const juge = async h => verifierTurnstile('tok', '1.2.3.4', { fetch: hote(h), secret: 'S' });
+    const hote = h => async () => ({ ok: true, json: async () => ({ success: true, action: 'connexion', ...(h === undefined ? {} : { hostname: h }) }) });
+    const juge = async h => verifierTurnstile('tok', '1.2.3.4', { fetch: hote(h), secret: 'S', action: 'connexion' });
+    // R1 : sans action attendue, rien ne passe (réponse parfaite comprise)
+    H.v('R1 : appel SANS action attendue => refusé même pour un jeton parfait (bon hostname, bonne action rendue)', [await verifierTurnstile('tok', null, { fetch: hote('rat-market.fr'), secret: 'S' }), await verifierTurnstile('tok', null, { fetch: hote('rat-market.fr'), secret: 'S', action: '' }), await verifierTurnstile('tok', null, { fetch: hote('rat-market.fr'), secret: 'S', action: 42 })], [false, false, false]);
     H.v('hostname rat-market.fr : accepté', await juge('rat-market.fr'), true);
     H.v('hostname www.rat-market.fr : accepté', await juge('www.rat-market.fr'), true);
     for (const h of ['api-v2.rat-market.fr', 'evil.fr', 'www.rat-market.fr.evil.fr', 'xrat-market.fr', 'localhost', 'WWW.RAT-MARKET.FR', '', 'www.rat-market.fr:443'])

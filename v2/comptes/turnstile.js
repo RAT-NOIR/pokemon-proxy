@@ -15,7 +15,7 @@ async function verifierTurnstile(jeton, ip, { fetch = globalThis.fetch, secret =
     if (!r || !r.ok) throw new Error(`turnstile-http-${r ? r.status : 'aucune-reponse'}`);
     const j = await r.json();
     // L1 : un jeton émis pour un autre site n'est pas un jeton du nôtre. Écrit par ce qu'il AUTORISE : `hostname` doit être l'un des deux hôtes du site (liste fermée, à l'octet) ;
-    // absent, non texte ou autre => refusé. `action` (quand la route en demande une) : celle que le widget a posée pour CE formulaire, exactement (inscription, connexion, oubli, renvoi).
-    return !!j && j.success === true && typeof j.hostname === 'string' && HOTES.includes(j.hostname) && (action === undefined || (typeof j.action === 'string' && j.action === action));
+    // absent, non texte ou autre => refusé. `action` : celle que le widget a posée pour CE formulaire, exactement (inscription, connexion, oubli, renvoi), et l'appelant DOIT en attendre une.
+    return !!j && j.success === true && typeof j.hostname === 'string' && HOTES.includes(j.hostname) && typeof action === 'string' && action !== '' && j.action === action;   // R1 : `action` OBLIGATOIRE : un appel sans action attendue refuse, il ne passe jamais
 }
 module.exports = { verifierTurnstile };
