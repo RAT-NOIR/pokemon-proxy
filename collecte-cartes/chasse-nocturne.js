@@ -109,9 +109,11 @@ const filigrane = site => site && site.filigrane === true ? { servi: false, dest
 const cadenceDe = site => Math.max(CADENCE_MIN_MS, Number.isFinite(site?.cadenceMs) ? site.cadenceMs : (site?.petit ? CADENCE_PETIT_MS : CADENCE_DEFAUT_MS));
 const hoteAFermer = e => Boolean(e && (e.arret || e.defi || CODES_FERMETURE.includes(e.status)));
 const imageDejaObtenue = (reg, url) => Boolean(reg?.objets?.[url]?.sha256);
+// Le cache garde les données ANALYSÉES : une page lue par une autre version de l'extraction se relit (07/11 : les pages de w-tcs étaient cachées 7 jours avec un résultat faux).
+const VERSION_EXTRACTION = 2;
 function pageDejaLue(reg, url, maintenant = new Date()) {
     const p = reg?.pages?.[url];
-    if (!p?.le) return false;
+    if (!p?.le || p.v !== VERSION_EXTRACTION) return false;
     const age = maintenant.getTime() - new Date(p.le).getTime();
     return Number.isFinite(age) && age >= 0 && age <= PAGE_TTL_JOURS * 86400000;
 }
@@ -140,7 +142,7 @@ function collectionsDepuis(html, cfg, base) {
 }
 function numeroDuTitre(s) {
     const t = String(s ?? '');
-    const m = /\(\s*([A-Za-z]{0,4}\d+[A-Za-z]?)\s*\/\s*(\d+)\s*\)/.exec(t);
+    const m = /\(\s*([A-Za-z]{0,4}\d+[A-Za-z]?)\s*\/\s*([A-Za-z]{0,4}\d+)\s*\)/.exec(t);
     if (m) return { numero: m[1], total: m[2] };
     const d = /#\s*([A-Za-z]{0,4}\d+[A-Za-z]?)\b/.exec(t);
     return d ? { numero: d[1], total: null } : { numero: null, total: null };
@@ -150,7 +152,11 @@ function itemsDepuis(html, cfg, base) {
     const sortie = [];
     if (cfg.type === 'jsonld-itemlist') {
         const t = String(html).replace(/\\"/g, '"');
+        const vus = new Set();                              // 07/11 : le flux répète le JSON-LD ; une même annonce (même url) lue deux fois n'est pas deux items (sinon « partage » refuse toute carte)
         for (const m of t.matchAll(/\{"@type":"ListItem","position":(\d+),"name":"((?:[^"\\]|\\.)*)","url":"([^"]*)","image":"([^"]*)"/g)) {
+            const cleItem = `${m[1]}|${m[3]}|${m[2]}`;                 // le flux répète exactement position, url et nom
+            if (vus.has(cleItem)) continue;
+            vus.add(cleItem);
             const nom = m[2].replace(/\\u0026/g, '&').replace(/\\"/g, '"'), img = m[4];
             const vide = !img || (cfg.placeholder && img.includes(cfg.placeholder));
             sortie.push({ position: +m[1], nom: nomNu(nom), titre: nom, ...numeroDuTitre(nom), url: absolue(m[3], base), image: vide ? null : absolue(img, base) });
@@ -169,7 +175,8 @@ function itemsDepuis(html, cfg, base) {
     }
     return sortie;
 }
-const pageSuivante = (html, param, n) => new RegExp(`[?&;]${param}=${n + 1}(?!\\d)`).test(String(html));
+// 07/11 : le « & » d'un nextUrl lu dans un flux JSON s'écrit & (et « &amp; » dans un lien) : sans ce décodage la page suivante n'était JAMAIS vue (w-tcs : 60 items sur 187).
+const pageSuivante = (html, param, n) => new RegExp(`[?&;]${param}=${n + 1}(?!\\d)`).test(String(html).replace(/\\u0026/gi, '&').replace(/&amp;/g, '&'));
 
 // ── 6. les requêtes du protocole des agents (BRIEF-B) : préparées, jamais lancées par un script ─────────────────────────────────────────────
 function requetesDeCarte(p, set) {
@@ -186,13 +193,13 @@ function requetesDeCarte(p, set) {
 
 // ── 7. l'entrée de preuve (format PHASE4), regle « a-lire » : le lot ne lit pas l'image ───────────────────────────────────────────────────────
 const LANGUE_DU_TIRAGE = { jp: 'ja', intl: 'en', 'zh-hans': 'zh', 'zh-hant': 'zh', id: 'id', th: 'th' };
-function construireEntree({ site, set, produit, item, image, collection, pageUrl, nomTemoin, definition, maintenant = new Date() }) {
+function construireEntree({ site, set, produit, item, image, collection, pageUrl, nomTemoin, via = null, definition, maintenant = new Date() }) {
     const f = filigrane(site);
     return {
         idProduct: produit.idProduct, regle: 'a-lire', url: image.url, hote: hoteDe(image.url), fichier: image.fichier, sha256: image.sha256, largeur: image.w, hauteur: image.h, page: pageUrl, seconde: null,
         attendu: { nom: produit.nomEn ?? produit.name, numero: produit.numero ?? null, langue: LANGUE_DU_TIRAGE[set.tirage] ?? null, tampon: null, variante: null },
         lu: null, varianteNommee: null, contradictions: [], sourcesConsultees: [site.code], luLe: null,
-        preparation: { par: 'chasse-nocturne', le: maintenant.toISOString(), set: set.set, collection, itemNom: item.nom, itemNumero: item.numero, nomTemoin, basseDefinition: Boolean(definition?.basseDefinition), filigrane: !f.servi, destination: f.destination }
+        preparation: { par: 'chasse-nocturne', le: maintenant.toISOString(), set: set.set, collection, itemNom: item.nom, itemNumero: item.numero, nomTemoin, ...(via === 'nom' ? { appariement: 'nom-seul' } : {}), basseDefinition: Boolean(definition?.basseDefinition), filigrane: !f.servi, destination: f.destination }
     };
 }
 
@@ -200,7 +207,7 @@ function construireEntree({ site, set, produit, item, image, collection, pageUrl
 async function explorerSite({ site, sets, registre, lirePage, lireImage, fermerHote, maintenant = () => new Date(), pause = ms => new Promise(r => setTimeout(r, ms)), budget = 500, dejaCouverts = new Set(), setsConnus = null }) {
     registre.objets ||= {}; registre.pages ||= {};
     const cadence = cadenceDe(site), dernier = new Map();
-    const stats = { code: site.code, actif: true, requetes: 0, collectionsEnumerees: 0, collectionsAppariees: 0, collectionsLues: 0, itemsLus: 0, surNumeroSeul: 0, produitsCouverts: 0, refus: {}, ferme: null, arretBudget: false, arretErreurs: false };
+    const stats = { code: site.code, actif: true, requetes: 0, collectionsEnumerees: 0, collectionsAppariees: 0, collectionsLues: 0, itemsLus: 0, surNumeroSeul: 0, surNomSeul: 0, produitsCouverts: 0, refus: {}, ferme: null, arretBudget: false, arretErreurs: false };
     const refuser = cle => { stats.refus[cle] = (stats.refus[cle] || 0) + 1; };
     const hotesPages = new Set(site.hotes), hotesImages = new Set([...(site.hotesImages || []), ...site.hotes]);
     let refusDeSuite = 0, erreursDeSuite = 0;
@@ -226,7 +233,7 @@ async function explorerSite({ site, sets, registre, lirePage, lireImage, fermerH
         const html = await requete(url, 'page', lirePage);
         if (html == null) return null;
         const donnees = analyser(html);
-        registre.pages[url] = { le: maintenant().toISOString(), donnees };
+        registre.pages[url] = { le: maintenant().toISOString(), v: VERSION_EXTRACTION, donnees };
         return donnees;
     }
     try {
@@ -266,9 +273,10 @@ async function explorerSite({ site, sets, registre, lirePage, lireImage, fermerH
             stats.itemsLus += items.length;
             const { retenus, refus } = apparierItems(items, set.produits);
             for (const r of refus) refuser(`item:${r.raison}`);
-            for (const { item, produit, nomTemoin } of retenus) {
+            for (const { item, produit, nomTemoin, via } of retenus) {
                 if (!item.image) { refuser('item:sans-image'); continue; }
                 if (nomTemoin !== 'concordant') stats.surNumeroSeul++;                    // apparié sur le seul numéro : le nom n'a rien confirmé
+                if (via === 'nom') stats.surNomSeul++;                                    // apparié sur le seul nom : aucun numéro des deux côtés, la validation à l'œil le sait
                 if (dejaCouverts.has(produit.idProduct)) { refuser('item:deja-couvert'); continue; }
                 const h = hoteDe(item.image);
                 if (!hotesImages.has(h)) { refuser('image:hote-non-declare'); continue; }
@@ -280,7 +288,7 @@ async function explorerSite({ site, sets, registre, lirePage, lireImage, fermerH
                 }
                 const def = meilleureDefinition([{ url: item.image, w: obj.w, h: obj.h }]);
                 if (!def.choix) { refuser(`image:${def.refus}`); continue; }
-                const e = construireEntree({ site, set, produit, item, image: { url: item.image, fichier: obj.fichier, sha256: obj.sha256, w: obj.w, h: obj.h }, collection: c.url, pageUrl: c.url, nomTemoin, definition: def, maintenant: maintenant() });
+                const e = construireEntree({ site, set, produit, item, image: { url: item.image, fichier: obj.fichier, sha256: obj.sha256, w: obj.w, h: obj.h }, collection: c.url, pageUrl: c.url, nomTemoin, via, definition: def, maintenant: maintenant() });
                 const deja = parProduit.get(produit.idProduct);
                 if (deja) { if (e.largeur > deja.largeur) entrees[entrees.indexOf(deja)] = e, parProduit.set(produit.idProduct, e); continue; }
                 parProduit.set(produit.idProduct, e); entrees.push(e);
@@ -310,7 +318,7 @@ function redigerJournal({ date, sites, population, entrees, famille, avertisseme
     L.push('', '| site | requêtes | collections énumérées | appariées | lues | cartes lues | produits couverts | fermé | refus par raison |', '|---|---|---|---|---|---|---|---|---|');
     for (const s of sites) {
         if (s.actif === false) { L.push(`| ${s.code} | — | non exploré : ${s.raison ?? 'raison non écrite'} | | | | | | |`); continue; }
-        L.push(`| ${s.code} | ${s.requetes} | ${s.collectionsEnumerees} énumérées | ${s.collectionsAppariees} appariées | ${s.collectionsLues} lues | ${s.itemsLus} (dont ${s.surNumeroSeul ?? 0} appariées sur le seul numéro) | ${s.produitsCouverts} couverts | ${s.ferme ?? 'non'}${s.arretBudget ? ' (plafond atteint)' : ''} | ${Object.entries(s.refus || {}).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(' ; ') || 'aucun'} |`);
+        L.push(`| ${s.code} | ${s.requetes} | ${s.collectionsEnumerees} énumérées | ${s.collectionsAppariees} appariées | ${s.collectionsLues} lues | ${s.itemsLus} (dont ${s.surNumeroSeul ?? 0} appariées sur le seul numéro${s.surNomSeul ? ` ; ${s.surNomSeul} appariées sur le nom seul : aucun numéro des deux côtés` : ''}) | ${s.produitsCouverts} couverts | ${s.ferme ?? 'non'}${s.arretBudget ? ' (plafond atteint)' : ''} | ${Object.entries(s.refus || {}).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(' ; ') || 'aucun'} |`);
     }
     L.push('', '## Ce que ce lot ne peut pas faire',
         '- La recherche par moteur (WebSearch, requêtes nom + code + numéro en 3 langues) : la porte réseau n\'offre que « verifier », « lire », « fermer », « lever » ; un script ne peut pas lancer une recherche. Elle reste aux agents ; les requêtes du protocole sont préparées dans a-chasser-par-agents-*.json.',
@@ -321,4 +329,4 @@ function redigerJournal({ date, sites, population, entrees, famille, avertisseme
 
 module.exports = { normaliser, apparierCollection, apparierItem, apparierItems, meilleureDefinition, filigrane, cadenceDe, hoteAFermer, imageDejaObtenue, pageDejaLue,
     collectionsDepuis, itemsDepuis, numeroDuTitre, pageSuivante, requetesDeCarte, construireEntree, explorerSite, construireFamille, redigerJournal, hoteDe, planTropVieux, ERREURS_DE_SUITE_MAX,
-    CADENCE_MIN_MS, LARGEUR_SERVIE, LARGEUR_PLANCHER, PAGE_TTL_JOURS, CODES_FERMETURE };
+    VERSION_EXTRACTION, CADENCE_MIN_MS, LARGEUR_SERVIE, LARGEUR_PLANCHER, PAGE_TTL_JOURS, CODES_FERMETURE };

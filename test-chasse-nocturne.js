@@ -90,7 +90,7 @@ const vrai = (nom, cond) => v(nom, Boolean(cond), true);
     v('fermeture : HTTP 500 ne ferme pas', CN.hoteAFermer({ status: 500 }), false);
     v('fermeture : un arrêt de la porte ferme', CN.hoteAFermer({ arret: true }), true);
     v('fermeture : un défi ferme', CN.hoteAFermer({ defi: 'cloudflare' }), true);
-    const reg = { objets: { 'https://h.test/a.jpg': { sha256: 'x', fichier: 'f' } }, pages: { 'https://h.test/p': { fichier: 'p.html', le: '2026-11-06T00:00:00.000Z' } } };
+    const reg = { objets: { 'https://h.test/a.jpg': { sha256: 'x', fichier: 'f' } }, pages: { 'https://h.test/p': { fichier: 'p.html', le: '2026-11-06T00:00:00.000Z', v: CN.VERSION_EXTRACTION } } };
     v('reprise : image déjà obtenue, jamais redemandée', CN.imageDejaObtenue(reg, 'https://h.test/a.jpg'), true);
     v('reprise : image inconnue à demander', CN.imageDejaObtenue(reg, 'https://h.test/b.jpg'), false);
     v('reprise : page récente (1 jour) relue du cache', CN.pageDejaLue(reg, 'https://h.test/p', new Date('2026-11-07T00:00:00Z')), true);
@@ -116,6 +116,32 @@ const vrai = (nom, cond) => v(nom, Boolean(cond), true);
     const cs = CN.itemsDepuis(htmlCartes, { type: 'vignettes-plaque', pleine: ['.thumb.', '.'] }, 'https://jp.h.test/Set-Expansion/');
     v('items : vignettes à plaque, image pleine définition déduite', [cs[0].nom, cs[0].numero, cs[0].image], ['Arbok', '1', 'https://den.test/397/Arbok.VEN3.1.53045.png']);
     v('numéro du titre : (012/100) et #12', [CN.numeroDuTitre('Foo (012/100) (Set)'), CN.numeroDuTitre('Foo #12')], [{ numero: '012', total: '100' }, { numero: '12', total: null }]);
+
+    // 07/11 : w-tcs, 262 cartes lues et 0 couverte. Extraits RÉELS de la page « BW7: Plasma Gale » et d'Aquapolis (tradingcardplanet) : le flux répète le JSON-LD, la pagination vit dans le flux avec « & » échappé.
+    const itemColress = { '@type': 'ListItem', position: 60, name: 'Colress (075/070) (BW7: Plasma Gale)', url: 'https://tradingcardplanet.com/products/colress-075-070-bw7-plasma-gale', image: 'https://cdn.shopify.com/s/files/1/0617/3979/4509/files/601880.jpg?v=1761584080' };
+    const itemColress64 = { '@type': 'ListItem', position: 59, name: 'Colress (064/070) (BW7: Plasma Gale)', url: 'https://tradingcardplanet.com/products/colress-064-070-bw7-plasma-gale', image: 'https://cdn.shopify.com/s/files/1/0617/3979/4509/files/601879.jpg?v=1' };
+    const flux = lst => `<script type="application/ld+json">${JSON.stringify({ itemListElement: lst })}</script>`;
+    const CFG_LD = { type: 'jsonld-itemlist', placeholder: '/images/holding/' };
+    const doublon = CN.itemsDepuis(flux([itemColress64, itemColress]) + '<div>flux</div>' + flux([itemColress64, itemColress]), CFG_LD, 'https://t.test/c');
+    v('items : le JSON-LD répété par le flux ne double pas les items', doublon.map(i => i.numero), ['064', '075']);
+    const homonymes = CN.itemsDepuis(flux([itemColress, { ...itemColress, url: 'https://tradingcardplanet.com/products/colress-075-070-bw7-plasma-gale-2', position: 61 }]), CFG_LD, 'https://t.test/c');
+    v('items : deux annonces d\'urls différentes au même numéro restent deux items', homonymes.length, 2);
+    const memeUrl = CN.itemsDepuis(flux([itemColress, { ...itemColress, name: 'Colress (076/070) (BW7: Plasma Gale)' }]), CFG_LD, 'https://t.test/c');
+    v('items : même url mais numéros différents = deux items gardés (la clé est position|url|nom)', memeUrl.map(i => i.numero), ['075', '076']);
+    const prodColress =[{ idProduct: 568364, name: 'Colress', numero: '075', nomEn: 'Colress' }];
+    const apCol = CN.apparierItems(doublon, prodColress);
+    v('items : Colress 075 (flux doublé) est apparié, pas rangé en partage', [apCol.retenus.map(x => x.produit.idProduct), apCol.refus.map(x => x.raison)], [[568364], ['numero-absent']]);
+    const apHom = CN.apparierItems(homonymes, prodColress);
+    v('items : deux annonces distinctes au même numéro restent en partage (§34)', [apHom.retenus.length, apHom.refus.map(x => x.raison)], [0, ['partage', 'partage']]);
+    const fluxPage = '...\\"currentPage\\":1,\\"totalPages\\":4,\\"prevUrl\\":null,\\"nextUrl\\":\\"/collections/pokemon/aquapolis?stock=all\\u0026page=2\\"...';
+    v('pagination : nextUrl du flux avec « & » échappé (\\u0026) est vue', [CN.pageSuivante(fluxPage, 'page', 1), CN.pageSuivante(fluxPage, 'page', 2)], [true, false]);
+    v('pagination : « &amp; » dans un lien est vu', CN.pageSuivante('<a href="/c?stock=all&amp;page=2">2</a>', 'page', 1), true);
+    v('pagination : page=2 n\'est pas page=20', CN.pageSuivante('?page=20', 'page', 1), false);
+    v('numéro du titre : sous-série à total lettré (H28/H32)', CN.numeroDuTitre('Tyranitar (H28) (H28/H32) (Aquapolis)'), { numero: 'H28', total: 'H32' });
+    v('numéro du titre : variante (103b/147)', CN.numeroDuTitre('Porygon (103b) (103b/147) (Aquapolis)'), { numero: '103b', total: '147' });
+    const regVieux = { pages: { 'https://h.test/p': { le: '2026-11-06T00:00:00.000Z', donnees: {} } } };
+    v('reprise : une page cachée par une autre version de l\'extraction est relue', CN.pageDejaLue(regVieux, 'https://h.test/p', new Date('2026-11-07T00:00:00Z')), false);
+    v('reprise : une page cachée par la version courante est reprise', CN.pageDejaLue({ pages: { 'https://h.test/p': { le: '2026-11-06T00:00:00.000Z', v: CN.VERSION_EXTRACTION, donnees: {} } } }, 'https://h.test/p', new Date('2026-11-07T00:00:00Z')), true);
 
     // ───────────── 6. requêtes de carte (protocole des agents, non lancées par un script) ─────────────
     const rq = CN.requetesDeCarte({ idProduct: 1, nomEn: 'Switch', numero: '016' }, { code: 'sA', nom: 'Sword Shield Starter Decks', tirage: 'jp' });
@@ -213,6 +239,15 @@ const vrai = (nom, cond) => v(nom, Boolean(cond), true);
         return (await CN.explorerSite({ site: SITE, sets: FILE_SETS, registre: { objets: {}, pages: {} }, ...m2b, budget: 50 })).stats.surNumeroSeul;
     })()), 1);
     v('numéro seul : 0 quand le nom concorde', r1.stats.surNumeroSeul, 0);
+    // relecture 07/11 : le « nom seul » (aucun numéro des deux côtés) est marqué sur l'entrée et compté au journal
+    const ldNom = JSON.stringify({ itemListElement: [{ '@type': 'ListItem', position: 1, name: 'Mew (Movie Set)', url: 'https://h.test/p/mew', image: 'https://cdn.test/mew.jpg' }] });
+    const pNom = { ...pagesFausses, 'https://h.test/collections/pokemon/sword-shield-starter-decks': `<script type="application/ld+json">${ldNom}</script>` };
+    const mNom = monde(); const mondeNom = { ...mNom, lirePage: async (u) => { mNom.requetes.push(['page', u]); if (pNom[u] !== undefined) return pNom[u]; throw Object.assign(new Error('404'), { status: 404 }); } };
+    const rNom = await CN.explorerSite({ site: SITE, sets: [{ ...FILE_SETS[0], produits: [{ idProduct: 77, name: 'Mew', numero: null, nomEn: 'Mew' }] }], registre: { objets: {}, pages: {} }, ...mondeNom, budget: 50 });
+    v('nom seul : l\'entrée porte la marque', [rNom.entrees.length, rNom.entrees[0]?.preparation.appariement], [1, 'nom-seul']);
+    v('nom seul : compté dans les stats', rNom.stats.surNomSeul, 1);
+    v('nom seul : l\'entrée appariée par le numéro ne porte pas la marque', [r1.entrees[0].preparation.appariement, r1.stats.surNomSeul], [undefined, 0]);
+    vrai('nom seul : le journal le dit', /1 appariées? sur le nom seul/.test(CN.redigerJournal({ date: 'd', sites: [{ code: 'w-a', actif: true, requetes: 1, collectionsEnumerees: 1, collectionsAppariees: 1, collectionsLues: 1, itemsLus: 1, surNomSeul: 1, produitsCouverts: 1, refus: {}, ferme: null }], population: { fichier: 1, encoreManquants: 1 }, entrees: 1, famille: 'F' })));
     // point 8 : plan périmé ; point 3 : gardes
     v('plan : 2 h = frais', CN.planTropVieux({ le: '2026-11-07T01:00:00Z' }, new Date('2026-11-07T03:00:00Z')), false);
     v('plan : 25 h = périmé', CN.planTropVieux({ le: '2026-11-06T02:00:00Z' }, new Date('2026-11-07T03:00:00Z')), true);
