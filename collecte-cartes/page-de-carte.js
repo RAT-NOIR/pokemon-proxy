@@ -32,7 +32,11 @@ function decisionDePage(contenu, titre) {
  * qu'un reste et l'état (le titre n'est pas redemandé au lancement suivant).
  * @returns {Promise<{ecrite: boolean, r2Ecrit?: boolean, motif?: string}>}
  */
-async function ecrirePageDeCarte({ M, r2, bucket, pg, slug, lot, redirigeDepuisTout, D, textesEpures, compter, impressionCible, compteRequetes }) {
+async function ecrirePageDeCarte({ M, r2, bucket, pg, slug, lot, redirigeDepuisTout, D, textesEpures, compter, impressionCible, compteRequetes, poserAppartenance }) {
+    // `poserAppartenance` est OBLIGATOIRE (booléen) : §51, une garde s'écrit par ce qu'elle autorise — pas de défaut qui pose le slug sans produit.
+    // `false` (collecteur-texte.js, 2026-11-07) : la page est écrite comme carte mais le slug N'ENTRE PAS dans `cartes.sets` ici —
+    // l'appartenance se pose APRÈS la jointure, pour les seules cartes qui ont un produit du set (collecte-cartes/appartenance-par-produit.js).
+    if (typeof poserAppartenance !== 'boolean') throw new Error('ecrirePageDeCarte : poserAppartenance est obligatoire (booléen) — aucun défaut, rien n\'est écrit');
     // l'état APRÈS l'unité : les titres du lot qui ont mené à cette page (cible + redirigés)
     const titresDeCettePage = [pg.title, ...(redirigeDepuisTout.get(pg.title) || [])].filter(t => lot.includes(t));
     const decision = decisionDePage(pg.content, pg.title);
@@ -73,7 +77,7 @@ async function ecrirePageDeCarte({ M, r2, bucket, pg, slug, lot, redirigeDepuisT
             bulba: { titre: pg.title, pageid: pg.pageid, revid: pg.revid, redirigeDepuis: redirigeDepuisTout.get(pg.title) || [], cleR2: cle },
             collecteLe: new Date()
         },
-        $addToSet: { sets: slug }, $setOnInsert: { version: 1, liens: { idProduct: [], idMetacards: [] } }
+        ...(poserAppartenance ? { $addToSet: { sets: slug } } : {}), $setOnInsert: { version: 1, liens: { idProduct: [], idMetacards: [] } }
     }, { upsert: true });
     textesEpures.set(pg.pageid, epure);
     await M.Etat.updateOne({ _id: slug }, {

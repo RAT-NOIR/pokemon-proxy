@@ -42,7 +42,7 @@ function faux() {
 }
 const contexte = (f, pg) => ({
     M: f.M, r2: f.R2, bucket: 'B', pg, slug: 'Set-Test', lot: [pg.title], redirigeDepuisTout: new Map(),
-    D: { epure: {} }, textesEpures: new Map(), compter: () => {}, impressionCible: () => null, compteRequetes: () => 7
+    D: { epure: {} }, textesEpures: new Map(), compter: () => {}, impressionCible: () => null, compteRequetes: () => 7, poserAppartenance: true
 });
 (async () => {
     for (const [nom, titre, motif] of [['homonymie-energie', 'Darkness Energy (TCG)', 'homonymie'], ['homonymie-tcg', 'Pikachu (SV-P Promo 1)', 'homonymie']]) {
@@ -64,6 +64,17 @@ const contexte = (f, pg) => ({
     verifier('Oddish : un upsert avec $addToSet sets', up.length === 1 && up[0][3].$addToSet.sets === 'Set-Test' && up[0][4].upsert === true, true);
     verifier('Oddish : numéro propre écrit (102), aucun jp', up[0][3].$set.impressions.map(i => [i.tirage, i.numero]), [['intl', '102']]);
     verifier('Oddish : déposée sur R2', f.depots.length, 1);
+    // B. `poserAppartenance` est OBLIGATOIRE (§51 : une garde s'écrit par ce qu'elle autorise) — absent ou non booléen : exception nommée, aucune écriture
+    for (const [nom, valeur] of [['absent', undefined], ['non booléen', 'oui']]) {
+        const fb = faux(), cb = contexte(fb, { title: 'Oddish (SVP Promo 102)', pageid: 295618, revid: 9, content: fx('oddish-svp-102') });
+        if (valeur === undefined) delete cb.poserAppartenance; else cb.poserAppartenance = valeur;
+        let err = null; try { await P.ecrirePageDeCarte(cb); } catch (e) { err = e.message; }
+        verifier(`poserAppartenance ${nom} : exception nommée`, typeof err === 'string' && err.includes('poserAppartenance'), true);
+        verifier(`poserAppartenance ${nom} : aucune écriture`, [fb.appels.length, fb.depots.length], [0, 0]);
+    }
+    const ff = faux(), cf = contexte(ff, { title: 'Oddish (SVP Promo 102)', pageid: 295618, revid: 9, content: fx('oddish-svp-102') });
+    cf.poserAppartenance = false; await P.ecrirePageDeCarte(cf);
+    verifier('poserAppartenance false : page écrite, aucun $addToSet sets', [ff.appels.filter(a => a[0] === 'Carte' && a[1] === 'updateOne').length, JSON.stringify(ff.appels.filter(a => a[0] === 'Carte')).includes('addToSet')], [1, false]);
 
     // 3 bis (I2). une page SANS NOM qui n'est PAS une homonymie : jamais une carte, mais RÉCUPÉRABLE
     const ebauche = '{{Project TCG notice\n}}\n{{TCG\n|Truc\n}}';

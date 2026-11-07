@@ -39,7 +39,7 @@ async function collecter({ existante, impressionCible }) {
     const appels = [];
     const M = { Carte: { updateOne: async (...a) => { appels.push(a); return {}; }, findById: () => ({ select: () => ({ lean: async () => existante }) }) }, Etat: { updateOne: async () => ({}) }, Reste: { updateOne: async () => ({}) } };
     const R2 = { cleWikitext: (p, r) => `bulba/${p}/${r}.wikitext`, deposerTexte: async () => ({ ecrit: true }) };
-    await PDC.ecrirePageDeCarte({ M, r2: R2, bucket: 'B', pg: { title: 'Oddish (SVP Promo 102)', pageid: 295618, revid: 9, content: fx('oddish-svp-102') }, slug: 'Set-Test', lot: ['Oddish (SVP Promo 102)'], redirigeDepuisTout: new Map(), D: { epure: {} }, textesEpures: new Map(), compter: () => { }, impressionCible, compteRequetes: () => 1 });
+    await PDC.ecrirePageDeCarte({ M, r2: R2, bucket: 'B', pg: { title: 'Oddish (SVP Promo 102)', pageid: 295618, revid: 9, content: fx('oddish-svp-102') }, slug: 'Set-Test', lot: ['Oddish (SVP Promo 102)'], redirigeDepuisTout: new Map(), D: { epure: {} }, textesEpures: new Map(), compter: () => { }, impressionCible, compteRequetes: () => 1, poserAppartenance: true });
     return appels[0][1].$set.rarete;
 }
 (async () => {

@@ -38,6 +38,7 @@ const { champsDuRejeu } = require('./collecte-cartes/champs-du-rejeu');
 const { refusDeCollecte } = require('./collecte-cartes/nom-synthetique');
 const { planSansPage } = require('./collecte-cartes/plan-sans-page');
 const { ecrirePageDeCarte } = require('./collecte-cartes/page-de-carte');
+const { poserAppartenances, fabriquerCandidates } = require('./collecte-cartes/appartenance-par-produit');
 
 const arg = nom => { const a = process.argv.find(x => x.startsWith(`--${nom}=`)); return a ? a.slice(nom.length + 3) : null; };
 const VERROU_MS = 10 * 60 * 1000;
@@ -145,7 +146,13 @@ const ATTENTE_VERROU_MS = 30 * 1000;
         if (G) console.log(`   garde du nom seul : ${new Set(G.gardees.map(l => l.idProduct)).size} produits gardés · ${G.refusees.length} refusés (${JSON.stringify(G.refusees.reduce((a, r) => { const k = r.raison.replace(/\d+/g, 'N'); a[k] = (a[k] || 0) + 1; return a; }, {}))})`);
         // 🔑 EX-TRAINER-KIT-2 : un set naît NOMMÉ ou il ne naît pas — nommé AVANT la première écriture de la jointure (collecte-cartes/set-nomme.js)
         const nomNaissance = await champsDeNaissance(cx.db, prod.db, { _id: slug, code: L.code, idExpansion: [L.exp], nomEn: TIRAGE === 'intl' ? nomsCibles[0] : null, nomJa: null, nomJaTraduit: null, region: TIRAGE === 'jp' ? 'jp' : 'intl', tirage: TIRAGE });
+        const membresAvantSansPage = await M.Carte.countDocuments({ sets: slug });
         const ecrit = await ecrireJointure(M, { slug, J, produits });
+        // Appartenance : cette voie n'écrit JAMAIS `cartes.sets` (elle lit les cartes par l'expansion déclarée) — rien à brancher ici ; la règle « un produit du set »
+        // s'applique à la voie Setlist (4 bis). Le dénominateur s'imprime quand même, pour que l'absence d'écriture se lise.
+        // compteur RÉEL : membres du set avant/après la jointure (0 si la voie n'écrit pas cartes.sets)
+        const membresApres = await M.Carte.countDocuments({ sets: slug });
+        console.log(`   appartenances : ${membresApres - membresAvantSansPage} posées par cette voie, 0 refusées sans produit du set (elle n'applique pas la règle : elle n'écrit pas cartes.sets)`);
         // Le set existe pour le site : son nom vient de l'expansion que NOS pages déclarent, pas d'une
         // page de set qu'on n'a pas. `bulba.titre` reste null — on n'invente pas une source.
         await M.Set.updateOne({ _id: slug }, {
@@ -296,11 +303,17 @@ const ATTENTE_VERROU_MS = 30 * 1000;
         for (const c of faits.champsAGabarit || []) D.champsAGabarit.set(c, (D.champsAGabarit.get(c) || 0) + 1);
     };
 
+    // 🔑 RÈGLE DU TESTEUR (03/11) : une fiche sans produit dans son set est un clone. La page est écrite, mais le slug n'entre dans `cartes.sets` qu'APRÈS la jointure
+    // et pour les seules cartes qui ont un produit du set (collecte-cartes/appartenance-par-produit.js). Les CANDIDATES de la jointure sont donc les membres
+    // actuels ∪ les pages écrites (cette exécution ou une précédente : `collecte_etat.pages`, etat « ok »), membres ou non.
+    const pagesEcrites = new Set();
+    const candidates = fabriquerCandidates({ M, slug, pagesEcrites });
+
     // ---- 3 bis. --reparser : rejouer le parseur sur l'archive R2, SANS refetcher ------------
     // C'est l'assurance contre le champ oublié, exercée : un défaut de parse se corrige en
     // relisant l'archive épurée (les faits y sont tous), pas en redemandant les pages.
     if (process.argv.includes('--reparser')) {
-        const tous = await M.Carte.find({ sets: slug }).select('_id bulba impressions rarete').lean();
+        const tous = await candidates('_id bulba impressions rarete');
         // une carte SANS page archivée (une fiche simple de creer-sets-sans-page.js, 2026-10-04) n'a rien à reparser : elle se compte
         // et se saute — sans cette garde, `c.bulba.cleR2` levait et arrêtait le reparse du set entier (relecture du 2026-10-04)
         const deja = tous.filter(c => c.bulba?.cleR2);
@@ -342,8 +355,8 @@ const ATTENTE_VERROU_MS = 30 * 1000;
         for (const pg of pages) {
             // 🔑 R4 : une page n'est écrite comme carte (et inscrite dans `cartes.sets`) que si collecte-cartes/page-de-carte.js l'autorise —
             // une page d'homonymie ({{disambig}}, {{tcgdisambig}}) devient un reste et un état, jamais une carte (banc test-page-de-carte.js).
-            const r = await ecrirePageDeCarte({ M, r2, bucket: process.env.R2_BUCKET_BRUT, pg, slug, lot, redirigeDepuisTout, D, textesEpures, compter, impressionCible, compteRequetes: bulba.compteRequetes });
-            if (r.ecrite) { ecrites++; if (r.r2Ecrit) r2Ecrits++; }
+            const r = await ecrirePageDeCarte({ M, r2, bucket: process.env.R2_BUCKET_BRUT, pg, slug, lot, redirigeDepuisTout, D, textesEpures, compter, impressionCible, compteRequetes: bulba.compteRequetes, poserAppartenance: false });
+            if (r.ecrite) { pagesEcrites.add(pg.pageid); ecrites++; if (r.r2Ecrit) r2Ecrits++; }
             else console.warn(`   ⚠️ « ${pg.title} » n'est pas une carte (${r.motif}) : ni écrite ni inscrite dans ${slug}`);
         }
         console.log(`   lot ${Math.floor(i / 50) + 1} : ${pages.length} pages, ${redirections.size} redirections, ${manquantes.length} manquantes`);
@@ -351,7 +364,7 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     if (arretDemande) { console.warn('⏹️  arrêté avant la jointure ; relancer reprend au premier titre non traité.'); await finir(); process.exit(0); }
 
     // ---- 4. la jointure ---------------------------------------------------------------------
-    let cartesDuSet = await M.Carte.find({ sets: slug }).lean();
+    let cartesDuSet = await candidates();
     // `numerosDepuisSetlist` (tirages chinois, pages « (ATCG) ») : le numéro du set n'est que dans la Setlist. Impressions
     // VIRTUELLES, et une preuve qui le dit (« setlist+numero »). Voir jointure.js. Depuis le 2026-09-24, celles que l'URL
     // Cardmarket confirme sont ÉCRITES sur la carte (poser-impressions-setlist.js) : la virtuelle ne s'ajoute pas en double.
@@ -401,12 +414,20 @@ const ATTENTE_VERROU_MS = 30 * 1000;
         intlLignes += Ji.lignes.length;
         console.log(`   bonus intl « ${nomIntl} » (exp ${idExpIntl}) : ${cartesJumelles.length} cartes sur ${cartesDuSet.length} déclarent ce jumeau → ${Ji.lignes.length} lignes sur ${prodIntl.length} produits, ${Ji.restes.length} restes non écrits`);
     }
+    // ---- 4 bis. l'appartenance : le slug n'entre dans `cartes.sets` que pour une carte qui a un produit de CE set (additif, ne retire rien) ----
+    // Vérité = la BASE après l'écriture de la jointure (lignes posées par joindre() ET par les autres outils, hors lignes détachées).
+    // Le slugSet RÉEL des lignes est gardé (deux sets frères sur le même idExpansion se distinguent), les lignes détachées sont exclues : appartenance-par-produit.js::poserAppartenances
+    // (la SEULE écriture de cartes.sets du collecteur, testée sur fausse base par test-appartenance-par-produit.js).
+    const AP = await poserAppartenances({ M, slug, exp: L.exp, cartes: cartesDuSet, interdits: lignesInterdites });
+    if (AP.message) console.warn(`   ⚠️ ${AP.message}`);
+    console.log(`   appartenances : ${AP.ajouter.length} posées, ${AP.refusees.length} refusées sans produit du set (${AP.dejaMembres.length} déjà membres, non touchées)`);
     if (ordreAvant) { const R = await restaurerOrdreLiens(M, ordreAvant); console.log(`   --reparser : ordre de liens.idProduct rétabli sur ${R.remis} carte(s) (le repère d'adresse du site, liens.idProduct[0], ne bouge pas)`); }
     await M.Etat.updateOne({ _id: slug }, { $set: { phase: 'jointure' } });
 
     // ---- 5. complétude ----------------------------------------------------------------------
     const pagesDistinctes = cartesDuSet.length;
-    const cartesEcrites = await M.Carte.countDocuments({ sets: slug });
+    // la concordance « pages distinctes = cartes écrites » compte les cartes ÉCRITES : membres du set + candidates refusées sans produit (écrites, jamais membres)
+    const cartesEcrites = await M.Carte.countDocuments({ sets: slug }) + AP.refusees.length;
     const restesParType = {};
     for (const r of J.restes) restesParType[r.type] = (restesParType[r.type] || 0) + 1;
     if (manquants) restesParType['titre-manquant'] = manquants;

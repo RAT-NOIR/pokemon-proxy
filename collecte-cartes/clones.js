@@ -16,6 +16,7 @@ const { decomposerNomCardmarket, nomJointDe, clesNom } = require('./jointure');
 const { aliasDe } = require('./alias-noms');
 const clesCarte = c => clesNom(nomJointDe(c));
 const { compterEtat, comparer, COMPTEURS } = require('./garde-lot');
+const { aUnProduitDuSet } = require('./appartenance-par-produit');
 
 const MOTIFS = Object.freeze(['produit-ailleurs', 'composition-autre-region']);
 const indexer = (xs, cle) => { const m = new Map(); for (const x of xs) { const k = cle(x); if (k === null || k === undefined) continue; (m.get(k) || m.set(k, []).get(k)).push(x); } return m; };
@@ -63,7 +64,8 @@ function classerClones(lecture, regles) {
             auditees++;
             const lignesC = lignesParCarte.get(c._id) || [];
             // 1. un produit rattaché dans CE set : jamais un clone
-            if (lignesC.some(l => l.slugSet === s._id) || (produitsParFiche.get(`${c._id}|${s._id}`) || []).length) { avecProduit++; continue; }
+            // UNE définition (appartenance-par-produit.js), partagée avec la règle d'ajout du collecteur (§21 bis)
+            if (aUnProduitDuSet(c._id, s._id, lignesC, produitsParFiche.get(`${c._id}|${s._id}`) || [])) { avecProduit++; continue; }
             // 2. un produit SANS_LIGNE du set peut être le sien : c'est une jointure à faire
             const imps = (c.impressions || []).filter(i => impressionDuSet(i, cible));
             // la clé de la PRODUCTION : clesNom(nomJointDe(carte)) (« Basic » retiré) contre clesNom(nom décomposé) ∪ clesNom(alias de l'expansion) — jointure.js:211-220
