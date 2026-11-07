@@ -169,6 +169,18 @@ const echapper = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
  * Aucun autre set ne porte « mEE » ou « sK » (univers-expansions.json, table-sets.js, table-sets-auto.json, table-sets-sans-page.json : aucune occurrence, vérifié le 2026-11-02).
  */
 const CODES_IMPRIMES_ALIAS = Object.freeze({ mEEv: 'mEE', sKV: 'sK' });
+/**
+ * (07/11) Cardmarket range PLUSIEURS decks sous un seul code (§53 : sA = cinq decks) ; la carte imprime alors le code de SON deck. Table FERMÉE, code Cardmarket du set (ligne codes_set) → { slugSet exigé,
+ * codes imprimés admis, preuve }. Écrite par ce qu'elle AUTORISE (§51) : tout code imprimé différent et absent d'ici reste `code-set-different` ; aucune règle générale (préfixe, inclusion). Chaque entrée est
+ * prouvée par une concordance NOM + NUMÉRO lue dans le cache d'audit (lecture.json, produits) le 2026-11-07 ; sans concordance, l'entrée n'entre pas. Le numéro et le nom restent comparés ailleurs.
+ *  · sC (VMAX-Starter-Decks, idExpansion 3595) → sC2 : 524115 Professor's Research - Professor Juniper n°17, 524120 Poké Kid n°18, 524125 Hop n°19, 524130 Marnie n°20 = les cartes 017 à 020/021 imprimées « sC2 ».
+ *    Les autres decks de 3595 (sC1, sC3…) ne sont PAS prouvés : ils ne sont pas admis.
+ *  · T-P (T-Promos, idExpansion 4354) → T : 571134 Slowpoke [Pound | Lazy Headbutt] n°004 = la carte « 004/T » (Slowpoke e-Card, Flegmon T Promotional cards 004).
+ */
+const CODES_IMPRIMES_ADMIS = Object.freeze({
+    sC: Object.freeze({ slugSet: 'VMAX-Starter-Decks', imprimes: Object.freeze([Object.freeze({ code: 'sC2', numeros: Object.freeze(['17', '18', '19', '20']) })]), preuve: 'cache d\'audit 07/11 : 524115/524120/524125/524130 = n°17-20 de VMAX-Starter-Decks, mêmes noms que les cartes sC2 017-020/021' }),
+    'T-P': Object.freeze({ slugSet: 'T-Promos', imprimes: Object.freeze([Object.freeze({ code: 'T', numeros: Object.freeze(['004']) })]), preuve: 'cache d\'audit 07/11 : 571134 Slowpoke [Pound | Lazy Headbutt] n°004 de T-Promos = la carte 004/T' })
+});
 /** Le code du set lu, confronté au slug Cardmarket (`…-svAL005`, `…-MA5-012`) et à la ligne du produit (`codeSet`, codes_set). @returns {string|null} le motif de refus, null si concordant. */
 function motifDeCode(lu, produit, np, drapeaux = []) {
     const code = norm(lu.codeSet);
@@ -183,6 +195,10 @@ function motifDeCode(lu, produit, np, drapeaux = []) {
         const cmN = norm(cm);
         if (ligne === cmN || (!ligne && slug && new RegExp(`(^|-)${echapper(cmN)}-?0*${echapper(n)}$`).test(slug))) { drapeaux.push(`codeAlias:${cm}→${CODES_IMPRIMES_ALIAS[cm]}`); return null; }
     }
+    // Table fermée des codes imprimés admis (07/11) : la ligne codes_set du produit est EXACTEMENT le code Cardmarket de l'entrée, son slugSet celui de l'entrée, et le code lu est l'un des imprimés prouvés.
+    // Et le NUMÉRO du produit est l'un de ceux que la preuve couvre (comparé par cleNumero de la jointure : 004 = 4).
+    const admis = Object.keys(CODES_IMPRIMES_ADMIS).find(k => ligne === norm(k) && produit?.slugSet === CODES_IMPRIMES_ADMIS[k].slugSet && CODES_IMPRIMES_ADMIS[k].imprimes.some(i => norm(i.code) === code && i.numeros.some(x => J.cleNumero(String(x)) === J.cleNumero(String(np)))));
+    if (admis) { drapeaux.push(`code-imprime-admis:${CODES_IMPRIMES_ADMIS[admis].imprimes.find(i => norm(i.code) === code).code}`); return null; }
     if (ligne && ligne !== code) return 'code-set-different';
     if (slug && new RegExp(`(^|-)${echapper(code)}-?0*${echapper(n)}$`).test(slug)) return null;
     if (ligne === code) return null;
@@ -761,5 +777,5 @@ function trousDuManifeste({ trous, recus, famille }) {
     return { trous: gardes, ecartes };
 }
 
-module.exports = { CODES_SANS_TOTAL, sansTotalAdmis, SOURCE, LOT, SRC, LANGUE_PREUVE, EDITIONS_LOCALES, REGLES, REGLE_MEME_DESSIN, LANGUES_NON_LATINES, MOYENS_DE_LECTURE, MOYENS_DE_LANGUE, SEUIL_PLANCHER, SCORE_PLANCHER, VIDE_PLANCHER, lienAvecLEntree, evaluerRemplacementMemeDessin, langueDuProduit, formeEntree, lireManifeste, lireValidations, rapprocher, evaluerPreuveLue, evaluerDeuxSources, evaluerEntree,
+module.exports = { CODES_IMPRIMES_ADMIS, CODES_SANS_TOTAL, sansTotalAdmis, SOURCE, LOT, SRC, LANGUE_PREUVE, EDITIONS_LOCALES, REGLES, REGLE_MEME_DESSIN, LANGUES_NON_LATINES, MOYENS_DE_LECTURE, MOYENS_DE_LANGUE, SEUIL_PLANCHER, SCORE_PLANCHER, VIDE_PLANCHER, lienAvecLEntree, evaluerRemplacementMemeDessin, langueDuProduit, formeEntree, lireManifeste, lireValidations, rapprocher, evaluerPreuveLue, evaluerDeuxSources, evaluerEntree,
     verifierCache, setAdmisPourPosition, preuvesDe, motifDeNom, motifDeNomTraduit, construireTableJaCroisee, preuveParTableCroisee, porteUnTemoinTraduit, CHAMPS_TEMOIN_TRADUIT, LANGUES_A_NOM_TRADUIT, TAMPONS_ATTENDUS, tamponAttendu, cleFiche, grouperUnites, MOTIFS_DE_TROU, motifDeTrou, trousDuManifeste, sha256De, racineDe };

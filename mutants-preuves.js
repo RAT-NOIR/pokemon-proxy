@@ -192,6 +192,14 @@ const GROUPES = [
         ['nom traduit : ce que le chasseur a lu non écrit dans la preuve', "...Object.fromEntries(CHAMPS_TEMOIN_TRADUIT.filter(", "...Object.fromEntries([].filter("],
         ['alias de code : table des alias retirée', "Object.freeze({ mEEv: 'mEE', sKV: 'sK' })", "Object.freeze({})"]
     ] },
+    // ➕ 07/11 : la table fermée des codes imprimés admis (sC→sC2, T-P→T) — banc à part (test-preuves-codes-admis.js)
+    { module: 'collecte-cartes/preuves.js', bancs: ['test-preuves-codes-admis.js'], mutants: [
+        ['codes imprimés admis : table vidée', "Object.keys(CODES_IMPRIMES_ADMIS).find(k => ligne === norm(k)", "Object.keys({}).find(k => ligne === norm(k)"],
+        ['codes imprimés admis : drapeau retiré', "drapeaux.push(`code-imprime-admis:${CODES_IMPRIMES_ADMIS[admis].imprimes.find(i => norm(i) === code)}`); return null;", "return null;"],
+        ['codes imprimés admis : comparaison relâchée à startsWith', "norm(i.code) === code && i.numeros.some(", "code.startsWith(norm(i.code)) && i.numeros.some("],
+        ['codes imprimés admis : slugSet non exigé', "produit?.slugSet === CODES_IMPRIMES_ADMIS[k].slugSet && ", ""],
+        ['codes imprimés admis : liste de numéros non exigée', "&& i.numeros.some(x => J.cleNumero(String(x)) === J.cleNumero(String(np)))", ""]
+    ] },
     // ➕ 03/11 : la TABLE CROISÉE des noms japonais (nom lu prouvé par une AUTRE carte de même nomEn) — jeu complet en mémoire : node mutants-nomja.js
     { module: 'collecte-cartes/preuves.js', bancs: ['test-preuves-table-croisee.js'], mutants: [
         ['table croisée : fiche simple (_id < 0) admise dans la table', "if (!(c?._id > 0) || !texte(c.nomEn) || !texte(c.nomJa)) continue;", "if (!texte(c.nomEn) || !texte(c.nomJa)) continue;"],
