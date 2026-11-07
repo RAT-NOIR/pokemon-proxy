@@ -1,0 +1,7 @@
+{
+  "success": true,
+  "sets": [
+    { "slug": "Fictif-Set", "possedees": 2, "majLe": "2026-10-10T09:00:00.000Z", "doublons": 2 },
+    { "slug": "Fictif-Set-B", "possedees": 1, "majLe": "2026-10-09T09:00:00.000Z" }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "possedees": 2,
+  "set": "Fictif-Set",
+  "cle": "9000001|001",
+  "quantite": 3,
+  "exemplaires": [
+    { "etat": "NM", "langue": "fr" },
+    { "etat": "PL", "langue": null }
+  ]
+}

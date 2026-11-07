@@ -752,16 +752,29 @@ const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empr
         await jouer(U, R_PUT, 'cocher avec une quantité (doubles)', 200, ch('S1', '2|1'), { corps: { possedee: true, quantite: 3 }, entetes: siteH(c5.cookie) });
         await jouer(U, R_SET, 'set avec une quantité ≥ 2 (`quantites`)', 200, '/api/collection/sets/S1', { entetes: siteH(c5.cookie) });
         await jouer(U, R_PUT, 'quantité hors 1…99 (ENTREE quantite)', 400, ch('S1', '2|1'), { corps: { possedee: true, quantite: 100 }, entetes: siteH(c5.cookie) });
-        await jouer(U, R_PUT, 'état hors liste (ENTREE etat)', 400, ch('S1', '2|1'), { corps: { possedee: true, etat: 'MT' }, entetes: siteH(c5.cookie) });
         // L5/L6 : le PUT par PRODUIT (index inverse du catalogue) et le détail par exemplaire. Le produit 2 n'a qu'UNE fiche (S3), le produit 1 en a quatre (ambigu), 999 n'en a aucune.
         {
             VB.installer([VB.doc(1), VB.doc(2)], [['S1', '1|1', [1]], ['S1', '2|1', [1]], ['S2', '3|1', [1]], ['S2', '4|1', [1]], ['S3', '5|1', [2]]]);
             const R_PROD = 'PUT /api/collection/produits/{idproduct}', chP = id => `/api/collection/produits/${id}`;
-            const c7 = await compte(), c8 = await compte();
+            const c7 = await compte(), c8 = await compte(), c9 = await compte();
             await jouer(U, R_PROD, 'un produit, une fiche : cochée, la fiche est nommée', 200, chP(2), { corps: { possedee: true }, entetes: siteH(c7.cookie) });
-            await jouer(U, R_PROD, 'le détail par exemplaire (état, langue) sur la fiche résolue', 200, chP(2), { corps: { possedee: true, etat: 'NM', langue: 'fr', quantite: 2 }, entetes: siteH(c7.cookie) });
+            // K5 (le site) : le détail par exemplaire d'une fiche cochée ; chaque statut documenté de la route est joué par un état réel (le 503 par la garde d'index)
+            const R_EX = 'PUT /api/collection/sets/{slug}/fiches/{cle}/exemplaires', chE = (slug, cle) => ch(slug, cle) + '/exemplaires';
+            await jouer(U, R_PROD, 'quantité 2 par le produit', 200, chP(2), { corps: { possedee: true, quantite: 2 }, entetes: siteH(c7.cookie) });
+            await jouer(U, R_EX, 'le détail (état, langue) de la fiche cochée', 200, chE('S3', '5|1'), { corps: { exemplaires: [{ etat: 'NM', langue: 'fr' }, { etat: 'MT', langue: null }] }, entetes: siteH(c7.cookie) });
+            await jouer(U, R_PROD, 'le PUT par produit d\'une fiche qui porte un détail (quantite et exemplaires rendus)', 200, chP(2), { corps: { possedee: true }, entetes: siteH(c7.cookie) });
+            await jouer(U, R_PUT, 'le PUT par fiche d\'une fiche qui porte un détail (quantite et exemplaires rendus)', 200, ch('S3', '5|1'), { corps: { possedee: true, quantite: 2 }, entetes: siteH(c7.cookie) });
             await jouer(U, R_SET, 'set avec un détail par exemplaire (`exemplaires`)', 200, '/api/collection/sets/S3', { entetes: siteH(c7.cookie) });
-            await jouer(U, R_PROD, 'produit inconnu (INTROUVABLE)', 404, chP(999), { corps: { possedee: true }, entetes: siteH(c7.cookie) });
+            await jouer(U, R_LISTE, 'liste avec un set à doublons (`doublons`)', 200, '/api/collection', { entetes: siteH(c7.cookie) });
+            await jouer(U, 'GET /api/collection/valeur', 'la valeur totale du propriétaire', 200, '/api/collection/valeur', { entetes: siteH(c7.cookie) });
+            await jouer(U, 'GET /api/collection/valeur', 'sans session', 401, '/api/collection/valeur', { entetes: siteH(null) });
+            await jouer(U, R_PROD, 'c9 : quantité 2 par le produit', 200, chP(2), { corps: { possedee: true, quantite: 2 }, entetes: siteH(c9.cookie) });
+            await jouer(U, R_EX, 'état hors liste (ENTREE etat)', 400, chE('S3', '5|1'), { corps: { exemplaires: [{ etat: 'XX', langue: null }] }, entetes: siteH(c9.cookie) });
+            await jouer(U, R_EX, 'plus d\'éléments que la quantité (CONFLIT exemplaires)', 409, chE('S3', '5|1'), { corps: { exemplaires: [{ etat: 'NM', langue: 'fr' }, { etat: 'NM', langue: 'fr' }, { etat: 'NM', langue: 'fr' }] }, entetes: siteH(c9.cookie) });
+            await jouer(U, R_EX, 'sans session', 401, chE('S3', '5|1'), { corps: { exemplaires: [] }, entetes: siteH(null) });
+            await jouer(U, R_EX, 'sans Origin du site (ORIGINE)', 403, chE('S3', '5|1'), { corps: { exemplaires: [] }, entetes: { cookie: c7.cookie, ...ip() } });
+            await jouer(U, R_EX, 'limiteur d\'écriture dépassé (DEBIT)', 429, chE('S3', '5|1'), { corps: { exemplaires: [] }, entetes: siteH(c3.cookie) });
+            await jouer(U, R_PROD, 'produit inconnu (INTROUVABLE)', 404, chP(999), { corps: { possedee: true }, entetes: siteH(c8.cookie) });
             await jouer(U, R_PROD, 'produit de plusieurs fiches (CONFLIT ambigu, fiches nommées)', 409, chP(1), { corps: { possedee: true }, entetes: siteH(c8.cookie) });
             await jouer(U, R_PROD, 'idProduct illisible (ENTREE idProduct)', 400, chP('abc'), { corps: { possedee: true }, entetes: siteH(c8.cookie) });
             etatMem.vider();
@@ -968,7 +981,9 @@ const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empr
             'GET /api/collection': { chemin: '/api/collection' },
             'GET /api/collection/sets/{slug}': { chemin: '/api/collection/sets/Banc-Set' },
             'PUT /api/collection/sets/{slug}/fiches/{cle}': { chemin: '/api/collection/sets/Banc-Set/fiches/1%7C001', corps: { possedee: true } },
-            'PUT /api/collection/produits/{idproduct}': { chemin: '/api/collection/produits/2', corps: { possedee: true } }
+            'PUT /api/collection/produits/{idproduct}': { chemin: '/api/collection/produits/2', corps: { possedee: true } },
+            'PUT /api/collection/sets/{slug}/fiches/{cle}/exemplaires': { chemin: '/api/collection/sets/Banc-Set/fiches/1%7C001/exemplaires', corps: { exemplaires: [] } },
+            'GET /api/collection/valeur': { chemin: '/api/collection/valeur' }
         };
         const sansRequete = OPERATIONS.filter(o => o.route !== 'GET /ping' && !REQ503[o.route] && !(o.route in JOUEE_AILLEURS)).map(o => o.route);
         H.v('503 : chaque route de `paths` (hors /ping) a sa requête de la garde d\'index', sansRequete, []);

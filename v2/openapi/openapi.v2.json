@@ -3077,7 +3077,7 @@
             }
           },
           "400": {
-            "description": "ENTREE (detail `slug`, `cle`, `possedee`, `quantite`, `etat` ou `langue`) : la forme n'est pas admise.",
+            "description": "ENTREE (detail `slug`, `cle`, `possedee` ou `quantite`) : la forme n'est pas admise.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3107,7 +3107,7 @@
             }
           },
           "409": {
-            "description": "CONFLIT, detail `borne-compte` (100 000 fiches cochées par compte : le catalogue complet plus 45 %), `borne-hors` (6 000 fiches hors catalogue par compte), `borne-quantites` (10 000 fiches à plus d'un exemplaire par compte), `borne-sets` (1 000 sets par compte), `borne-quantite` (plus de 99 exemplaires d'une même fiche, détail compris), `borne-exemplaires` (5 000 entrées de détail état/langue par compte), `exemplaires` (une quantité inférieure au détail déjà enregistré) ou `borne-service` (budget de stockage de TOUS les comptes ensemble, en OCTETS mesurés par collStats ; valeur provisoire de 10 Mo, relevée au passage en Flex) : rien n'est écrit, rien n'est perdu.",
+            "description": "CONFLIT, detail `borne-compte` (100 000 fiches cochées par compte : le catalogue complet plus 45 %), `borne-hors` (6 000 fiches hors catalogue par compte), `borne-quantites` (10 000 fiches à plus d'un exemplaire par compte), `borne-sets` (1 000 sets par compte), `exemplaires` (une quantité inférieure au nombre d'exemplaires détaillés) ou `borne-service` (budget de stockage de TOUS les comptes ensemble, en OCTETS mesurés par collStats ; valeur provisoire de 10 Mo, relevée au passage en Flex) : rien n'est écrit, rien n'est perdu.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3147,6 +3147,80 @@
         }
       }
     },
+    "/api/collection/sets/{slug}/fiches/{cle}/exemplaires": {
+      "put": {
+        "operationId": "detaillerExemplaires",
+        "tags": ["collection"],
+        "summary": "Ma collection : REMPLACER l'état et la langue des exemplaires d'une fiche cochée (K5 du site) — idempotent ; compte vérifié",
+        "description": "K5 (DEMANDE-SERVEUR-SITE.md, O13). Le corps est la liste des exemplaires { etat, langue } (null admis), au plus `quantite` éléments (le total de la fiche, K3) ; la fiche doit être cochée. L'écriture REMPLACE tout le détail ; un élément { null, null } est un exemplaire non précisé (non stocké). La quantité totale ne bouge pas. Mêmes gardes que K3 et limiteur partagé. Lecture : `exemplaires` de `GET /api/collection/sets/{slug}`.",
+        "security": [{ "session": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/XRatMarket" },
+          { "$ref": "#/components/parameters/SlugDeSet" },
+          { "$ref": "#/components/parameters/CleDeFiche" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RequeteExemplaires" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Le détail stocké après l'écriture (développé, trié état puis langue).",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseExemplaires" } } },
+            "headers": { "Cache-Control": { "schema": { "type": "string", "enum": ["no-store"] } } }
+          },
+          "400": {
+            "description": "ENTREE (detail `slug`, `cle`, `exemplaires` pour la structure, `etat` ou `langue` pour une valeur hors liste).",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } }
+          },
+          "401": {
+            "description": "SESSION (cookie absent, expiré ou révoqué).",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } }
+          },
+          "403": {
+            "description": "ORIGINE (Origin exacte du site et X-Rat-Market obligatoires) ou VERIFICATION.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } }
+          },
+          "409": {
+            "description": "CONFLIT, detail `exemplaires` (la fiche n'est pas cochée, ou plus d'éléments que sa quantité : rien n'est écrit, le détail d'avant est intact ; peut aussi dire trois écritures simultanées perdues : réessayer), `borne-exemplaires` (5 000 entrées de détail distinctes par compte, posée sans mesure d'usage) ou `borne-service` (budget de stockage de tous les comptes).",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } }
+          },
+          "429": {
+            "description": "DEBIT : plus de 1 000 écritures par heure pour ce compte (limiteur partagé avec K3), avec `reessayerDans` et `Retry-After`.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } },
+            "headers": { "Retry-After": { "schema": { "type": "integer", "minimum": 0 } } }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable, bits du set illisibles contre son registre).",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } }
+          }
+        }
+      }
+    },
+    "/api/collection/valeur": {
+      "get": {
+        "operationId": "valeurDeMaCollection",
+        "tags": ["collection"],
+        "summary": "Ma collection : la valeur totale (propriétaire connecté SEULEMENT)",
+        "description": "Ordre explicite de l'utilisateur (07/11) : la valeur totale n'est servie qu'au propriétaire connecté, sur sa session (cookie), `Cache-Control: no-store` ; jamais dans une réponse sans session, avec un jeton d'installation ou pour un autre compte. Σ(tendance du guide × quantité) des fiches qui ont une cote ; les exemplaires sans cote sont comptés à part (`sansCote`), jamais estimés. Aucune écriture.",
+        "security": [{ "session": [] }],
+        "responses": {
+          "200": {
+            "description": "La valeur et ses dénominateurs.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseValeur" } } },
+            "headers": { "Cache-Control": { "schema": { "type": "string", "enum": ["no-store"] } } }
+          },
+          "401": {
+            "description": "SESSION (cookie absent, expiré ou révoqué) : aucune valeur, aucun prix dans le corps.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable, bits illisibles).",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } }
+          }
+        }
+      }
+    },
     "/api/collection/produits/{idproduct}": {
       "put": {
         "operationId": "cocherProduit",
@@ -3169,7 +3243,7 @@
             "headers": { "Cache-Control": { "schema": { "type": "string", "enum": ["no-store"] } } }
           },
           "400": {
-            "description": "ENTREE (detail `idProduct`, `possedee`, `quantite`, `etat` ou `langue`) : la forme n'est pas admise.",
+            "description": "ENTREE (detail `idProduct`, `possedee` ou `quantite`) : la forme n'est pas admise.",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } }
           },
           "401": {
@@ -3185,7 +3259,7 @@
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } }
           },
           "409": {
-            "description": "CONFLIT, detail `ambigu` (le produit désigne plusieurs fiches : `erreur.fiches`, rien n'est écrit) ou l'une des bornes du PUT par fiche (`borne-compte`, `borne-hors`, `borne-quantites`, `borne-quantite`, `borne-exemplaires`, `borne-sets`, `borne-service`, `exemplaires`).",
+            "description": "CONFLIT, detail `ambigu` (le produit désigne plusieurs fiches : `erreur.fiches`, rien n'est écrit) ou l'une des bornes du PUT par fiche (`borne-compte`, `borne-hors`, `borne-quantites`, `borne-sets`, `borne-service`, `exemplaires`).",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } }
           },
           "429": {
@@ -3771,7 +3845,7 @@
         }
       },
       "IdDeProduit": {
-        "name": "idProduct",
+        "name": "idproduct",
         "in": "path",
         "required": true,
         "description": "L'identifiant du produit Cardmarket (celui d'un verdict du scanner ou d'une recherche) : un entier décimal sans zéro de tête, 10 chiffres au plus.",
@@ -6770,6 +6844,11 @@
                 "majLe": {
                   "type": "string",
                   "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                },
+                "doublons": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "L6 — Σ(quantité − 1) des fiches du set (le nombre d'exemplaires en trop). Champ ABSENT d'un set sans aucun double (la réponse d'avant, à l'octet près) ; calculé à la lecture, rien n'est stocké."
                 }
               },
               "required": [
@@ -6832,19 +6911,11 @@
           },
           "exemplaires": {
             "type": "object",
-            "description": "L5/L6 — le détail par exemplaire, par clé de fiche cochée : la liste de ses variantes (état, langue, quantité), triée (état, langue). `etat` et `langue` valent `null` quand ils ne sont pas précisés. La somme des quantités d'une fiche est au plus sa quantité totale (le reste est « non précisé »). Champ ABSENT quand aucune fiche du set n'a de détail (la réponse d'avant, à l'octet près).",
+            "description": "K5 (le site, O13) — le détail par exemplaire, par clé de fiche cochée : UN élément { etat, langue } par exemplaire détaillé, trié (état, langue) ; `null` quand non précisé. Le nombre d'éléments d'une fiche est au plus sa quantité (le reste est non précisé). Champ ABSENT quand aucune fiche du set n'a de détail (la réponse d'avant, à l'octet près).",
             "additionalProperties": {
               "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "etat": { "oneOf": [{ "type": "null" }, { "$ref": "#/components/schemas/EtatExemplaire" }] },
-                  "langue": { "oneOf": [{ "type": "null" }, { "$ref": "#/components/schemas/LangueExemplaire" }] },
-                  "quantite": { "type": "integer", "minimum": 1, "maximum": 99 }
-                },
-                "required": ["etat", "langue", "quantite"],
-                "additionalProperties": false
-              }
+              "maxItems": 99,
+              "items": { "$ref": "#/components/schemas/ExemplaireDetail" }
             }
           },
           "cotes": {
@@ -6892,15 +6963,7 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 99,
-            "description": "FACULTATIF (avec `possedee: true` seulement) : le nombre d'exemplaires, de 1 à 99 ; absent vaut 1 sur une clé neuve et laisse la quantité inchangée sur une clé déjà cochée. `possedee: false` efface la quantité. 99 est posé sans mesure d'usage réel. Avec `etat` et/ou `langue` : la quantité de CETTE variante."
-          },
-          "etat": {
-            "$ref": "#/components/schemas/EtatExemplaire",
-            "description": "FACULTATIF (L5/L6) : l'état de l'exemplaire. Avec `etat` et/ou `langue`, l'écriture porte sur UNE variante d'exemplaire de la fiche : `possedee: true` fixe sa quantité (hausse prise d'abord sur les exemplaires non précisés, puis ajoutée au total ; baisse retirée du total), `possedee: false` retire cette variante. Sans l'un ni l'autre, le corps est lu comme avant."
-          },
-          "langue": {
-            "$ref": "#/components/schemas/LangueExemplaire",
-            "description": "FACULTATIF (L5/L6) : la langue de l'exemplaire (voir `etat`)."
+            "description": "FACULTATIF (avec `possedee: true` seulement) : le nombre d'exemplaires, de 1 à 99 ; absent vaut 1 sur une clé neuve et laisse la quantité inchangée sur une clé déjà cochée. `possedee: false` efface la quantité. 99 est posé sans mesure d'usage réel. Ne peut pas passer sous le nombre d'exemplaires détaillés (409 `exemplaires`)."
           }
         },
         "required": [
@@ -6910,8 +6973,51 @@
       },
       "EtatExemplaire": {
         "type": "string",
-        "enum": ["NM", "EX", "GD", "LP", "PL", "PO"],
-        "description": "L'état d'un exemplaire (échelle de Cardmarket sans MT) : NM near mint, EX excellent, GD good, LP light played, PL played, PO poor. Liste fermée."
+        "enum": ["MT", "NM", "EX", "GD", "LP", "PL", "PO"],
+        "description": "L'état d'un exemplaire (échelle de Cardmarket) : MT mint, NM near mint, EX excellent, GD good, LP light played, PL played, PO poor. Liste fermée."
+      },
+      "ExemplaireDetail": {
+        "type": "object",
+        "description": "K5 : UN exemplaire détaillé. Les deux clés sont obligatoires, `null` = non précisé.",
+        "properties": {
+          "etat": { "oneOf": [{ "type": "null" }, { "$ref": "#/components/schemas/EtatExemplaire" }] },
+          "langue": { "oneOf": [{ "type": "null" }, { "$ref": "#/components/schemas/LangueExemplaire" }] }
+        },
+        "required": ["etat", "langue"],
+        "additionalProperties": false
+      },
+      "RequeteExemplaires": {
+        "type": "object",
+        "description": "K5 : REMPLACE tout le détail des exemplaires de la fiche (cochée). Au plus `quantite` éléments (le total de la fiche, 99 au plus). Un élément { null, null } est un exemplaire non précisé : il n'est pas stocké (c'est le reste du total) et ne revient pas dans la réponse. Un tableau vide efface le détail.",
+        "properties": {
+          "exemplaires": { "type": "array", "maxItems": 99, "items": { "$ref": "#/components/schemas/ExemplaireDetail" } }
+        },
+        "required": ["exemplaires"],
+        "additionalProperties": false
+      },
+      "ReponseExemplaires": {
+        "type": "object",
+        "description": "K5 : le détail STOCKÉ de la fiche après l'écriture, développé (un élément par exemplaire détaillé, trié état puis langue).",
+        "properties": {
+          "success": { "const": true },
+          "exemplaires": { "type": "array", "maxItems": 99, "items": { "$ref": "#/components/schemas/ExemplaireDetail" } }
+        },
+        "required": ["success", "exemplaires"],
+        "additionalProperties": false
+      },
+      "ReponseValeur": {
+        "type": "object",
+        "description": "La valeur de MA collection : Σ(tendance du guide × quantité) des fiches qui ont une cote (la règle de la cote d'une fiche : §1.8). Réservée au propriétaire connecté (session), jamais dans une réponse sans session.",
+        "properties": {
+          "success": { "const": true },
+          "valeurTotale": { "type": "number", "minimum": 0, "description": "En euros, arrondie au centime." },
+          "devise": { "const": "EUR" },
+          "nbExemplaires": { "type": "integer", "minimum": 0, "description": "Σ des quantités des fiches cochées (sets lus)." },
+          "sansCote": { "type": "integer", "minimum": 0, "description": "Les exemplaires SANS cote : comptés à part, jamais estimés." },
+          "partielle": { "type": "boolean", "description": "true quand plus de 200 sets sont cochés ou que le guide n'a pas répondu pour un set : la somme ne porte alors que sur les sets lus." }
+        },
+        "required": ["success", "valeurTotale", "devise", "nbExemplaires", "sansCote", "partielle"],
+        "additionalProperties": false
       },
       "LangueExemplaire": {
         "type": "string",
@@ -6925,7 +7031,9 @@
           "success": { "const": true },
           "possedees": { "type": "integer", "minimum": 0 },
           "set": { "type": "string" },
-          "cle": { "type": "string" }
+          "cle": { "type": "string" },
+          "quantite": { "type": "integer", "minimum": 1, "maximum": 99, "description": "La quantité TOTALE de la fiche écrite, seulement quand elle porte un détail." },
+          "exemplaires": { "type": "array", "maxItems": 99, "items": { "$ref": "#/components/schemas/ExemplaireDetail" }, "description": "Le détail de la fiche écrite, seulement quand elle en porte un." }
         },
         "required": ["success", "possedees", "set", "cle"],
         "additionalProperties": false
@@ -6939,7 +7047,9 @@
           "possedees": {
             "type": "integer",
             "minimum": 0
-          }
+          },
+          "quantite": { "type": "integer", "minimum": 1, "maximum": 99, "description": "La quantité TOTALE de la fiche écrite, seulement quand elle porte un détail (champ additif : absent, la réponse d'avant à l'octet)." },
+          "exemplaires": { "type": "array", "maxItems": 99, "items": { "$ref": "#/components/schemas/ExemplaireDetail" }, "description": "Le détail de la fiche écrite, seulement quand elle en porte un (champ additif)." }
         },
         "required": [
           "success",

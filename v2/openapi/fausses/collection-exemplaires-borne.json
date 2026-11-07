@@ -1,0 +1,9 @@
+{
+  "success": false,
+  "erreur": {
+    "code": "CONFLIT",
+    "message": "Au plus 5000 entrées de détail (état, langue) par compte",
+    "detail": "borne-exemplaires"
+  },
+  "facturation": null
+}

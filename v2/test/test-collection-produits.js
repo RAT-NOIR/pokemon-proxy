@@ -104,7 +104,15 @@ const attendre = ms => new Promise(r => setTimeout(r, ms));
         H.v('   une version sans index inverse (archive d\'avant) : 503 catalogue aussi', [ancien.statut, detail(ancien)], [503, 'catalogue']);
         const casse = Object.freeze({ comptes: Object.freeze({}), fichesDuSet: () => [], fichesDuProduit() { throw new Error('panne'); }, produitsDeMetacarte: () => [], entree: () => null });
         E.installer(casse);
+        // relecture 1 m1 : la fiche résolue est re-jugée par la forme (slugValide, cleValide) ; « je ne sais pas » bloque (503 catalogue), jamais une écriture sous un set nul ou une clé illisible
+        const fausse = fiches => { E.installer(Object.freeze({ comptes: Object.freeze({}), fichesDuSet: () => [], fichesDuProduit: () => fiches, produitsDeMetacarte: () => [], entree: () => null })); return putP(A, 1, { possedee: true }); };
+        for (const [nom, f] of [['set nul', [{ set: null, cle: '1|001' }]], ['slug illisible', [{ set: 'Set A!', cle: '1|001' }]], ['clé illisible', [{ set: 'Set-A', cle: 'abc' }]]]) {
+            const r = await fausse(f);
+            H.v(`   m1 : une fiche résolue avec ${nom} : 503 catalogue, rien d'écrit`, [r.statut, detail(r), await nDocs() - n0], [503, 'catalogue', 0]);
+        }
+        E.installer(casse);
         const panne = await putP(A, 1, { possedee: true });
+        H.v('   Cache-Control: no-store aussi sur les 404, 409 et 503 de la route', [inc.entetes['cache-control'], amb.entetes['cache-control'], panne.entetes['cache-control']], ['no-store', 'no-store', 'no-store']);
         H.v('   un index qui lève : 503 catalogue (jamais un 500, jamais un 404)', [panne.statut, detail(panne)], [503, 'catalogue']);
         VB.installer([doc(1), doc(2), doc(3), doc(4), doc(5), doc(6)], [['Set-A', '100|001', [1]], ['Set-A', '101|002', [2, 3]], ['Set-B', '200|001', [4]], ['Set-A', '102|003', [5]], ['Set-B', '201|010', [5]]]);
         H.v('   le catalogue revient : le même PUT passe', (await putP(A, 1, { possedee: true })).statut, 200);

@@ -537,6 +537,54 @@
     "route": "GET /api/collection/sets/{slug}",
     "statut": 200,
     "schema": "ReponseCollectionSet",
-    "description": "L5/L6 : un set dont une fiche porte un détail par exemplaire (état, langue, quantité) ; `quantites` garde le total, `exemplaires` le détail. Champ absent quand aucune fiche n'en porte."
+    "description": "K5 : un set dont une fiche porte un détail par exemplaire ; `quantites` garde le total, `exemplaires` le détail, UN élément { etat, langue } par exemplaire détaillé (null = non précisé). Champ absent quand aucune fiche n'en porte."
+  },
+  "collection-exemplaires-ecrits.json": {
+    "route": "PUT /api/collection/sets/{slug}/fiches/{cle}/exemplaires",
+    "statut": 200,
+    "schema": "ReponseExemplaires",
+    "description": "K5 : le détail stocké après l'écriture, développé et trié (état, langue). Un { null, null } du corps n'y revient pas."
+  },
+  "collection-exemplaires-etat-invalide.json": {
+    "route": "PUT /api/collection/sets/{slug}/fiches/{cle}/exemplaires",
+    "statut": 400,
+    "schema": "ReponseErreur",
+    "description": "K5 : un état hors de la liste fermée (MT NM EX GD LP PL PO) ; même forme pour `langue` (detail langue) et pour la structure (detail exemplaires)."
+  },
+  "collection-exemplaires-conflit.json": {
+    "route": "PUT /api/collection/sets/{slug}/fiches/{cle}/exemplaires",
+    "statut": 409,
+    "schema": "ReponseErreur",
+    "description": "K5 : la fiche n'est pas cochée ou le détail dépasse sa quantité (CONFLIT, detail exemplaires) ; le détail d'avant est intact. Même refus pour K3 qui baisserait la quantité sous le détail."
+  },
+  "collection-exemplaires-borne.json": {
+    "route": "PUT /api/collection/sets/{slug}/fiches/{cle}/exemplaires",
+    "statut": 409,
+    "schema": "ReponseErreur",
+    "description": "K5 : la borne de 5 000 entrées de détail distinctes par compte (CONFLIT, detail borne-exemplaires), posée sans mesure d'usage réel."
+  },
+  "collection-valeur.json": {
+    "route": "GET /api/collection/valeur",
+    "statut": 200,
+    "schema": "ReponseValeur",
+    "description": "L6 : la valeur totale de MA collection (propriétaire connecté seulement), ses dénominateurs (exemplaires, sans cote) et `partielle`. Valeurs fictives."
+  },
+  "collection-sets-doublons.json": {
+    "route": "GET /api/collection",
+    "statut": 200,
+    "schema": "ReponseMesSets",
+    "description": "L6 : `doublons` (Σ quantité − 1) par set, absent d'un set sans double."
+  },
+  "collection-cocher-detail.json": {
+    "route": "PUT /api/collection/sets/{slug}/fiches/{cle}",
+    "statut": 200,
+    "schema": "ReponseCocher",
+    "description": "C4 : une fiche qui porte un détail rend aussi sa quantité totale et son détail (champs additifs, absents sinon : la réponse d'avant, à l'octet)."
+  },
+  "collection-produit-cochee-detail.json": {
+    "route": "PUT /api/collection/produits/{idproduct}",
+    "statut": 200,
+    "schema": "ReponseCocherProduit",
+    "description": "C4 : le PUT par produit d'une fiche qui porte un détail : set, clé, quantité totale et détail."
   }
 }

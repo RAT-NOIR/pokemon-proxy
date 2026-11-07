@@ -5,8 +5,9 @@
   "quantites": { "9000001|001": 3 },
   "exemplaires": {
     "9000001|001": [
-      { "etat": "NM", "langue": "fr", "quantite": 2 },
-      { "etat": "PL", "langue": null, "quantite": 1 }
+      { "etat": "NM", "langue": "fr" },
+      { "etat": "NM", "langue": "fr" },
+      { "etat": "PL", "langue": null }
     ]
   },
   "cotes": {},

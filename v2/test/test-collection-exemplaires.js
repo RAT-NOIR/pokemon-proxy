@@ -1,10 +1,9 @@
 'use strict';
-// L5/L6 — ÉTAT et LANGUE par exemplaire dans « Ma collection » (décision de l'utilisateur, 07/11). Champs ADDITIFS : `etat` (NM, EX, GD, LP, PL, PO) et `langue` (liste fermée) dans le corps du PUT, et
-// `exemplaires` dans le GET d'un set — SEULEMENT quand une fiche en porte. Une collection sans ces champs rend une réponse IDENTIQUE À L'OCTET à celle d'avant.
-// MODÈLE : la quantité de la fiche (bit + `qte`, inchangée) reste le TOTAL ; `ex` détaille des exemplaires par (fiche, état, langue) ; la somme du détail ≤ le total, le reste est « non précisé ».
-//   · écrire une variante (etat et/ou langue) fixe SA quantité (absente : inchangée sur une variante existante, 1 sur une neuve) ; une hausse est prise d'abord sur les exemplaires non précisés, puis ajoute au total ;
-//     une baisse retire du total ; { possedee: false, etat/langue } retire la variante ; { possedee: false } seul retire la fiche ET son détail ;
-//   · l'octet : chaque entrée de détail est réservée au pire AVANT d'écrire, rendue au retrait (même compteur que le reste) ; une borne par compte (exemplairesParCompte).
+// L5/L6 — ÉTAT et LANGUE par exemplaire dans « Ma collection », sous la forme K5 ÉCRITE PAR LE SITE (DEMANDE-SERVEUR-SITE.md, O13) :
+//   PUT /api/collection/sets/{slug}/fiches/{cle}/exemplaires   { exemplaires: [{ etat: "MT"|"NM"|"EX"|"GD"|"LP"|"PL"|"PO"|null, langue: <code>|null }] }  (au plus `quantite` éléments)  →  { success, exemplaires }
+//   lecture : `exemplaires?: { [cle]: [{ etat, langue }, …] }` dans GET /sets/{slug} — UN élément par exemplaire détaillé, champ ABSENT quand il est vide.
+// MODÈLE : la quantité de la fiche (K3, bit + `qte`, inchangés) reste le TOTAL ; le détail `ex` donne l'état et la langue de certains exemplaires (somme ≤ total), le reste est non précisé.
+//   L'écriture K5 REMPLACE tout le détail de la fiche ; un élément { null, null } est un exemplaire non précisé (il n'est pas stocké : c'est le reste du total).
 // Base EN MÉMOIRE (INT2), aucun réseau. Les données d'un autre compte ne sont jamais lues.
 const H = require('./_harnais');
 const mongoose = require('mongoose');
@@ -47,139 +46,136 @@ const attendre = ms => new Promise(r => setTimeout(r, ms));
     const sv = await serveur();
     const chemin = (slug, cle) => `/api/collection/sets/${encodeURIComponent(slug)}/fiches/${encodeURIComponent(cle)}`;
     const put = (c, slug, cle, corps, sx = sv) => H.appel(sx.url, chemin(slug, cle), { methode: 'PUT', corps, entetes: siteH(c && c.cookie) });
+    const putEx = (c, slug, cle, corps, sx = sv, entetes) => H.appel(sx.url, chemin(slug, cle) + '/exemplaires', { methode: 'PUT', corps, entetes: entetes || siteH(c && c.cookie) });
     const putP = (c, id, corps) => H.appel(sv.url, `/api/collection/produits/${id}`, { methode: 'PUT', corps, entetes: siteH(c && c.cookie) });
     const lire = (c, slug) => H.appel(sv.url, `/api/collection/sets/${encodeURIComponent(slug)}`, { entetes: siteH(c && c.cookie) });
     const code = r => r.json && r.json.erreur && r.json.erreur.code;
     const detail = r => r.json && r.json.erreur && r.json.erreur.detail;
     const octets = async () => (await raw('compteurs').findOne({ cle: 'collection-octets' })).n;
     const docs = c => raw('collection_fiches').find({ compteId: c.c._id }).toArray();
+    const el = (etat, langue) => ({ etat, langue });
 
     VB.installer([VB.doc(1), VB.doc(2), VB.doc(3)], [['Set-E', '10|001', [1]], ['Set-E', '11|002', [2]], ['Set-E', '12|003', [3]]]);
 
-    // ═══════════════ 1. LA FORME DU CORPS (lireCorps) ═══════════════
-    const lc = b => routes.lireCorps(b, 99);
-    H.v('1. les listes fermées : états NM EX GD LP PL PO', F.ETATS, ['NM', 'EX', 'GD', 'LP', 'PL', 'PO']);
+    // ═══════════════ 1. LES LISTES ET LA FORME DU CORPS ═══════════════
+    H.v('1. les états : l\'échelle de Cardmarket, MT compris', F.ETATS, ['MT', 'NM', 'EX', 'GD', 'LP', 'PL', 'PO']);
     H.vrai('   les langues : celles du catalogue (identifier/produit.js) plus id et th, sans doublon', (() => { const P = require('../identifier/produit').LANGUES; return P.every(l => F.LANGUES.includes(l)) && F.LANGUES.includes('id') && F.LANGUES.includes('th') && new Set(F.LANGUES).size === F.LANGUES.length; })());
-    H.v('   un corps SANS les nouveaux champs : lu exactement comme avant (aucune variante)', [lc({ possedee: true }), lc({ possedee: true, quantite: 2 }), lc({ possedee: false })].map(x => x.variante === true), [false, false, false]);
-    H.v('   etat + langue valides : lus', lc({ possedee: true, etat: 'NM', langue: 'fr', quantite: 2 }), { possedee: true, quantite: 2, etat: 'NM', langue: 'fr', variante: true });
-    H.v('   etat seul, langue seule : lus (l\'autre non précisé)', [lc({ possedee: true, etat: 'GD' }), lc({ possedee: true, langue: 'ja' })].map(x => [x.etat ?? null, x.langue ?? null, x.variante]), [['GD', null, true], [null, 'ja', true]]);
-    H.v('   { possedee: false, etat } : retrait d\'une variante (admis)', lc({ possedee: false, etat: 'NM' }).variante, true);
-    for (const [b, d] of [[{ possedee: true, etat: 'XX' }, 'etat'], [{ possedee: true, etat: 'nm' }, 'etat'], [{ possedee: true, etat: null }, 'etat'], [{ possedee: true, etat: 3 }, 'etat'], [{ possedee: true, etat: '' }, 'etat'],
-        [{ possedee: true, langue: 'xx' }, 'langue'], [{ possedee: true, langue: 'FR' }, 'langue'], [{ possedee: true, langue: null }, 'langue'], [{ possedee: true, langue: ['fr'] }, 'langue'], [{ possedee: true, langue: '__proto__' }, 'langue'],
-        [{ possedee: false, quantite: 2, etat: 'NM' }, 'quantite'], [{ possedee: true, etat: 'NM', quantite: 100 }, 'quantite'], [{ possedee: true, etat: 'NM', autre: 1 }, 'possedee']]) {
-        H.v(`   ${JSON.stringify(b)} → refus, detail ${d}`, lc(b).detail, d);
+    H.v('   le corps du PUT par fiche est celui d\'AVANT : etat et langue n\'y sont plus admis (400 possedee)', [routes.lireCorps({ possedee: true, etat: 'NM' }, 99).detail, routes.lireCorps({ possedee: true }, 99)], ['possedee', { possedee: true, quantite: undefined }]);
+    const le = b => routes.lireExemplaires(b, 99);
+    H.v('   un corps K5 valide : { exemplaires } rendu, null admis', le({ exemplaires: [el('NM', 'fr'), el(null, null), el('MT', null), el(null, 'ja')] }), { exemplaires: [el('NM', 'fr'), el(null, null), el('MT', null), el(null, 'ja')] });
+    H.v('   un tableau vide est valide (il efface le détail)', le({ exemplaires: [] }), { exemplaires: [] });
+    for (const [b, d] of [[undefined, 'exemplaires'], [{}, 'exemplaires'], [{ exemplaires: 'NM' }, 'exemplaires'], [{ exemplaires: {} }, 'exemplaires'], [{ exemplaires: [], autre: 1 }, 'exemplaires'],
+        [{ exemplaires: [1] }, 'exemplaires'], [{ exemplaires: [null] }, 'exemplaires'], [{ exemplaires: [[]] }, 'exemplaires'], [{ exemplaires: [{ etat: 'NM' }] }, 'exemplaires'], [{ exemplaires: [{ langue: 'fr' }] }, 'exemplaires'],
+        [{ exemplaires: [{ etat: 'NM', langue: 'fr', quantite: 2 }] }, 'exemplaires'], [{ exemplaires: Array(100).fill(el(null, null)) }, 'exemplaires'],
+        [{ exemplaires: [el('XX', null)] }, 'etat'], [{ exemplaires: [el('nm', null)] }, 'etat'], [{ exemplaires: [el('', null)] }, 'etat'], [{ exemplaires: [el(3, null)] }, 'etat'],
+        [{ exemplaires: [el(null, 'xx')] }, 'langue'], [{ exemplaires: [el(null, 'FR')] }, 'langue'], [{ exemplaires: [el(null, '__proto__')] }, 'langue'], [{ exemplaires: [el(null, ['fr'])] }, 'langue']]) {
+        H.v(`   ${JSON.stringify(b)} → refus, detail ${d}`, le(b).detail, d);
     }
 
-    // ═══════════════ 2. RIEN N'A BOUGÉ SANS LES CHAMPS (octet pour octet) ═══════════════
+    // ═══════════════ 2. RIEN N'A BOUGÉ SANS LE DÉTAIL (octet pour octet) ═══════════════
     const A = await compte();
-    await put(A, 'Set-E', '10|001', { possedee: true, quantite: 3 });
+    const base0 = await put(A, 'Set-E', '10|001', { possedee: true, quantite: 3 });
+    H.v('2. le PUT par fiche sans détail : la réponse d\'avant, à l\'octet', base0.texte, JSON.stringify({ success: true, possedees: 1 }));
     const sansEx = await lire(A, 'Set-E');
-    H.v('2. un set sans exemplaires : PAS de champ `exemplaires` — clés et ordre d\'avant', Object.keys(sansEx.json), ['success', 'set', 'possedees', 'quantites', 'cotes', 'majLe']);
+    H.v('   un set sans détail : PAS de champ `exemplaires`, clés et ordre d\'avant', Object.keys(sansEx.json), ['success', 'set', 'possedees', 'quantites', 'cotes', 'majLe']);
     H.v('   ... et le texte est celui d\'avant, à l\'octet', sansEx.texte, JSON.stringify({ success: true, set: 'Set-E', possedees: ['10|001'], quantites: { '10|001': 3 }, cotes: { '10|001': null, '11|002': null, '12|003': null }, majLe: sansEx.json.majLe }));
     H.vrai('   le document stocké ne porte pas de champ `ex`', !('ex' in (await docs(A))[0]));
+    const liste0 = await H.appel(sv.url, '/api/collection', { entetes: siteH(A.cookie) });
+    H.v('   GET /api/collection : `doublons` = 2 pour la fiche à 3 exemplaires (champ additif, calculé sans écriture)', liste0.json.sets.map(s => [s.slug, s.doublons]), [['Set-E', 2]]);
 
-    // ═══════════════ 3. ÉCRIRE UNE VARIANTE ═══════════════
-    const o0 = await octets();
-    const v1 = await put(A, 'Set-E', '11|002', { possedee: true, etat: 'NM', langue: 'fr', quantite: 2 });
-    H.v('3. variante NM/fr ×2 sur une fiche NEUVE : 200, 2 cochées dans le set (1 + 1), le total de la fiche est 2', [v1.statut, v1.json], [200, { success: true, possedees: 2 }]);
-    const g1 = await lire(A, 'Set-E');
-    H.v('   GET : la fiche est cochée, `quantites` = le total, `exemplaires` = le détail (champ APRÈS quantites, avant cotes)', [g1.json.possedees, g1.json.quantites, g1.json.exemplaires, Object.keys(g1.json)],
-        [['10|001', '11|002'], { '10|001': 3, '11|002': 2 }, { '11|002': [{ etat: 'NM', langue: 'fr', quantite: 2 }] }, ['success', 'set', 'possedees', 'quantites', 'exemplaires', 'cotes', 'majLe']]);
-    const m1 = (await docs(A)).find(d => d.set === 'Set-E').majLe; await attendre(15);
-    const v1b = await put(A, 'Set-E', '11|002', { possedee: true, etat: 'NM', langue: 'fr', quantite: 2 });
-    H.v('   idempotent : le même PUT ne change RIEN (majLe inchangé, octets inchangés)', [v1b.json, (await docs(A)).find(d => d.set === 'Set-E').majLe.getTime() === m1.getTime()], [v1.json, true]);
-    const o1 = await octets();
-    await put(A, 'Set-E', '11|002', { possedee: true, etat: 'EX', langue: 'en' });
-    const g2 = await lire(A, 'Set-E');
-    H.v('   seconde variante EX/en (quantité absente = 1) : le total passe à 3, le détail est trié (état, langue)', [g2.json.quantites['11|002'], g2.json.exemplaires['11|002']], [3, [{ etat: 'EX', langue: 'en', quantite: 1 }, { etat: 'NM', langue: 'fr', quantite: 2 }]]);
-    H.vrai('   l\'octet : chaque entrée de détail a été RÉSERVÉE (le compteur a monté à chaque nouvelle entrée)', o1 > o0 && (await octets()) > o1);
-    await put(A, 'Set-E', '11|002', { possedee: true, etat: 'PO' });
-    await put(A, 'Set-E', '11|002', { possedee: true, langue: 'de', quantite: 2 });
-    const g4 = await lire(A, 'Set-E');
-    H.v('   état seul et langue seule : l\'autre champ est null dans le détail (non précisé)', g4.json.exemplaires['11|002'].filter(e => e.etat === null || e.langue === null), [{ etat: null, langue: 'de', quantite: 2 }, { etat: 'PO', langue: null, quantite: 1 }]);
-    H.v('   ... total = 2 + 1 + 1 + 2 = 6', g4.json.quantites['11|002'], 6);
-    // quantité absente sur une variante EXISTANTE : inchangée
-    await put(A, 'Set-E', '11|002', { possedee: true, etat: 'NM', langue: 'fr' });
-    H.v('   quantité absente sur une variante existante : INCHANGÉE (comme pour la fiche)', (await lire(A, 'Set-E')).json.exemplaires['11|002'].find(e => e.etat === 'NM' && e.langue === 'fr').quantite, 2);
-
-    // ═══════════════ 4. LES NON PRÉCISÉS SONT PRIS D'ABORD ═══════════════
+    // ═══════════════ 3. ÉCRIRE LE DÉTAIL (K5) ═══════════════
     {
-        await put(A, 'Set-E', '12|003', { possedee: true, quantite: 5 });                                    // 5 exemplaires non précisés
-        await put(A, 'Set-E', '12|003', { possedee: true, etat: 'NM', langue: 'fr', quantite: 2 });
-        let g = (await lire(A, 'Set-E')).json;
-        H.v('4. 5 non précisés puis NM/fr ×2 : le total reste 5 (les 2 viennent des non précisés), détail 2', [g.quantites['12|003'], g.exemplaires['12|003']], [5, [{ etat: 'NM', langue: 'fr', quantite: 2 }]]);
-        await put(A, 'Set-E', '12|003', { possedee: true, etat: 'NM', langue: 'fr', quantite: 8 });
-        g = (await lire(A, 'Set-E')).json;
-        H.v('   NM/fr passe à 8 : 3 non précisés absorbés, 3 de plus au total → 8', g.quantites['12|003'], 8);
-        await put(A, 'Set-E', '12|003', { possedee: true, etat: 'NM', langue: 'fr', quantite: 1 });
-        g = (await lire(A, 'Set-E')).json;
-        H.v('   NM/fr redescend à 1 : le total baisse de 7 → 1 (on a retiré des exemplaires)', [g.quantites, g.exemplaires['12|003']], [{ '10|001': 3, '11|002': 6 }, [{ etat: 'NM', langue: 'fr', quantite: 1 }]]);
-        const plus = await put(A, 'Set-E', '12|003', { possedee: true, quantite: 0 + 1 });
-        H.v('   le PUT par fiche avec une quantité ≥ le détail passe (1 ≥ 1)', plus.statut, 200);
-        await put(A, 'Set-E', '12|003', { possedee: true, etat: 'EX', langue: 'it', quantite: 4 });
-        const trop = await put(A, 'Set-E', '12|003', { possedee: true, quantite: 3 });
-        H.v('   le PUT par fiche avec une quantité INFÉRIEURE au détail (3 < 1 + 4) : 409 CONFLIT, detail « exemplaires », rien n\'a bougé', [trop.statut, code(trop), detail(trop), (await lire(A, 'Set-E')).json.quantites['12|003']], [409, 'CONFLIT', 'exemplaires', 5]);
-        const ret = await put(A, 'Set-E', '12|003', { possedee: false, etat: 'EX', langue: 'it' });
-        g = (await lire(A, 'Set-E')).json;
-        H.v('   { possedee:false, etat, langue } retire LA variante (total 5 → 1), les autres restent', [ret.statut, g.quantites['12|003'] ?? 1, g.exemplaires['12|003']], [200, 1, [{ etat: 'NM', langue: 'fr', quantite: 1 }]]);
-        const retB = await put(A, 'Set-E', '12|003', { possedee: false, etat: 'EX', langue: 'it' });
-        H.v('   ... idempotent (déjà retirée : 200, rien ne change)', [retB.statut, retB.json.possedees], [200, ret.json.possedees]);
-        const retDern = await put(A, 'Set-E', '12|003', { possedee: false, etat: 'NM', langue: 'fr' });
-        const gd = (await lire(A, 'Set-E')).json;
-        H.v('   retirer la dernière variante d\'une fiche sans non précisé : la fiche est décochée, plus de détail', [retDern.statut, gd.possedees.includes('12|003'), gd.exemplaires && gd.exemplaires['12|003']], [200, false, undefined]);
+        const o0 = await octets();
+        const non = await putEx(A, 'Set-E', '11|002', { exemplaires: [el('NM', 'fr')] });
+        H.v('3. une fiche NON cochée : un détail non vide = 409 CONFLIT detail « exemplaires », rien d\'écrit', [non.statut, code(non), detail(non), (await docs(A)).filter(d => d.set === 'Set-E').length, await octets()], [409, 'CONFLIT', 'exemplaires', 1, o0]);
+        const vide = await putEx(A, 'Set-E', '11|002', { exemplaires: [] });
+        H.v('   ... un tableau vide sur une fiche non cochée : 200, { success, exemplaires: [] }, rien d\'écrit', [vide.statut, vide.json, await octets()], [200, { success: true, exemplaires: [] }, o0]);
+        const o1 = await octets();
+        const w = await putEx(A, 'Set-E', '10|001', { exemplaires: [el('NM', 'fr'), el('EX', 'en'), el('NM', 'fr')] });
+        H.v('   3 exemplaires détaillés sur une fiche à 3 : 200, { success, exemplaires } — exactement ces deux clés, triés (état, langue)', [w.statut, Object.keys(w.json), w.json.exemplaires], [200, ['success', 'exemplaires'], [el('EX', 'en'), el('NM', 'fr'), el('NM', 'fr')]]);
+        const g = await lire(A, 'Set-E');
+        H.v('   GET : `exemplaires` APRÈS quantites et avant cotes, UN élément par exemplaire { etat, langue }', [Object.keys(g.json), g.json.quantites, g.json.exemplaires], [['success', 'set', 'possedees', 'quantites', 'exemplaires', 'cotes', 'majLe'], { '10|001': 3 }, { '10|001': [el('EX', 'en'), el('NM', 'fr'), el('NM', 'fr')] }]);
+        const o2 = await octets();
+        H.vrai('   l\'octet : les deux entrées de détail (NM/fr ×2 et EX/en) ont été RÉSERVÉES', o2 > o1);
+        const m1 = (await docs(A)).find(d => d.set === 'Set-E').majLe; await attendre(15);
+        const w2 = await putEx(A, 'Set-E', '10|001', { exemplaires: [el('NM', 'fr'), el('NM', 'fr'), el('EX', 'en')] });
+        H.v('   idempotent (même détail dans un autre ordre) : même réponse, majLe INCHANGÉ, octets inchangés', [w2.json, (await docs(A)).find(d => d.set === 'Set-E').majLe.getTime() === m1.getTime(), await octets()], [w.json, true, o2]);
+        const r = await putEx(A, 'Set-E', '10|001', { exemplaires: [el(null, null), el('PL', null), el(null, 'ja')] });
+        H.v('   REMPLACE tout : { null, null } n\'est pas stocké (c\'est le reste du total) ; état seul et langue seule sont admis', [r.json.exemplaires, (await lire(A, 'Set-E')).json.exemplaires['10|001']], [[el(null, 'ja'), el('PL', null)], [el(null, 'ja'), el('PL', null)]]);
+        const trop = await putEx(A, 'Set-E', '10|001', { exemplaires: [el('NM', 'fr'), el('NM', 'fr'), el('NM', 'fr'), el('NM', 'fr')] });
+        H.v('   plus d\'éléments que la quantité (4 > 3) : 409 « exemplaires », le détail d\'avant est INTACT', [trop.statut, detail(trop), (await lire(A, 'Set-E')).json.exemplaires['10|001']], [409, 'exemplaires', [el(null, 'ja'), el('PL', null)]]);
+        const kk = await put(A, 'Set-E', '10|001', { possedee: true, quantite: 1 });
+        H.v('   le PUT par fiche avec une quantité INFÉRIEURE au détail (1 < 2) : 409 « exemplaires », rien n\'a bougé', [kk.statut, code(kk), detail(kk), (await lire(A, 'Set-E')).json.quantites['10|001']], [409, 'CONFLIT', 'exemplaires', 3]);
+        const k2 = await put(A, 'Set-E', '10|001', { possedee: true, quantite: 2 });
+        H.v('   ... à la somme exacte (2) : passe ; la réponse porte alors la fiche à jour (quantite, exemplaires), champs additifs', [k2.statut, k2.json], [200, { success: true, possedees: 1, quantite: 2, exemplaires: [el(null, 'ja'), el('PL', null)] }]);
+        const clr = await putEx(A, 'Set-E', '10|001', { exemplaires: [] });
+        const dclr = (await docs(A)).find(d => d.set === 'Set-E');
+        H.v('   un tableau vide EFFACE le détail : le champ `ex` disparaît, les octets reviennent à ceux d\'avant le détail', [clr.json, 'ex' in dclr, await octets()], [{ success: true, exemplaires: [] }, false, o1]);
+        H.vrai('   ... et le GET n\'a plus de champ `exemplaires`', !('exemplaires' in (await lire(A, 'Set-E')).json));
     }
 
-    // ═══════════════ 5. DÉCOCHER LA FICHE EFFACE SON DÉTAIL, ET L'OCTET REVIENT ═══════════════
+    // ═══════════════ 4. LA RÉPONSE DES ÉCRITURES K3 ET PRODUIT, LE DÉCOCHAGE, LES OCTETS ═══════════════
     {
         const B = await compte();
+        const W = await compte();                                                         // le registre d'un set est PARTAGÉ et ne se rend jamais : on le remplit avant de prendre la valeur de départ
+        for (const k of ['11|002', '12|003']) { await put(W, 'Set-E', k, { possedee: true }); await put(W, 'Set-E', k, { possedee: false }); }
         const base = await octets();
-        await put(B, 'Set-E', '10|001', { possedee: true, etat: 'LP', langue: 'ja', quantite: 2 });
-        await put(B, 'Set-E', '10|001', { possedee: true, etat: 'PL', langue: 'ko', quantite: 1 });
-        await put(B, 'Set-E', '11|002', { possedee: true, etat: 'GD', langue: 'es', quantite: 1 });
+        await put(B, 'Set-E', '11|002', { possedee: true, quantite: 2 });
+        await putEx(B, 'Set-E', '11|002', { exemplaires: [el('GD', 'es'), el('LP', 'it')] });
+        await put(B, 'Set-E', '12|003', { possedee: true, quantite: 1 });
+        await putEx(B, 'Set-E', '12|003', { exemplaires: [el('MT', 'de')] });
         const plein = await octets();
-        H.vrai('5. trois entrées de détail sur deux fiches : le compteur d\'octets a monté', plein > base);
-        const dec = await put(B, 'Set-E', '10|001', { possedee: false });
+        H.vrai('4. trois entrées de détail sur deux fiches : le compteur a monté', plein > base);
+        const pp = await putP(B, 2, { possedee: true });
+        H.v('   le PUT par PRODUIT d\'une fiche qui a un détail : { possedees, set, cle } PLUS quantite et exemplaires', [pp.statut, pp.json], [200, { success: true, possedees: 2, set: 'Set-E', cle: '11|002', quantite: 2, exemplaires: [el('GD', 'es'), el('LP', 'it')] }]);
+        const pq = await putP(B, 1, { possedee: true });
+        H.v('   ... d\'une fiche SANS détail : la réponse d\'avant (set, cle, sans quantite ni exemplaires)', Object.keys(pq.json).sort(), ['cle', 'possedees', 'set', 'success']);
+        await put(B, 'Set-E', '10|001', { possedee: false });
+        const dec = await put(B, 'Set-E', '11|002', { possedee: false });
         const g = (await lire(B, 'Set-E')).json;
-        H.v('   PUT { possedee:false } : la fiche et SON détail partent, l\'autre fiche garde le sien', [dec.statut, g.possedees, g.exemplaires], [200, ['11|002'], { '11|002': [{ etat: 'GD', langue: 'es', quantite: 1 }] }]);
-        await put(B, 'Set-E', '11|002', { possedee: false });
-        H.v('   tout décoché : plus aucun document, et le compteur d\'octets est REVENU exactement à sa valeur d\'avant', [(await docs(B)).length, await octets()], [0, base]);
-        // la suppression du compte rend ce que le détail occupe
+        H.v('   PUT { possedee:false } : la fiche et SON détail partent, l\'autre fiche garde le sien', [dec.statut, g.possedees, g.exemplaires], [200, ['12|003'], { '12|003': [el('MT', 'de')] }]);
+        await put(B, 'Set-E', '12|003', { possedee: false });
+        H.v('   tout décoché : plus aucun document, compteur d\'octets REVENU exactement à sa valeur d\'avant', [(await docs(B)).length, await octets()], [0, base]);
         const C = await compte(); const b0 = await octets();
-        await put(C, 'Set-E', '10|001', { possedee: true, etat: 'NM', langue: 'fr', quantite: 3 });
+        await put(C, 'Set-E', '10|001', { possedee: true, quantite: 3 });
+        await putEx(C, 'Set-E', '10|001', { exemplaires: [el('NM', 'fr'), el('NM', 'en')] });
         await svc.supprimerDuCompte(C.c._id, cfg);
         H.v('   la suppression du compte rend le détail : compteur revenu à sa valeur d\'avant', [(await docs(C)).length, await octets()], [0, b0]);
+        const VD = await compte();
+        await put(VD, 'Set-Hors', '99|001', { possedee: true, quantite: 2 });
+        const h = await putEx(VD, 'Set-Hors', '99|001', { exemplaires: [el('EX', 'en'), el(null, null)] });
+        H.v('   une fiche HORS catalogue (clé dans `hors`) porte aussi son détail', [h.statut, h.json.exemplaires, (await lire(VD, 'Set-Hors')).json.exemplaires], [200, [el('EX', 'en')], { '99|001': [el('EX', 'en')] }]);
     }
 
-    // ═══════════════ 6. BORNES ═══════════════
+    // ═══════════════ 5. BORNES ═══════════════
     {
-        const D = await compte();
-        const r = await put(D, 'Set-E', '10|001', { possedee: true, etat: 'NM', langue: 'fr', quantite: 99 });
-        const r2 = await put(D, 'Set-E', '10|001', { possedee: true, etat: 'EX', langue: 'fr', quantite: 1 });
-        H.v('6. le total d\'une fiche dépasse 99 : 409 CONFLIT, detail « borne-quantite », rien d\'écrit', [r.statut, r2.statut, code(r2), detail(r2), (await lire(D, 'Set-E')).json.quantites['10|001']], [200, 409, 'CONFLIT', 'borne-quantite', 99]);
         const svp = await serveur({ ...cfg, collection: { ...cfg.collection, exemplairesParCompte: 2 } });
         const E2 = await compte();
-        const a = await put(E2, 'Set-E', '10|001', { possedee: true, etat: 'NM', langue: 'fr' }, svp), b = await put(E2, 'Set-E', '11|002', { possedee: true, etat: 'EX', langue: 'fr' }, svp), c = await put(E2, 'Set-E', '12|003', { possedee: true, etat: 'GD', langue: 'fr' }, svp);
-        H.v('   exemplairesParCompte = 2 : la troisième entrée de détail est refusée (409 « borne-exemplaires »), rien d\'écrit pour cette fiche', [a.statut, b.statut, c.statut, detail(c), (await lire(E2, 'Set-E')).json.possedees], [200, 200, 409, 'borne-exemplaires', ['10|001', '11|002']]);
-        const rep = await put(E2, 'Set-E', '10|001', { possedee: true, etat: 'NM', langue: 'fr', quantite: 4 }, svp);
-        H.v('   ... changer la quantité d\'une entrée EXISTANTE au plafond passe (rien n\'est ajouté)', rep.statut, 200);
+        for (const k of ['10|001', '11|002', '12|003']) await put(E2, 'Set-E', k, { possedee: true, quantite: 2 }, svp);
+        const a = await putEx(E2, 'Set-E', '10|001', { exemplaires: [el('NM', 'fr'), el('EX', 'fr')] }, svp), c = await putEx(E2, 'Set-E', '11|002', { exemplaires: [el('GD', 'fr')] }, svp);
+        H.v('5. exemplairesParCompte = 2 (entrées DISTINCTES de détail) : la troisième est refusée (409 « borne-exemplaires »), rien d\'écrit pour cette fiche', [a.statut, c.statut, detail(c), (await lire(E2, 'Set-E')).json.exemplaires['11|002']], [200, 409, 'borne-exemplaires', undefined]);
+        const rep = await putEx(E2, 'Set-E', '10|001', { exemplaires: [el('NM', 'fr'), el('NM', 'fr')] }, svp);
+        H.v('   ... remplacer le détail d\'une fiche par MOINS d\'entrées passe au plafond', rep.statut, 200);
         await svp.fermer();
     }
 
-    // ═══════════════ 7. PAR PRODUIT, HORS CATALOGUE, ISOLEMENT ═══════════════
+    // ═══════════════ 6. GARDES, ISOLEMENT ═══════════════
     {
-        const P = await compte();
-        const pp = await putP(P, 1, { possedee: true, etat: 'NM', langue: 'fr', quantite: 2 });
-        H.v('7. le PUT par PRODUIT porte les mêmes champs : variante écrite sur la fiche résolue', [pp.statut, pp.json.cle, (await lire(P, 'Set-E')).json.exemplaires], [200, '10|001', { '10|001': [{ etat: 'NM', langue: 'fr', quantite: 2 }] }]);
-        const hors = await put(P, 'Set-Hors', '99|001', { possedee: true, etat: 'EX', langue: 'en', quantite: 2 });
-        const gh = (await lire(P, 'Set-Hors')).json;
-        H.v('   une fiche HORS catalogue (clé dans `hors`) porte aussi son détail', [hors.statut, gh.quantites, gh.exemplaires], [200, { '99|001': 2 }, { '99|001': [{ etat: 'EX', langue: 'en', quantite: 2 }] }]);
-        const Q = await compte();
+        const P = await compte(), Q = await compte();
+        await put(P, 'Set-E', '10|001', { possedee: true, quantite: 2 });
+        await putEx(P, 'Set-E', '10|001', { exemplaires: [el('NM', 'fr')] });
         const gq = await lire(Q, 'Set-E');
-        H.v('   un AUTRE compte ne voit ni le détail ni le total de P', [gq.json.possedees, 'exemplaires' in gq.json, 'quantites' in gq.json], [[], false, false]);
-        await put(Q, 'Set-E', '10|001', { possedee: true, etat: 'PO', langue: 'fr' });
-        const gp = (await lire(P, 'Set-E')).json;
-        H.v('   ... Q écrit sur la même fiche : le détail de P est INTACT', gp.exemplaires['10|001'], [{ etat: 'NM', langue: 'fr', quantite: 2 }]);
-        H.v('   sans session : 401 (aucune écriture de détail possible)', (await H.appel(sv.url, chemin('Set-E', '10|001'), { methode: 'PUT', corps: { possedee: true, etat: 'NM' }, entetes: { origin: SITE, 'x-rat-market': '1', 'x-forwarded-for': IP() } })).statut, 401);
+        H.v('6. un AUTRE compte ne voit ni le détail ni le total de P', [gq.json.possedees, 'exemplaires' in gq.json, 'quantites' in gq.json], [[], false, false]);
+        const qw = await putEx(Q, 'Set-E', '10|001', { exemplaires: [el('PO', 'fr')] });
+        H.v('   ... Q écrit un détail sur la même clé non cochée chez lui : 409, et le détail de P est INTACT', [qw.statut, (await lire(P, 'Set-E')).json.exemplaires['10|001']], [409, [el('NM', 'fr')]]);
+        H.v('   sans session : 401 SESSION', (await putEx(null, 'Set-E', '10|001', { exemplaires: [] }, sv, { origin: SITE, 'x-rat-market': '1', 'x-forwarded-for': IP() })).statut, 401);
+        const ori = await putEx(P, 'Set-E', '10|001', { exemplaires: [] }, sv, siteH(P.cookie, { origin: 'https://autre.exemple' }));
+        H.v('   mauvaise Origin : 403 ORIGINE', [ori.statut, code(ori)], [403, 'ORIGINE']);
+        const bad = await putEx(P, 'Set-E', 'abc', { exemplaires: [] });
+        H.v('   clé mal formée : 400 ENTREE cle', [bad.statut, detail(bad)], [400, 'cle']);
+        const bad2 = await putEx(P, 'Set-E', '10|001', { exemplaires: [el('XX', null)] });
+        H.v('   état hors liste : 400 ENTREE etat, détail intact', [bad2.statut, detail(bad2), (await lire(P, 'Set-E')).json.exemplaires['10|001']], [400, 'etat', [el('NM', 'fr')]]);
+        for (const m of ['GET', 'POST', 'DELETE']) H.v(`   ${m} sur /exemplaires : pas de route (404)`, (await H.appel(sv.url, chemin('Set-E', '10|001') + '/exemplaires', { methode: m, entetes: siteH(P.cookie) })).statut, 404);
     }
     await sv.fermer();
     await mongoose.disconnect();

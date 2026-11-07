@@ -18,9 +18,9 @@ const cleValide = c => {
 };
 const slugValide = s => typeof s === 'string' && SLUG.test(s) && !s.includes('//');
 // L5/L6 — ÉTAT et LANGUE d'un exemplaire : deux listes FERMÉES (une valeur hors liste est refusée, jamais normalisée). L'échelle des états est celle de Cardmarket pour les cartes à l'unité, sans
-// « MT » (Mint, que le site n'emploie pas) : NM near mint, EX excellent, GD good, LP light played, PL played, PO poor. Les langues sont celles du catalogue (identifier/produit.js::LANGUES, que
+// (MT mint, ajouté au tour de correction : le site K5 le liste) : NM near mint, EX excellent, GD good, LP light played, PL played, PO poor. Les langues sont celles du catalogue (identifier/produit.js::LANGUES, que
 // test-collection-exemplaires.js confronte) plus `id` et `th`, les deux tirages d'Asie du Sud-Est du catalogue. Ajouter une valeur est additif ; en retirer une ne l'est pas.
-const ETATS = Object.freeze(['NM', 'EX', 'GD', 'LP', 'PL', 'PO']);
+const ETATS = Object.freeze(['MT', 'NM', 'EX', 'GD', 'LP', 'PL', 'PO']);
 const LANGUES = Object.freeze(['fr', 'en', 'de', 'es', 'it', 'pt', 'nl', 'pl', 'ru', 'cs', 'hu', 'ja', 'ko', 'zh-hans', 'zh-hant', 'id', 'th']);
 const etatValide = x => typeof x === 'string' && ETATS.includes(x);
 const langueValide = x => typeof x === 'string' && LANGUES.includes(x);
