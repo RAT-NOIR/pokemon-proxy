@@ -39,7 +39,7 @@ const GROUPES = [
         ['reprise : l\'image déjà obtenue est redemandée', "if (!imageDejaObtenue(registre, item.image)) {", "if (true) {"],
         ['reprise : la page récente est redemandée', "age <= PAGE_TTL_JOURS * 86400000", "age <= 0"],
         ['reprise : la page de plus de 7 jours n\'expire jamais', "age <= PAGE_TTL_JOURS * 86400000", "age <= Infinity"],
-        ['pagination : une page suivante supposée', "new RegExp(`[?&;]${param}=${n + 1}(?!\\\\d)`).test(String(html))", "true"],
+        ['pagination : une page suivante supposée', "const pageSuivante = (html, param, n) => new RegExp(", "const pageSuivante = (html, param, n) => true || new RegExp("],
         ['budget : le plafond de requêtes ignoré', "if (stats.requetes >= budget) {", "if (false) {"],
         ['cadence : l\'attente entre deux requêtes d\'un hôte supprimée', "if (attente > 0) await pause(attente);", ""],
         ['hôte : le premier 403 ne ferme rien', "if (hoteAFermer(e)) {", "if (false) {"],
