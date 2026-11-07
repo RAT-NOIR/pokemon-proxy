@@ -16,6 +16,8 @@
 //   (`n + coût ≤ plafond`), le coût au PIRE du modèle mesuré (couts.js) ; le surplus est rendu quand l'écriture n'a rien ajouté. Retrait réel, document vidé supprimé et suppression de compte rendent ce qu'ils
 //   ont RÉELLEMENT retiré (le modèle de ce qui était stocké). Au montage le compteur est RECOMPTÉ depuis `collStats` (`size` + `totalIndexSize`) des DEUX collections ; un recompte qui échoue FERME les
 //   écritures (503) et se rejoue à l'écriture suivante ; un compteur ABSENT les ferme aussi (seul le recompte le crée) ; il ne descend jamais sous 0. Toute dérive possible va vers le HAUT (fermeture).
+//   · L5/L6 — `ex` (facultatif, absent des documents d'avant) : le DÉTAIL par exemplaire, un tableau d'éléments « cle\netat\nlangue\nN » ; la quantité de la clé (bit + `qte`, ou `hors`) reste le TOTAL, la somme du détail
+//     est au plus ce total. Une entrée est réservée au pire AVANT d'écrire et rendue au retrait (couts.js::exemplaire, EX_BASE). Voir `ecrireVariante`.
 // Le stockage ne juge pas si une clé désigne une fiche réelle autrement que par l'appartenance au catalogue chargé : la forme est jugée à la porte (forme.js).
 const crypto = require('crypto');
 const { Long } = require('mongoose').mongo;
@@ -24,7 +26,7 @@ const etat = require('../chargeur/etat');
 const C = require('./couts');
 const NOM = 'collection_fiches', REGISTRE = 'collection_registre', COMPTEURS = 'compteurs', CLE_TOTAL = 'collection-octets';
 const LECTURE = { promoteLongs: false };                       // les mots sont des Long : jamais promus en nombre (un entier de 64 bits ne tient pas dans un Number)
-const PROJ = { set: 1, mots: 1, hors: 1, qte: 1, epoque: 1 };
+const PROJ = { set: 1, mots: 1, hors: 1, qte: 1, epoque: 1, ex: 1 };
 const REESSAI_CATALOGUE_S = 5;                                  // « le catalogue n'est pas chargé » : le chargement vient en quelques secondes, le site réessaie
 
 // ── les bits
@@ -142,7 +144,19 @@ async function ajouterAuRegistre(slug, cle) {
 }
 
 // ── lectures
-const docsDuCompte = compteId => col(NOM).find({ compteId }, { projection: { set: 1, mots: 1, hors: 1, qte: 1 }, ...LECTURE }).toArray();
+const docsDuCompte = compteId => col(NOM).find({ compteId }, { projection: { set: 1, mots: 1, hors: 1, qte: 1, ex: 1 }, ...LECTURE }).toArray();
+// L5/L6 — le DÉTAIL par exemplaire d'une clé dans un document : [{ cle, etat, langue, q }] (état et langue '' = non précisés)
+const exDe = (doc, cle) => (doc && doc.ex ? doc.ex.map(C.lireElementEx).filter(x => x.cle === cle) : []);
+const sommeEx = (doc, cle) => exDe(doc, cle).reduce((n, x) => n + x.q, 0);
+const EXEMPLAIRES_DEFAUT = 5000;
+// les expressions de mise à jour par pipeline du détail : les éléments de `ex` qui ne sont PAS cette clé (ou cette clé, cet état, cette langue) ; le champ disparaît quand plus rien n'y reste
+const champEx = i => ({ $arrayElemAt: [{ $split: ['$$this', '\n'] }, i] });
+function exSans(cle, etat, langue) {
+    const egaux = [{ $eq: [champEx(0), { $literal: cle }] }];
+    if (etat !== undefined) egaux.push({ $eq: [champEx(1), { $literal: etat }] }, { $eq: [champEx(2), { $literal: langue }] });
+    return { $filter: { input: { $ifNull: ['$ex', []] }, cond: { $not: [{ $and: egaux }] } } };
+}
+const exOuAbsent = tab => ({ $cond: [{ $eq: [{ $size: tab }, 0] }, '$$REMOVE', tab] });
 async function totalDuCompte(compteId) { return (await docsDuCompte(compteId)).reduce((n, d) => n + nbCoches(d), 0); }
 /** Les clés à quantité ≥ 2 d'un document : les entrées `qte` (registre) et les clés `hors` qui portent « \n N ». */
 const nbQuantites = d => Object.keys(d.qte || {}).length + (d.hors || []).filter(e => e.includes('\n')).length;
@@ -195,6 +209,7 @@ async function ajouter(a, essai = 0) {
     const { doc, h, reg, qAvant } = await situation(compteId, slug, cle);
     const q = a.quantite === undefined ? (qAvant > 0 ? qAvant : 1) : a.quantite;                             // `quantite` absente : 1 sur une clé NEUVE, INCHANGÉE sur une clé déjà cochée (un ancien onglet ne rétrograde pas un double)
     if (qAvant === q) return { possedees: nbCoches(doc) };                                                  // idempotent : rien ne change, rien n'est consommé, même au plafond
+    if (q < sommeEx(doc, cle)) return { refus: 'exemplaires' };                                              // L5/L6 : la quantité totale ne peut pas être inférieure au détail (état, langue) déjà enregistré
     const pos = reg.pos;
     // ORDRE DE DÉCISION : (1) la clé est déjà dans `hors` → elle y reste ; (2) elle est déjà au registre (sa position est en base) → bit ; (3) sinon le catalogue CHARGÉ tranche : il la connaît → ajout au registre,
     // il ne la connaît pas → `hors` (une fiche sans produit) ; aucun catalogue chargé → on n'écrit RIEN (503 « catalogue ») : `hors` ne reçoit jamais une clé par accident.
@@ -285,6 +300,14 @@ async function retirer({ compteId, slug, cle, maintenant }) {
             { returnDocument: 'before', projection: { qte: 1 }, ...LECTURE });
         if (avant) { change = true; if (avant.qte && avant.qte[reg.pos] >= 2) rendu += C.qte; }
     }
+    // L5/L6 : décocher la fiche efface AUSSI son détail par exemplaire (une clé décochée ne garde aucun état ni aucune langue)
+    if (exDe(doc, cle).length) {
+        const avant = await c.findOneAndUpdate({ compteId, set: slug }, [{ $set: { ex: exOuAbsent(exSans(cle)), majLe: { $literal: maintenant } } }], { returnDocument: 'before', projection: { ex: 1 }, ...LECTURE });
+        if (avant && avant.ex) {
+            const retires = avant.ex.map(C.lireElementEx).filter(x => x.cle === cle);
+            if (retires.length) { rendu += retires.reduce((n, x) => n + C.exemplaire(x.cle), 0) + (retires.length === avant.ex.length ? C.EX_BASE : 0); change = true; }
+        }
+    }
     if (change) {
         const supprime = await c.findOneAndDelete({ compteId, set: slug, ...VIDE }, { projection: PROJ, ...LECTURE });   // plus rien : le document disparaît (sauf si une clé vient d'y être remise)
         if (supprime) rendu += C.coutDuDocument(supprime);
@@ -303,6 +326,62 @@ function cocher({ compteId, slug, cle, possedee, quantite, cfg, maintenant = new
     return ajouter({ compteId, slug, cle, quantite, cfg, maintenant });
 }
 
+/**
+ * L5/L6 — écrit (ou retire, `possedee` false) UNE variante (état, langue) d'une fiche. Le total de la fiche reste le seul stockage de la quantité (bit + `qte`, inchangés) ; `ex` détaille des exemplaires
+ * par (fiche, état, langue), la somme du détail ≤ le total, le reste est « non précisé ». Une HAUSSE de la variante est prise d'abord sur les exemplaires non précisés, puis ajoute au total ; une BAISSE
+ * (ou un retrait) retire du total. L'ORDRE garde l'invariant « somme du détail ≤ total » à chaque instant : hausse → total d'abord, détail ensuite ; baisse → détail d'abord, total ensuite.
+ * Les octets : l'entrée neuve est RÉSERVÉE au pire avant toute écriture (et rendue si le total est refusé), rendue au retrait. Rend { possedees } ou { refus, borne? } comme `cocher`.
+ * Limite connue (comme le reste du service) : deux écritures simultanées du même compte sur la même fiche peuvent se croiser ; le dépassement est borné par le limiteur d'écriture, et l'invariant se relit à la lecture.
+ */
+async function ecrireVariante({ compteId, slug, cle, possedee, quantite, etat, langue, cfg, maintenant = new Date() }) {
+    const c = col(NOM), e = etat || '', l = langue || '';
+    await assurer(cfg);
+    const { doc, qAvant } = await situation(compteId, slug, cle);
+    const entrees = exDe(doc, cle), somme = entrees.reduce((n, x) => n + x.q, 0);
+    const ancien = entrees.find(x => x.etat === e && x.langue === l), qOld = ancien ? ancien.q : 0;
+    const qNew = possedee ? (quantite === undefined ? (qOld > 0 ? qOld : 1) : quantite) : 0;
+    if (qNew === qOld) return { possedees: doc ? nbCoches(doc) : 0 };                                        // idempotent : rien ne change, rien n'est consommé
+    if (qNew > cfg.collection.quantiteMax) throw new Error('quantite');                                      // la route la refuse déjà en 400
+    const reste = Math.max(0, qAvant - somme), d = qNew - qOld;
+    const total = d > 0 ? qAvant + Math.max(0, d - reste) : qAvant + d;
+    if (total > cfg.collection.quantiteMax) return { refus: 'borne-quantite', borne: cfg.collection.quantiteMax };
+    const neuve = !ancien && qNew > 0, aDeja = Boolean(doc && doc.ex && doc.ex.length);
+    if (neuve) {
+        const max = cfg.collection.exemplairesParCompte ?? EXEMPLAIRES_DEFAUT;
+        if ((await docsDuCompte(compteId)).reduce((n, x) => n + (x.ex ? x.ex.length : 0), 0) >= max) return { refus: 'borne-exemplaires', borne: max };
+    }
+    const reserve = neuve ? C.exemplaire(cle) + (aDeja ? 0 : C.EX_BASE) : 0;
+    if (reserve > 0 && !(await reserver(cfg, reserve))) return { refus: 'borne-service', borne: cfg.collection.octetsService };
+    const ecrireDetail = async () => {
+        const sans = exSans(cle, e, l), nouveau = qNew > 0 ? { $concatArrays: [sans, [{ $literal: C.elementEx(cle, e, l, qNew) }]] } : sans;
+        return c.findOneAndUpdate({ compteId, set: slug }, [{ $set: { ex: exOuAbsent(nouveau), majLe: { $literal: maintenant } } }], { returnDocument: 'before', projection: { ex: 1 }, ...LECTURE });
+    };
+    const regler = async avant => {                                                                         // octets réels de CE que la mise à jour du détail a fait, contre la réservation
+        const avantEx = avant && avant.ex ? avant.ex.map(C.lireElementEx) : [], existait = avantEx.some(x => x.cle === cle && x.etat === e && x.langue === l);
+        const reel = qNew > 0 ? (existait ? 0 : C.exemplaire(cle) + (avantEx.length ? 0 : C.EX_BASE)) : -(existait ? C.exemplaire(cle) + (avantEx.length === 1 ? C.EX_BASE : 0) : 0);
+        if (reel < 0) await rendre(-reel);
+        const delta = reserve - Math.max(0, reel);
+        if (delta > 0) await rendre(delta); if (delta < 0) await forcer(-delta);
+    };
+    if (d > 0) {                                                                                             // hausse : le total d'abord
+        if (total !== qAvant) {
+            const r = await ajouter({ compteId, slug, cle, quantite: total, cfg, maintenant });
+            if (r.refus) { await rendre(reserve); return r; }
+        }
+        const avant = await ecrireDetail();
+        if (!avant) { await rendre(reserve); return { possedees: 0 }; }                                      // le document a disparu entre-temps (un retrait simultané) : rien n'est resté
+        await regler(avant);
+    } else {                                                                                                 // baisse : le détail d'abord
+        const avant = await ecrireDetail();
+        if (avant) await regler(avant);
+        if (total <= 0) return retirer({ compteId, slug, cle, maintenant });
+        const r = await ajouter({ compteId, slug, cle, quantite: total, cfg, maintenant });
+        if (r.refus) return r;
+    }
+    const apres = await c.findOne({ compteId, set: slug }, { projection: { mots: 1, hors: 1 }, ...LECTURE });
+    return { possedees: apres ? nbCoches(apres) : 0 };
+}
+
 /** Les mots d'un document, lus contre le registre de LEUR époque (LÈVE RegistreIllisible sinon). */
 async function metaDuRegistre(slug) {
     const r = await col(REGISTRE).aggregate([{ $match: { _id: slug } }, { $project: { epoque: 1, n: { $size: '$cles' } } }]).toArray();
@@ -310,7 +389,7 @@ async function metaDuRegistre(slug) {
 }
 async function lireSet(compteId, slug) {
     const doc = await col(NOM).findOne({ compteId, set: slug }, { ...LECTURE });
-    if (!doc) return { cles: [], quantites: {}, majLe: null };
+    if (!doc) return { cles: [], quantites: {}, exemplaires: {}, majLe: null };
     const toutes = new Map();                                                                                // clé → quantité
     for (const e of doc.hors || []) { const { cle, q } = C.lireElementHors(e); toutes.set(cle, q); }
     const positions = positionsPosees(doc.mots);
@@ -321,7 +400,13 @@ async function lireSet(compteId, slug) {
     }
     const cles = [...toutes.keys()].sort(), quantites = {};
     for (const k of cles) if (toutes.get(k) >= 2) quantites[k] = toutes.get(k);
-    return { cles, quantites, majLe: doc.majLe };
+    // L5/L6 : le détail par exemplaire, par clé cochée, trié (état, langue) ; {} quand aucune fiche n'en porte (le champ est alors absent de la réponse)
+    const exemplaires = {};
+    for (const x of (doc.ex || []).map(C.lireElementEx).sort((a, b) => (a.etat < b.etat ? -1 : a.etat > b.etat ? 1 : a.langue < b.langue ? -1 : a.langue > b.langue ? 1 : 0))) {
+        if (!toutes.has(x.cle)) continue;                                                                    // un détail dont la fiche n'est plus cochée n'est pas servi
+        (exemplaires[x.cle] = exemplaires[x.cle] || []).push({ etat: x.etat || null, langue: x.langue || null, quantite: x.q });
+    }
+    return { cles, quantites, exemplaires, majLe: doc.majLe };
 }
 
 /** Les sets où au moins une fiche est cochée : [{ slug, possedees, majLe }], triés par slug. LÈVE RegistreIllisible si les bits d'un set ne se lisent pas : `possedees` et `lireSet` ne divergent jamais. */
@@ -347,5 +432,5 @@ async function supprimerDuCompte(compteId, cfg) {
     await rendre(rendu);
     return n;
 }
-module.exports = { NOM, REGISTRE, RegistreIllisible, cocher, lireSet, lireSets, totalDuCompte, supprimerDuCompte, recompter, initialiser, attendreInitialisation, avecDelai };
+module.exports = { NOM, REGISTRE, RegistreIllisible, cocher, ecrireVariante, lireSet, lireSets, totalDuCompte, supprimerDuCompte, recompter, initialiser, attendreInitialisation, avecDelai };
 // Limite connue (M-C, relecture finale) : le recompte est ABSOLU ; avec plusieurs instances, un recompte lancé pendant que l'autre écrit peut écraser des incréments en vol (dérive basse d'au plus le nombre d'écritures en vol). Une seule instance aujourd'hui.

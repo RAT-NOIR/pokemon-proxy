@@ -4,6 +4,7 @@ const CODES = Object.freeze({
     JETON: 401, VERIFICATION: 403, QUOTA: 429, DEBIT: 429, INDISPONIBLE: 503, IMAGE: 200, IA: 200, SERVEUR: 500, VERSION: 426, MARCHE: 422,
     SESSION: 401, ORIGINE: 403, IDENTIFIANTS: 401, MOT_DE_PASSE_FAIBLE: 422, CODE_INVALIDE: 404, CODE_EXPIRE: 410, DEJA_LIE: 409,
     CONFLIT: 409, CREDITS_ACHETES: 409, ENTREE: 400,
+    INTROUVABLE: 404,        // L5 : « Ma collection » par produit — le produit n'est (ou n'a) aucune fiche du catalogue chargé
     EN_RECONCILIATION: 409   // B3 tour 5 : clé rejouée dont la ligne de débit attend la réconciliation — ni rejouée ni redébitée, aucun crédit ni remboursement associé
 });
 // Messages STABLES des codes émis par la couche argent (le texte ne change pas d'un appel à l'autre).
@@ -21,6 +22,7 @@ function corpsErreur(code, message, extra = {}) {
     const corps = { success: false, erreur, facturation: extra.facturation ?? null };
     if (extra.solde !== undefined) corps.solde = extra.solde;
     // OFFRE-QUOTA : `achat` n'existe plus (la vente est arrêtée) — un appelant qui en passerait un est ignoré, aucun lien de vente ne sort jamais d'un corps d'erreur
+    if (extra.fiches !== undefined) erreur.fiches = extra.fiches;   // L5 : les fiches candidates d'un produit ambigu ([{ set, cle }], au plus 10)
     if (extra.declaration !== undefined) corps.declaration = extra.declaration;   // PLAFOND-DECLARE : le jugement d'un remboursement de DÉCLARATION (rendue, ou refusée par `plafond-declarations`)
     if (extra.offre !== undefined) corps.offre = extra.offre;   // OFFRE-QUOTA : { nom, restant, remiseAZero } — le refus QUOTA joint l'offre (restant 0)
     return corps;

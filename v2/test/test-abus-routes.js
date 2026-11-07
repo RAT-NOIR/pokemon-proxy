@@ -231,7 +231,9 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         'POST /api/scanner/analyses': { auth: 'session', multipart: true, idem: true, base: () => ({ source: 'camera' }), nullables: [] },
         'POST /api/scanner/analyses/:id/reponse': { auth: 'session', base: () => ({ choix: 'a' }), nullables: [], idem: true, chemin: () => `/api/scanner/analyses/${new mongoose.Types.ObjectId().toHexString()}/reponse` },
         // lot COLLECTION : le corps est un booléen (aucun champ texte à injecter : la cellule (a) est « sans objet », dite) ; le compte de l'acteur est vérifié ; la clé et le slug sont ceux d'une fiche plausible
-        'PUT /api/collection/sets/:slug/fiches/:cle': { auth: 'session', base: () => ({ possedee: true }), nullables: [], chemin: () => `/api/collection/sets/Banc-Set/fiches/${encodeURIComponent('895789|001')}` }
+        'PUT /api/collection/sets/:slug/fiches/:cle': { auth: 'session', base: () => ({ possedee: true }), nullables: [], chemin: () => `/api/collection/sets/Banc-Set/fiches/${encodeURIComponent('895789|001')}` },
+        // L5 : le PUT par produit — même corps que le PUT par fiche (+ etat, langue : deux listes fermées) ; le catalogue du banc n'a AUCUN lien fiche → produit, donc un produit plausible rend 404 INTROUVABLE (jamais une écriture) : c'est la forme qui est éprouvée ici
+        'PUT /api/collection/produits/:idproduct': { auth: 'session', base: () => ({ possedee: true }), nullables: [], chemin: () => '/api/collection/produits/9000001' }
     };
     // les routes en LECTURE à paramètre de chemin : le banc les joue avec un paramètre ordinaire (un « :slug » littéral n'est pas un slug)
     const CHEMIN_LECTURE = { 'GET /api/collection/sets/:slug': '/api/collection/sets/Banc-Set' };
@@ -503,6 +505,12 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             rep = await envoyer(V, { methode: 'PUT', chemin: cible.chemin(), entetes: siteH(CB.cookie), corps: { possedee: false } }); attendu = [200];
             const lu = await envoyer(V, { methode: 'GET', chemin: '/api/collection/sets/Banc-Set', entetes: siteH(CB.cookie) });
             if (rep.json && rep.json.possedees !== 0) ecart(r.cle, 'e', `B voit ${rep.json.possedees} fiche(s) cochée(s) dans le set de A`);
+            if (!lu.json || lu.json.possedees.length) ecart(r.cle, 'e', 'la lecture de B montre une clé de A');
+        }
+        else if (r.cle === 'PUT /api/collection/produits/:idproduct') {
+            // B écrit par produit : la route ne prend aucun identifiant de compte, le produit ne désigne ici aucune fiche (404) — rien de la collection de A n'est lu ni changé (état de A comparé plus bas)
+            rep = await envoyer(V, { methode: 'PUT', chemin: cible.chemin(), entetes: siteH(CB.cookie), corps: { possedee: false } }); attendu = [404];
+            const lu = await envoyer(V, { methode: 'GET', chemin: '/api/collection/sets/Banc-Set', entetes: siteH(CB.cookie) });
             if (!lu.json || lu.json.possedees.length) ecart(r.cle, 'e', 'la lecture de B montre une clé de A');
         }
         else if (r.cle === 'POST /api/scanner/analyses/:id/reponse') { rep = await envoyer(V, { methode: 'POST', chemin: `/api/scanner/analyses/${scanSA}/reponse`, entetes: siteH(CB.cookie), corps: { choix: 'a' } }); attendu = [404]; }

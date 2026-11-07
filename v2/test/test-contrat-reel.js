@@ -752,6 +752,25 @@ const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empr
         await jouer(U, R_PUT, 'cocher avec une quantité (doubles)', 200, ch('S1', '2|1'), { corps: { possedee: true, quantite: 3 }, entetes: siteH(c5.cookie) });
         await jouer(U, R_SET, 'set avec une quantité ≥ 2 (`quantites`)', 200, '/api/collection/sets/S1', { entetes: siteH(c5.cookie) });
         await jouer(U, R_PUT, 'quantité hors 1…99 (ENTREE quantite)', 400, ch('S1', '2|1'), { corps: { possedee: true, quantite: 100 }, entetes: siteH(c5.cookie) });
+        await jouer(U, R_PUT, 'état hors liste (ENTREE etat)', 400, ch('S1', '2|1'), { corps: { possedee: true, etat: 'MT' }, entetes: siteH(c5.cookie) });
+        // L5/L6 : le PUT par PRODUIT (index inverse du catalogue) et le détail par exemplaire. Le produit 2 n'a qu'UNE fiche (S3), le produit 1 en a quatre (ambigu), 999 n'en a aucune.
+        {
+            VB.installer([VB.doc(1), VB.doc(2)], [['S1', '1|1', [1]], ['S1', '2|1', [1]], ['S2', '3|1', [1]], ['S2', '4|1', [1]], ['S3', '5|1', [2]]]);
+            const R_PROD = 'PUT /api/collection/produits/{idproduct}', chP = id => `/api/collection/produits/${id}`;
+            const c7 = await compte(), c8 = await compte();
+            await jouer(U, R_PROD, 'un produit, une fiche : cochée, la fiche est nommée', 200, chP(2), { corps: { possedee: true }, entetes: siteH(c7.cookie) });
+            await jouer(U, R_PROD, 'le détail par exemplaire (état, langue) sur la fiche résolue', 200, chP(2), { corps: { possedee: true, etat: 'NM', langue: 'fr', quantite: 2 }, entetes: siteH(c7.cookie) });
+            await jouer(U, R_SET, 'set avec un détail par exemplaire (`exemplaires`)', 200, '/api/collection/sets/S3', { entetes: siteH(c7.cookie) });
+            await jouer(U, R_PROD, 'produit inconnu (INTROUVABLE)', 404, chP(999), { corps: { possedee: true }, entetes: siteH(c7.cookie) });
+            await jouer(U, R_PROD, 'produit de plusieurs fiches (CONFLIT ambigu, fiches nommées)', 409, chP(1), { corps: { possedee: true }, entetes: siteH(c8.cookie) });
+            await jouer(U, R_PROD, 'idProduct illisible (ENTREE idProduct)', 400, chP('abc'), { corps: { possedee: true }, entetes: siteH(c8.cookie) });
+            etatMem.vider();
+            await jouer(U, R_PROD, 'aucun catalogue chargé (INDISPONIBLE, detail catalogue)', 503, chP(2), { corps: { possedee: true }, entetes: siteH(c8.cookie) });
+            VB.installer([VB.doc(1), VB.doc(2)], [['S1', '1|1', [1]], ['S1', '2|1', [1]], ['S2', '3|1', [1]], ['S2', '4|1', [1]], ['S3', '5|1', [2]]]);
+            await jouer(U, R_PROD, 'sans session', 401, chP(2), { corps: { possedee: true }, entetes: siteH(null) });
+            await jouer(U, R_PROD, 'sans Origin du site (ORIGINE)', 403, chP(2), { corps: { possedee: true }, entetes: { cookie: c8.cookie, ...ip() } });
+            await jouer(U, R_PROD, 'limiteur d\'écriture dépassé (DEBIT, le limiteur du PUT par fiche)', 429, chP(2), { corps: { possedee: true }, entetes: siteH(c3.cookie) });
+        }
         await svC.fermer();
         const baseOctets = await require('../collection/service').recompter(cfg);
         const svB = await monter({ ...cfgC, limites: { ...cfgC.limites, collectionEcrituresParCompteHeure: 50 }, collection: { ...cfgC.collection, octetsService: baseOctets } });
@@ -948,7 +967,8 @@ const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empr
             'POST /api/scanner/analyses/{id}/reponse': { chemin: `/api/scanner/analyses/${fauxId}/reponse`, corps: { choix: 'a' } },
             'GET /api/collection': { chemin: '/api/collection' },
             'GET /api/collection/sets/{slug}': { chemin: '/api/collection/sets/Banc-Set' },
-            'PUT /api/collection/sets/{slug}/fiches/{cle}': { chemin: '/api/collection/sets/Banc-Set/fiches/1%7C001', corps: { possedee: true } }
+            'PUT /api/collection/sets/{slug}/fiches/{cle}': { chemin: '/api/collection/sets/Banc-Set/fiches/1%7C001', corps: { possedee: true } },
+            'PUT /api/collection/produits/{idproduct}': { chemin: '/api/collection/produits/2', corps: { possedee: true } }
         };
         const sansRequete = OPERATIONS.filter(o => o.route !== 'GET /ping' && !REQ503[o.route] && !(o.route in JOUEE_AILLEURS)).map(o => o.route);
         H.v('503 : chaque route de `paths` (hors /ping) a sa requête de la garde d\'index', sansRequete, []);

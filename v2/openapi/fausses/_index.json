@@ -508,5 +508,35 @@
     "statut": 422,
     "schema": "ReponseErreur",
     "description": "Mauvais code, code absent, ou offre fermée : la MÊME réponse (indiscernables)."
+  },
+  "collection-produit-cochee.json": {
+    "route": "PUT /api/collection/produits/{idproduct}",
+    "statut": 200,
+    "schema": "ReponseCocherProduit",
+    "description": "L5 : un produit résolu en UNE fiche et cochée ; la réponse nomme la fiche (set, clé). Valeurs fictives."
+  },
+  "collection-produit-ambigu.json": {
+    "route": "PUT /api/collection/produits/{idproduct}",
+    "statut": 409,
+    "schema": "ReponseErreur",
+    "description": "L5 : le produit désigne plusieurs fiches (CONFLIT, detail ambigu) : les candidates sont nommées, rien n'est écrit, le site écrit par fiche."
+  },
+  "collection-produit-introuvable.json": {
+    "route": "PUT /api/collection/produits/{idproduct}",
+    "statut": 404,
+    "schema": "ReponseErreur",
+    "description": "L5 : aucune fiche du catalogue chargé ne porte ce produit (INTROUVABLE)."
+  },
+  "collection-produit-catalogue.json": {
+    "route": "PUT /api/collection/produits/{idproduct}",
+    "statut": 503,
+    "schema": "ReponseErreur",
+    "description": "L5 : aucun catalogue chargé (ou un index qui ne répond pas) : « je ne sais pas » n'est jamais « introuvable » ; rien n'est écrit, le site réessaie."
+  },
+  "collection-set-exemplaires.json": {
+    "route": "GET /api/collection/sets/{slug}",
+    "statut": 200,
+    "schema": "ReponseCollectionSet",
+    "description": "L5/L6 : un set dont une fiche porte un détail par exemplaire (état, langue, quantité) ; `quantites` garde le total, `exemplaires` le détail. Champ absent quand aucune fiche n'en porte."
   }
 }

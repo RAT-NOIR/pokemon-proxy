@@ -22,7 +22,9 @@ const FICHIER = require('path').join(__dirname, 'mesure-chargeur', 'mesure-colle
     const bdd = (async () => { process.env.MONGODB_BASE = 'test_scratch'; const { connecterMongo } = require('../../mongo-connexion'); await connecterMongo({ script: 'test-collection-budget.js', ecrit: true }); return mongoose.connection.db; })();
     const B = await bdd;
     const formes = [];       // { nom, indexUnique, docs: () => iterable, modele: doc => octets }
-    const fiche = (compteId, set, mots, horsL, qte) => ({ compteId, set, ...(Object.keys(mots).length ? { epoque: hex(16) } : {}), mots, hors: horsL, ...(qte ? { qte } : {}), majLe: new Date() });
+    const fiche = (compteId, set, mots, horsL, qte, ex) => ({ compteId, set, ...(Object.keys(mots).length ? { epoque: hex(16) } : {}), mots, hors: horsL, ...(qte ? { qte } : {}), ...(ex ? { ex } : {}), majLe: new Date() });
+    // L5/L6 : une entrée du DÉTAIL par exemplaire au plus long (clé de 45 o, état PL, langue « zh-hans », quantité à 2 chiffres)
+    const entreeEx = () => C.elementEx(cle45(), 'PL', 'zh-hans', 99);
     const motsPleins = n => Object.fromEntries(Array.from({ length: n }, (_, i) => [String(i), PLEIN]));
     const modeleFiche = d => C.coutDuDocument(d);
     const modeleRegistre = d => C.registreDocument(d._id) + d.cles.reduce((n, k) => n + C.registreEntree(k), 0);
@@ -35,6 +37,9 @@ const FICHIER = require('path').join(__dirname, 'mesure-chargeur', 'mesure-colle
     formes.push({ nom: 'C. des clés HORS de 45 o avec quantité (48 o), 5 comptes × 3 documents × 2 000 clés', fiches: true, docs: () => Array.from({ length: 5 }, () => new ObjectId()).flatMap(id => Array.from({ length: 3 }, () => fiche(id, hex(20), {}, Array.from({ length: 2000 }, () => `${cle45()}\n99`)))) });
     formes.push({ nom: 'D. des mots pleins : 5 documents de 1 100 mots de 64 bits (noms de 4 chiffres)', fiches: true, docs: () => Array.from({ length: 5 }, () => fiche(new ObjectId(), hex(30), motsPleins(1100), [])) });
     formes.push({ nom: 'E. des quantités : 5 documents de 2 000 entrées `qte` (positions de 5 chiffres)', fiches: true, docs: () => Array.from({ length: 5 }, () => fiche(new ObjectId(), hex(30), { 0: Long.fromBits(1, 0) }, [], Object.fromEntries(Array.from({ length: 2000 }, (_, i) => [String(10000 + i), 99])))) });
+    // L5/L6 — le DÉTAIL par exemplaire (`ex`) : des entrées au plus long, et UNE entrée seule (le champ-tableau lui-même, EX_BASE, payé par la première entrée d'un document)
+    formes.push({ nom: 'X. le détail par exemplaire : 5 comptes × 3 documents × 1 500 entrées de 45 o (état PL, langue zh-hans, quantité 99)', fiches: true, docs: () => Array.from({ length: 5 }, () => new ObjectId()).flatMap(id => Array.from({ length: 3 }, () => fiche(id, hex(20), { 0: Long.fromBits(1, 0) }, [], null, Array.from({ length: 1500 }, entreeEx)))) });
+    formes.push({ nom: 'X1. UNE entrée de détail par document : 20 comptes × 150 documents', fiches: true, docs: () => A.flatMap(id => Array.from({ length: 150 }, () => fiche(id, hex(80), { 0: Long.fromBits(1, 0) }, [], null, [entreeEx()]))) });
     // ── les formes extrêmes du REGISTRE
     formes.push({ nom: 'F. registre : 3 documents de 3 000 clés de 45 o', registre: true, docs: () => Array.from({ length: 3 }, () => ({ _id: hex(60), cles: Array.from({ length: 3000 }, cle45) })) });
     formes.push({ nom: 'G. registre : 1 500 documents d\'une clé, identifiant de 80 caractères', registre: true, docs: () => Array.from({ length: 1500 }, () => ({ _id: hex(80), cles: [cle45()] })) });
@@ -70,6 +75,9 @@ const FICHIER = require('path').join(__dirname, 'mesure-chargeur', 'mesure-colle
                     docs.push(fiche(id, sid, motsPleins(Math.ceil(arch / 64)), hors(), Object.fromEntries(Array.from({ length: n }, (_, p) => [String(p), 99]))));
                 }
                 while (docs.length < NSet) docs.push(fiche(id, hex(80), {}, hors()));
+                // L5/L6 : et le détail par exemplaire PLEIN (exemplairesParCompte entrées au plus long), réparti sur les documents
+                const NE = cfg.collection.exemplairesParCompte;
+                for (let i = 0; i < NE; i++) { const d = docs[i % docs.length]; (d.ex = d.ex || []).push(entreeEx()); }
                 return docs;
             } });
         formes.push({ nom: `R. le REGISTRE complet de ces ${mesure.parSet.length} sets (${mesure.archive.fiches} clés)`, registre: true, complet: true,
@@ -105,6 +113,8 @@ const FICHIER = require('path').join(__dirname, 'mesure-chargeur', 'mesure-colle
     const D = formes.find(f => f.nom.startsWith('D.')), Cc = formes.find(f => f.nom.startsWith('C.'));
     H.vrai('   ↳ un modèle amputé (mot de 8 o) ne couvre PAS la forme D — le banc sait dire NON', D.modele - 5 * 1100 * 8 < D.net);
     H.vrai('   ↳ un modèle amputé (en-tête d\'élément de 4 o) ne couvre PAS la forme C — le banc sait dire NON', Cc.modele - 5 * 3 * 2000 * (C.ELEMENT - 4) < Cc.net);
+    const Xd = formes.find(f => f.nom.startsWith('X.'));
+    H.vrai('   ↳ un modèle amputé (entrée de détail sans son en-tête d\'élément, sans « \\n » ni état/langue) ne couvre PAS la forme X — le banc sait dire NON', Xd.modele - 15 * 1500 * (C.ELEMENT + 3 + 2 + 7 + 2) < Xd.net);
     const A1 = formes.find(f => f.nom.startsWith('A.'));
     H.vrai('   ↳ un document modélisé à 150 o (au lieu de 300 + 2 × slug) ne couvre PAS la forme A — le banc sait dire NON', A1.n * (150 + 2 * 80 + C.mot) < A1.net);
 

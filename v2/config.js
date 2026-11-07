@@ -182,8 +182,9 @@ function lireConfig(env = process.env) {
         //   · horsCatalogueParCompte = 6 000 : les fiches que la règle du site donne et que l'archive ne porte pas (mesuré : 3 934, 128 sets, tous sets confondus), +52 % ; `hors` ne reçoit plus que les clés qu'un catalogue CHARGÉ ne connaît pas ;
         //   · quantitesParCompte = 10 000 : le nombre de clés à quantité ≥ 2 par compte (registre et hors) — sans lui un compte pèse ~3 fois plus (une quantité sur chacune de ses clés) ;
         //   · setsParCompte : 1 000 (le coût d'un document dépasse celui d'une clé) ; quantiteMax : 99, posée SANS mesure d'usage réel ;
-        //   · octetsService : le budget GLOBAL, en OCTETS mesurés par collStats (données + index des deux collections), VALEUR PROVISOIRE (10 Mo) : relevé au passage en Flex. Un compteur unique, voir collection/service.js.
-        collection: { clesParCompte: 100000, horsCatalogueParCompte: 6000, quantitesParCompte: 10000, setsParCompte: 1000, quantiteMax: 99, octetsService: 10485760 },
+        //   · octetsService : le budget GLOBAL, en OCTETS mesurés par collStats (données + index des deux collections), VALEUR PROVISOIRE (10 Mo) : relevé au passage en Flex. Un compteur unique, voir collection/service.js ;
+        //   · exemplairesParCompte = 5 000 (L5/L6) : les entrées de détail (fiche, état, langue) d'un compte, posée SANS mesure d'usage réel — au plus ~0,5 Mo par compte au modèle (couts.js::exemplaire), jugée AVANT l'écriture.
+        collection: { clesParCompte: 100000, horsCatalogueParCompte: 6000, quantitesParCompte: 10000, setsParCompte: 1000, quantiteMax: 99, octetsService: 10485760, exemplairesParCompte: 5000 },
         comptes: { motDePasseMin: 10, lienHeures: 24, codeLongueur: 6, codeMinutes: 10, codesVivants: 3, sessionJours: 30, libelleMax: 60, glissementHeures: 24,
                     // O3 : un compte non confirmé est INACTIF et supprimé après `nonConfirmeHeures` ; un seul courriel de confirmation par adresse et par `confirmationHeures` (inscription et renvoi confondus).
                     nonConfirmeHeures: 48, confirmationHeures: 24,

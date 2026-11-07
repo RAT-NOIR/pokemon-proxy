@@ -1,0 +1,14 @@
+{
+  "success": true,
+  "set": "Fictif-Set",
+  "possedees": ["9000001|001", "9000002|-"],
+  "quantites": { "9000001|001": 3 },
+  "exemplaires": {
+    "9000001|001": [
+      { "etat": "NM", "langue": "fr", "quantite": 2 },
+      { "etat": "PL", "langue": null, "quantite": 1 }
+    ]
+  },
+  "cotes": {},
+  "majLe": "2026-10-10T09:00:00.000Z"
+}
