@@ -289,12 +289,21 @@ function arretHote(hote, motif, { dossier = DOSSIER_PAUSES, url = null } = {}) {
     return f;
 }
 /** L'arrêt durable d'un hôte, ou null. Un fichier illisible vaut ARRÊT (« je ne sais pas » n'est jamais « tout va bien »). */
-function hoteArrete(hote, dossier = DOSSIER_PAUSES) {
+function hoteArrete(hote, dossier = DOSSIER_PAUSES, { hoteExact = null } = {}) {
     const pb = problemeDeDossier(dossier);
     if (pb) return { hote, nature: 'arret-definitif', illisible: true, motif: `${dossier} : ${pb} — on ne sait pas, l'arrêt tient` };
     const f = fichierArret(dossier, hote);
     if (!fs.existsSync(f)) return null;
-    try { const j = JSON.parse(fs.readFileSync(f, 'utf8')); if (j && typeof j === 'object') return j; } catch { /* illisible */ }
+    try {
+        const j = JSON.parse(fs.readFileSync(f, 'utf8'));
+        if (j && typeof j === 'object') {
+            // I3 (scission) : l'hôte EXACT rouvert par `sauf` n'est pas arrêté par ce fichier, sauf s'il a son PROPRE arrêt (§21 bis : même règle que porte-reseau.js)
+            const nom = s => String(s || '').trim().toLowerCase().replace(/\.+$/, '');
+            const ex = nom(hoteExact), racine = nom(hote);
+            if (ex && ex !== racine && ex.endsWith(`.${racine}`) && Array.isArray(j.sauf) && j.sauf.some(x => typeof x === 'string' && nom(x) === ex) && !fs.existsSync(fichierArret(dossier, ex))) return null;
+            return j;
+        }
+    } catch { /* illisible */ }
     return { hote, nature: 'arret-definitif', illisible: true, motif: `${f} illisible : on ne sait pas, l'arrêt tient` };
 }
 // ── le registre du PROCESSUS : un suivi par HÔTE pour toute la durée du processus (une pause « plus de 20 » ou « inattendue » ne se perd pas d'une unité à l'autre) ──

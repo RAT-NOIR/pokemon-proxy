@@ -479,7 +479,7 @@ function verdictShell(cmd, cwd) {
         if (GIT_DEBUT.test(ins)) { const g = verdictGit(ins); if (g) raisons.push(g); continue; }
         hors.push(ins);
         const tl = jetons(ins.replace(/^\s*&\s*/, '')), ip = tl.findIndex(x => /^porte-reseau(\.js)?$/i.test(path.basename(x)));       // B3 : `lever` est une action de l'utilisateur
-        if (ip >= 0 && tl.slice(ip + 1).some(x => x.toLowerCase() === 'lever')) prot('porte-reseau.js lever : un agent ne lève pas un arrêt ; la levée est une action de l\'utilisateur, à la main dans son terminal');
+        if (ip >= 0 && tl.slice(ip + 1).some(x => ['lever', 'scinder'].includes(x.toLowerCase()))) prot('porte-reseau.js lever / scinder : un agent ne lève ni ne scinde un arrêt ; c\'est une action de l\'utilisateur, à la main dans son terminal');
         const ar = verdictArrets(ins, ctx); if (ar) prot(ar);
         // B3 : un verbe d'écriture sur le dossier des arrêts, ou une redirection dont la CIBLE y est (lister vers un autre fichier reste permis)
         if (mentionneArrets(ins) && (MODIFIE_VERBE.test(ins) || [...ins.matchAll(/>>?\s*("[^"]*"|'[^']*'|[^\s"'>]+)/g)].some(r => mentionneArrets(r[1])))) prot('écriture dans le dossier des arrêts (arrets-hotes\\) : un agent n\'y écrit rien ; la levée ou la suppression d\'un arrêt est une action de l\'utilisateur, à la main dans son terminal');

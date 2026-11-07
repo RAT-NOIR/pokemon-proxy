@@ -144,7 +144,7 @@ async function planCatalogue({ db, prod, releves, cm, minCommuns }) {
     return { etat: 'planifie', ...pc.resume, denominateursCm: donnees.denominateurs, nonAppariees: pc.table.resume.nonAppariees.length, unites: pc.unites, restes: pc.restes, nonJoints: pc.nonJoints };
 }
 async function construirePlan({ db, prod = null, releves, dossierArrets = RH.DOSSIER_PAUSES, cm = null, minCommuns = null }) {
-    const arret = RH.hoteArrete(TC.RACINE_IMAGES, dossierArrets);
+    const arret = RH.hoteArrete(TC.RACINE_IMAGES, dossierArrets, { hoteExact: TC.RACINE_IMAGES });
     const parGroupe = [], unites = [], restes = [];
     for (const g of TC.GROUPES) {
         const r = releves[g.groupId];
