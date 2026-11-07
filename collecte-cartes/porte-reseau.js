@@ -168,7 +168,7 @@ const NOM_HOTE = /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]
 function saufValides(j, nomFichier) {
     if (!j || !Array.isArray(j.sauf)) return [];
     const base = normNom(nomFichier), racine = racineDe(base);
-    return j.sauf.filter(x => typeof x === 'string').map(normNom).filter(x => NOM_HOTE.test(x) && x !== base && racineDe(x) === racine);
+    return j.sauf.filter(x => typeof x === 'string').map(normNom).filter(x => NOM_HOTE.test(x) && x !== base && x !== racine && racineDe(x) === racine);
 }
 /** D7 : un ARRET-HOTE ferme son nom de fichier et son champ `hote` (chacun avec sa racine), ET l'hôte EXACT de son champ `url`. */
 function hoteFerme(hote, dossier) {
@@ -486,10 +486,18 @@ async function scinder(racineHote, sousHote, motif, o = {}) {
     if (dejaDans.includes(s)) throw erreurRefus(`scinder : ${s} est déjà dans \`sauf\` de ${r}`);
     const iso = new Date(c.maintenant()).toISOString(), m = motif.trim();
     const nouveau = { ...contenu, sauf: [...(Array.isArray(contenu.sauf) ? contenu.sauf : []), s], scissions: [...(Array.isArray(contenu.scissions) ? contenu.scissions : []), { hote: s, le: iso, motif: m }] };
+    // le JOURNAL d'abord : s'il est inaccessible, rien n'est rouvert (sens fermé) ; l'inverse rouvrirait l'hôte sans trace ET rendrait « REFUSÉ » à l'utilisateur
+    try { fs.appendFileSync(path.join(c.dossierArrets, 'JOURNAL-HOTES.md'), `${iso} SCISSION ${r} : ${s} rouvert — ${m}\n`); }
+    catch (e) { throw erreurRefus(`scinder : JOURNAL-HOTES.md inaccessible (${e.message}) : rien n'est rouvert`); }
     const tmp = path.join(c.dossierArrets, `~scission-${process.pid}-${Date.now()}.tmp`);
-    fs.writeFileSync(tmp, JSON.stringify(nouveau, null, 1), { flag: 'wx' });
-    try { fs.renameSync(tmp, fichier); } catch (e) { try { fs.unlinkSync(tmp); } catch { /* déjà retiré */ } throw e; }
-    fs.appendFileSync(path.join(c.dossierArrets, 'JOURNAL-HOTES.md'), `${iso} SCISSION ${r} : ${s} rouvert — ${m}\n`);
+    try {
+        fs.writeFileSync(tmp, JSON.stringify(nouveau, null, 1), { flag: 'wx' });
+        fs.renameSync(tmp, fichier);
+    } catch (e) {
+        try { fs.unlinkSync(tmp); } catch { /* déjà retiré */ }
+        try { fs.appendFileSync(path.join(c.dossierArrets, 'JOURNAL-HOTES.md'), `${iso} SCISSION ÉCHOUÉE ${r} : ${s} reste fermé (${e.message})\n`); } catch { /* journal inaccessible : l'échec est quand même levé */ }
+        throw erreurRefus(`scinder : écriture de l'arrêt impossible (${e.message}) : ${s} reste fermé`);
+    }
     return { ok: true, fichier, sauf: nouveau.sauf };
 }
 

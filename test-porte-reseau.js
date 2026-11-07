@@ -572,6 +572,16 @@ async function lever(f) { try { await f(); return null; } catch (e) { return e; 
             const b = banc(); ecrireArret(b, RACINE, { sauf: [SOUS] }); ecrireArret(b, SOUS);
             verifier(/ferm/i.test(String(ferme(b, `https://${SOUS}/x`))), 'I3b : le sous-hôte reste fermé par son PROPRE arrêt');
         }
+        // (b bis) RELECTURE : l'ordre des fichiers ne compte pas — la racine (qui trie AVANT x.pc.test) ne doit pas court-circuiter l'arrêt propre du sous-hôte
+        {
+            const b = banc(); ecrireArret(b, 'pc.test', { sauf: ['x.pc.test'] }); ecrireArret(b, 'x.pc.test');
+            verifier(/ferm/i.test(String(ferme(b, 'https://x.pc.test/x'))), 'I3b bis : arrêt propre lu même quand la racine trie avant');
+            const b2 = banc(); fs.writeFileSync(path.join(b2.arrets, 'ARRET-HOTE-www.pc.test.json'), JSON.stringify({ hote: 'www.pc.test', sauf: ['pc.test', 'www.pc.test'] }));
+            verifier(/ferm/i.test(String(ferme(b2, 'https://pc.test/x'))) && /ferm/i.test(String(ferme(b2, 'https://www.pc.test/x'))), 'I3b bis : `sauf` ne peut exempter ni la racine ni le nom du fichier');
+            const b3 = banc(); ecrireArret(b3, 'pc.test'); fs.mkdirSync(path.join(b3.arrets, 'JOURNAL-HOTES.md'));
+            const e3 = await lever(() => P.scinder('pc.test', 'a.pc.test', 'm', b3.o));
+            verifier(e3 && e3.refus === true && !JSON.parse(fs.readFileSync(path.join(b3.arrets, 'ARRET-HOTE-pc.test.json'), 'utf8')).sauf && /ferm/i.test(String(ferme(b3, 'https://a.pc.test/x'))), `I3b bis : journal inaccessible -> refus, rien n'est rouvert (${e3 && e3.message})`);
+        }
         // (c) entrées de `sauf` invalides : ignorées
         {
             const b = banc(); ecrireArret(b, RACINE, { sauf: ['autre.test', 'pas un hote', 42, null, '*.pokemon-card.com', 'POKEMON-CARD.com'] });
