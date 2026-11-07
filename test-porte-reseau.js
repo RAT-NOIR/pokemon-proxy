@@ -544,6 +544,105 @@ async function lever(f) { try { await f(); return null; } catch (e) { return e; 
         verifier(e && e.refus === true && /ferm/i.test(e.message), `I5 : l'arrêt écrit pendant l'attente refuse la lecture (${e && e.message})`);
         verifier(!b.urls().includes('https://attente.test/p') && !fs.existsSync(path.join(b.sorties, 'p')), `I5 : la page n'est JAMAIS demandée (${JSON.stringify(b.urls())})`);
     }
+    // ── I3 : scinder un arrêt : la racine reste fermée, UN sous-hôte nommé est rouvert ──────────────────────────────────────────────────────
+    {
+        const RACINE = 'pokemon-card.com', SOUS = 'asia.pokemon-card.com';
+        const ecrireArret = (b, nom, extra = {}) => fs.writeFileSync(path.join(b.arrets, `ARRET-HOTE-${nom}.json`), JSON.stringify({ hote: nom, nature: 'arret-definitif', le: '2026-10-01T00:00:00.000Z', motif: 'HTTP 403 (HTTP 403)', url: 'https://www.pokemon-card.com/ex/', levee: 'x', ...extra }, null, 1));
+        const ferme = (b, url) => P.gardeSimple(url, P.configurer({ ...b.o, mode: 'page' })).motif;
+        // (a) racine fermée + sauf : le sous-hôte passe la fermeture, les autres hôtes de la racine restent fermés
+        {
+            const b = banc(); ecrireArret(b, RACINE, { sauf: [SOUS] });
+            verifier(ferme(b, `https://${SOUS}/x`) === null, `I3a : ${SOUS} n'est pas fermé par l'arrêt de la racine (${ferme(b, `https://${SOUS}/x`)})`);
+            for (const u of ['https://www.pokemon-card.com/x', 'https://pokemon-card.com/x', 'https://cdn.pokemon-card.com/x', 'https://autre.asia.pokemon-card.com/x']) verifier(/ferm/i.test(String(ferme(b, u))), `I3a : ${u} reste fermé`);
+            b.reponses[`https://${SOUS}/robots.txt`] = ROBOTS('User-agent: *\nAllow: /');
+            const v = await P.verdict(`https://${SOUS}/x`, b.o);
+            verifier(!/ferm/i.test(v.motif), `I3a : le verdict n'invoque plus la fermeture pour ${SOUS} (${v.motif})`);
+            const v2 = await P.verdict('https://www.pokemon-card.com/x', b.o);
+            verifier(v2.ok === false && /ferm/i.test(v2.motif), 'I3a : le verdict refuse toujours www.');
+        }
+        // (a bis) la garde par l'hôte exact de `url` suit la même règle
+        {
+            const b = banc(); ecrireArret(b, RACINE, { sauf: [SOUS], url: `https://${SOUS}/ex/` });
+            verifier(ferme(b, `https://${SOUS}/x`) === null, 'I3a : un `url` pointant le sous-hôte exempté ne le ferme pas');
+            const b2 = banc(); ecrireArret(b2, RACINE, { url: `https://${SOUS}/ex/` });
+            verifier(/ferm/i.test(String(ferme(b2, `https://${SOUS}/x`))), 'I3a : sans `sauf`, l\'hôte de `url` reste fermé');
+        }
+        // (b) sauf + propre arrêt du sous-hôte : fermé
+        {
+            const b = banc(); ecrireArret(b, RACINE, { sauf: [SOUS] }); ecrireArret(b, SOUS);
+            verifier(/ferm/i.test(String(ferme(b, `https://${SOUS}/x`))), 'I3b : le sous-hôte reste fermé par son PROPRE arrêt');
+        }
+        // (c) entrées de `sauf` invalides : ignorées
+        {
+            const b = banc(); ecrireArret(b, RACINE, { sauf: ['autre.test', 'pas un hote', 42, null, '*.pokemon-card.com', 'POKEMON-CARD.com'] });
+            for (const u of [`https://${SOUS}/x`, 'https://www.pokemon-card.com/x']) verifier(/ferm/i.test(String(ferme(b, u))),`I3c : ${u} reste fermé (sauf invalide ignoré)`);
+            verifier(/ferm/i.test(String(ferme(b, 'https://pokemon-card.com/x'))), 'I3c : la racine elle-même dans `sauf` ne s\'exempte pas (sous-hôte exigé)');
+            verifier(!/ferm/i.test(String(ferme(b, 'https://autre.test/x'))), 'I3c : un hôte hors racine n\'est pas fermé par ce fichier');
+            const b2 = banc(); ecrireArret(b2, RACINE, { sauf: 'asia.pokemon-card.com' });
+            verifier(/ferm/i.test(String(ferme(b2, `https://${SOUS}/x`))), 'I3c : `sauf` qui n\'est pas un tableau est ignoré');
+        }
+        // (d) scinder : chaque refus
+        {
+            verifier(typeof P.scinder === 'function', 'I3d : scinder est exportée');
+            if (typeof P.scinder === 'function') {
+                const b = banc(); ecrireArret(b, RACINE);
+                const refus = async (args, motifRe, nom) => { const e = await lever(() => P.scinder(...args, b.o)); verifier(e && e.refus === true && motifRe.test(e.message), `I3d : ${nom} (${e && e.message})`); };
+                await refus([RACINE, SOUS, ''], /motif/i, 'motif vide refusé');
+                await refus([RACINE, SOUS, '   '], /motif/i, 'motif blanc refusé');
+                await refus([RACINE, 'pas un hote', 'm'], /h[ôo]te|illisible/i, 'sous-hôte non-hôte refusé');
+                await refus([RACINE, '', 'm'], /h[ôo]te|illisible/i, 'sous-hôte vide refusé');
+                await refus([RACINE, 'autre.test', 'm'], /racine/i, 'sous-hôte hors racine refusé');
+                await refus([RACINE, RACINE, 'm'], /racine|identique|m[êe]me/i, 'sous-hôte = racine refusé');
+                await refus(['absent.test', 'a.absent.test', 'm'], /n'existe pas/, 'arrêt de la racine absent refusé');
+                fs.writeFileSync(path.join(b.arrets, 'ARRET-HOTE-casse.test.json'), '{pas du json');
+                await refus(['casse.test', 'a.casse.test', 'm'], /illisible/, 'fichier illisible refusé');
+                ecrireArret(b, SOUS);
+                await refus([RACINE, SOUS, 'm'], /propre arr[êe]t/, 'sous-hôte avec son propre arrêt refusé');
+                fs.unlinkSync(path.join(b.arrets, `ARRET-HOTE-${SOUS}.json`));
+                verifier(!JSON.parse(fs.readFileSync(path.join(b.arrets, `ARRET-HOTE-${RACINE}.json`), 'utf8')).sauf, 'I3d : aucun refus n\'a écrit `sauf`');
+                verifier(!fs.existsSync(path.join(b.arrets, 'JOURNAL-HOTES.md')), 'I3d : aucun refus n\'a écrit le journal');
+            }
+        }
+        // (e) scinder écrit sauf, scissions, journal ; garde le contenu ; refuse un doublon
+        {
+            const b = banc(); ecrireArret(b, RACINE, { champIntrus: 'garde-moi' });
+            if (typeof P.scinder === 'function') {
+                const r = await P.scinder(RACINE.toUpperCase() + '.', SOUS.toUpperCase(), '  tentative honnête  ', b.o);
+                verifier(r.ok === true && Array.isArray(r.sauf) && r.sauf.join() === SOUS && typeof r.fichier === 'string', `I3e : rend { ok, fichier, sauf } (${JSON.stringify(r)})`);
+                const j = JSON.parse(fs.readFileSync(path.join(b.arrets, `ARRET-HOTE-${RACINE}.json`), 'utf8'));
+                verifier(j.hote === RACINE && j.nature === 'arret-definitif' && j.motif === 'HTTP 403 (HTTP 403)' && j.champIntrus === 'garde-moi' && j.url === 'https://www.pokemon-card.com/ex/', 'I3e : le contenu existant est conservé');
+                verifier(Array.isArray(j.sauf) && j.sauf.length === 1 && j.sauf[0] === SOUS, 'I3e : `sauf` contient le sous-hôte normalisé');
+                verifier(Array.isArray(j.scissions) && j.scissions.length === 1 && j.scissions[0].hote === SOUS && j.scissions[0].motif === 'tentative honnête' && !Number.isNaN(Date.parse(j.scissions[0].le)), 'I3e : `scissions` trace hote, le, motif');
+                const jr = fs.readFileSync(path.join(b.arrets, 'JOURNAL-HOTES.md'), 'utf8');
+                verifier(new RegExp(`SCISSION ${RACINE.replace(/\./g, '\\.')} : ${SOUS.replace(/\./g, '\\.')} rouvert — tentative honnête`).test(jr) && /^\d{4}-\d\d-\d\dT/.test(jr), `I3e : ligne de journal (${jr.trim()})`);
+                verifier(fs.readdirSync(b.arrets).every(n => !/\.tmp$/i.test(n) && !/^~/.test(n)), `I3e : aucun fichier temporaire ne reste (${fs.readdirSync(b.arrets).join(',')})`);
+                const e = await lever(() => P.scinder(RACINE, SOUS, 'encore', b.o));
+                verifier(e && e.refus === true && /d[ée]j[àa]/.test(e.message), `I3e : déjà dans \`sauf\` refusé (${e && e.message})`);
+                verifier(!/ferm/i.test(String(ferme(b, `https://${SOUS}/x`))) && /ferm/i.test(String(ferme(b, 'https://www.pokemon-card.com/x'))), 'I3e : après scission, le sous-hôte est ouvert, www. fermé');
+                const r2 = await P.scinder(RACINE, 'cdn.pokemon-card.com', 'second', b.o);
+                const j2 = JSON.parse(fs.readFileSync(path.join(b.arrets, `ARRET-HOTE-${RACINE}.json`), 'utf8'));
+                verifier(r2.ok && j2.sauf.length === 2 && j2.scissions.length === 2, 'I3e : une seconde scission s\'ajoute');
+                const jr2 = fs.readFileSync(path.join(b.arrets, 'JOURNAL-HOTES.md'), 'utf8').trim().split('\n');
+                verifier(jr2.length === 2, 'I3e : le journal garde ses lignes (ajout, pas réécriture)');
+            }
+        }
+        // (f) CLI scinder 0 / 3 / 2
+        {
+            const { spawnSync } = require('child_process');
+            const dArr = path.join(TMP_RACINE, 'cli3-arrets');
+            fs.mkdirSync(dArr, { recursive: true });
+            fs.writeFileSync(path.join(dArr, `ARRET-HOTE-${RACINE}.json`), JSON.stringify({ hote: RACINE, nature: 'arret-definitif', motif: 'banc' }));
+            const env = { ...process.env, PORTE_RESEAU_BANC: moduleBanc(dArr, path.join(TMP_RACINE, 'cli3-porte')) };
+            const cli = (...a) => spawnSync(process.execPath, [path.join(__dirname, 'collecte-cartes', 'porte-reseau.js'), ...a], { encoding: 'utf8', env });
+            verifier(cli('scinder', RACINE, SOUS, '--motif=essai').status === 0, 'I3f : CLI scinder fait -> 0');
+            verifier(JSON.parse(fs.readFileSync(path.join(dArr, `ARRET-HOTE-${RACINE}.json`), 'utf8')).sauf?.[0] === SOUS, 'I3f : CLI scinder a écrit `sauf`');
+            verifier(cli('scinder', RACINE, SOUS, '--motif=encore').status === 3, 'I3f : CLI scinder déjà fait -> 3');
+            verifier(cli('scinder', RACINE, 'autre.test', '--motif=x').status === 3, 'I3f : CLI scinder hors racine -> 3');
+            verifier(cli('scinder', RACINE, SOUS).status === 2, 'I3f : CLI scinder sans motif -> 2');
+            verifier(cli('scinder', RACINE).status === 2, 'I3f : CLI scinder sans sous-hôte -> 2');
+            verifier(cli('scinder').status === 2, 'I3f : CLI scinder sans rien -> 2');
+        }
+    }
     // ── B2 : en production, les dossiers de la porte et des arrêts sont FIXES ; le chemin des bancs exige un transport factice ───────────────
     {
         const fixe = typeof P.configurer === 'function' ? P.configurer({ dossierArrets: path.join(TMP_RACINE, 'vide-a'), dossierPorte: path.join(TMP_RACINE, 'vide-p'), maintenant: () => 0, pause: () => {}, transport: { get() { throw new Error('faux'); } } }) : null;

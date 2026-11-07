@@ -200,6 +200,18 @@ const ABSENTE = cl({ statut: 404 });
     verifier('I2 : la racine d\'un hôte (artofpkm.com pour cdn.artofpkm.com)', [R.hoteRacine('cdn.artofpkm.com'), R.hoteRacine('www.artofpkm.com'), R.hoteRacine('archives.bulbagarden.net'), R.hoteRacine('localhost'), R.hoteRacine('h.example')], ['artofpkm.com', 'artofpkm.com', 'bulbagarden.net', 'localhost', 'h.example']);
     fs.rmSync(d, { recursive: true, force: true });
 }
+// ── I3 : un arrêt SCINDÉ (`sauf`) : les appelants passent l'hôte exact, la racine reste fermée, le sous-hôte nommé non ──────
+{
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), 'rh-scinde-'));
+    fs.writeFileSync(R.fichierArret(d, 'pokemon-card.com'), JSON.stringify({ hote: 'pokemon-card.com', nature: 'arret-definitif', motif: 'HTTP 403', sauf: ['asia.pokemon-card.com'] }));
+    verifier('I3 : sans hoteExact, la racine reste arrêtée (comportement actuel)', R.hoteArrete('pokemon-card.com', d)?.nature, 'arret-definitif');
+    verifier('I3 : hoteExact dans `sauf` (casse, point final) et pas de fichier propre → pas arrêté', R.hoteArrete('pokemon-card.com', d, { hoteExact: 'ASIA.pokemon-card.com.' }), null);
+    verifier('I3 : hoteExact hors `sauf` → l\'arrêt de la racine tient', R.hoteArrete('pokemon-card.com', d, { hoteExact: 'www.pokemon-card.com' })?.nature, 'arret-definitif');
+    verifier('I3 : hoteExact = la racine elle-même → l\'arrêt tient', R.hoteArrete('pokemon-card.com', d, { hoteExact: 'pokemon-card.com' })?.nature, 'arret-definitif');
+    fs.writeFileSync(R.fichierArret(d, 'asia.pokemon-card.com'), JSON.stringify({ hote: 'asia.pokemon-card.com', nature: 'arret-definitif', motif: 'HTTP 403 asia' }));
+    verifier('I3 : le sous-hôte exempté mais arrêté par son PROPRE fichier reste arrêté', R.hoteArrete('pokemon-card.com', d, { hoteExact: 'asia.pokemon-card.com' })?.nature, 'arret-definitif');
+    fs.rmSync(d, { recursive: true, force: true });
+}
 
 // ── I3 : le suivi vit par HÔTE pour toute la durée du PROCESSUS ──────────────────────────────────────────────────────────────
 {
