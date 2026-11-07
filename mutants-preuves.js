@@ -195,7 +195,7 @@ const GROUPES = [
     // ➕ 07/11 : la table fermée des codes imprimés admis (sC→sC2, T-P→T) — banc à part (test-preuves-codes-admis.js)
     { module: 'collecte-cartes/preuves.js', bancs: ['test-preuves-codes-admis.js'], mutants: [
         ['codes imprimés admis : table vidée', "Object.keys(CODES_IMPRIMES_ADMIS).find(k => ligne === norm(k)", "Object.keys({}).find(k => ligne === norm(k)"],
-        ['codes imprimés admis : drapeau retiré', "drapeaux.push(`code-imprime-admis:${CODES_IMPRIMES_ADMIS[admis].imprimes.find(i => norm(i) === code)}`); return null;", "return null;"],
+        ['codes imprimés admis : drapeau retiré', "drapeaux.push(`code-imprime-admis:${CODES_IMPRIMES_ADMIS[admis].imprimes.find(i => norm(i.code) === code).code}`); return null;", "return null;"],
         ['codes imprimés admis : comparaison relâchée à startsWith', "norm(i.code) === code && i.numeros.some(", "code.startsWith(norm(i.code)) && i.numeros.some("],
         ['codes imprimés admis : slugSet non exigé', "produit?.slugSet === CODES_IMPRIMES_ADMIS[k].slugSet && ", ""],
         ['codes imprimés admis : liste de numéros non exigée', "&& i.numeros.some(x => J.cleNumero(String(x)) === J.cleNumero(String(np)))", ""]
