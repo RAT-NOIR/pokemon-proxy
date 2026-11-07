@@ -23,7 +23,7 @@ const cas = (c, produits, lignesDuSet = [], cartes = cartesDuSet, produitsDuSet)
 let n = 0;
 const ok = (nom, f) => { try { f(); n++; } catch (e) { console.error(`ECHEC ${nom} : ${e.message}`); process.exitCode = 1; } };
 
-ok('liste fermée des raisons', () => assert.deepStrictEqual([...RAISONS].sort(), ['aucun-produit', 'carte-deja-jointe-dans-le-set', 'nom-ambigu', 'nom-contredit', 'nom-contredit-numero', 'nom-inclus-seulement', 'plusieurs-produits-au-numero', 'produit-deja-joint'].sort()));
+ok('liste fermée des raisons', () => assert.deepStrictEqual([...RAISONS].sort(), ['aucun-produit', 'carte-deja-jointe-dans-le-set', 'nom-ambigu', 'nom-contredit', 'nom-contredit-numero', 'nom-inclus-seulement', 'plusieurs-entrees-sans-numero', 'plusieurs-produits-au-numero', 'produit-deja-joint'].sort()));
 
 ok('ACCEPTÉ par le numéro : forme de production exacte', () => {
     const r = cas(bulbi, [prod(10, 'Bulbasaur', '1')]);
@@ -123,6 +123,22 @@ ok('REFUSÉ : un homonyme du set sans aucune attaque connue', () => {
 ok('REFUSÉ : carte sans numéro dans le set, produit numéroté dont le numéro est celui d\'une AUTRE carte', () => {
     const x = carte(60, 'Meowth', null, ['Zap']), y = carte(61, 'Meowth', null, ['Bite']);
     assert.deepStrictEqual(cas(x, [prod(79, 'Meowth [Zap]', '1'), prod(80, 'Meowth [Bite]', null)], [], [...cartesDuSet, x, y]), { refus: 'nom-ambigu' });
+});
+// ── jugement PAR ENTRÉE AFFICHÉE (carte, numéro) — comme l'audit : une carte à deux numéros dans le set a deux entrées
+const dbl = { _id: 90, nomEn: 'Zekrom ex', sets: ['Test-Set'], impressions: [imp('003'), imp('103')], attaques: ['Bolt'] };
+const parEntree = (numero, produits, lignesDuSet, n = 2, cartes = [...cartesDuSet, dbl]) => jugerJointure({ carte: dbl, set: SET, produitsSansLigne: produits, cartesDuSet: cartes, lignesDuSet, regles, numero, nEntreesCarte: n });
+ok('entrée n°103 d\'une carte déjà jointe à son n°003 : JUGÉE, jointe au produit n°103 (numeroFiche 103)', () => {
+    const r = parEntree('103', [prod(100, 'Zekrom ex', '103')], [{ carteId: 90, idProduct: 99, numeroFiche: '003' }]);
+    assert.ok(r.ligne, JSON.stringify(r)); assert.strictEqual(r.ligne.idProduct, 100); assert.strictEqual(r.ligne.numeroFiche, '103'); assert.strictEqual(r.ligne.preuve, 'set+numero');
+});
+ok('entrée n°003 déjà couverte par une ligne numeroFiche 003 : carte-deja-jointe', () => assert.deepStrictEqual(parEntree('003', [prod(100, 'Zekrom ex', '003')], [{ carteId: 90, idProduct: 99, numeroFiche: '003' }]), { refus: 'carte-deja-jointe-dans-le-set' }));
+ok('une ligne SANS numeroFiche ne couvre aucune entrée d\'une carte à deux numéros', () => assert.ok(parEntree('103', [prod(100, 'Zekrom ex', '103')], [{ carteId: 90, idProduct: 99, numeroFiche: null }]).ligne));
+ok('une ligne sans numeroFiche couvre l\'entrée UNIQUE de la carte', () => assert.deepStrictEqual(parEntree('003', [prod(100, 'Zekrom ex', '003')], [{ carteId: 90, idProduct: 99, numeroFiche: null }], 1), { refus: 'carte-deja-jointe-dans-le-set' }));
+ok('entrée n°103 : le produit n°003 ne la désigne pas (le numéro de l\'entrée seul compte)', () => assert.notStrictEqual((parEntree('103', [prod(101, 'Zekrom ex', '003')], []).ligne || {}).idProduct, 101));
+ok('carte à deux entrées : un produit SANS numéro n\'est pas joint par le nom à une entrée numérotée', () => assert.deepStrictEqual(parEntree('103', [prod(102, 'Zekrom ex', null)], []), { refus: 'plusieurs-entrees-sans-numero' }));
+ok('carte à deux entrées : la voie nom+attaques ne joint pas non plus un produit SANS numéro', () => {
+    const autre = { _id: 91, nomEn: 'Zekrom ex', sets: ['Test-Set'], impressions: [], attaques: ['Other'] };
+    assert.deepStrictEqual(parEntree('103', [prod(103, 'Zekrom ex [Bolt]', null), prod(104, 'Zekrom ex [Other]', null)], [], 2, [...cartesDuSet, dbl, autre]), { refus: 'nom-ambigu' });
 });
 // ── énergies : « Speed Lightning Energy » n'est PAS « Lightning Energy » ; « Basic X » = « X » reste joint par le nom seul
 ok('Basic Water Energy / Water Energy : joint par le nom (clé « Basic » existante), pas par une voie neuve', () => {

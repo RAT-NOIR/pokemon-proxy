@@ -10,7 +10,7 @@
 const { decomposerNomCardmarket, nomJointDe, clesNom, cleNumero, temoinDuNom, cleAttaque } = require('./jointure');
 const { gardeNomSeul, numerosExacts, cleNom } = require('./garde-nom-seul');
 
-const RAISONS = Object.freeze(['carte-deja-jointe-dans-le-set', 'produit-deja-joint', 'plusieurs-produits-au-numero', 'nom-contredit', 'nom-contredit-numero', 'nom-ambigu', 'nom-inclus-seulement', 'aucun-produit']);   // inchangée : la voie nom+attaques ne crée aucune raison
+const RAISONS = Object.freeze(['carte-deja-jointe-dans-le-set', 'produit-deja-joint', 'plusieurs-produits-au-numero', 'nom-contredit', 'nom-contredit-numero', 'nom-ambigu', 'nom-inclus-seulement', 'aucun-produit', 'plusieurs-entrees-sans-numero']);   // inchangée : la voie nom+attaques ne crée aucune raison
 const motsDe = n => String(n || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 const refus = raison => ({ refus: raison });
 
@@ -20,13 +20,20 @@ const refus = raison => ({ refus: raison });
  *   lignesDuSet : les lignes cartes_produits DÉJÀ présentes dans ce set (à enrichir par l'appelant des lignes qu'il vient d'accepter).
  * @returns {{ligne: object}|{refus: string}}
  */
-function jugerJointure({ carte, set, produitsSansLigne, produitsDuSet, cartesDuSet, lignesDuSet, regles }) {
+function jugerJointure({ carte, set, produitsSansLigne, produitsDuSet, cartesDuSet, lignesDuSet, regles, numero, nEntreesCarte }) {
     const { impressionDuSet, normaliserNumero, expansionsDuSet, tirageDuSet } = regles || {};
     for (const [k, f] of Object.entries({ impressionDuSet, normaliserNumero, expansionsDuSet, tirageDuSet })) if (typeof f !== 'function') throw new Error(`jugerJointure : règle injectée absente (${k}) — jamais de repli`);
     const idsExpansion = [].concat(set.idExpansion ?? []);
     if (!idsExpansion.length) throw new Error(`jugerJointure : le set ${set._id} n'a pas d'idExpansion`);
     // 1. la carte a déjà son produit dans ce set
-    if (lignesDuSet.some(l => l.carteId === carte._id)) return refus('carte-deja-jointe-dans-le-set');
+    // 🔑 JUGEMENT PAR ENTRÉE AFFICHÉE (carte, numéro), comme l'audit : `numero` (normalisé, ou null) désigne l'entrée ; absent = ancien jugement par carte.
+    //    Une ligne couvre l'entrée si son numeroFiche est celui de l'entrée, ou si elle n'en a pas ET que la carte n'a qu'une entrée.
+    const parEntree = numero !== undefined;
+    const cleDe = n => { const v = regles.normaliserNumero(n); return v === null || v === undefined ? null : cleNumero(v); };
+    const cleEntree = parEntree && numero !== null ? cleDe(numero) : null;
+    const restreint = cleEntree !== null && (nEntreesCarte || 1) > 1;   // carte à plusieurs entrées numérotées : un produit sans numéro ne se joint jamais par le nom
+    const couvre = l => l.carteId === carte._id && (!parEntree || numero === null || (l.numeroFiche != null && l.numeroFiche !== '' ? cleDe(l.numeroFiche) === cleEntree : (nEntreesCarte || 1) === 1));
+    if (lignesDuSet.some(couvre)) return refus('carte-deja-jointe-dans-le-set');
     const prisIds = new Set(lignesDuSet.map(l => l.idProduct));
     const sansLigne = produitsSansLigne.filter(p => idsExpansion.includes(p.idExpansion));
     const tous = (produitsDuSet || produitsSansLigne).filter(p => idsExpansion.includes(p.idExpansion));
@@ -36,7 +43,7 @@ function jugerJointure({ carte, set, produitsSansLigne, produitsDuSet, cartesDuS
     const laCarte = cartes.find(c => c._id === carte._id) || { ...carte, attaques: (carte.attaques || []).map(a => (typeof a === 'string' ? { nom: a } : a)) };
     const decomp = p => decomposerNomCardmarket(p.name);
     const cleN = n => { const v = normaliserNumero(n); return v === null || v === undefined ? null : cleNumero(v); };
-    const imps = (carte.impressions || []).filter(i => impressionDuSet(i, cible));
+    const imps = (carte.impressions || []).filter(i => impressionDuSet(i, cible) && (cleEntree === null || cleN(i.numero) === cleEntree));
     const ligneDe = (p, preuve, numeroFiche, detail) => ({ _id: `${carte._id}|${p.idProduct}`, carteId: carte._id, idProduct: p.idProduct, idExpansion: p.idExpansion, tirage: cible.tirage, preuve, detail, numeroFiche, slug: p.slug ?? null, slugSet: p.slugSet ?? set._id ?? null, verifieLe: new Date() });
 
     // 2. PAR LE NUMÉRO : le numéro de l'impression de la carte dans CE set désigne un produit de l'expansion
@@ -80,6 +87,7 @@ function jugerJointure({ carte, set, produitsSansLigne, produitsDuSet, cartesDuS
         if (homonymes.some(c => c._id !== carte._id && attDe(c).size === 0)) return null;
         const numP = cleN(numeroDuProduit.get(p.idProduct));
         if (numP !== null && clesCarte.size && !clesCarte.has(numP)) return null;
+        if (restreint && numP === null) return null;
         // carte sans numéro dans ce set : un produit numéroté qui porte le numéro d'une AUTRE carte du set est refusé
         if (numP !== null && !clesCarte.size && cartes.some(c => c._id !== carte._id && (c.impressions || []).filter(i => impressionDuSet(i, cible)).some(i => cleN(i.numero) === numP))) return null;
         // numeroFiche = null : si un numéro concordait, la voie set+numero (étape 2) aurait déjà décidé ; ici la carte n'a pas de numéro à rapporter.
@@ -92,6 +100,7 @@ function jugerJointure({ carte, set, produitsSansLigne, produitsDuSet, cartesDuS
     // le produit porte un numéro, la carte en a dans ce set, aucun ne correspond : le numéro contredit le nom
     const numP = cleN(numeroDuProduit.get(p.idProduct));
     if (numP !== null && clesCarte.size && !clesCarte.has(numP)) return refus('nom-contredit-numero');
+    if (restreint && numP === null) return refus('plusieurs-entrees-sans-numero');
     const brouillon ={ _id: `${carte._id}|${p.idProduct}`, carteId: carte._id, idProduct: p.idProduct, preuve: 'set+nom-seul' };
     const g = gardeNomSeul({ lignes: [brouillon], produits: tous.map(q => ({ idProduct: q.idProduct, nom: decomp(q).nom, attaques: decomp(q).attaques })), cartes });
     if (!g.gardees.length) return parAttaques() || refus('nom-ambigu');

@@ -55,45 +55,57 @@ async function lancerSimulation() {
     for (const p of produits) {
         const cands = setsParExpansion.get(p.idExpansion) || [];
         const s = cands.length ? (cands.find(x => x._id === p.setId) || cands[0]) : (p.setId && setPublie.get(p.setId) ? setPublie.get(p.setId) : null);
-        if (s) prodsParSet.get(s._id).push({ idProduct: p.idProduct, idExpansion: p.idExpansion, name: p.name, numero: numeroDe.get(p.idProduct) ?? null, slug: null, slugSet: null, sansLigne: !!(p.fiche && p.fiche.classe === 'SANS_LIGNE'), ficheCarteId: p.fiche && p.fiche.carteId != null ? p.fiche.carteId : null, ficheSetId: p.fiche ? p.fiche.setId : null });
+        if (s) prodsParSet.get(s._id).push({ idProduct: p.idProduct, idExpansion: p.idExpansion, name: p.name, numero: numeroDe.get(p.idProduct) ?? null, slug: null, slugSet: null, sansLigne: !!(p.fiche && p.fiche.classe === 'SANS_LIGNE'), ficheCarteId: p.fiche && p.fiche.carteId != null ? p.fiche.carteId : null, ficheNumero: p.fiche ? p.fiche.numero ?? null : null, ficheSetId: p.fiche ? p.fiche.setId : null });
     }
     const cartesParSet = new Map();
     for (const c of cartes) if (typeof c.nomEn === 'string' && c.nomEn !== '') for (const s of new Set(c.sets || [])) (cartesParSet.get(s) || cartesParSet.set(s, []).get(s)).push(c);
     const lignesParSet = new Map();
-    for (const l of lignes) if (l.slugSet) (lignesParSet.get(l.slugSet) || lignesParSet.set(l.slugSet, []).get(l.slugSet)).push({ carteId: l.carteId, idProduct: l.idProduct });
+    for (const l of lignes) if (l.slugSet) (lignesParSet.get(l.slugSet) || lignesParSet.set(l.slugSet, []).get(l.slugSet)).push({ carteId: l.carteId, idProduct: l.idProduct, numeroFiche: l.numeroFiche ?? null });
     const aEcrire = [], refus = {}, parSet = {}, preuves = {}, refusDetail = [];
     for (const r of RAISONS) refus[r] = 0;
-    let auditees = 0, avecLigne = 0, jugees = 0;
+    let auditees = 0, avecLigne = 0, jugees = 0;   // jugées = entrées affichées (carte, numéro) ; avecLigne = refus « déjà couverte »
     for (const s of publies) {
         const membres = (cartesParSet.get(s._id) || []).sort((a, b) => a._id - b._id);
         const prods = prodsParSet.get(s._id);
         if (!membres.length || !prods.length) continue;
         // lignes du set : cartes_produits (slugSet) + produits dont la fiche désigne (carte, set), comme clones.js
         const lignesDuSet = [...(lignesParSet.get(s._id) || [])];
-        for (const p of prods) if (p.ficheCarteId !== null && p.ficheSetId === s._id) lignesDuSet.push({ carteId: p.ficheCarteId, idProduct: p.idProduct });
-        const avec = new Set(lignesDuSet.map(l => l.carteId));
+        for (const p of prods) if (p.ficheCarteId !== null && p.ficheSetId === s._id) lignesDuSet.push({ carteId: p.ficheCarteId, idProduct: p.idProduct, numeroFiche: p.ficheNumero ?? null });
         const sansLigne = prods.filter(p => p.sansLigne);
+        const cible = { tirage: regles.tirageDuSet(s), expansions: regles.expansionsDuSet(s), deck: s.deck ?? null };
         for (const c of membres) {
-            auditees++;
-            if (avec.has(c._id)) { avecLigne++; continue; }
-            jugees++;
-            const r = jugerJointure({ carte: c, set: s, produitsSansLigne: sansLigne, produitsDuSet: prods, cartesDuSet: membres, lignesDuSet, regles });
-            if (r.refus) {
-                refus[r.refus]++;
-                if (r.refus === 'nom-ambigu' || r.refus === 'nom-inclus-seulement') refusDetail.push({ carteId: c._id, set: s._id, raison: r.refus, nomCarte: c.nomEn, produitsCandidats: candidatsDuRefus(c, sansLigne).map(p => ({ idProduct: p.idProduct, name: p.name, numero: p.numero })) });
-                continue;
+            // les ENTRÉES AFFICHÉES de la carte dans ce set, comme audit-sets.js:94-101 : un numéro normalisé par entrée, ou une entrée sans numéro
+            const nums = [...new Set((c.impressions || []).filter(i => regles.impressionDuSet(i, cible)).map(i => regles.normaliserNumero(i.numero)).filter(n => n !== null && n !== undefined))];
+            const entrees = nums.length ? nums : [null];
+            for (const numero of entrees) {
+                auditees++;
+                jugees++;
+                const r = jugerJointure({ carte: c, set: s, produitsSansLigne: sansLigne, produitsDuSet: prods, cartesDuSet: membres, lignesDuSet, regles, numero, nEntreesCarte: entrees.length });
+                if (r.refus) {
+                    refus[r.refus]++;
+                    if (r.refus === 'nom-ambigu' || r.refus === 'nom-inclus-seulement') refusDetail.push({ carteId: c._id, set: s._id, numero, raison: r.refus, nomCarte: c.nomEn, produitsCandidats: candidatsDuRefus(c, sansLigne).map(p => ({ idProduct: p.idProduct, name: p.name, numero: p.numero })) });
+                    continue;
+                }
+                preuves[r.ligne.preuve] = (preuves[r.ligne.preuve] || 0) + 1;
+                lignesDuSet.push({ carteId: r.ligne.carteId, idProduct: r.ligne.idProduct, numeroFiche: r.ligne.numeroFiche });
+                aEcrire.push({ ...r.ligne, set: s._id, nomEn: c.nomEn });
+                parSet[s._id] = (parSet[s._id] || 0) + 1;
             }
-            preuves[r.ligne.preuve] = (preuves[r.ligne.preuve] || 0) + 1;
-            lignesDuSet.push({ carteId: r.ligne.carteId, idProduct: r.ligne.idProduct });
-            avec.add(c._id);
-            aEcrire.push({ ...r.ligne, set: s._id, nomEn: c.nomEn });
-            parSet[s._id] = (parSet[s._id] || 0) + 1;
         }
     }
-    const denominateurs = { sets: sets.length, setsPublies: publies.length, cartes: cartes.length, lignes: lignes.length, produits: produits.length, appartenancesAuditees: auditees, avecLigneDansLeSet: avecLigne, sansLigneJugees: jugees };
+    avecLigne = refus['carte-deja-jointe-dans-le-set'];
+    const denominateurs = { sets: sets.length, setsPublies: publies.length, cartes: cartes.length, lignes: lignes.length, produits: produits.length, entreesAffichees: auditees, entreesDejaCouvertes: avecLigne, entreesSansLigneJugees: jugees - avecLigne };
     if (jugees !== aEcrire.length + Object.values(refus).reduce((a, b) => a + b, 0)) throw new Error('concordance rompue : jugées ≠ à écrire + refus');
-    if (!jugees) throw new Error('aucune appartenance sans ligne jugée : une simulation sur zéro n\'est pas une mesure (§41)');
+    if (!jugees) throw new Error('aucune entrée jugée : une simulation sur zéro n\'est pas une mesure (§41)');
     console.log(`dénominateurs : ${JSON.stringify(denominateurs)}`);
+    // rapprochement avec l'audit du jour : entrées sans produit (causes « produits-sans-ligne… » et « …meme-numero ») contre entrées jugées sans couverture
+    try {
+        const A = JSON.parse(fs.readFileSync(path.join(DOSSIER, 'AUDIT-SETS.json'), 'utf8'));
+        const causes = {}; for (const st of A.sets) for (const it of st.sansProduit.items) causes[it.cause] = (causes[it.cause] || 0) + 1;
+        const cibles = (causes['produits-sans-ligne-dans-l-expansion'] || 0) + (causes['produit-sans-ligne-meme-numero'] || 0);
+        const restes = Object.fromEntries(Object.entries(refus).filter(([k, v]) => k !== 'carte-deja-jointe-dans-le-set' && v));
+        console.log(`RAPPROCHEMENT audit (${A.le || 'date ?'}) : entrées jugées sans couverture ${jugees - avecLigne} · audit sansProduit causes produits-sans-ligne-dans-l-expansion + meme-numero = ${cibles} · toutes causes d'audit ${JSON.stringify(causes)} · à écrire ${aEcrire.length} · reste par raison ${JSON.stringify(restes)}`);
+    } catch (e) { console.log(`RAPPROCHEMENT audit impossible : ${String(e.message).slice(0, 120)}`); }
     console.log(`À ÉCRIRE ${aEcrire.length} · par preuve ${JSON.stringify(preuves)} · refus par raison ${JSON.stringify(refus)}`);
     console.log('par set (top 30) :');
     for (const [s, n] of Object.entries(parSet).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).slice(0, 30)) console.log(`   ${s} : ${n}`);
@@ -130,13 +142,15 @@ async function lancerEcriture() {
         const ids = [...new Set(plan.lignes.map(l => l.carteId))], prodIds = [...new Set(plan.lignes.map(l => l.idProduct))];
         const vives = [], vivesProd = [];
         const RAISON = 'une carte ou un produit sans ligne est le cas attendu de ce lot';
-        for (const m of morceaux(ids, 500)) vives.push(...await lireMongo(col, { carteId: { $in: m } }, { nom: 'cartes_produits (cartes du plan)', videAutorise: RAISON, projection: { carteId: 1, idProduct: 1, slugSet: 1, idExpansion: 1 } }));
+        for (const m of morceaux(ids, 500)) vives.push(...await lireMongo(col, { carteId: { $in: m } }, { nom: 'cartes_produits (cartes du plan)', videAutorise: RAISON, projection: { carteId: 1, idProduct: 1, slugSet: 1, idExpansion: 1, numeroFiche: 1 } }));
         for (const m of morceaux(prodIds, 500)) vivesProd.push(...await lireMongo(col, { idProduct: { $in: m } }, { nom: 'cartes_produits (produits du plan)', videAutorise: RAISON, projection: { carteId: 1, idProduct: 1 } }));
         console.log(`état vivant relu : ${vives.length} lignes des ${ids.length} cartes · ${vivesProd.length} lignes des ${prodIds.length} produits`);
         const erreurs = [];
         const produitPris = new Set(vivesProd.map(l => l.idProduct));
         for (const l of plan.lignes) {
-            if (vives.some(v => v.carteId === l.carteId && (v.slugSet === l.slugSet || v.idExpansion === l.idExpansion))) erreurs.push(`${l._id} : la carte a désormais une ligne dans ce set`);
+            // une carte à plusieurs entrées (numéros) peut recevoir une ligne par entrée : conflit seulement si la ligne vivante couvre CETTE entrée (même numeroFiche, ou l'une des deux sans numeroFiche)
+            const cleF = n => (n == null || n === '' ? null : require('./collecte-cartes/jointure').cleNumero(n));
+            if (vives.some(v => v.carteId === l.carteId && (v.slugSet === l.slugSet || v.idExpansion === l.idExpansion) && (cleF(v.numeroFiche) === null || cleF(l.numeroFiche) === null || cleF(v.numeroFiche) === cleF(l.numeroFiche)))) erreurs.push(`${l._id} : la carte a désormais une ligne qui couvre cette entrée dans ce set`);
             if (produitPris.has(l.idProduct)) erreurs.push(`${l._id} : le produit a désormais une ligne`);
         }
         if (erreurs.length) {
