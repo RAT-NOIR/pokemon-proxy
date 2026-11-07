@@ -73,7 +73,7 @@ async function charger(navigateur, etat, reponses, attenteMs, { url = URL1, html
         verifier('   un seul envoi pour la page entière (3 cartes), pas de lots de 25', lots.map(l => l.corps.cartes.length), [3, 3, 3]);
         // Seconde relecture (2026-09-26, nuit) : la variante n'est plus envoyée — le serveur la relit du slug (une seule règle, la sienne ;
         // la copie du script exigeait un tiret après « Vk » et ratait « Mewtwo-V-UNION-V3 »).
-        verifier('   slug nettoyé de sa query string, numéro du titre, code décodé, AUCUNE variante envoyée', lots[0].corps.cartes[2], { idProduct: 907767, numero: '003', codeSet: '30C', nomFr: 'Muciole', slug: 'Volbeat-30C003', slugSet: '30th-Celebration' });
+        verifier('   slug nettoyé de sa query string, numéro du titre, code décodé, AUCUNE variante envoyée', lots[0].corps.cartes[2], { idProduct: 907767, numero: '003', codeSet: '30C', nomFr: 'Muciole', slug: 'Volbeat-30C003', slugSet: '30th-Celebration', urlPage: '/fr/Pokemon/Products/Singles/30th-Celebration' });
         verifier('   (point 1) aucune carte du lot ne porte de variante calculée par le client', lots[0].corps.cartes.some(c => 'variante' in c), false);
         // Point 8 : le panneau dit sa version (l'export et le journal la disaient, le panneau non).
         verifier('   (point 8) le panneau affiche la version du script', new RegExp(`Apprentissage ${/@version\s+(\S+)/.exec(SCRIPT)[1].replace('.', '\\.')}`).test(A.panneau), true);
@@ -145,7 +145,7 @@ ${dri(826050, 'Aaa-DRI001', 'Aaa', '001')}${dri(826051, 'Bbb-DRI002', 'Bbb', '00
         // 1.9 (testeur, 2026-09-26) : un produit n'est plus JAMAIS écarté à cause de son image — il part par son lien et son titre,
         // sans idProduct, et c'est le serveur qui le déduit (collecte-cartes/deduire-produit.js).
         verifier('10. 3 vignettes, 3 lues (le webp en data-src, et la sans-image par son lien) : l\'envoi porte les 3', lotJ.map(l => l.corps.cartes.map(c => c.idProduct)), [[826050, 826051, null]]);
-        verifier('   la sans-image part avec son slug, son numéro et son code de TITRE, marquée', lotJ[0]?.corps.cartes[2], { idProduct: null, numero: '003', codeSet: 'DRI', nomFr: 'Ccc', slug: 'Ccc-DRI003', slugSet: 'Destined-Rivals', sansImage: true });
+        verifier('   la sans-image part avec son slug, son numéro et son code de TITRE, marquée', lotJ[0]?.corps.cartes[2], { idProduct: null, numero: '003', codeSet: 'DRI', nomFr: 'Ccc', slug: 'Ccc-DRI003', slugSet: 'Destined-Rivals', sansImage: true, urlPage: '/fr/Pokemon/Products/Singles?idCategory=51&idExpansion=6096' });
         const e = (J.store.rm_journal || [])[0] || {};
         verifier('11. le journal : vignettes, lues, 0 écartée, 1 sans image (avec son lien), lecture non standard dite', [e.v, e.vignettes, e.lues, e.ecartees, e.sansImage, e.detailSansImage?.[0]?.href, e.lecturesAutres], [VERSION_ENTETE, 3, 3, 0, 1, '/fr/Pokemon/Products/Singles/Destined-Rivals/Ccc-DRI003', ['826051:data-src:webp']]);
         verifier('12. le journal : total annoncé, export, filtres COCHÉS seulement, paramètres, réponse du serveur', [e.totalAnnonce?.n, e.produitsExport, e.filtres, e.params, e.envoi?.status, e.envoi?.nouvelles, e.envoi?.deduites],
