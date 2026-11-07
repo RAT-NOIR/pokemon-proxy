@@ -206,7 +206,8 @@ function lireConfig(env = process.env) {
         empreinte: { secret: secretEmpreinte, jours: entier('V2_EMPREINTE_JOURS', env.V2_EMPREINTE_JOURS, 365, 1) },
         origines: { extension: 'chrome-extension://fgibgdgmadfejkaapeohbhaoolhgpkhb',
                     extensionDev: banc ? (env.V2_ORIGINE_EXTENSION_DEV || null) : null,
-                    site: 'https://rat-market.fr' },
+                    site: 'https://rat-market.fr',
+                    siteWww: 'https://www.rat-market.fr' },       // L1 : admise au même titre que l'apex (CORS avec cookies, origine des écritures) ; liste FERMÉE à ces deux, voir comptes/origines-site.js
         // COTES-VISUELS : d'où l'API charge la décision des visuels et le lien fiche → produits. 'fichier' (défaut) : l'archive compacte précalculée HORS de l'API, objet R2 PRIVÉ lu avec des clés de lecture
         // dédiées et authentifié par un HMAC (variables V2_VISUELS_R2_* et V2_VISUELS_HMAC, lues par chargeur/montage.js, fermées par défaut : absentes ⇒ « sans visuel ») ; 'calcul' : calculée dans un fil plafonné
         // depuis `cartes` en lecture seule (pic mesuré ~320 Mo : à n'allumer que sur un service qui l'accepte).

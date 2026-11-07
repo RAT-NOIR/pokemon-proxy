@@ -157,7 +157,7 @@ const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empr
     await semer('double');
     const FAUX = path.join(__dirname, 'faux-reseau-scanner.js');          // = faux-reseau-v2.js (le faux réseau du verrou) + le data-URL du scanner rejoué
     const baseEnv = { VERROU_CHARGES: CHARGES, JETON_API: 'jeton-verrou', MONGODB_BASE: 'test_scratch', OPENROUTER_API_KEY: '', V2_VISUELS_BANC_FICHIER: FICHIER_VIS };
-    const srv = await demarrer(FAUX, { ...baseEnv, RM_API_V2: '1' });
+    const srv = await demarrer(FAUX, { ...baseEnv, RM_API_V2: '1', V2_TURNSTILE: 'off' });   // L1 : la connexion exige Turnstile ; le serveur enfant (base de banc) le coupe, le défi se juge dans test-comptes-defi.js
     if (!await srv.attendreMongo()) throw new Error('Mongo non connecté');
     const U = `http://127.0.0.1:${srv.port}`;
     const ident = (url, etat, attendu, jeton, c = corpsId(), { cleIdem = cle(), sansCle = false, entetes = {} } = {}) =>
@@ -517,9 +517,11 @@ const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empr
         await postS('POST /api/compte/connexion', 'sans Origin du site', 403, '/api/compte/connexion', { email: 'ab@gmail.com', motDePasse: MDP }, ip());
         for (let k = 0; k < 10; k++) await postS('POST /api/compte/connexion', 'essais sur une adresse', 401, '/api/compte/connexion', { email: 'cible@exemple.fr', motDePasse: 'x' + k });
         await postS('POST /api/compte/connexion', 'plafond par adresse atteint', 429, '/api/compte/connexion', { email: 'cible@exemple.fr', motDePasse: 'x' });
+        await postS('POST /api/compte/connexion', 'jeton Turnstile vide (L1 : defi-anti-robot)', 422, '/api/compte/connexion', { email: 'ab@gmail.com', motDePasse: MDP, turnstile: '' });
         // oubli / réinitialisation
         await postS('POST /api/compte/mot-de-passe-oublie', 'adresse connue', 202, '/api/compte/mot-de-passe-oublie', { email: 'ab@gmail.com' });
         await postS('POST /api/compte/mot-de-passe-oublie', 'adresse inconnue (même réponse)', 202, '/api/compte/mot-de-passe-oublie', { email: 'inconnu@exemple.fr' });
+        await postS('POST /api/compte/mot-de-passe-oublie', 'jeton Turnstile vide (L1 : defi-anti-robot)', 422, '/api/compte/mot-de-passe-oublie', { email: 'ab@gmail.com', turnstile: '' });
         await postS('POST /api/compte/mot-de-passe-oublie', 'sans Origin du site', 403, '/api/compte/mot-de-passe-oublie', { email: 'ab@gmail.com' }, ip());
         const memO = ip(); for (let k = 0; k < 3; k++) await postS('POST /api/compte/mot-de-passe-oublie', 'sous le plafond', 202, '/api/compte/mot-de-passe-oublie', { email: 'inconnu@exemple.fr' }, { ...siteH(null), ...memO });
         await postS('POST /api/compte/mot-de-passe-oublie', 'plafond par IP atteint', 429, '/api/compte/mot-de-passe-oublie', { email: 'inconnu@exemple.fr' }, { ...siteH(null), ...memO });
@@ -541,6 +543,7 @@ const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empr
         const renv1 = await postS('POST /api/compte/renvoyer-verification', 'compte non vérifié', 202, '/api/compte/renvoyer-verification', { email: 'plaf1@exemple.fr' });
         const renv2 = await postS('POST /api/compte/renvoyer-verification', 'adresse inconnue (même réponse)', 202, '/api/compte/renvoyer-verification', { email: 'inconnue@exemple.fr' });
         H.v('renvoi : la réponse est identique pour une adresse connue et inconnue (octet pour octet)', renv1.texte === renv2.texte, true);
+        await postS('POST /api/compte/renvoyer-verification', 'jeton Turnstile vide (L1 : defi-anti-robot)', 422, '/api/compte/renvoyer-verification', { email: 'plaf1@exemple.fr', turnstile: '' });
         await postS('POST /api/compte/renvoyer-verification', 'sans Origin du site', 403, '/api/compte/renvoyer-verification', { email: 'plaf1@exemple.fr' }, ip());
         const memRv = ip(); for (let k = 0; k < 3; k++) await postS('POST /api/compte/renvoyer-verification', 'sous le plafond', 202, '/api/compte/renvoyer-verification', { email: 'inconnue@exemple.fr' }, { ...siteH(null), ...memRv });
         await postS('POST /api/compte/renvoyer-verification', 'plafond par IP atteint', 429, '/api/compte/renvoyer-verification', { email: 'inconnue@exemple.fr' }, { ...siteH(null), ...memRv });

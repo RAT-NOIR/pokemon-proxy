@@ -1238,6 +1238,16 @@
               }
             }
           },
+          "422": {
+            "description": "ENTREE avec detail `defi-anti-robot` (L1 : jeton Turnstile absent, vide, non texte ou refusé). Rendu avant toute lecture du compte : il ne révèle rien sur l'adresse.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
           "429": {
             "description": "QUOTA (avec `solde`) ou DEBIT (avec `reessayerDans`).",
             "content": {
@@ -1376,6 +1386,16 @@
           },
           "403": {
             "description": "VERIFICATION (adresse non confirmée) ou ORIGINE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ENTREE avec detail `defi-anti-robot` (L1 : jeton Turnstile absent, vide, non texte ou refusé). Rendu avant toute lecture du compte : il ne révèle rien sur l'adresse.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1901,6 +1921,16 @@
           },
           "403": {
             "description": "ORIGINE (Origin exacte du site et X-Rat-Market obligatoires).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ENTREE avec detail `defi-anti-robot` (L1 : jeton Turnstile absent, vide, non texte ou refusé). Rendu avant toute lecture du compte : il ne révèle rien sur l'adresse.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3790,7 +3820,7 @@
         "name": "X-Rat-Market",
         "in": "header",
         "required": true,
-        "description": "Obligatoire sur toute écriture authentifiée par cookie (avec `Origin: https://rat-market.fr`).",
+        "description": "Obligatoire sur toute écriture authentifiée par cookie (avec `Origin: https://rat-market.fr` ou `https://www.rat-market.fr`, liste fermée).",
         "schema": {
           "type": "string",
           "enum": [
@@ -7516,28 +7546,40 @@
       },
       "RequeteConnexion": {
         "type": "object",
+        "description": "L1 : le jeton Turnstile est exigé, comme à l'inscription. Ordre des refus : origine (403), limite par IP (429), défi (422), limite par adresse (429), identifiants (401).",
         "properties": {
           "email": {
             "type": "string"
           },
           "motDePasse": {
             "type": "string"
+          },
+          "turnstile": {
+            "type": "string",
+            "description": "Jeton Cloudflare Turnstile du widget du site (le même que pour l'inscription). OBLIGATOIRE (L1) : absent, vide, non texte ou refusé => 422 ENTREE, detail `defi-anti-robot`. Usage unique."
           }
         },
         "required": [
           "email",
-          "motDePasse"
+          "motDePasse",
+          "turnstile"
         ]
       },
       "RequeteMotDePasseOublie": {
         "type": "object",
+        "description": "L1 : le jeton Turnstile est exigé, comme à l'inscription. Un défi refusé est le seul refus de la route avant le 202 (hors origine et limites).",
         "properties": {
           "email": {
             "type": "string"
+          },
+          "turnstile": {
+            "type": "string",
+            "description": "Jeton Cloudflare Turnstile du widget du site (le même que pour l'inscription). OBLIGATOIRE (L1) : absent, vide, non texte ou refusé => 422 ENTREE, detail `defi-anti-robot`. Usage unique."
           }
         },
         "required": [
-          "email"
+          "email",
+          "turnstile"
         ]
       },
       "RequeteReinitialisation": {
@@ -7558,13 +7600,19 @@
       },
       "RequeteRenvoiVerification": {
         "type": "object",
+        "description": "L1 : le jeton Turnstile est exigé, comme à l'inscription. Un défi refusé est le seul refus de la route avant le 202 (hors origine et limites).",
         "properties": {
           "email": {
             "type": "string"
+          },
+          "turnstile": {
+            "type": "string",
+            "description": "Jeton Cloudflare Turnstile du widget du site (le même que pour l'inscription). OBLIGATOIRE (L1) : absent, vide, non texte ou refusé => 422 ENTREE, detail `defi-anti-robot`. Usage unique."
           }
         },
         "required": [
-          "email"
+          "email",
+          "turnstile"
         ]
       },
       "RequeteEtiquetteBanc": {

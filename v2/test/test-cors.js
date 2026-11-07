@@ -68,6 +68,13 @@ function fabriquerApp(cfg) {
     r = await H.appel(u, '/api/compte/connexion', { methode: 'POST', corps: {}, entetes: o(SITE) });
     H.v('   POST réel : Allow-Origin + Credentials', [r.entetes[ACAO], r.entetes['access-control-allow-credentials']], [SITE, 'true']);
 
+    // 3 bis. L1 : www.rat-market.fr est admis au même titre que l'apex (profil site, cookies), liste fermée
+    const WWW = 'https://www.rat-market.fr';
+    r = await H.appel(u, '/api/compte/connexion', { methode: 'OPTIONS', entetes: o(WWW, { 'access-control-request-method': 'POST' }) });
+    H.v('3 bis. www, OPTIONS /api/compte/connexion => 204, origine exacte, cookies', [r.statut, r.entetes[ACAO], r.entetes['access-control-allow-credentials'], r.entetes['access-control-allow-headers']], [204, WWW, 'true', 'Content-Type, X-Rat-Market, Idempotency-Key']);
+    r = await H.appel(u, '/ping', { entetes: o(WWW) });
+    H.v('   www sur /ping : origine v2 reconnue', [r.entetes[ACAO], r.json.origineV2], [WWW, true]);
+
     // 4. croisements et voisines refusés
     const refus = [
         ['site sur /api/identifier', SITE, '/api/identifier'],
@@ -79,7 +86,13 @@ function fabriquerApp(cfg) {
         ['autre extension', 'chrome-extension://abcdefghijklmnopabcdefghijklmnop', '/api/solde'],
         ['extension + suffixe', EXT + 'x', '/ping'],
         ['http://rat-market.fr', 'http://rat-market.fr', '/api/compte/connexion'],
-        ['https://www.rat-market.fr', 'https://www.rat-market.fr', '/ping'],
+        ['www sur /api/identifier (hors profil site)', 'https://www.rat-market.fr', '/api/identifier'],
+        ['autre sous-domaine api-v2', 'https://api-v2.rat-market.fr', '/ping'],
+        ['sous-domaine inconnu', 'https://evil.rat-market.fr', '/api/compte/connexion'],
+        ['www en http', 'http://www.rat-market.fr', '/ping'],
+        ['www + suffixe', 'https://www.rat-market.fr.evil.fr', '/ping'],
+        ['www avec port', 'https://www.rat-market.fr:8443', '/ping'],
+        ['www en majuscules', 'HTTPS://WWW.RAT-MARKET.FR', '/ping'],
         ['https://rat-market.fr:8443', 'https://rat-market.fr:8443', '/ping'],
         ['*.onrender.com', 'https://pokemon-proxy.onrender.com', '/ping'],
         ['Origin: null', 'null', '/ping'],

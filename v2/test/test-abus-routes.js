@@ -199,12 +199,12 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         'POST /api/compte/lier': { auth: 'bearer', idemCle: true, base: () => ({ code: 'ABC123' }), nullables: [] },
         'POST /api/compte/delier': { auth: 'bearer', base: () => ({}), nullables: [] },
         'POST /api/compte/inscription': { auth: 'site', base: () => ({ email: mail(), turnstile: 't' }), nullables: [] },   // D6 : l'inscription ne prend plus de mot de passe
-        'POST /api/compte/connexion': { auth: 'site', base: () => ({ email: mail(), motDePasse: MDP }), nullables: [] },
+        'POST /api/compte/connexion': { auth: 'site', base: () => ({ email: mail(), motDePasse: MDP, turnstile: 't' }), nullables: [] },
         'POST /api/compte/deconnexion': { auth: 'site', base: () => ({}), nullables: [] },
         // 202 IDENTIQUE par construction (anti-énumération) : un e-mail de mauvais type n'est ni accepté ni refusé, il ne déclenche RIEN (aucune écriture, aucun courrier). Les objets d'opérateur, eux, sont refusés (400).
-        'POST /api/compte/mot-de-passe-oublie': { auth: 'site', base: () => ({ email: mail() }), nullables: [],
+        'POST /api/compte/mot-de-passe-oublie': { auth: 'site', base: () => ({ email: mail(), turnstile: 't' }), nullables: [],
             tolere: { email: { variantes: ['tableau', 'nombre', 'null'], ecriture: false, raison: '202 identique par construction (anti-énumération) : aucun traitement, aucune écriture' } } },
-        'POST /api/compte/renvoyer-verification': { auth: 'site', base: () => ({ email: mail() }), nullables: [],
+        'POST /api/compte/renvoyer-verification': { auth: 'site', base: () => ({ email: mail(), turnstile: 't' }), nullables: [],
             tolere: { email: { variantes: ['tableau', 'nombre', 'null'], ecriture: false, raison: '202 identique par construction (anti-énumération) : aucun traitement, aucune écriture' } } },
         'POST /api/compte/reinitialiser': { auth: 'site', base: () => ({ jeton: 'j'.repeat(43), motDePasse: MDP }), nullables: [] },
         'POST /api/compte/verification': { auth: 'site', base: () => ({ jeton: 'j'.repeat(43), motDePasse: MDP }), nullables: [] },   // D6 : lien + mot de passe choisi au clic
@@ -625,10 +625,10 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         const connus = [];
         for (let i = 0; i < 20; i++) { const adresse = mail(); await raw('comptes').insertOne(Object.assign(M.nouveauCompte({ email: adresse, emailCle: adresse, motDePasse: hash }), { verifie: true })); connus.push(adresse); }
         const t = { inconnue: [], faux: [] };
-        await envoyer(V, { methode: 'POST', chemin: '/api/compte/connexion', entetes: siteH(null), corps: { email: mail(), motDePasse: MDP } });   // échauffement
+        await envoyer(V, { methode: 'POST', chemin: '/api/compte/connexion', entetes: siteH(null), corps: { email: mail(), motDePasse: MDP, turnstile: 't' } });   // échauffement
         for (let i = 0; i < 20; i++) {
-            const r1 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/connexion', entetes: siteH(null), corps: { email: mail(), motDePasse: 'mot-de-passe-faux-1' } });
-            const r2 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/connexion', entetes: siteH(null), corps: { email: connus[i], motDePasse: 'mot-de-passe-faux-2' } });
+            const r1 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/connexion', entetes: siteH(null), corps: { email: mail(), motDePasse: 'mot-de-passe-faux-1', turnstile: 't' } });
+            const r2 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/connexion', entetes: siteH(null), corps: { email: connus[i], motDePasse: 'mot-de-passe-faux-2', turnstile: 't' } });
             t.inconnue.push(r1.ms); t.faux.push(r2.ms);
             if (r1.statut !== 401 || r2.statut !== 401 || r1.texte !== r2.texte) ecart('POST /api/compte/connexion', 'step2', `les deux échecs ne sont pas identiques (${r1.statut}/${r2.statut})`);
         }
@@ -645,22 +645,22 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         await svc.attendre();
         H.v('step 2 : inscription — adresse neuve et adresse déjà prise : 202, MÊMES OCTETS (corps et en-têtes)', [i1.statut, i2.statut, signature(i1) === signature(i2)], [202, 202, true]);
         // mot de passe oublié : adresse connue / inconnue
-        const o1 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/mot-de-passe-oublie', entetes: siteH(null), corps: { email: prise } });
-        const o2 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/mot-de-passe-oublie', entetes: siteH(null), corps: { email: mail() } });
+        const o1 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/mot-de-passe-oublie', entetes: siteH(null), corps: { email: prise, turnstile: 't' } });
+        const o2 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/mot-de-passe-oublie', entetes: siteH(null), corps: { email: mail(), turnstile: 't' } });
         await svc.attendre();
         H.v('step 2 : mot de passe oublié — adresse connue et inconnue : 202, MÊMES OCTETS', [o1.statut, o2.statut, signature(o1) === signature(o2)], [202, 202, true]);
         // renvoi de la vérification : compte non vérifié / vérifié / inconnu
         const nv = mail(); await raw('comptes').insertOne(Object.assign(M.nouveauCompte({ email: nv, emailCle: nv, motDePasse: hash }), { verifie: false }));
-        const v1 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/renvoyer-verification', entetes: siteH(null), corps: { email: nv } });
-        const v2 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/renvoyer-verification', entetes: siteH(null), corps: { email: prise } });
-        const v3 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/renvoyer-verification', entetes: siteH(null), corps: { email: mail() } });
+        const v1 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/renvoyer-verification', entetes: siteH(null), corps: { email: nv, turnstile: 't' } });
+        const v2 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/renvoyer-verification', entetes: siteH(null), corps: { email: prise, turnstile: 't' } });
+        const v3 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/renvoyer-verification', entetes: siteH(null), corps: { email: mail(), turnstile: 't' } });
         await svc.attendre();
         H.v('step 2 : renvoi — non vérifié, vérifié, inconnu : 202, MÊMES OCTETS', [v1.statut, v2.statut, v3.statut, signature(v1) === signature(v2), signature(v2) === signature(v3)], [202, 202, 202, true, true]);
         // le courrier n'est pas une arme : une même adresse ne reçoit pas plus de `renvoiParCompteHeure` liens de réinitialisation par heure, d'où que viennent les demandes
         courrier.envoyes.length = 0;
         const victime = mail(); await raw('comptes').insertOne(Object.assign(M.nouveauCompte({ email: victime, emailCle: victime, motDePasse: hash }), { verifie: true }));
-        const reps = [];        for (let k = 0; k < 8; k++) reps.push(await envoyer(V, { methode: 'POST', chemin: '/api/compte/mot-de-passe-oublie', entetes: siteH(null), corps: { email: victime } }));
-        const inconnue = await envoyer(V, { methode: 'POST', chemin: '/api/compte/mot-de-passe-oublie', entetes: siteH(null), corps: { email: mail() } });
+        const reps = [];        for (let k = 0; k < 8; k++) reps.push(await envoyer(V, { methode: 'POST', chemin: '/api/compte/mot-de-passe-oublie', entetes: siteH(null), corps: { email: victime, turnstile: 't' } }));
+        const inconnue = await envoyer(V, { methode: 'POST', chemin: '/api/compte/mot-de-passe-oublie', entetes: siteH(null), corps: { email: mail(), turnstile: 't' } });
         await svc.attendre();
         const recus = courrier.envoyes.filter(e => e.email === victime).length;
         // O1 (corrigé, I-3) : au plus `renvoiParCompteHeure` courriers par adresse et par heure, d'où que viennent les demandes (le plafond par IP se contourne avec des IP). Et la LIMITE NE SE VOIT PAS :

@@ -18,6 +18,18 @@ async function defi(cfg, corps, ip) {
     try { return (await t.verifier(corps.turnstile, ip)) === true ? 'ok' : 'refuse'; } catch (e) { console.error(`❌ [v2 turnstile] pilote en échec (${nomErreur(e)})`); return 'indispo'; }
 }
 const courrierDe = () => { try { return registre.obtenir('courrier'); } catch { return null; } };
+/** L1 : le défi Turnstile en garde de route (connexion, mot-de-passe-oublie, renvoyer-verification), avec la MÊME fonction `defi` et le MÊME refus que l'inscription
+ *  (422 ENTREE `defi-anti-robot`, 503 si le pilote manque ou tombe). Il se place APRÈS l'origine et la limite par IP, AVANT tout budget par adresse et toute lecture de compte :
+ *  un robot sans jeton ne consomme ni le budget d'un titulaire ni un hachage. `avecCourrier` : l'oubli et le renvoi n'ont pas de sens sans courrier (503 d'abord, comme l'inscription). */
+const exigerDefi = (cfg, { avecCourrier = false } = {}) => async (req, res, next) => {
+    try {
+        if (avecCourrier && !courrierDe()) return indispo(res);
+        const d = await defi(cfg, objet(req.body) ? req.body : {}, req.ip);
+        if (d === 'indispo') return indispo(res);
+        if (d === 'refuse') return repondreErreur(res, 'ENTREE', 'Vérification anti-robot échouée', { detail: 'defi-anti-robot' }, 422);
+        return next();
+    } catch (e) { console.error(`❌ [v2 defi] ${nomErreur(e)}`); return indispo(res); }
+};
 
 function routesComptes(router, cfg) {
     const site = [S.exigerOrigineSite(cfg)];                           // toute écriture du site : Origin + X-Rat-Market
@@ -50,7 +62,7 @@ function routesComptes(router, cfg) {
         const e = adresseDuCorps(q);
         return e ? J.empreinte(e) : `invalide-${L.empreinteIp(q.ip)}`;
     } });
-    router.post('/api/compte/connexion', ...site, connexionIp, parCompte, async (req, res) => {
+    router.post('/api/compte/connexion', ...site, connexionIp, exigerDefi(cfg), parCompte, async (req, res) => {
         try {
             const b = objet(req.body) ? req.body : {};
             const r = await svc.connecter({ email: b.email, motDePasse: b.motDePasse, cfg });
@@ -68,14 +80,14 @@ function routesComptes(router, cfg) {
         } catch (e) { console.error(`❌ [v2 deconnexion] ${nomErreur(e)}`); return indispo(res); }
     });
 
-    router.post('/api/compte/mot-de-passe-oublie', ...site, parIp('oubli-ip', cfg.limites.oubliIpHeure), async (req, res) => {
+    router.post('/api/compte/mot-de-passe-oublie', ...site, parIp('oubli-ip', cfg.limites.oubliIpHeure), exigerDefi(cfg, { avecCourrier: true }), async (req, res) => {
         try {
             const courrier = courrierDe(); if (!courrier) return indispo(res);
             svc.demanderReinit({ email: objet(req.body) ? req.body.email : undefined, cfg, courrier });   // détaché
             return res.status(202).json({ success: true });
         } catch (e) { console.error(`❌ [v2 mot-de-passe-oublie] ${nomErreur(e)}`); return indispo(res); }
     });
-    router.post('/api/compte/renvoyer-verification', ...site, parIp('renvoi-ip', cfg.limites.verificationIpHeure), async (req, res) => {
+    router.post('/api/compte/renvoyer-verification', ...site, parIp('renvoi-ip', cfg.limites.verificationIpHeure), exigerDefi(cfg, { avecCourrier: true }), async (req, res) => {
         try {
             const courrier = courrierDe(); if (!courrier) return indispo(res);
             svc.renvoyerVerification({ email: objet(req.body) ? req.body.email : undefined, cfg, courrier });   // détaché, réponse identique dans tous les cas
@@ -149,4 +161,4 @@ function routesComptes(router, cfg) {
         } catch (e) { console.error(`❌ [v2 verification] ${nomErreur(e)}`); return indispo(res); }
     });
 }
-module.exports = { routesComptes, defi, indispo, objet };
+module.exports = { routesComptes, defi, exigerDefi, indispo, objet };
