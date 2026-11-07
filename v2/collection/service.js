@@ -346,7 +346,13 @@ function cocher({ compteId, slug, cle, possedee, quantite, cfg, maintenant = new
 // ── L5/L6 : LE DÉTAIL PAR EXEMPLAIRE (forme K5 du site)
 const cmpEx = (a, b) => (a.etat < b.etat ? -1 : a.etat > b.etat ? 1 : a.langue < b.langue ? -1 : a.langue > b.langue ? 1 : 0);
 /** Le détail groupé [{ etat, langue, q }] → UN élément { etat, langue } par exemplaire (null quand non précisé), trié (état, langue) : la forme de K5. */
-const developper = entrees => { const out = []; for (const x of [...entrees].sort(cmpEx)) for (let i = 0; i < x.q; i++) out.push({ etat: x.etat || null, langue: x.langue || null }); return out; };
+const developper = (entrees, total = 0) => {
+    const out = [];
+    for (const x of [...entrees].sort(cmpEx)) for (let i = 0; i < x.q; i++) out.push({ etat: x.etat || null, langue: x.langue || null });
+    // R2 (relecture 3) : la liste est COMPLÉTÉE par des { null, null } (exemplaires non précisés) jusqu'à la quantité de la fiche, APRÈS les précisés — sans rien changer au stockage ; une fiche sans aucun détail rend [].
+    if (out.length) while (out.length < total) out.push({ etat: null, langue: null });
+    return out;
+};
 const nbEx = d => (d.ex ? d.ex.length : 0);
 // les conditions de l'écriture du détail, dans le FILTRE de la mise à jour : la fiche est cochée, avec au moins n exemplaires (dans `hors` : l'élément porte la clé et une quantité ≥ n ; au registre : le bit est posé, `qte` ≥ n,
 // la clé n'est pas aussi dans `hors`, l'époque est celle lue)
@@ -369,11 +375,19 @@ async function remplacerExemplaires({ compteId, slug, cle, elements, cfg, mainte
     const groupes = new Map();
     for (const x of elements) { if (x.etat == null && x.langue == null) continue; const k = `${x.etat || ''}\n${x.langue || ''}`; groupes.set(k, (groupes.get(k) || 0) + 1); }
     const entrees = [...groupes].map(([k, q]) => { const [etat, langue] = k.split('\n'); return { etat, langue, q }; }).sort(cmpEx);
-    const n = elements.length, rendu = { exemplaires: developper(entrees) };
+    const n = elements.length;
+    if (n === 0) {                                                                                           // r2 : EFFACER le détail ne demande aucune fiche cochée (et ne lit pas le registre) : un détail orphelin s'efface aussi
+        const avant = await c.findOneAndUpdate({ compteId, set: slug, ex: { $exists: true } }, [{ $set: { ex: exOuAbsent(exSans(cle)), majLe: { $literal: maintenant } } }], { returnDocument: 'before', projection: { ex: 1 }, ...LECTURE });
+        if (avant) {
+            const tout = (avant.ex || []).map(C.lireElementEx), retire = tout.filter(x => x.cle === cle).length;
+            if (retire) await rendre(retire * C.exemplaire(cle) + (retire === tout.length ? C.EX_BASE : 0));
+        }
+        return { exemplaires: [] };
+    }
     for (let essai = 0; essai < 3; essai++) {
         const { doc, h, reg, qAvant } = await situation(compteId, slug, cle);
-        const anciens = exDe(doc, cle);
-        if (n > qAvant) return n === 0 && !anciens.length ? rendu : { refus: 'exemplaires' };
+        const anciens = exDe(doc, cle), rendu = { exemplaires: developper(entrees, qAvant) };
+        if (n > qAvant) return { refus: 'exemplaires' };
         if (anciens.length === entrees.length && entrees.every(x => anciens.some(a => a.etat === x.etat && a.langue === x.langue && a.q === x.q))) return rendu;   // idempotent : rien ne change, rien n'est consommé
         const max = cfg.collection.exemplairesParCompte ?? EXEMPLAIRES_DEFAUT;
         if (entrees.length > anciens.length && (await docsDuCompte(compteId)).reduce((s, d) => s + nbEx(d), 0) - anciens.length + entrees.length > max) return { refus: 'borne-exemplaires', borne: max };
@@ -397,7 +411,7 @@ async function remplacerExemplaires({ compteId, slug, cle, elements, cfg, mainte
         if (net < 0) await rendre(-net);
         return rendu;
     }
-    return { refus: 'exemplaires' };                                                                          // trois essais perdus contre des écritures simultanées : le refus se dit, rien n'est écrit
+    return { refus: 'concurrence' };                                                                          // r1 : trois essais perdus contre des écritures simultanées : un « réessayer » (503), pas une fausse raison de fond ; rien n'est écrit à moitié
 }
 
 /** La fiche à jour pour la réponse d'une écriture (K3, produit) : { quantite, exemplaires } quand la fiche porte un détail, {} sinon (la réponse d'avant, à l'octet). */
@@ -406,7 +420,7 @@ async function detailDeLaFiche(compteId, slug, cle) {
     const ex = exDe(doc, cle);
     if (!ex.length) return {};
     const { qAvant } = await situation(compteId, slug, cle);
-    return qAvant > 0 ? { quantite: qAvant, exemplaires: developper(ex) } : {};
+    return qAvant > 0 ? { quantite: qAvant, exemplaires: developper(ex, qAvant) } : {};
 }
 
 /** Les mots d'un document, lus contre le registre de LEUR époque (LÈVE RegistreIllisible sinon). */
@@ -431,7 +445,7 @@ async function lireSet(compteId, slug) {
     const parCle = new Map();
     for (const x of (doc.ex || []).map(C.lireElementEx)) { if (!toutes.has(x.cle)) continue; (parCle.get(x.cle) || parCle.set(x.cle, []).get(x.cle)).push(x); }   // un détail dont la fiche n'est plus cochée n'est pas servi
     const exemplaires = {};
-    for (const k of cles) if (parCle.has(k)) exemplaires[k] = developper(parCle.get(k));                      // UN élément { etat, langue } par exemplaire détaillé (K5)
+    for (const k of cles) if (parCle.has(k)) exemplaires[k] = developper(parCle.get(k), toutes.get(k));                      // UN élément { etat, langue } par exemplaire détaillé (K5)
     return { cles, quantites, exemplaires, majLe: doc.majLe };
 }
 

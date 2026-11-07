@@ -3191,7 +3191,7 @@
             "headers": { "Retry-After": { "schema": { "type": "integer", "minimum": 0 } } }
           },
           "503": {
-            "description": "INDISPONIBLE (index manquants, base injoignable, bits du set illisibles contre son registre).",
+            "description": "INDISPONIBLE (index manquants, base injoignable, bits du set illisibles contre son registre). Avec `detail: \"reessayer\"` (et `reessayerDans`, `Retry-After`) : trois essais perdus contre des écritures simultanées sur la fiche — RIEN n'est écrit à moitié, le détail d'avant est intact, réessayer (ce n'est pas un refus de fond).",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } }
           }
         }
@@ -3200,9 +3200,10 @@
     "/api/collection/valeur": {
       "get": {
         "operationId": "valeurDeMaCollection",
+        "x-conditionnel": "V2_COLLECTION_COTES=1",
         "tags": ["collection"],
-        "summary": "Ma collection : la valeur totale (propriétaire connecté SEULEMENT)",
-        "description": "Ordre explicite de l'utilisateur (07/11) : la valeur totale n'est servie qu'au propriétaire connecté, sur sa session (cookie), `Cache-Control: no-store` ; jamais dans une réponse sans session, avec un jeton d'installation ou pour un autre compte. Σ(tendance du guide × quantité) des fiches qui ont une cote ; les exemplaires sans cote sont comptés à part (`sansCote`), jamais estimés. Aucune écriture.",
+        "summary": "Ma collection : la valeur totale — NON MONTÉE par défaut (404 natif) : aucune valeur Cardmarket tant que l'accord n'existe pas",
+        "description": "DÉCISION DE L'UTILISATEUR (31/10, maintenue le 07/11) : aucune valeur issue de Cardmarket dans la collection. Cette route n'est montée que si `V2_COLLECTION_COTES=1`, drapeau ÉTEINT par défaut et REFUSÉ hors d'une base de banc : en production elle n'existe pas (404 natif). Quand elle est montée (bancs) : propriétaire connecté seulement, session (cookie), `Cache-Control: no-store`, limiteur de lecture de 30 par heure et cache de 60 s par compte invalidé à chaque écriture. Σ(tendance du guide × quantité) des fiches qui ont une cote ; les exemplaires sans cote sont comptés à part (`sansCote`), jamais estimés. Aucune écriture.",
         "security": [{ "session": [] }],
         "responses": {
           "200": {
@@ -3213,6 +3214,11 @@
           "401": {
             "description": "SESSION (cookie absent, expiré ou révoqué) : aucune valeur, aucun prix dans le corps.",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } }
+          },
+          "429": {
+            "description": "DEBIT : plus de 30 lectures par heure pour ce compte (plafond écrit dans routes.js, posé sans mesure d'usage réel), avec `reessayerDans` et `Retry-After`. La réponse est de plus mise en cache 60 s par compte, invalidée à chaque écriture de la collection de ce compte.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } },
+            "headers": { "Retry-After": { "schema": { "type": "integer", "minimum": 0 } } }
           },
           "503": {
             "description": "INDISPONIBLE (index manquants, base injoignable, bits illisibles).",
@@ -6911,7 +6917,7 @@
           },
           "exemplaires": {
             "type": "object",
-            "description": "K5 (le site, O13) — le détail par exemplaire, par clé de fiche cochée : UN élément { etat, langue } par exemplaire détaillé, trié (état, langue) ; `null` quand non précisé. Le nombre d'éléments d'une fiche est au plus sa quantité (le reste est non précisé). Champ ABSENT quand aucune fiche du set n'a de détail (la réponse d'avant, à l'octet près).",
+            "description": "K5 (le site, O13) — le détail par exemplaire, par clé de fiche cochée : UN élément { etat, langue } par exemplaire, les précisés d'abord triés (état, langue), puis COMPLÉTÉ par des { null, null } (exemplaires non précisés) jusqu'à la quantité de la fiche : la longueur de la liste = `quantite`. Rien ne change au stockage. Champ ABSENT quand aucune fiche du set n'a de détail (la réponse d'avant, à l'octet près).",
             "additionalProperties": {
               "type": "array",
               "maxItems": 99,
@@ -6920,7 +6926,7 @@
           },
           "cotes": {
             "type": "object",
-            "description": "Par clé de fiche : sa cote, ou `null`. Une fiche absente vaut `null`. `{}` tant qu'aucun chargement n'a réussi (l'état « sans visuel ») ou pour un set sans lien fiche → produits. Au-delà de 5 000 produits dans un set, les cotes sont PARTIELLES : les fiches qui ne tiennent pas dans la borne sont absentes (= `null`).",
+            "description": "ABSENT par défaut — DÉCISION DE L'UTILISATEUR (31/10, maintenue le 07/11) : aucune valeur issue de Cardmarket dans les routes de la collection, même pour les cartes possédées, tant que l'accord de Cardmarket n'existe pas. Le champ n'existe que lorsque le drapeau `V2_COLLECTION_COTES=1` est posé, ce que seule une base de banc admet (config.js) : jamais en production. Quand il existe : par clé de fiche, sa cote, ou `null`. Une fiche absente vaut `null`. `{}` tant qu'aucun chargement n'a réussi (l'état « sans visuel ») ou pour un set sans lien fiche → produits. Au-delà de 5 000 produits dans un set, les cotes sont PARTIELLES : les fiches qui ne tiennent pas dans la borne sont absentes (= `null`).",
             "additionalProperties": {
               "oneOf": [
                 {
@@ -6948,7 +6954,6 @@
           "success",
           "set",
           "possedees",
-          "cotes",
           "majLe"
         ],
         "additionalProperties": false
@@ -6988,7 +6993,7 @@
       },
       "RequeteExemplaires": {
         "type": "object",
-        "description": "K5 : REMPLACE tout le détail des exemplaires de la fiche (cochée). Au plus `quantite` éléments (le total de la fiche, 99 au plus). Un élément { null, null } est un exemplaire non précisé : il n'est pas stocké (c'est le reste du total) et ne revient pas dans la réponse. Un tableau vide efface le détail.",
+        "description": "K5 : REMPLACE tout le détail des exemplaires de la fiche (cochée). Au plus `quantite` éléments (le total de la fiche, 99 au plus). Un élément { null, null } est un exemplaire non précisé : il n'est pas stocké (c'est le reste du total) ; la réponse le rend en fin de liste, jusqu'à la quantité. Un tableau vide efface le détail.",
         "properties": {
           "exemplaires": { "type": "array", "maxItems": 99, "items": { "$ref": "#/components/schemas/ExemplaireDetail" } }
         },
@@ -6997,7 +7002,7 @@
       },
       "ReponseExemplaires": {
         "type": "object",
-        "description": "K5 : le détail STOCKÉ de la fiche après l'écriture, développé (un élément par exemplaire détaillé, trié état puis langue).",
+        "description": "K5 : le détail de la fiche après l'écriture, développé : les exemplaires précisés triés (état, puis langue), puis des { null, null } jusqu'à la quantité de la fiche (longueur = quantité) ; [] quand le détail est effacé ou vide.",
         "properties": {
           "success": { "const": true },
           "exemplaires": { "type": "array", "maxItems": 99, "items": { "$ref": "#/components/schemas/ExemplaireDetail" } }

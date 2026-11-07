@@ -77,8 +77,8 @@ const attendre = ms => new Promise(r => setTimeout(r, ms));
     const base0 = await put(A, 'Set-E', '10|001', { possedee: true, quantite: 3 });
     H.v('2. le PUT par fiche sans détail : la réponse d\'avant, à l\'octet', base0.texte, JSON.stringify({ success: true, possedees: 1 }));
     const sansEx = await lire(A, 'Set-E');
-    H.v('   un set sans détail : PAS de champ `exemplaires`, clés et ordre d\'avant', Object.keys(sansEx.json), ['success', 'set', 'possedees', 'quantites', 'cotes', 'majLe']);
-    H.v('   ... et le texte est celui d\'avant, à l\'octet', sansEx.texte, JSON.stringify({ success: true, set: 'Set-E', possedees: ['10|001'], quantites: { '10|001': 3 }, cotes: { '10|001': null, '11|002': null, '12|003': null }, majLe: sansEx.json.majLe }));
+    H.v('   un set sans détail : PAS de champ `exemplaires`, clés et ordre d\'avant', Object.keys(sansEx.json), ['success', 'set', 'possedees', 'quantites', 'majLe']);
+    H.v('   ... et le texte est celui d\'avant, à l\'octet', sansEx.texte, JSON.stringify({ success: true, set: 'Set-E', possedees: ['10|001'], quantites: { '10|001': 3 }, majLe: sansEx.json.majLe }));
     H.vrai('   le document stocké ne porte pas de champ `ex`', !('ex' in (await docs(A))[0]));
     const liste0 = await H.appel(sv.url, '/api/collection', { entetes: siteH(A.cookie) });
     H.v('   GET /api/collection : `doublons` = 2 pour la fiche à 3 exemplaires (champ additif, calculé sans écriture)', liste0.json.sets.map(s => [s.slug, s.doublons]), [['Set-E', 2]]);
@@ -94,16 +94,17 @@ const attendre = ms => new Promise(r => setTimeout(r, ms));
         const w = await putEx(A, 'Set-E', '10|001', { exemplaires: [el('NM', 'fr'), el('EX', 'en'), el('NM', 'fr')] });
         H.v('   3 exemplaires détaillés sur une fiche à 3 : 200, { success, exemplaires } — exactement ces deux clés, triés (état, langue)', [w.statut, Object.keys(w.json), w.json.exemplaires], [200, ['success', 'exemplaires'], [el('EX', 'en'), el('NM', 'fr'), el('NM', 'fr')]]);
         const g = await lire(A, 'Set-E');
-        H.v('   GET : `exemplaires` APRÈS quantites et avant cotes, UN élément par exemplaire { etat, langue }', [Object.keys(g.json), g.json.quantites, g.json.exemplaires], [['success', 'set', 'possedees', 'quantites', 'exemplaires', 'cotes', 'majLe'], { '10|001': 3 }, { '10|001': [el('EX', 'en'), el('NM', 'fr'), el('NM', 'fr')] }]);
+        H.v('   GET : `exemplaires` APRÈS quantites et avant cotes, UN élément par exemplaire { etat, langue }', [Object.keys(g.json), g.json.quantites, g.json.exemplaires], [['success', 'set', 'possedees', 'quantites', 'exemplaires', 'majLe'], { '10|001': 3 }, { '10|001': [el('EX', 'en'), el('NM', 'fr'), el('NM', 'fr')] }]);
         const o2 = await octets();
         H.vrai('   l\'octet : les deux entrées de détail (NM/fr ×2 et EX/en) ont été RÉSERVÉES', o2 > o1);
         const m1 = (await docs(A)).find(d => d.set === 'Set-E').majLe; await attendre(15);
         const w2 = await putEx(A, 'Set-E', '10|001', { exemplaires: [el('NM', 'fr'), el('NM', 'fr'), el('EX', 'en')] });
         H.v('   idempotent (même détail dans un autre ordre) : même réponse, majLe INCHANGÉ, octets inchangés', [w2.json, (await docs(A)).find(d => d.set === 'Set-E').majLe.getTime() === m1.getTime(), await octets()], [w.json, true, o2]);
         const r = await putEx(A, 'Set-E', '10|001', { exemplaires: [el(null, null), el('PL', null), el(null, 'ja')] });
-        H.v('   REMPLACE tout : { null, null } n\'est pas stocké (c\'est le reste du total) ; état seul et langue seule sont admis', [r.json.exemplaires, (await lire(A, 'Set-E')).json.exemplaires['10|001']], [[el(null, 'ja'), el('PL', null)], [el(null, 'ja'), el('PL', null)]]);
+        H.v('   REMPLACE tout : { null, null } n\'est pas STOCKÉ (c\'est le reste du total) mais la réponse et la lecture sont COMPLÉTÉES par des { null, null } jusqu\'à la quantité (3), après les précisés ; état seul et langue seule sont admis', [r.json.exemplaires, (await lire(A, 'Set-E')).json.exemplaires['10|001']], [[el(null, 'ja'), el('PL', null), el(null, null)], [el(null, 'ja'), el('PL', null), el(null, null)]]);
+        H.v('   ... le stockage, lui, ne porte que les 2 exemplaires précisés (le complément est calculé)', (await docs(A)).find(d => d.set === 'Set-E').ex.length, 2);
         const trop = await putEx(A, 'Set-E', '10|001', { exemplaires: [el('NM', 'fr'), el('NM', 'fr'), el('NM', 'fr'), el('NM', 'fr')] });
-        H.v('   plus d\'éléments que la quantité (4 > 3) : 409 « exemplaires », le détail d\'avant est INTACT', [trop.statut, detail(trop), (await lire(A, 'Set-E')).json.exemplaires['10|001']], [409, 'exemplaires', [el(null, 'ja'), el('PL', null)]]);
+        H.v('   plus d\'éléments que la quantité (4 > 3) : 409 « exemplaires », le détail d\'avant est INTACT', [trop.statut, detail(trop), (await lire(A, 'Set-E')).json.exemplaires['10|001']], [409, 'exemplaires', [el(null, 'ja'), el('PL', null), el(null, null)]]);
         const kk = await put(A, 'Set-E', '10|001', { possedee: true, quantite: 1 });
         H.v('   le PUT par fiche avec une quantité INFÉRIEURE au détail (1 < 2) : 409 « exemplaires », rien n\'a bougé', [kk.statut, code(kk), detail(kk), (await lire(A, 'Set-E')).json.quantites['10|001']], [409, 'CONFLIT', 'exemplaires', 3]);
         const k2 = await put(A, 'Set-E', '10|001', { possedee: true, quantite: 2 });
@@ -144,7 +145,7 @@ const attendre = ms => new Promise(r => setTimeout(r, ms));
         const VD = await compte();
         await put(VD, 'Set-Hors', '99|001', { possedee: true, quantite: 2 });
         const h = await putEx(VD, 'Set-Hors', '99|001', { exemplaires: [el('EX', 'en'), el(null, null)] });
-        H.v('   une fiche HORS catalogue (clé dans `hors`) porte aussi son détail', [h.statut, h.json.exemplaires, (await lire(VD, 'Set-Hors')).json.exemplaires], [200, [el('EX', 'en')], { '99|001': [el('EX', 'en')] }]);
+        H.v('   une fiche HORS catalogue (clé dans `hors`) porte aussi son détail', [h.statut, h.json.exemplaires, (await lire(VD, 'Set-Hors')).json.exemplaires], [200, [el('EX', 'en'), el(null, null)], { '99|001': [el('EX', 'en'), el(null, null)] }]);
     }
 
     // ═══════════════ 5. BORNES ═══════════════
@@ -167,15 +168,44 @@ const attendre = ms => new Promise(r => setTimeout(r, ms));
         const gq = await lire(Q, 'Set-E');
         H.v('6. un AUTRE compte ne voit ni le détail ni le total de P', [gq.json.possedees, 'exemplaires' in gq.json, 'quantites' in gq.json], [[], false, false]);
         const qw = await putEx(Q, 'Set-E', '10|001', { exemplaires: [el('PO', 'fr')] });
-        H.v('   ... Q écrit un détail sur la même clé non cochée chez lui : 409, et le détail de P est INTACT', [qw.statut, (await lire(P, 'Set-E')).json.exemplaires['10|001']], [409, [el('NM', 'fr')]]);
+        H.v('   ... Q écrit un détail sur la même clé non cochée chez lui : 409, et le détail de P est INTACT', [qw.statut, (await lire(P, 'Set-E')).json.exemplaires['10|001']], [409, [el('NM', 'fr'), el(null, null)]]);
         H.v('   sans session : 401 SESSION', (await putEx(null, 'Set-E', '10|001', { exemplaires: [] }, sv, { origin: SITE, 'x-rat-market': '1', 'x-forwarded-for': IP() })).statut, 401);
         const ori = await putEx(P, 'Set-E', '10|001', { exemplaires: [] }, sv, siteH(P.cookie, { origin: 'https://autre.exemple' }));
         H.v('   mauvaise Origin : 403 ORIGINE', [ori.statut, code(ori)], [403, 'ORIGINE']);
         const bad = await putEx(P, 'Set-E', 'abc', { exemplaires: [] });
         H.v('   clé mal formée : 400 ENTREE cle', [bad.statut, detail(bad)], [400, 'cle']);
         const bad2 = await putEx(P, 'Set-E', '10|001', { exemplaires: [el('XX', null)] });
-        H.v('   état hors liste : 400 ENTREE etat, détail intact', [bad2.statut, detail(bad2), (await lire(P, 'Set-E')).json.exemplaires['10|001']], [400, 'etat', [el('NM', 'fr')]]);
+        H.v('   état hors liste : 400 ENTREE etat, détail intact', [bad2.statut, detail(bad2), (await lire(P, 'Set-E')).json.exemplaires['10|001']], [400, 'etat', [el('NM', 'fr'), el(null, null)]]);
         for (const m of ['GET', 'POST', 'DELETE']) H.v(`   ${m} sur /exemplaires : pas de route (404)`, (await H.appel(sv.url, chemin('Set-E', '10|001') + '/exemplaires', { methode: m, entetes: siteH(P.cookie) })).statut, 404);
+    }
+
+    // ═══════════════ 7. r1, r2, r3 (relecture 1, tour 1) ═══════════════
+    {
+        const CT = require('../collection/couts');
+        const dbReelle = mongoose.connection.db;
+        const injecter = f => { const faux = Object.create(dbReelle); faux.collection = (n, o) => { const c = dbReelle.collection(n, o); return n === 'collection_fiches' ? f(c) : c; }; db.brancher(faux); };
+        const lier = (t, k) => { const v = t[k]; return typeof v === 'function' ? v.bind(t) : v; };
+        // r1 : trois essais perdus contre des écritures simultanées = 503 INDISPONIBLE « réessayer » (pas un 409 qui dit une fausse raison), rien d'écrit à moitié, octets intacts
+        const R = await compte(); await put(R, 'Set-E', '10|001', { possedee: true, quantite: 2 });
+        const o = await octets();
+        injecter(c => new Proxy(c, { get(t, k) { if (k === 'findOneAndUpdate') return async (...a) => (Array.isArray(a[1]) && a[0] && a[0].$expr ? null : t.findOneAndUpdate(...a)); return lier(t, k); } }));
+        let rr; try { rr = await putEx(R, 'Set-E', '10|001', { exemplaires: [el('NM', 'fr')] }); } finally { db.brancher(dbReelle); }
+        H.v('7. r1 : l\'écriture du détail perd trois essais : 503 INDISPONIBLE, detail « reessayer », reessayerDans et Retry-After', [rr.statut, code(rr), detail(rr), rr.json.erreur.reessayerDans > 0 && Number(rr.entetes['retry-after']) === rr.json.erreur.reessayerDans], [503, 'INDISPONIBLE', 'reessayer', true]);
+        H.v('   ... rien n\'est écrit à moitié : pas de détail, octets REVENUS', [(await docs(R))[0].ex, await octets()], [undefined, o]);
+        const apresR1 = await putEx(R, 'Set-E', '10|001', { exemplaires: [el('NM', 'fr')] });
+        H.v('   ... et le même appel, la base revenue, passe', apresR1.statut, 200);
+        // r2 : un détail orphelin (fiche non cochée) s'efface avec un tableau vide, sans 503
+        const O = await compte();
+        await raw('collection_fiches').insertOne({ compteId: O.c._id, set: 'Set-E', mots: {}, hors: [], ex: [CT.elementEx('10|001', 'NM', 'fr', 1)], majLe: new Date() });
+        const ro = await putEx(O, 'Set-E', '10|001', { exemplaires: [] });
+        H.v('   r2 : un tableau vide sur une fiche non cochée qui porte un détail orphelin : 200, le détail est effacé (pas de 503)', [ro.statut, ro.json, 'ex' in ((await docs(O))[0] || {})], [200, { success: true, exemplaires: [] }, false]);
+        // r3 : une erreur de lecture APRÈS une écriture réussie ne fait pas croire à un échec
+        const T = await compte(); await put(T, 'Set-E', '10|001', { possedee: true, quantite: 2 });
+        await putEx(T, 'Set-E', '10|001', { exemplaires: [el('NM', 'fr')] });
+        injecter(c => new Proxy(c, { get(t, k) { if (k === 'findOne') return async (...a) => { if (a[1] && JSON.stringify(a[1].projection) === '{"ex":1}') throw new Error('lecture en panne'); return t.findOne(...a); }; return lier(t, k); } }));
+        let r3; try { r3 = await put(T, 'Set-E', '10|001', { possedee: true, quantite: 3 }); } finally { db.brancher(dbReelle); }
+        H.v('   r3 : la lecture du détail lève APRÈS une écriture réussie : 200 de succès minimal { success, possedees } (jamais un 503 qui ferait croire à un échec)', [r3.statut, r3.json], [200, { success: true, possedees: 1 }]);
+        H.v('   ... et l\'écriture a bien eu lieu (quantité 3)', (await lire(T, 'Set-E')).json.quantites['10|001'], 3);
     }
     await sv.fermer();
     await mongoose.disconnect();

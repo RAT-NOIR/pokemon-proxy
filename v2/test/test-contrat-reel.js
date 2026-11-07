@@ -128,7 +128,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
     await raw('idempotence').insertOne({ cle: `${porteur}|${routeIdem}|${valeur}`, empreinteCorps: empreinteDuCorps(corps), etat: 'en-cours', proprietaire: 'banc', creeLe: new Date(), expireLe: new Date(Date.now() + 120000) });
 }
 
-const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empreinte.js (derrière V2_EMPREINTE_EXTENSION=1)' };
+const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empreinte.js (derrière V2_EMPREINTE_EXTENSION=1)', 'GET /api/collection/valeur': 'jouée plus haut sur un montage au drapeau V2_COLLECTION_COTES allumé (banc seulement) ; absente du montage par défaut (test-collection-sans-cotes.js)' };
 (async () => {
     // Les limiteurs du serveur comptent par FENÊTRE FIXE (heure, jour). Un banc qui franchirait une frontière en pleine série de « 3 essais puis 429 » verrait son compteur repartir à zéro :
     // état non joué, comptes différents d'une exécution à l'autre (constat du tour 1, M3). On attend donc la frontière avant de commencer quand elle est à moins de 4 minutes.
@@ -712,7 +712,7 @@ const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empr
         // COLLECTION-COMPACTE : le catalogue EN MÉMOIRE connaît S1 (1|1, 2|1) et S2 (3|1, 4|1) : leurs clés entrent au REGISTRE ; celles de « Banc-Set » n'y sont pas : elles vont dans `hors` (2 au plus ici)
         const etatMem = require('../chargeur/etat'), versionAvant = etatMem.version();
         VB.installer([VB.doc(1)], [['S1', '1|1', [1]], ['S1', '2|1', [1]], ['S2', '3|1', [1]], ['S2', '4|1', [1]]]);
-        const cfgC = { ...cfg, limites: { ...cfg.limites, collectionEcrituresParCompteHeure: 5 }, collection: { ...cfg.collection, horsCatalogueParCompte: 2, clesParCompte: 3, setsParCompte: 10 } };
+        const cfgC = { ...cfg, limites: { ...cfg.limites, collectionEcrituresParCompteHeure: 5 }, collection: { ...cfg.collection, horsCatalogueParCompte: 2, clesParCompte: 3, setsParCompte: 10, cotes: true } };      // cotes: true = le drapeau V2_COLLECTION_COTES allumé (banc seulement) pour jouer les statuts de GET /valeur
         const svC = await monter(cfgC), U = svC.url;
         // TOUR 1 (I2) : aucun catalogue chargé → une clé neuve rend 503 INDISPONIBLE (detail catalogue, reessayerDans, Retry-After) ; le catalogue se charge ensuite
         etatMem.vider(); const cS = await compte();
@@ -768,6 +768,8 @@ const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empr
             await jouer(U, R_LISTE, 'liste avec un set à doublons (`doublons`)', 200, '/api/collection', { entetes: siteH(c7.cookie) });
             await jouer(U, 'GET /api/collection/valeur', 'la valeur totale du propriétaire', 200, '/api/collection/valeur', { entetes: siteH(c7.cookie) });
             await jouer(U, 'GET /api/collection/valeur', 'sans session', 401, '/api/collection/valeur', { entetes: siteH(null) });
+            { const cV = await compte(); for (let i = 0; i < 30; i++) await jouer(U, 'GET /api/collection/valeur', `lecture ${i + 1} sur 30 permises`, 200, '/api/collection/valeur', { entetes: siteH(cV.cookie) });
+              await jouer(U, 'GET /api/collection/valeur', 'limiteur de lecture dépassé (DEBIT, Retry-After)', 429, '/api/collection/valeur', { entetes: siteH(cV.cookie) }); }
             await jouer(U, R_PROD, 'c9 : quantité 2 par le produit', 200, chP(2), { corps: { possedee: true, quantite: 2 }, entetes: siteH(c9.cookie) });
             await jouer(U, R_EX, 'état hors liste (ENTREE etat)', 400, chE('S3', '5|1'), { corps: { exemplaires: [{ etat: 'XX', langue: null }] }, entetes: siteH(c9.cookie) });
             await jouer(U, R_EX, 'plus d\'éléments que la quantité (CONFLIT exemplaires)', 409, chE('S3', '5|1'), { corps: { exemplaires: [{ etat: 'NM', langue: 'fr' }, { etat: 'NM', langue: 'fr' }, { etat: 'NM', langue: 'fr' }] }, entetes: siteH(c9.cookie) });
@@ -982,8 +984,8 @@ const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empr
             'GET /api/collection/sets/{slug}': { chemin: '/api/collection/sets/Banc-Set' },
             'PUT /api/collection/sets/{slug}/fiches/{cle}': { chemin: '/api/collection/sets/Banc-Set/fiches/1%7C001', corps: { possedee: true } },
             'PUT /api/collection/produits/{idproduct}': { chemin: '/api/collection/produits/2', corps: { possedee: true } },
-            'PUT /api/collection/sets/{slug}/fiches/{cle}/exemplaires': { chemin: '/api/collection/sets/Banc-Set/fiches/1%7C001/exemplaires', corps: { exemplaires: [] } },
-            'GET /api/collection/valeur': { chemin: '/api/collection/valeur' }
+            'PUT /api/collection/sets/{slug}/fiches/{cle}/exemplaires': { chemin: '/api/collection/sets/Banc-Set/fiches/1%7C001/exemplaires', corps: { exemplaires: [] } }
+            // GET /api/collection/valeur : route CONDITIONNELLE (V2_COLLECTION_COTES=1, éteint par défaut, décision du 31/10) : absente de ce montage, donc hors de cette boucle (son 503 est déclaré non joué ci-dessous)
         };
         const sansRequete = OPERATIONS.filter(o => o.route !== 'GET /ping' && !REQ503[o.route] && !(o.route in JOUEE_AILLEURS)).map(o => o.route);
         H.v('503 : chaque route de `paths` (hors /ping) a sa requête de la garde d\'index', sansRequete, []);
@@ -1023,6 +1025,7 @@ const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empr
     H.v(`routes de paths jouées par un état RÉEL (${OPERATIONS.length - nonJouees.length} / ${OPERATIONS.length}) — la boucle 503 ne compte pas`, nonJouees, []);
     // chaque statut documenté : joué par un état réel, joué par la garde d'index (503 seulement), ou déclaré non joué avec sa raison — et une déclaration périmée est vue
     const NON_JOUES = {
+        'GET /api/collection/valeur 503': 'COTES (décision du 31/10) : route derrière V2_COLLECTION_COTES=1, ÉTEINT par défaut — absente du montage de la garde d\'index (404 natif, prouvé par test-collection-sans-cotes.js) ; ses statuts 200, 401 et 429 sont joués plus haut sur un montage au drapeau allumé (banc seulement)',
         ...Object.fromEntries(['302', '404', '429', '502', '503'].map(st => [`GET /api/modele-empreinte/{sha256} ${st}`, 'INDEX-EMPREINTES : route derrière V2_EMPREINTE_EXTENSION=1, absente de ce banc (drapeau éteint) ; ses cinq statuts sont joués sur un serveur réel par test-modele-empreinte.js (302 vers l\'adresse présignée, 404, 429, 502, 503)'])),
         'POST /api/identifier/mesures 500': 'CALCUL-CLIENT : SERVEUR n\'est rendu que si la carte PROMUE ne peut pas être fabriquée depuis `analyses` (identifier/calcul-client-route.js l.146), donc APRÈS une promotion réelle : index d\'empreintes chargé, règle G rejouée sur les mesures, question réservée réglée — un état qui exige la doublure de l\'index (test-calcul-client-route.js la fabrique, mais ne joue pas ce 500) ; aucune autre branche de la route ne rend 500 (les pannes de lecture rendent 503 INDISPONIBLE)',
         'DELETE /api/compte 400': 'aucun chemin ne rend 400 : v2/comptes/routes.js l.117-125 — supprimerCompte rend 401 IDENTIFIANTS ou 409 CREDITS_ACHETES, parSession rend 401/403 ; un corps non objet devient {} (donc 401), jamais 400',

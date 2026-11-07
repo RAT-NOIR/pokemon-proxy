@@ -101,6 +101,7 @@ Source de la liste : `v2/config.js` (les 30 variables sont DÉRIVÉES du fichier
 | `V2_SECRET_EMPREINTE` | aucun | v2 allumée sans secret = configuration invalide (503) hors mode banc | moins de 16 caractères = invalide | oui |
 | `V2_TURNSTILE` | `on` | `on` | autre que `on`/`off` = invalide ; `off` hors mode banc = invalide | oui |
 | `V2_COOKIE_SECURE` | `1` | cookie `Secure` | autre que `0`/`1` = invalide ; `0` hors mode banc = invalide (D7) | oui |
+| `V2_COLLECTION_COTES` | `0` | aucun prix dans la collection : pas de `cotes`, `/api/collection/valeur` non montée (décision du 31/10 : aucune valeur Cardmarket tant que l'accord n'existe pas) | autre que `0`/`1` = invalide ; `1` hors mode banc = invalide | oui |
 | `V2_DESCRIPTION_AU_MODELE` | `0` | rien de l'annonce n'est envoyé au modèle | invalide | oui |
 | `V2_DESCRIPTION_CONSERVEE` | `1` (90 jours) | conservation 90 jours | invalide | oui (purge quotidienne) |
 | `V2_REGLE_G` | `0` | la chaîne héritée décide | invalide | oui |

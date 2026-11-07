@@ -86,6 +86,10 @@ function lireConfig(env = process.env) {
     const turnstile = (() => { const t = env.V2_TURNSTILE; if (t === undefined || t === '') return 'on'; if (t === 'on' || t === 'off') return t; throw new Error(`configuration invalide : V2_TURNSTILE="${t}" (attendu on ou off)`); })();
     if (actif && turnstile === 'off' && !banc) throw new Error('configuration invalide : V2_TURNSTILE=off n\'est accepté que sur une base de banc (MONGODB_BASE=test_scratch ET BANC_ISOLE=1)');
     // B8.1 : même garde que Turnstile — un cookie de session SANS Secure n'est admis que sur un banc (test_scratch) ; en production allumée, V2_COOKIE_SECURE=0 est une configuration invalide.
+    // DÉCISION DE L'UTILISATEUR (31/10, maintenue le 07/11) : AUCUNE valeur issue de Cardmarket dans les routes de la collection (ni `cotes` par fiche, ni valeur totale), même pour les cartes possédées, tant que l'accord de
+    // Cardmarket n'existe pas. Le code qui les sert reste derrière CE drapeau, ÉTEINT par défaut, et V2_COLLECTION_COTES=1 est REFUSÉ hors d'une base de banc : aucun accord n'existe, on ne l'allume pas en production.
+    const collectionCotes = booleen('V2_COLLECTION_COTES', env.V2_COLLECTION_COTES, false);
+    if (collectionCotes && !banc) throw new Error('configuration invalide : V2_COLLECTION_COTES=1 n\'est accepté que sur une base de banc (MONGODB_BASE=test_scratch ET BANC_ISOLE=1) : aucune valeur Cardmarket dans la collection tant que l\'accord de Cardmarket n\'existe pas');
     const cookieSecure = booleen('V2_COOKIE_SECURE', env.V2_COOKIE_SECURE, true);
     if (actif && !cookieSecure && !banc) throw new Error('configuration invalide : V2_COOKIE_SECURE=0 n\'est accepté que sur une base de banc (MONGODB_BASE=test_scratch ET BANC_ISOLE=1)');
     // BANC-12 (décision du testeur, 2026-10-11) : le lien contribution ↔ compte dure 12 mois AU PLUS, puis anonymisation définitive. Au-delà de 12 (ou de la durée de l'image) : configuration invalide.
@@ -184,7 +188,7 @@ function lireConfig(env = process.env) {
         //   · setsParCompte : 1 000 (le coût d'un document dépasse celui d'une clé) ; quantiteMax : 99, posée SANS mesure d'usage réel ;
         //   · octetsService : le budget GLOBAL, en OCTETS mesurés par collStats (données + index des deux collections), VALEUR PROVISOIRE (10 Mo) : relevé au passage en Flex. Un compteur unique, voir collection/service.js ;
         //   · exemplairesParCompte = 5 000 (L5/L6) : les entrées de détail (fiche, état, langue) d'un compte, posée SANS mesure d'usage réel — au plus ~0,5 Mo par compte au modèle (couts.js::exemplaire), jugée AVANT l'écriture.
-        collection: { clesParCompte: 100000, horsCatalogueParCompte: 6000, quantitesParCompte: 10000, setsParCompte: 1000, quantiteMax: 99, octetsService: 10485760, exemplairesParCompte: 5000 },
+        collection: { clesParCompte: 100000, horsCatalogueParCompte: 6000, quantitesParCompte: 10000, setsParCompte: 1000, quantiteMax: 99, octetsService: 10485760, exemplairesParCompte: 5000, cotes: collectionCotes },
         comptes: { motDePasseMin: 10, lienHeures: 24, codeLongueur: 6, codeMinutes: 10, codesVivants: 3, sessionJours: 30, libelleMax: 60, glissementHeures: 24,
                     // O3 : un compte non confirmé est INACTIF et supprimé après `nonConfirmeHeures` ; un seul courriel de confirmation par adresse et par `confirmationHeures` (inscription et renvoi confondus).
                     nonConfirmeHeures: 48, confirmationHeures: 24,

@@ -3,6 +3,7 @@
   "exemplaires": [
     { "etat": "MT", "langue": "ja" },
     { "etat": "NM", "langue": "fr" },
-    { "etat": "NM", "langue": null }
+    { "etat": "NM", "langue": null },
+    { "etat": null, "langue": null }
   ]
 }

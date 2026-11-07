@@ -559,6 +559,11 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         const ok = await envoyer(V, { methode: r.methode, chemin: ch, entetes: siteH(c.cookie) });
         H.v(`(f) ${r.cle} : ${n} requêtes hostiles → 400, la requête ordinaire → 200`, [bons, ok.statut], [n, 200]);
     }
+    // Décision du 31/10 (maintenue) : aucune valeur Cardmarket dans la collection — GET /api/collection/valeur n'est PAS montée (404 natif) : rien à boucler, rien à lire, pour aucun compte
+    {
+        const att = await compte(), r404 = await envoyer(V, { methode: 'GET', chemin: '/api/collection/valeur', entetes: siteH(att.cookie) });
+        H.v('(valeur) la route n\'existe pas : 404, aucune valeur dans le corps', [r404.statut, /valeurTotale|tendance/.test(r404.texte)], [404, false]);
+    }
     for (const [t, n] of toleres) console.log(`   toléré (${n} variante(s)) : ${t}`);
     // les acceptations tolérées n'ont rien stocké d'opérateur : aucun document ne porte une clé $ne / $gt / $where
     {
@@ -863,6 +868,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             V2_MODELE_EMPREINTE_IP_HEURE: [c => c.limites.modeleEmpreinteIpHeure, 10, '0', 'leve'],      // INDEX-EMPREINTES : le plafond par IP du téléchargement du modèle (entier >= 1)
             V2_EMPREINTES_BANC_FICHIER: [c => c.modeleEmpreinte.fichierBanc, null, 'C:\\tmp\\intrus.rmei', { ferme: c => c.modeleEmpreinte.fichierBanc === null }, PROD],      // honorée SEULEMENT en mode banc : en production elle est ignorée
             V2_COOKIE_SECURE: [c => c.cookieSecure, true, '2', 'leve'],
+            V2_COLLECTION_COTES: [c => c.collection.cotes, false, '2', 'leve'],      // aucune valeur Cardmarket dans la collection (décision du 31/10) : éteint par défaut, « 1 » refusé hors banc, autre que 0/1 = invalide
             V2_LEVIERS_ABDE: [c => c.leviersAbde, false, '2', 'leve'], V2_LEVIERS_ECART: [c => c.leviersEcart, 0.1, '0.04', 'leve'], V2_LEVIERS_UN_CANDIDAT: [c => c.leviersUnCandidat, false, 'true', 'ignore'],      // LEVIERS-ABDE : éteint par défaut ; écart refusé hors 0,05-0,5 ; UN_CANDIDAT : seul « 1 » l'allume
             V2_CONFIRMATION_NOMBREUX: [c => c.confirmationNombreux, false, 'true', 'ignore'],      // DESIGNATION-REGLES R5 : éteint par défaut ; seul « 1 » l'allume
             V2_PROMOTION_SURS: [c => c.promotionSurs, false, '2', 'leve'],      // DECISION-SURS : éteint par défaut ; « 0 » ou « 1 » seulement, toute autre valeur rend la configuration invalide

@@ -6,7 +6,7 @@ const mongoose = require('mongoose');
 const express = require('express');
 const db = require('../db'); const M = require('../modeles');
 const { lireConfig } = require('../config');
-const cfg = lireConfig({ MONGODB_BASE: 'test_scratch' });
+const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_COLLECTION_COTES: '1' });   // drapeau ALLUMÉ (banc seulement) : ce banc éprouve le code de la valeur totale ; éteint (le défaut), la route n'existe pas : test-collection-sans-cotes.js
 const SITE = cfg.origines.site;
 const raw = n => mongoose.connection.db.collection(n);
 let nCompte = 0, nIp = 0;
@@ -68,6 +68,32 @@ const IP = () => { nIp++; return `10.80.${Math.floor(nIp / 250)}.${nIp % 250 + 1
     H.v('   avec un jeton d\'installation (pas un cookie de session) : 401, aucune valeur', [bearer.statut, /valeurTotale/.test(bearer.texte)], [401, false]);
     for (const m of ['PUT', 'POST', 'DELETE']) H.v(`   ${m} /api/collection/valeur : pas de route (404)`, (await H.appel(sv.url, '/api/collection/valeur', { methode: m, corps: {}, entetes: siteH(A.cookie) })).statut, 404);
     H.v('   la liste des sets et le GET d\'un set ne portent PAS la valeur totale', [/valeurTotale/.test(liste.texte), /valeurTotale/.test((await get(A, '/api/collection/sets/Set-V')).texte)], [false, false]);
+
+    // ═══════════════ 3. LE CACHE PAR COMPTE, invalidé à chaque écriture de la collection de CE compte (relecture 2 : amplification) ═══════════════
+    {
+        await raw('guide_prix').updateOne({ idProduct: 1 }, { $set: { trend: 10 } });
+        const encore = await get(A, '/api/collection/valeur');
+        H.v('3. le guide change, la valeur du compte est servie du CACHE (15,5 : la grappe n\'est pas relue)', encore.json.valeurTotale, 15.5);
+        const autreCompte = await compte(); await put(autreCompte, 'Set-V', '11|002', { possedee: true });
+        H.v('   l\'écriture d\'un AUTRE compte n\'invalide pas le cache de A', (await get(A, '/api/collection/valeur')).json.valeurTotale, 15.5);
+        await put(A, 'Set-V', '10|001', { possedee: true, quantite: 3 });       // une écriture de A (même idempotente) invalide son cache
+        H.v('   une écriture de A invalide SON cache : la valeur est recalculée sur le guide du jour (3 × 10 + 2 = 32)', (await get(A, '/api/collection/valeur')).json.valeurTotale, 32);
+        const dernier = await get(A, '/api/collection/valeur');
+        H.v('   le cache est par compte : B, qui a écrit, ne reçoit pas la valeur de A', (await get(B, '/api/collection/valeur')).json.valeurTotale === dernier.json.valeurTotale, false);
+        await raw('guide_prix').updateOne({ idProduct: 1 }, { $set: { trend: 4.5 } });
+    }
+
+    // ═══════════════ 4. LE LIMITEUR DE LECTURE (30 par heure et par compte, constante écrite) ═══════════════
+    {
+        H.v('4. le plafond est une CONSTANTE écrite dans routes.js', routes.VALEUR_LECTURES_PAR_HEURE, 30);
+        const L1 = await compte(); const statuts = [];
+        for (let i = 0; i < routes.VALEUR_LECTURES_PAR_HEURE + 1; i++) statuts.push((await get(L1, '/api/collection/valeur')).statut);
+        const dernier = await get(L1, '/api/collection/valeur');
+        H.v('   30 lectures passent, la 31e est refusée 429 DEBIT avec reessayerDans et Retry-After', [statuts.slice(0, 30).every(s => s === 200), statuts[30], dernier.json.erreur.code, dernier.json.erreur.reessayerDans > 0 && Number(dernier.entetes['retry-after']) === dernier.json.erreur.reessayerDans, /valeurTotale/.test(dernier.texte)], [true, 429, 'DEBIT', true, false]);
+        H.v('   le limiteur est PAR COMPTE : un autre compte lit encore', (await get(A, '/api/collection/valeur')).statut, 200);
+        H.v('   le limiteur de lecture ne touche pas les écritures du compte', (await put(L1, 'Set-V', '11|002', { possedee: true })).statut, 200);
+    }
+
     await sv.fermer();
     await mongoose.disconnect();
     await H.arreterBanc();

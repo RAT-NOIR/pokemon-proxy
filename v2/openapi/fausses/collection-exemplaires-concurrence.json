@@ -1,0 +1,10 @@
+{
+  "success": false,
+  "erreur": {
+    "code": "INDISPONIBLE",
+    "message": "Écritures simultanées sur cette fiche : réessayez dans un instant",
+    "detail": "reessayer",
+    "reessayerDans": 1
+  },
+  "facturation": null
+}

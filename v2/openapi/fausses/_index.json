@@ -585,6 +585,18 @@
     "route": "PUT /api/collection/produits/{idproduct}",
     "statut": 200,
     "schema": "ReponseCocherProduit",
-    "description": "C4 : le PUT par produit d'une fiche qui porte un détail : set, clé, quantité totale et détail."
+    "description": "C4 : le PUT par produit d'une fiche qui porte un détail : set, clé, quantité totale et détail (complété par des { null, null } jusqu'à la quantité)."
+  },
+  "collection-valeur-limite.json": {
+    "route": "GET /api/collection/valeur",
+    "statut": 429,
+    "schema": "ReponseErreur",
+    "description": "La valeur totale est limitée à 30 lectures par heure et par compte (DEBIT, reessayerDans, Retry-After) ; aucun prix dans le corps."
+  },
+  "collection-exemplaires-concurrence.json": {
+    "route": "PUT /api/collection/sets/{slug}/fiches/{cle}/exemplaires",
+    "statut": 503,
+    "schema": "ReponseErreur",
+    "description": "K5 : trois essais perdus contre des écritures simultanées sur la fiche : INDISPONIBLE detail reessayer, rien d'écrit à moitié, le détail d'avant est intact."
   }
 }

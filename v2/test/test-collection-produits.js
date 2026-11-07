@@ -8,7 +8,7 @@ const mongoose = require('mongoose');
 const express = require('express');
 const db = require('../db'); const M = require('../modeles');
 const { lireConfig } = require('../config');
-const cfg = lireConfig({ MONGODB_BASE: 'test_scratch' });
+const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_COLLECTION_COTES: '1' });   // drapeau des cotes ALLUMÉ (banc seulement) : la section 5 éprouve que les cotes ne sortent que de la session du propriétaire
 const SITE = cfg.origines.site;
 const raw = n => mongoose.connection.db.collection(n);
 let nCompte = 0, nIp = 0;

@@ -14,6 +14,12 @@ const { cotesDuSet } = require('./cotes');
 const etat = require('../chargeur/etat');
 const REESSAI_CATALOGUE_S = 5;                                  // le même délai que service.js : le chargement vient en quelques secondes
 const VALEUR_SETS_MAX = 200;                                    // la valeur totale lit les cotes set par set (une requête du guide chacun) : au-delà, elle est PARTIELLE et le dit
+// GET /api/collection/valeur fait jusqu'à 200 lectures de set et 200 requêtes du guide par appel (relecture 2) : un limiteur de LECTURE par compte (30 par heure, constante écrite, posée sans mesure d'usage réel) ET un
+// cache par compte (60 s au plus, borné à 1 000 comptes), INVALIDÉ à chaque écriture de la collection de CE compte. Le site décide s'il affiche la valeur.
+const VALEUR_LECTURES_PAR_HEURE = 30, VALEUR_CACHE_MS = 60e3, VALEUR_CACHE_COMPTES = 1000;
+// DÉCISION DE L'UTILISATEUR (31/10, maintenue le 07/11) : AUCUNE valeur Cardmarket dans les routes de la collection (ni `cotes` par fiche, ni valeur totale), même pour les cartes possédées, tant que l'accord de Cardmarket
+// n'existe pas. Tout le code qui sert un prix (`cotes` de GET /sets/{slug}, GET /api/collection/valeur) est derrière UN drapeau, `cfg.collection.cotes` (V2_COLLECTION_COTES, ÉTEINT par défaut, refusé hors banc : config.js).
+// Éteint : `cotes` est ABSENT de la réponse du set, le guide n'est pas lu, et /valeur n'est pas montée (404 natif).
 
 const nomErreur = e => (e && e.name) || 'Error';           // jamais e.message : un pilote peut y mettre une adresse
 const indispo = res => repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible');
@@ -43,7 +49,8 @@ const MESSAGES_BORNE = Object.freeze({
     'borne-hors': n => `Au plus ${n} fiches cochées hors du catalogue sur un compte`,
     'borne-quantites': n => `Au plus ${n} fiches avec une quantité de plus d'un exemplaire par compte`,
     'borne-exemplaires': n => `Au plus ${n} entrées de détail (état, langue) par compte`,
-    'exemplaires': () => 'Le détail (état, langue) doit porter sur une fiche cochée et ne peut pas dépasser sa quantité ; la quantité ne peut pas passer sous le détail',
+    'reessayer': () => 'Écritures simultanées : réessayez',
+    'exemplaires': () =>'Le détail (état, langue) doit porter sur une fiche cochée et ne peut pas dépasser sa quantité ; la quantité ne peut pas passer sous le détail',
     'borne-service': () => 'Limite atteinte pour l\'ensemble du service (budget de stockage partagé), pas pour votre compte'
 });
 // un compte dont l'adresse n'est pas confirmée n'écrit pas : même refus que le scanner pour ses crédits (403 VERIFICATION), sans solde (aucun crédit n'est en jeu)
@@ -54,11 +61,16 @@ function exigerVerifie(req, res, next) {
 function routesCollection(router, cfg) {
     const parCompte = L.limiteur({ nom: 'collection', max: cfg.limites.collectionEcrituresParCompteHeure, fenetreMs: 3600e3, cle: q => (q.v2 && q.v2.porteur ? `${q.v2.porteur.type}:${q.v2.porteur.id}` : null) });
     const LECTURE = [resoudrePorteur(cfg), exigerSession];
+    const parLectureValeur = L.limiteur({ nom: 'collection-valeur', max: VALEUR_LECTURES_PAR_HEURE, fenetreMs: 3600e3, cle: q => (q.v2 && q.v2.porteur ? `${q.v2.porteur.type}:${q.v2.porteur.id}` : null) });
+    const cacheValeur = new Map();                                  // compteId → { jusqua, corps } ; vidé pour CE compte à chaque écriture de sa collection
+    const invalider = id => cacheValeur.delete(String(id));
     const ECRITURE = [resoudrePorteur(cfg), exigerSession, S.exigerOrigineSite(cfg), exigerVerifie, parCompte];
     const entree = (res, detail) => repondreErreur(res, 'ENTREE', 'Requête invalide', { detail });
     const compteId = req => req.v2.porteur.id;
     const indisponibleCatalogue = res => repondreErreur(res, 'INDISPONIBLE', 'Le catalogue des fiches n\'est pas encore chargé : réessayez dans quelques secondes', { detail: 'catalogue', reessayerDans: REESSAI_CATALOGUE_S });
-    const refus = (res, r) => (r.refus === 'catalogue'
+    const refus = (res, r) => (r.refus === 'concurrence'
+        ? repondreErreur(res, 'INDISPONIBLE', 'Écritures simultanées sur cette fiche : réessayez dans un instant', { detail: 'reessayer', reessayerDans: 1 })
+        : r.refus === 'catalogue'
         ? repondreErreur(res, 'INDISPONIBLE', 'Le catalogue des fiches n\'est pas encore chargé : réessayez dans quelques secondes', { detail: 'catalogue', reessayerDans: r.reessayerDans })
         : repondreErreur(res, 'CONFLIT', MESSAGES_BORNE[r.refus](r.borne), { detail: r.refus }));
 
@@ -71,11 +83,13 @@ function routesCollection(router, cfg) {
         } catch (e) { console.error(`❌ [v2 collection] lecture des sets : ${nomErreur(e)}`); return indispo(res); }
     });
 
-    // L6 — la VALEUR TOTALE de ma collection, au propriétaire connecté SEULEMENT (ordre explicite de l'utilisateur, 07/11) : sous la même LECTURE (cookie de session), `no-store`, et nulle part ailleurs. La somme de
+    // L6 — la VALEUR TOTALE de ma collection. NON MONTÉE par défaut (drapeau V2_COLLECTION_COTES éteint : décision du 31/10 maintenue, aucune valeur Cardmarket) — 404 natif. Allumée (bancs seulement), au propriétaire connecté SEULEMENT : sous la même LECTURE (cookie de session), `no-store`, et nulle part ailleurs. La somme de
     // tendance du guide × quantité des fiches qui ont une cote (collection/cotes.js : la règle de la cote d'une fiche) ; les exemplaires sans cote sont comptés à part (jamais estimés). Au plus VALEUR_SETS_MAX sets : au-delà,
     // `partielle` vaut true. Aucune écriture, aucun stockage.
-    router.get('/api/collection/valeur', ...LECTURE, async (req, res) => {
+    if (cfg.collection.cotes === true) router.get('/api/collection/valeur', ...LECTURE, parLectureValeur, async (req, res) => {
         try {
+            const dejaCalcule = cacheValeur.get(String(compteId(req)));
+            if (dejaCalcule && dejaCalcule.jusqua > Date.now()) { res.setHeader('Cache-Control', 'no-store'); return res.status(200).json(dejaCalcule.corps); }
             const sets = await svc.lireSets(compteId(req));
             let valeur = 0, nb = 0, sansCote = 0, partielle = sets.length > VALEUR_SETS_MAX;
             for (const s of sets.slice(0, VALEUR_SETS_MAX)) {
@@ -89,7 +103,10 @@ function routesCollection(router, cfg) {
                 }
             }
             res.setHeader('Cache-Control', 'no-store');
-            return res.status(200).json({ success: true, valeurTotale: Math.round(valeur * 100) / 100, devise: 'EUR', nbExemplaires: nb, sansCote, partielle });
+            const corps = { success: true, valeurTotale: Math.round(valeur * 100) / 100, devise: 'EUR', nbExemplaires: nb, sansCote, partielle };
+            if (cacheValeur.size >= VALEUR_CACHE_COMPTES) cacheValeur.delete(cacheValeur.keys().next().value);
+            cacheValeur.set(String(compteId(req)), { jusqua: Date.now() + VALEUR_CACHE_MS, corps });
+            return res.status(200).json(corps);
         } catch (e) { console.error(`❌ [v2 collection] valeur : ${nomErreur(e)}`); return indispo(res); }
     });
 
@@ -99,23 +116,27 @@ function routesCollection(router, cfg) {
             const s = await svc.lireSet(compteId(req), req.params.slug);
             res.setHeader('Cache-Control', 'no-store');
             // `cotes` : la cote du guide de chaque fiche du set connue du lien EN MÉMOIRE (collection/cotes.js, CONTRAT-API-V2.md §1.8). Aucun chargement réussi, ou une panne du guide : {} — le site lit {} comme « null pour toute fiche ».
-            let cotes = {};
-            try { cotes = await cotesDuSet(req.params.slug); } catch (e) { console.error(`❌ [v2 collection] cotes (le guide ne répond pas, {} rendu) : ${nomErreur(e)}`); }
+            //   Drapeau ÉTEINT (le défaut, décision du 31/10) : pas de champ `cotes`, le guide n'est pas lu.
+            const avecCotes = cfg.collection.cotes === true; let cotes = {};
+            if (avecCotes) { try { cotes = await cotesDuSet(req.params.slug); } catch (e) { console.error(`❌ [v2 collection] cotes (le guide ne répond pas, {} rendu) : ${nomErreur(e)}`); } }
             // `quantites` : seulement les clés à n ≥ 2, et le champ ABSENT quand il n'y en a aucune (la réponse d'avant, à l'octet près)
             const quantites = Object.keys(s.quantites).length ? { quantites: s.quantites } : {};
             // `exemplaires` (K5) : UN élément { etat, langue } par exemplaire détaillé, ABSENT quand aucune fiche du set n'en porte (la réponse d'avant, à l'octet près)
             const exemplaires = Object.keys(s.exemplaires).length ? { exemplaires: s.exemplaires } : {};
-            return res.status(200).json({ success: true, set: req.params.slug, possedees: s.cles, ...quantites, ...exemplaires, cotes, majLe: s.majLe ? s.majLe.toISOString() : null });
+            return res.status(200).json({ success: true, set: req.params.slug, possedees: s.cles, ...quantites, ...exemplaires, ...(avecCotes ? { cotes } : {}), majLe: s.majLe ? s.majLe.toISOString() : null });
         } catch (e) { console.error(`❌ [v2 collection] lecture d'un set : ${nomErreur(e)}`); return indispo(res); }
     });
 
     // L'écriture d'UNE fiche (slug, cle) : la même pour le PUT par fiche et pour le PUT par produit (une seule définition, §21 bis). `plus` : les champs ajoutés à la réponse (la fiche résolue, pour le produit).
     // La réponse porte aussi la fiche à jour (`quantite`, `exemplaires`) QUAND elle a un détail, et seulement alors (la réponse d'avant, à l'octet près, pour toute autre fiche).
     async function ecrireFiche(req, res, slug, cle, corps, plus = {}) {
-        const r = await svc.cocher({ compteId: compteId(req), slug, cle, possedee: corps.possedee, quantite: corps.quantite, cfg });
+        let r;
+        try { r = await svc.cocher({ compteId: compteId(req), slug, cle, possedee: corps.possedee, quantite: corps.quantite, cfg }); } finally { invalider(compteId(req)); }
         // aucun catalogue chargé et la clé n'est pas encore au registre : RIEN n'est écrit, le site réessaie dans quelques secondes (le chargement part au démarrage de l'instance)
         if (r.refus) return refus(res, r);
-        const detail = corps.possedee ? await svc.detailDeLaFiche(compteId(req), slug, cle) : {};
+        // r3 : l'écriture A EU LIEU ; une erreur en lisant le détail pour la réponse ne doit pas faire croire à un échec — réponse de succès minimale (le détail se relit par GET)
+        let detail = {};
+        if (corps.possedee) { try { detail = await svc.detailDeLaFiche(compteId(req), slug, cle); } catch (e) { console.error(`❌ [v2 collection] détail de la fiche après écriture (réponse minimale) : ${nomErreur(e)}`); } }
         res.setHeader('Cache-Control', 'no-store');
         return res.status(200).json({ success: true, possedees: r.possedees, ...plus, ...detail });
     }
@@ -138,7 +159,8 @@ function routesCollection(router, cfg) {
             if (!F.cleValide(req.params.cle)) return entree(res, 'cle');
             const corps = lireExemplaires(req.body, cfg.collection.quantiteMax);
             if (corps.detail) return entree(res, corps.detail);
-            const r = await svc.remplacerExemplaires({ compteId: compteId(req), slug: req.params.slug, cle: req.params.cle, elements: corps.exemplaires, cfg });
+            let r;
+            try { r = await svc.remplacerExemplaires({ compteId: compteId(req), slug: req.params.slug, cle: req.params.cle, elements: corps.exemplaires, cfg }); } finally { invalider(compteId(req)); }
             if (r.refus) return refus(res, r);
             res.setHeader('Cache-Control', 'no-store');
             return res.status(200).json({ success: true, exemplaires: r.exemplaires });
@@ -167,4 +189,4 @@ function routesCollection(router, cfg) {
         } catch (e) { console.error(`❌ [v2 collection] écriture par produit : ${nomErreur(e)}`); return indispo(res); }
     });
 }
-module.exports = { routesCollection, lireCorps, lireExemplaires };
+module.exports = { routesCollection, lireCorps, lireExemplaires, VALEUR_LECTURES_PAR_HEURE };
