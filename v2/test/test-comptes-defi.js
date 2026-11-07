@@ -103,6 +103,25 @@ async function demarrerAvecCors(cfg) {
     }
     H.v('configuration : origines.siteWww', [cfg.origines.site, cfg.origines.siteWww], ['https://rat-market.fr', WWW]);
 
+    // C2 (mutants survivants de la relecture 1)
+    {
+        // (1) l'ordre « limite par IP, PUIS défi » : un client SANS jeton atteint quand même le 429 par IP (le défi n'est pas placé avant la limite)
+        const maxIp = cfg.limites.connexionIpHeure, mem = { 'x-forwarded-for': '198.51.100.77' }, codes = [];
+        for (let i = 0; i < maxIp + 1; i++) codes.push((await post('/api/compte/connexion', { email: `ip${i}@exemple.fr`, motDePasse: MDP }, mem)).statut);
+        H.v(`C2.1 ordre : ${maxIp} requêtes sans jeton d'une même IP => 422, la suivante => 429 (limite IP AVANT le défi)`, [codes.slice(0, maxIp).every(s => s === 422), codes[maxIp]], [true, 429]);
+        // (2) le courrier est contrôlé AVANT le défi : sans courrier et sans jeton, 503 (jamais 422)
+        A.registre.vider(); A.registre.fournir('turnstile', turnstile);
+        const sc = [await post('/api/compte/mot-de-passe-oublie', { email: 'bob@exemple.fr' }), await post('/api/compte/renvoyer-verification', { email: 'bob@exemple.fr' })];
+        H.v('C2.2 courrier absent ET jeton absent : 503 INDISPONIBLE sur oubli et renvoi (le courrier précède le défi)', sc.map(r => [r.statut, r.json.erreur.code]), [[503, 'INDISPONIBLE'], [503, 'INDISPONIBLE']]);
+        A.registre.fournir('courrier', courrier);
+        // (3) un 503 du vérificateur ne débite PAS le budget par adresse : après 12 pannes, les 10 essais de l'adresse passent encore (401), le 11e est 429
+        A.registre.fournir('turnstile', { verifier: async () => { throw new Error('panne'); } });
+        const pannes = []; for (let i = 0; i < 12; i++) pannes.push((await post('/api/compte/connexion', { email: 'budget@exemple.fr', motDePasse: MDP, turnstile: 'ok' })).statut);
+        A.registre.fournir('turnstile', turnstile);
+        const apres = []; for (let i = 0; i < 11; i++) apres.push((await post('/api/compte/connexion', { email: 'budget@exemple.fr', motDePasse: MDP, turnstile: 'ok' })).statut);
+        H.v('C2.3 budget par adresse intact après 12 réponses 503 : 10 essais => 401 puis 429', [pannes.every(s => s === 503), apres.slice(0, 10).every(s => s === 401), apres[10]], [true, true, 429]);
+    }
+
     // fail-closed
     A.registre.vider(); A.registre.fournir('courrier', courrier);
     const f = []; for (const [nom, R] of Object.entries(CHEMINS)) f.push(detail(await post(R.chemin, { ...R.corps('bob@exemple.fr'), turnstile: 'ok' })).slice(0, 2));
@@ -128,7 +147,8 @@ async function demarrerAvecCors(cfg) {
             const r = await H.appel(s.url, route, { methode: 'POST', corps, sansDefi: true, entetes: { ...A.SITE, ...A.ip(++n + 3000), ...entetes } });
             await s.fermer(); return r;
         };
-        const ESSAI = { V2_CIBLE: 'essai', V2_SECRET_MESURE: SEC }, EN = { 'x-rat-market-mesure': SEC };
+        const SERVICE_ESSAI = 'srv-db7ticgm7kps73crjibg';
+        const ESSAI = { V2_CIBLE: 'essai', V2_SECRET_MESURE: SEC, RENDER_SERVICE_ID: SERVICE_ESSAI }, EN = { 'x-rat-market-mesure': SEC };
         const st = r => [r.statut, r.json && r.json.erreur && r.json.erreur.detail];
         H.v('mesure : sans en-tête => 422 defi-anti-robot', st(await cas(ESSAI, {})), [422, 'defi-anti-robot']);
         H.v('mesure : en-tête faux => 422', st(await cas(ESSAI, { 'x-rat-market-mesure': SEC + 'z' })), [422, 'defi-anti-robot']);
@@ -146,7 +166,22 @@ async function demarrerAvecCors(cfg) {
         const prod = await cas({ V2_CIBLE: 'prod', V2_SECRET_MESURE: SEC }, EN, '/api/compte/mot-de-passe-oublie', { email: 'bob@exemple.fr' });
         H.v('mesure : oubli en prod avec le bon en-tête => 422', prod.statut, 422);
         H.v('mesure : l\'inscription n\'est PAS dispensée (essai, bon en-tête, sans jeton) => 422', st(await cas(ESSAI, EN, '/api/compte/inscription', { email: 'nouveau@exemple.fr' })), [422, 'defi-anti-robot']);
-        H.v('configuration : secretMesure null hors essai / trop court, le secret sur l\'essai', [lireConfig({ MONGODB_BASE: 'test_scratch', V2_CIBLE: 'prod', V2_SECRET_MESURE: SEC }).secretMesure, lireConfig({ MONGODB_BASE: 'test_scratch', ...ESSAI }).secretMesure], [null, SEC]);
+        const L = env => lireConfig({ MONGODB_BASE: 'test_scratch', ...env });
+        H.v('configuration : dispense inactive hors essai / sans service de l\'essai, active sur l\'essai', [L({ V2_CIBLE: 'prod', V2_SECRET_MESURE: SEC, RENDER_SERVICE_ID: SERVICE_ESSAI }).mesure.actif, L(ESSAI).mesure.actif], [false, true]);
+        // M1 : les variables de l'essai copiées sur un AUTRE service (ou hors Render) n'allument rien
+        H.v('M1 : variables de l\'essai copiées sur un autre service Render => 422 même avec le bon en-tête', st(await cas({ ...ESSAI, RENDER_SERVICE_ID: 'srv-autre-service-prod' }, EN)), [422, 'defi-anti-robot']);
+        H.v('M1 : RENDER_SERVICE_ID absent (hors Render) => 422', st(await cas({ V2_CIBLE: 'essai', V2_SECRET_MESURE: SEC }, EN)), [422, 'defi-anti-robot']);
+        H.v('M1 : identifiant de service de casse différente => 422', st(await cas({ ...ESSAI, RENDER_SERVICE_ID: SERVICE_ESSAI.toUpperCase() }, EN)), [422, 'defi-anti-robot']);
+        H.v('M1 : la raison d\'inactivité nomme la cause', [L({ V2_CIBLE: 'essai', V2_SECRET_MESURE: SEC, RENDER_SERVICE_ID: 'srv-x' }).mesure.raison, L({ V2_CIBLE: 'prod', V2_SECRET_MESURE: SEC }).mesure.raison, L({}).mesure.raison, L({ V2_CIBLE: 'essai', V2_SECRET_MESURE: 'court', RENDER_SERVICE_ID: SERVICE_ESSAI }).mesure.raison].map(x => typeof x === 'string' && x.length > 5 && !x.includes(SEC)), [true, true, true, true]);
+        // F1 : le secret n'est nulle part dans la configuration énumérable, ni dans sa sérialisation
+        const cfgE = L(ESSAI);
+        H.vrai('F1 : ni JSON.stringify(cfg) ni util.inspect(cfg) ne contiennent le secret ni son condensé', ![JSON.stringify(cfgE), require('util').inspect(cfgE, { depth: 6, showHidden: false }), JSON.stringify(cfgE.mesure)].some(s => s.includes(SEC) || s.includes(require('crypto').createHash('sha256').update(SEC).digest('hex'))));
+        H.vrai('F1 : cfg.secretMesure n\'existe plus (en clair)', !('secretMesure' in cfgE));
+        // la ligne de démarrage dit active / inactive (raison), sans le secret
+        const lignes = []; const lg = console.log; console.log = (...a) => lignes.push(a.join(' '));
+        try { for (const env of [ESSAI, { ...ESSAI, RENDER_SERVICE_ID: 'srv-autre' }]) { A.registre.vider(); A.registre.fournir('courrier', courrier); A.registre.fournir('turnstile', turnstile); const s = await A.demarrer(L(env)); await s.fermer(); } } finally { console.log = lg; }
+        const dm = lignes.filter(l => l.includes('dispense de mesure'));
+        H.v('démarrage : une ligne « dispense de mesure : active » puis « inactive (raison) », sans le secret', [dm.length, /active/.test(dm[0]) && !/inactive/.test(dm[0]), /inactive \(.+\)/.test(dm[1]), dm.some(l => l.includes(SEC))], [2, true, true, false]);
     }
 
     // Les outils de mesure portent l'en-tête (secret lu par NOM, jamais imprimé) quand le secret existe, et rien sinon
@@ -161,8 +196,29 @@ async function demarrerAvecCors(cfg) {
         await CE.ouvrirSession({ appeler, ids: ids1 }); await CE.ouvrirSession({ appeler, ids: ids0 });
         H.v('outil connexion-essai : l\'en-tête X-Rat-Market-Mesure n\'est posé qu\'avec le secret', [vusEntetes[0]['X-Rat-Market-Mesure'], vusEntetes[1]['X-Rat-Market-Mesure']], [SEC, undefined]);
         const enteteParcours = []; const fetchF = async (u, o) => { enteteParcours.push(o.headers); return { status: 200, headers: { get: () => 'rm_session=zz', getSetCookie: () => ['rm_session=zz'] } }; };
-        await PT.connecter('https://x', { role: 'r', email: 'a@b.fr', motDePasse: 'm' }, fetchF, SEC); await PT.connecter('https://x', { role: 'r', email: 'a@b.fr', motDePasse: 'm' }, fetchF);
+        const ESSAI_URL = 'https://rat-market-api-essai.onrender.com', cpt = { role: 'r', email: 'a@b.fr', motDePasse: 'm' };
+        await PT.connecter(ESSAI_URL, cpt, fetchF, SEC); await PT.connecter(ESSAI_URL, cpt, fetchF);
         H.v('outil parcours-test : l\'en-tête n\'est posé qu\'avec le secret', [enteteParcours[0]['x-rat-market-mesure'], enteteParcours[1]['x-rat-market-mesure']], [SEC, undefined]);
+        // F2 : le secret ne part QU'À l'hôte exact de l'essai ; ailleurs, refus local sans aucune requête
+        const avantF2 = enteteParcours.length; const refus = [];
+        for (const u of ['https://rat-market-api.onrender.com', 'https://api-v2.rat-market.fr', 'https://rat-market-api-essai.onrender.com.evil.fr', 'http://rat-market-api-essai.onrender.com', 'https://x']) {
+            let m = null; try { await PT.connecter(u, cpt, fetchF, SEC); } catch (e) { m = String(e.message); }
+            refus.push([m !== null && m.includes('V2_SECRET_MESURE') && !m.includes(SEC)]);
+        }
+        H.v('F2 parcours-test : hôte autre que l\'essai + secret => refus local nommant la variable, aucune requête', [refus.every(r => r[0]), enteteParcours.length - avantF2], [true, 0]);
+        let ouvre = null; try { await CE.ouvrirSession({ appeler, ids: ids1, base: 'https://rat-market-api.onrender.com' }); } catch (e) { ouvre = e.message; }
+        H.vrai('F2 connexion-essai : la base de l\'outil est déjà bornée à l\'essai (baseAutorisee)', CE.baseAutorisee('https://rat-market-api-essai.onrender.com') !== undefined);
+        // message clair : 422 defi-anti-robot => la variable est NOMMÉE, le secret jamais imprimé
+        const a422 = async () => ({ statut: 422, corps: { success: false, erreur: { code: 'ENTREE', detail: 'defi-anti-robot' } }, cookie: null });
+        for (const [nom, ids] of [['sans secret', ids0], ['avec secret', ids1]]) {
+            let m = null; try { await CE.ouvrirSession({ appeler: a422, ids }); } catch (e) { m = e.message; }
+            H.v(`outil connexion-essai (${nom}) : 422 defi-anti-robot => message qui nomme V2_SECRET_MESURE, sans le secret`, [m !== null && m.includes('V2_SECRET_MESURE'), m !== null && m.includes(SEC)], [true, false]);
+        }
+        const f422 = async () => ({ status: 422, headers: { get: () => null, getSetCookie: () => [] }, json: async () => ({ erreur: { code: 'ENTREE', detail: 'defi-anti-robot' } }) });
+        for (const sec of [null, SEC]) {
+            let m = null; try { await PT.connecter(ESSAI_URL, cpt, f422, sec); } catch (e) { m = e.message; }
+            H.v(`outil parcours-test (${sec ? 'avec' : 'sans'} secret) : 422 defi-anti-robot => message qui nomme V2_SECRET_MESURE, sans le secret`, [m !== null && m.includes('V2_SECRET_MESURE'), m !== null && m.includes(SEC)], [true, false]);
+        }
     }
 
     // hostname du jeton : liste fermée (rat-market.fr, www.rat-market.fr)
@@ -172,6 +228,28 @@ async function demarrerAvecCors(cfg) {
     H.v('hostname www.rat-market.fr : accepté', await juge('www.rat-market.fr'), true);
     for (const h of ['api-v2.rat-market.fr', 'evil.fr', 'www.rat-market.fr.evil.fr', 'xrat-market.fr', 'localhost', 'WWW.RAT-MARKET.FR', '', 'www.rat-market.fr:443'])
         H.v(`hostname « ${h} » : refusé`, await juge(h), false);
+    // F3 : un 5xx / un non-2xx / une panne réseau de siteverify LÈVE (=> 503), jamais un refus (422) ; l'action est vérifiée (liste fermée par route)
+    for (const [nom, f] of [['500', async () => ({ ok: false, status: 500, json: async () => ({}) })], ['503', async () => ({ ok: false, status: 503, json: async () => ({}) })], ['400', async () => ({ ok: false, status: 400, json: async () => ({}) })], ['réseau', async () => { throw new Error('ECONNRESET'); }]]) {
+        let leve = null; try { await verifierTurnstile('tok', null, { fetch: f, secret: 'S' }); } catch (e) { leve = e.message; }
+        H.vrai(`F3 : siteverify « ${nom} » => le vérificateur LÈVE (503 côté route)`, leve !== null);
+    }
+    {
+        A.registre.vider(); A.registre.fournir('courrier', courrier);
+        A.registre.fournir('turnstile', { verifier: async () => verifierTurnstile('tok', null, { fetch: async () => ({ ok: false, status: 502, json: async () => ({}) }), secret: 'S' }) });
+        const s5 = await demarrerAvecCors(cfg); const r5 = await H.appel(s5.url, '/api/compte/connexion', { methode: 'POST', corps: { email: 'bob@exemple.fr', motDePasse: MDP, turnstile: 'ok' }, entetes: { ...A.SITE, ...A.ip(7001) } }); await s5.fermer();
+        H.v('F3 : siteverify en 502 => la route répond 503 INDISPONIBLE (pas 422 defi-anti-robot)', [r5.statut, r5.json.erreur.code], [503, 'INDISPONIBLE']);
+        const ACT = (a, h = 'rat-market.fr') => async () => ({ ok: true, json: async () => ({ success: true, hostname: h, ...(a === undefined ? {} : { action: a }) }) });
+        const avecAction = (a, attendue) => verifierTurnstile('tok', null, { fetch: ACT(a), secret: 'S', action: attendue });
+        H.v('F3 action : celle de la route => accepté', [await avecAction('connexion', 'connexion'), await avecAction('inscription', 'inscription'), await avecAction('oubli', 'oubli'), await avecAction('renvoi', 'renvoi')], [true, true, true, true]);
+        H.v('F3 action : celle d\'une autre route, absente, vide, casse ou non texte => refusé', [await avecAction('inscription', 'connexion'), await avecAction(undefined, 'connexion'), await avecAction('', 'connexion'), await avecAction('Connexion', 'connexion'), await avecAction(42, 'connexion')], [false, false, false, false, false]);
+        const vusAction = []; A.registre.vider(); A.registre.fournir('courrier', courrier);
+        A.registre.fournir('turnstile', { verifier: async (j, ip, action) => { vusAction.push(action); return true; } });
+        const s6 = await demarrerAvecCors(cfg);
+        for (const [chemin, corps] of [['/api/compte/connexion', { email: 'bob@exemple.fr', motDePasse: MDP }], ['/api/compte/mot-de-passe-oublie', { email: 'bob@exemple.fr' }], ['/api/compte/renvoyer-verification', { email: 'bob@exemple.fr' }], ['/api/compte/inscription', { email: 'action@exemple.fr' }]])
+            await H.appel(s6.url, chemin, { methode: 'POST', corps: { ...corps, turnstile: 'ok' }, entetes: { ...A.SITE, ...A.ip(7100 + vusAction.length) } });
+        await s6.fermer(); await A.attendre();
+        H.v('F3 action : chaque route demande SON action (connexion, oubli, renvoi, inscription)', vusAction, ['connexion', 'oubli', 'renvoi', 'inscription']);
+    }
     H.v('hostname absent de la réponse : refusé (une garde s\'écrit par ce qu\'elle autorise)', await juge(undefined), false);
     H.v('hostname non texte : refusé', await verifierTurnstile('tok', null, { fetch: async () => ({ ok: true, json: async () => ({ success: true, hostname: 42 }) }), secret: 'S' }), false);
     H.v('success false avec bon hostname : refusé', await verifierTurnstile('tok', null, { fetch: async () => ({ ok: true, json: async () => ({ success: false, hostname: 'rat-market.fr' }) }), secret: 'S' }), false);

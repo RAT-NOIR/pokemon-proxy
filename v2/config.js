@@ -3,6 +3,7 @@
 // ACHETE-AVANT-JOUR (2026-10-17) : la poche `achete` (analyses payées avec la 1.0.5) se débite AVANT `jour`, ordre FIXÉ dans le code (poches.ordreDe) ; V2_ORDRE_POCHES ne peut pas la nommer.
 // Les autres anciennes (essai, accueil, hebdo, abonnement) restent des NOMS CONNUS en lecture seule : le grand livre sait encore RENDRE un débit pris avant la bascule (rendrePoche),
 // et les soldes anciens restent lisibles ; aucune ne se DÉBITE plus (essayerPoche) et V2_ORDRE_POCHES ne peut plus les nommer.
+const SERVICE_ESSAI = 'srv-db7ticgm7kps73crjibg';   // L1 : le service Render de l'essai (rat-market-api-essai), seul où la dispense de mesure peut s'allumer
 const POCHES = Object.freeze(['jour']);
 const POCHES_ANCIENNES = Object.freeze(['essai', 'accueil', 'hebdo', 'abonnement', 'achete']);
 const entier = (nom, v, defaut, min = 0, max = Infinity) => {
@@ -122,6 +123,19 @@ function lireConfig(env = process.env) {
         const raison = variableFautive || 'configuration du modèle';
         if (empreinteVoulue) { empreinteExtension = false; console.warn(`⚠️ [v2 config] empreintes de l'extension DÉSACTIVÉES : configuration du modèle mal formée (${raison})`); }
         else console.warn(`⚠️ [v2 config] configuration du modèle d'empreinte mal formée, ignorée (drapeau éteint) : ${raison}`);
+    }
+    // L1 : exemption ÉTROITE du défi Turnstile pour les outils de mesure. Écrite par ce qu'elle autorise : TROIS conditions positives, toutes requises —
+    // V2_CIBLE exactement « essai », V2_SECRET_MESURE d'au moins 32 caractères, ET RENDER_SERVICE_ID exactement le service de l'essai (variable posée par Render lui-même : un copier-coller
+    // des variables de l'essai vers un autre service ne l'emporte pas). Le secret n'est JAMAIS gardé : seul son condensé SHA-256 l'est, non énumérable (ni JSON.stringify ni console.log ne l'impriment).
+    const mesure = { actif: false, raison: '' };
+    {
+        const secret = env.V2_SECRET_MESURE;
+        if (typeof secret !== 'string' || !secret) mesure.raison = 'V2_SECRET_MESURE absent';
+        else if (env.V2_CIBLE !== 'essai') mesure.raison = 'V2_CIBLE n\'est pas « essai »';
+        else if (secret.length < 32) mesure.raison = 'V2_SECRET_MESURE trop court (moins de 32 caractères)';
+        else if (env.RENDER_SERVICE_ID !== SERVICE_ESSAI) mesure.raison = 'ce service n\'est pas celui de l\'essai (RENDER_SERVICE_ID)';
+        else { mesure.actif = true; mesure.raison = 'essai'; }
+        Object.defineProperty(mesure, 'sha', { value: mesure.actif ? require('crypto').createHash('sha256').update(secret).digest('hex') : null, enumerable: false, writable: false, configurable: false });
     }
     return gele({
         actif,
@@ -332,8 +346,7 @@ function lireConfig(env = process.env) {
         // STRIPE-V2 : les abonnements Pro et Fondateurs. ÉTEINTS par défaut (V2_ABONNEMENTS=1 les allume) ; ne lève JAMAIS (voir abonnements/config.js).
         abonnements: require('./abonnements/config').lireAbonnements(env),
         turnstile,
-        // L1 : exemption ÉTROITE du défi pour les outils de mesure. Écrite par ce qu'elle autorise : V2_CIBLE exactement « essai » ET V2_SECRET_MESURE d'au moins 32 caractères ; sinon null (inerte).
-        secretMesure: (env.V2_CIBLE === 'essai' && typeof env.V2_SECRET_MESURE === 'string' && env.V2_SECRET_MESURE.length >= 32) ? env.V2_SECRET_MESURE : null,
+        mesure,   // L1 : exemption ÉTROITE du défi pour les outils de mesure (voir plus haut) : { actif, raison } ; le condensé du secret est non énumérable
         cookieSecure
     });
 }

@@ -41,7 +41,14 @@ function entetesDeLApi({ cookie = null, entetes = {}, avecCorps = false }) {
 }
 /** Une ouverture de session par compte : le cookie rm_session, jamais affiché. */
 async function connecter(essai, c, fetchFn = fetch, secretMesure = null) {          // `fetchFn` : substituable par un banc ; `secretMesure` (V2_SECRET_MESURE du .env) dispense du seul défi Turnstile sur l'ESSAI, jamais imprimé
-    const r = await fetchFn(`${essai}/api/compte/connexion`, { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://rat-market.fr', 'x-rat-market': '1', ...(typeof secretMesure === 'string' && secretMesure ? { 'x-rat-market-mesure': secretMesure } : {}) }, body: JSON.stringify({ email: c.email, motDePasse: c.motDePasse }), signal: AbortSignal.timeout(90000) });
+    const avecSecret = typeof secretMesure === 'string' && secretMesure !== '';
+    // L1 (F2) : le secret ne part QU'À l'hôte exact de l'essai (liste fermée) ; ailleurs, refus local avant toute requête.
+    if (avecSecret && essai !== 'https://rat-market-api-essai.onrender.com') throw new Error('V2_SECRET_MESURE n\'est envoyée qu\'à https://rat-market-api-essai.onrender.com : refus local, aucune requête');
+    const r = await fetchFn(`${essai}/api/compte/connexion`, { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://rat-market.fr', 'x-rat-market': '1', ...(avecSecret ? { 'x-rat-market-mesure': secretMesure } : {}) }, body: JSON.stringify({ email: c.email, motDePasse: c.motDePasse }), signal: AbortSignal.timeout(90000) });
+    if (r.status === 422) {
+        let j = null; try { j = await r.json(); } catch { /* corps non JSON */ }
+        if (j && j.erreur && j.erreur.detail === 'defi-anti-robot') throw new Error(`connexion du compte « ${c.role} » : défi anti-robot refusé (422) — ${avecSecret ? 'V2_SECRET_MESURE est posée ici mais l\'essai ne l\'accepte pas (secret différent ou service sans la variable)' : 'V2_SECRET_MESURE est absente du .env : la poser, identique à celle de l\'essai'}`);
+    }
     if (r.status !== 200) throw new Error(`connexion du compte « ${c.role} » refusée (HTTP ${r.status})`);
     const m = (r.headers.getSetCookie ? r.headers.getSetCookie() : [r.headers.get('set-cookie') || '']).join(';').match(/rm_session=([A-Za-z0-9_-]+)/);
     if (!m) throw new Error(`connexion du compte « ${c.role} » : pas de cookie de session`);
