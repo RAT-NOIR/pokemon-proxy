@@ -10,6 +10,7 @@ const EXPOSE ='Retry-After, Idempotency-Replayed';
 
 // GALERIE : les chemins de la Communauté (le site seul, avec cookies) ; le pseudo vit sous /api/compte. Méthodes du préflight : GET, POST, PUT, DELETE.
 const GALERIE_CHEMINS = /^\/api\/(galerie|banque|enregistres|classeurs|signalements|illustrations|admin\/moderation|compte\/pseudo)(\/.*)?$/;
+const LIEN_ORDINATEUR_CHEMIN = /^\/api\/lien-ordinateur$/;
 function profils(cfg, env = process.env) {
     const o = cfg.origines;
     const ext = [o.extension, o.extensionDev].filter(x => typeof x === 'string' && x);
@@ -30,6 +31,8 @@ function profils(cfg, env = process.env) {
     ];
     // GALERIE : les chemins de la Communauté s'ajoutent au profil du site SEULEMENT lot allumé (éteint, le profil est celui d'avant, octet pour octet)
     if (cfg.galerie && cfg.galerie.actif === true) liste.find(x => x.nom === 'site').chemins.push(GALERIE_CHEMINS);
+    // LIEN-ORDINATEUR : ce chemin EXACT s'ajoute au profil du site SEULEMENT drapeau allumé (éteint, le profil est celui d'avant, octet pour octet) ; son préflight n'annonce que POST (voir plus bas)
+    if (cfg.lienOrdinateur && cfg.lienOrdinateur.actif === true) liste.find(x => x.nom === 'site').chemins.push(LIEN_ORDINATEUR_CHEMIN);
     return liste;
 }
 
@@ -53,7 +56,8 @@ function middlewareV2(cfg, env = process.env) {
             // « Ma collection » (site) : GET et PUT seulement, jamais POST ni DELETE — le profil du site ailleurs est inchangé.
             const collection = p.nom === 'site' && /^\/api\/collection(\/.*)?$/.test(chemin);
             const galerie = p.nom === 'site' && cfg.galerie && cfg.galerie.actif === true && GALERIE_CHEMINS.test(chemin);
-            res.setHeader('Access-Control-Allow-Methods', galerie ? 'GET, POST, PUT, DELETE' : collection ? 'GET, PUT' : delPermis ? `${p.methodes}, DELETE` : p.methodes);
+            const lien = p.nom === 'site' && LIEN_ORDINATEUR_CHEMIN.test(chemin);   // LIEN-ORDINATEUR : POST seulement
+            res.setHeader('Access-Control-Allow-Methods', lien ? 'POST' : galerie ? 'GET, POST, PUT, DELETE' : collection ? 'GET, PUT' : delPermis ? `${p.methodes}, DELETE` : p.methodes);
             res.setHeader('Access-Control-Allow-Headers', p.entetes);
             res.setHeader('Access-Control-Max-Age', '600');
             return res.status(204).end();
