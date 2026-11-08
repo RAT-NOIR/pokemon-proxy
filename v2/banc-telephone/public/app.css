@@ -1,0 +1,22 @@
+:root { color-scheme: light dark; --fond: #fafafa; --texte: #111; --carte: #fff; --trait: #d0d0d0; --ok: #0a7a2f; --ecart: #b45309; --ko: #b91c1c; --attente: #475569; }
+@media (prefers-color-scheme: dark) { :root { --fond: #0f1115; --texte: #eee; --carte: #181b21; --trait: #333; --ok: #4ade80; --ecart: #fbbf24; --ko: #f87171; --attente: #94a3b8; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--fond); color: var(--texte); font: 16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 640px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 1.4rem; margin: 0 0 4px; }
+h2 { font-size: 1rem; margin: 20px 0 6px; }
+.sous { color: var(--attente); font-size: 0.9rem; margin: 0 0 12px; }
+.verdict { border: 3px solid var(--attente); border-radius: 12px; padding: 16px; text-align: center; background: var(--carte); }
+.verdict.ok { border-color: var(--ok); } .verdict.ecart { border-color: var(--ecart); } .verdict.ko { border-color: var(--ko); }
+#verdictMot { font-size: 2.6rem; font-weight: 800; letter-spacing: 0.02em; line-height: 1.1; }
+.verdict.ok #verdictMot { color: var(--ok); } .verdict.ecart #verdictMot { color: var(--ecart); } .verdict.ko #verdictMot { color: var(--ko); } .verdict.attente #verdictMot { color: var(--attente); }
+#verdictDetail { margin-top: 6px; font-size: 1rem; }
+.trois p { margin: 6px 0; font-size: 1.05rem; font-weight: 600; word-break: break-word; }
+.boutons { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+button { flex: 1 1 200px; min-height: 52px; font-size: 1.05rem; font-weight: 700; border-radius: 10px; border: 2px solid var(--texte); background: var(--carte); color: var(--texte); }
+button:disabled { opacity: 0.4; }
+.envoi { font-size: 0.9rem; color: var(--attente); }
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; background: var(--carte); }
+td { border: 1px solid var(--trait); padding: 4px 6px; vertical-align: top; word-break: break-word; }
+td:first-child { width: 46%; color: var(--attente); }
+pre { background: var(--carte); border: 1px solid var(--trait); border-radius: 8px; padding: 8px; font-size: 0.75rem; white-space: pre-wrap; word-break: break-all; max-height: 260px; overflow: auto; margin: 0; }
