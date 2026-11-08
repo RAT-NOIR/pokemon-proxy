@@ -222,8 +222,8 @@ function lireConfig(env = process.env) {
                      jour: entier('V2_COURRIELS_JOUR', env.V2_COURRIELS_JOUR, 250, 1, 300), avertissementsInactifs: booleen('V2_AVERTISSEMENTS_INACTIFS', env.V2_AVERTISSEMENTS_INACTIFS, false) },
         // LIEN-ORDINATEUR (D1 du site, accordée par l'éditeur le 2026-11-08) : POST /api/lien-ordinateur, éteinte par défaut ; allumée par la valeur « 1 » EXACTEMENT, toute autre valeur l'éteint (et est dite, voir plus bas) sans
         // jamais rendre la configuration invalide (une faute de frappe sur ce drapeau ne doit pas fermer toutes les routes v2). `parIpJour` : les demandes par IP et par jour UTC (3 : un visiteur légitime en fait une, deux avec
-        // une faute de frappe) ; `jour` : le plafond d'envois par jour civil de Paris (200 = la place que la classe « avertissement » du plafond de Brevo laisse par défaut, 250 − 20 %, courriels de sécurité préservés).
-        lienOrdinateur: { actif: env.V2_LIEN_ORDINATEUR === '1', parIpJour: entier('V2_LIEN_ORDINATEUR_IP_JOUR', env.V2_LIEN_ORDINATEUR_IP_JOUR, 3, 1, 100), jour: entier('V2_LIEN_ORDINATEUR_JOUR', env.V2_LIEN_ORDINATEUR_JOUR, 200, 1, 300) },
+        // une faute de frappe) ; `jour` : le plafond d'envois par jour civil de Paris (100, borne haute 150 : la route envoie en classe « avertissement » du plafond de Brevo, 200 par défaut ; en prendre 100 laisse la moitié de la classe aux avertissements de comptes tant qu'une classe dédiée n'existe pas).
+        lienOrdinateur: { actif: env.V2_LIEN_ORDINATEUR === '1', parIpJour: entier('V2_LIEN_ORDINATEUR_IP_JOUR', env.V2_LIEN_ORDINATEUR_IP_JOUR, 3, 1, 100), jour: entier('V2_LIEN_ORDINATEUR_JOUR', env.V2_LIEN_ORDINATEUR_JOUR, 100, 1, 150) },
         urls: { verification: url('V2_URL_VERIFICATION', env.V2_URL_VERIFICATION, 'https://rat-market.fr/fr/verification'), reinit: url('V2_URL_REINIT', env.V2_URL_REINIT, 'https://rat-market.fr/fr/reinitialisation') },
         empreinte: { secret: secretEmpreinte, jours: entier('V2_EMPREINTE_JOURS', env.V2_EMPREINTE_JOURS, 365, 1) },
         origines: { extension: 'chrome-extension://fgibgdgmadfejkaapeohbhaoolhgpkhb',
