@@ -21,7 +21,9 @@ const CHAMPS_POSES_APRES = ['illustrateur', 'illustrateurPreuve'];
 // source, posée pour qu'une fiche ne mélange plus plusieurs impressions. Le parseur ne la refabrique pas non plus.
 // ➕ 2026-10-13 : `origine-slug` (completer-fiches-multi.js, lot MULTI) — une impression par numéro d'ORIGINE lu dans le slug Cardmarket d'une réimpression,
 // sous le nom d'expansion synthétique du set. Aucune page de carte ne la déclare : sans cette marque, une recollecte l'effacerait (§59).
-const SOURCES_POSEES_APRES = ['setlist', 'numero-cardmarket', 'origine-slug'];
+// ➕ 2026-11-08 : `origine-lue` (poser-numeros-imprimes.js) — le numéro et le total d'ORIGINE tels qu'IMPRIMÉS sur la carte WCD / Prize Pack, LUS sur un scan.
+// Aucune page de carte ne les déclare : sans cette marque, une recollecte les effacerait (§59). Posée dans le même commit que l'outil.
+const SOURCES_POSEES_APRES = ['setlist', 'numero-cardmarket', 'origine-slug', 'origine-lue'];
 const cleImpression = i => `${i.tirage}|${i.expansion}|${i.numero ?? ''}|${i.deck ?? ''}`;
 
 /**
