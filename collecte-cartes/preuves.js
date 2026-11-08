@@ -197,8 +197,19 @@ const echapper = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
  *  · mEEv → mEE : planche pl-sb-mEEv-mEZ.png (phase4-b-visuels), 10 cartes MEGA Starter Set Eevee ex (Jolteon 001/019 … Eevee 020/019) portant « mEE » dans la ligne du bas ; Cardmarket : slugSet MEGA-Starter-Set-Eevee-ex, idExpansion 6637, codeSet « mEEv ».
  *  · sKV → sK  : planche pl-sKV.png (phase4-b-visuels), 5 cartes VSTAR Premium Trainer Box (Cherubi 001/030 … Mew 007/030) portant « sK » ; Cardmarket : slugSet Premium-Trainer-Box-VSTAR, idExpansion 4515, codeSet « sKV ».
  * Aucun autre set ne porte « mEE » ou « sK » (univers-expansions.json, table-sets.js, table-sets-auto.json, table-sets-sans-page.json : aucune occurrence, vérifié le 2026-11-02).
+ *  · M-P/TH → M-P : promos thaïes imprimant « NNN/M-P » (slug Cardmarket …-M-PTH069), cartes thaïes relues le 2026-11-08 sur couverture\S8\PHASE4\N8R1\validation\planche-07.png à planche-11.png.
+ *  · SV-P/TH et S-P/TH ne sont PAS admis : aucun scan cité ; ils reviendront avec leur planche.
  */
-const CODES_IMPRIMES_ALIAS = Object.freeze({ mEEv: 'mEE', sKV: 'sK' });
+const CODES_IMPRIMES_ALIAS = Object.freeze({ mEEv: 'mEE', sKV: 'sK', 'M-P/TH': 'M-P' });
+/** La clé de la table dont le code imprimé vaut `code` ET dont le code Cardmarket est celui du produit (`ligne`, ou, ligne vide, trouvé dans le slug) : indépendant de l'ordre des clés, deux clés au même code imprimé comprises.
+ *  La branche « slug quand la ligne est vide » ne sert pas aux clés contenant « / » (M-P/TH) : un slug n'a jamais de « / » (`…-M-PTH069`), elle ne peut y concorder ; ces clés exigent la ligne exacte. */
+function cleAliasPour(table, code, ligne, slug = null, n = '') {
+    return Object.keys(table).find(k => {
+        if (norm(table[k]) !== code) return false;
+        const cmN = norm(k);
+        return ligne === cmN || (!ligne && slug && new RegExp(`(^|-)${echapper(cmN)}-?0*${echapper(n)}$`).test(slug));
+    });
+}
 /**
  * (07/11) Cardmarket range PLUSIEURS decks sous un seul code (§53 : sA = cinq decks) ; la carte imprime alors le code de SON deck. Table FERMÉE, code Cardmarket du set (ligne codes_set) → { slugSet exigé,
  * codes imprimés admis, preuve }. Écrite par ce qu'elle AUTORISE (§51) : tout code imprimé différent et absent d'ici reste `code-set-different` ; aucune règle générale (préfixe, inclusion). Chaque entrée est
@@ -220,11 +231,8 @@ function motifDeCode(lu, produit, np, drapeaux = []) {
     const n = String(np).trim().toLowerCase().replace(/^0+(?=\d)/, '');
     const slug = texte(produit?.slug) ? produit.slug.trim().toLowerCase() : null;
     // Alias FERMÉ (2026-11-02) : le code imprimé n'est pas celui de Cardmarket. Passe SEULEMENT si le produit porte exactement le code Cardmarket de la paire (ligne codes_set, ou slug quand la ligne est vide).
-    const cm = Object.keys(CODES_IMPRIMES_ALIAS).find(k => norm(CODES_IMPRIMES_ALIAS[k]) === code);
-    if (cm) {
-        const cmN = norm(cm);
-        if (ligne === cmN || (!ligne && slug && new RegExp(`(^|-)${echapper(cmN)}-?0*${echapper(n)}$`).test(slug))) { drapeaux.push(`codeAlias:${cm}→${CODES_IMPRIMES_ALIAS[cm]}`); return null; }
-    }
+    const cm = cleAliasPour(CODES_IMPRIMES_ALIAS, code, ligne, slug, n);
+    if (cm) { drapeaux.push(`codeAlias:${cm}→${CODES_IMPRIMES_ALIAS[cm]}`); return null; }
     // Table fermée des codes imprimés admis (07/11) : la ligne codes_set du produit est EXACTEMENT le code Cardmarket de l'entrée, son slugSet celui de l'entrée, et le code lu est l'un des imprimés prouvés.
     // Et le NUMÉRO du produit est l'un de ceux que la preuve couvre (comparé par cleNumero de la jointure : 004 = 4).
     const admis = Object.keys(CODES_IMPRIMES_ADMIS).find(k => ligne === norm(k) && produit?.slugSet === CODES_IMPRIMES_ADMIS[k].slugSet && CODES_IMPRIMES_ADMIS[k].imprimes.some(i => norm(i.code) === code && i.numeros.some(x => J.cleNumero(String(x)) === J.cleNumero(String(np)))));
@@ -846,5 +854,5 @@ function trousDuManifeste({ trous, recus, famille }) {
     return { trous: gardes, ecartes };
 }
 
-module.exports = { POSITIONS_RONDES, CODES_IMPRIMES_ADMIS, CODES_SANS_TOTAL, sansTotalAdmis, SOURCE, LOT, SRC, LANGUE_PREUVE, EDITIONS_LOCALES, REGLES, REGLE_MEME_DESSIN, LANGUES_NON_LATINES, MOYENS_DE_LECTURE, MOYENS_DE_LANGUE, SEUIL_PLANCHER, SCORE_PLANCHER, VIDE_PLANCHER, lienAvecLEntree, evaluerRemplacementMemeDessin, langueDuProduit, formeEntree, lireManifeste, lireValidations, rapprocher, evaluerPreuveLue, evaluerDeuxSources, evaluerEntree,
+module.exports = { cleAliasPour, POSITIONS_RONDES, CODES_IMPRIMES_ADMIS, CODES_SANS_TOTAL, sansTotalAdmis, SOURCE, LOT, SRC, LANGUE_PREUVE, EDITIONS_LOCALES, REGLES, REGLE_MEME_DESSIN, LANGUES_NON_LATINES, MOYENS_DE_LECTURE, MOYENS_DE_LANGUE, SEUIL_PLANCHER, SCORE_PLANCHER, VIDE_PLANCHER, lienAvecLEntree, evaluerRemplacementMemeDessin, langueDuProduit, formeEntree, lireManifeste, lireValidations, rapprocher, evaluerPreuveLue, evaluerDeuxSources, evaluerEntree,
     verifierCache, setAdmisPourPosition, preuvesDe, motifDeNom, motifDeNomTraduit, REGLES_SANS_POKEDEX, construireTableJaCroisee, preuveParTableCroisee, porteUnTemoinTraduit, CHAMPS_TEMOIN_TRADUIT, LANGUES_A_NOM_TRADUIT, TAMPONS_ATTENDUS, tamponAttendu, cleFiche, grouperUnites, MOTIFS_DE_TROU, motifDeTrou, trousDuManifeste, sha256De, racineDe };

@@ -1179,6 +1179,28 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.match(mt(trad({ codeSet: 's' }), pm), /code-set-different/, '« s » contre sKV refuse');
         assert.ok(!drap(trad(), ptrad()).some(d => d.startsWith('codeAlias')), 'aucun alias hors des deux paires : pas de drapeau');
     });
+    await test('alias de code thaï : M-P/TH→M-P seul (sens unique, ligne exacte, indépendant de l\'ordre des clés)', () => {
+        const th = (code, o = {}) => { const t = trad({ langue: 'th', codeSet: code, numero: '069', ...o }); return { ...t, attendu: { ...t.attendu, numero: '069' } }; };
+        const pth = (ligne, o = {}) => ptrad({ tirage: 'th', numero: '069', slug: 'Mareep-M-PTH069', codeSet: ligne, ...o });
+        const e = th('M-P'), p = pth('M-P/TH');
+        assert.deepStrictEqual(lue(e, p), { ok: true, motifs: [] }, '(a) M-P imprimé contre la ligne M-P/TH');
+        assert.ok(drap(e, p).includes('codeAlias:M-P/TH→M-P'), 'le drapeau codeAlias est écrit');
+        assert.match(mt(e, pth('M-P/KR')), /code-set-different/, '(b) ligne non listée');
+        assert.match(mt(th('SV-P'), p), /code-set-different/, '(c) SV-P lu sur ligne M-P/TH');
+        assert.strictEqual(lue(th('M-P/TH'), p).ok, true, '(d) M-P/TH lu sur M-P/TH comme avant');
+        assert.match(mt(th('SV-P'), pth('SV-P/TH', { slug: 'Mareep-SV-PTH069' })), /code-set-different/, 'SV-P/TH non admis (aucune planche)');
+        assert.match(mt(th('S-P'), pth('S-P/TH', { slug: 'Mareep-S-PTH069' })), /code-set-different/, 'S-P/TH non admis (aucune planche)');
+        assert.match(mt(e, pth('', { slug: 'Mareep-M-PTH069' })), /code-set-different/, 'ligne vide + slug M-PTH069 : la branche slug ne sert pas aux clés à « / »');
+        assert.match(mt(trad({ nom: 'サンダース', dex: 135, pv: 110, numero: '001', codeSet: 'mEE' }), ptrad({ numero: '001', slug: 'Jolteon-mEEv-001', codeSet: 'mEZ', nomEn: 'Jolteon' })), /code-set-different/, 'ligne mEZ + slug mEEv : la ligne non vide l\'emporte sur le slug');
+        // (e) deux clés au même code imprimé : l'ordre des clés ne change rien
+        const A = { 'X/1': 'ZZ', 'Y/2': 'ZZ' };
+        assert.strictEqual(PV.cleAliasPour(A, 'zz', 'y/2'), 'Y/2');
+        assert.strictEqual(PV.cleAliasPour({ 'Y/2': 'ZZ', 'X/1': 'ZZ' }, 'zz', 'y/2'), 'Y/2');
+        assert.strictEqual(PV.cleAliasPour(A, 'zz', 'x/1'), 'X/1');
+        assert.strictEqual(PV.cleAliasPour(A, 'zz', 'w/3'), undefined);
+        // (f) alias existants
+        assert.strictEqual(lue(trad({ codeSet: 'sK' }), ptrad({ slug: 'Mareep-sKV005', slugSet: 'Premium-Trainer-Box-VSTAR' })).ok, true, 'sKV');
+    });
     await test('V / VMAX / VSTAR sans Pokédex lu : PV + attaques (dégâts) + code + numéro, liste fermée (08/11)', () => {
         const attaquesLues = [{ nom: '风暴俯冲', degats: 220 }, { nom: '星耀汇聚', degats: null }];
         const lugia = (o = {}) => entree({ attendu: { ...entree().attendu, numero: '161' }, lu: { nom: '洛奇亚VSTAR', numero: '161', total: '131', langue: 'zh-hans', tampon: null, finition: 'normale', marques: ['code cs6aC imprimé'], codeSet: 'cs6aC', pv: 280, attaques: attaquesLues, ...o } });
