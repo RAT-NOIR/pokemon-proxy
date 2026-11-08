@@ -63,6 +63,10 @@ const attente = ms => new Promise(r => setTimeout(r, ms));
             for (let i = 0; i < DELAI * 4; i++) { const p = JSON.parse(await evalue('JSON.stringify(window.__banc.E.prep)')); if (p && (p.etat === 'pret' || p.etat === 'echec' || p.etat === 'abandon')) { prep = p; break; } await attente(250); }
             attendPret = Date.now() - tNav;
         }
+        // --eval-fichier=<js> : évalue ce fichier dans la page (expression asynchrone) et imprime le résultat ; --sans-clic=1 : s'arrête là (diagnostic)
+        const EVAL = arg('eval-fichier', '');
+        if (EVAL) { console.log('EVAL', JSON.stringify(await evalue(fs.readFileSync(EVAL, 'utf8'), true))); }
+        if (arg('sans-clic', '') === '1') { try { cp.execFileSync('taskkill.exe', ['/PID', String(chrome.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* déjà arrêté */ } srv.close(); setTimeout(() => process.exit(0), 500); return; }
         // le premier clic, puis des scans de plus (même page, session déjà prête)
         const t1 = Date.now();
         await evalue('window.__banc.lancer("wasm")', true);
