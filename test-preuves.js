@@ -1199,6 +1199,10 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.match(mt(lugia({ attaques: [{ nom: '风暴俯冲', degats: '220' }] }), plugia()), /attaques-non-lues/, 'dégâts en texte : illisible');
         assert.match(mt(lugia(), plugia({ attaquesCarte: null })), /attaques-de-base-inconnues/, 'base sans attaques');
         assert.match(mt(lugia(), plugia({ attaquesCarte: [{ nom: 'Tempest Dive', degats: null }] })), /attaques-de-base-inconnues|attaques-differentes/, 'base sans dégâts : refus');
+        assert.match(mt(lugia({ attaques: [{ nom: '星耀汇聚', degats: null }] }), plugia({ attaquesCarte: [{ nom: 'Star Requiem', degats: null }] })), /attaques-de-base-inconnues/, 'base ET lecture sans aucune attaque à dégâts : refus, pas égalité de deux suites vides');
+        assert.match(mt(lugia({ regle: 'V' }), plugia()), /regle-incoherente/, 'lu.regle posé et différent de la règle du nom lu : refus');
+        assert.match(mt(lugia(), plugia({ attaquesCarte: [{ nom: 'Tempest Dive', degats: '220' }, { nom: 'X', degats: '-' }] })), /attaques-de-base-inconnues/, 'dégât de base illisible (« - ») : motif exact attaques-de-base-inconnues');
+        assert.match(mt(lugia(), plugia({ attaquesCarte: [{ nom: 'Tempest Dive', degats: '220' }, { nom: 'X', degats: '20+10' }] })), /attaques-de-base-inconnues/, 'dégât de base illisible (« 20+10 ») : idem');
         assert.match(mt(lugia({ codeSet: 'cs6bC' }), plugia()), /code-set-different/, 'code du set faux');
         assert.match(mt(lugia({ numero: '160' }), plugia()), /numero-different/, 'numéro faux');
         assert.match(mt(lugia({ nom: '洛奇亚VMAX' }), plugia()), /pokedex-non-lu/, 'règle lue ≠ règle du produit : variante fermée, règle actuelle (refus)');
