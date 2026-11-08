@@ -13,10 +13,10 @@ const S = require('../../v2/banc-telephone/stockage');
 const lot = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'v2', 'banc-telephone', 'public', 'lot.json'), 'utf8'));
 const cfg = { modeleEmpreinte: { id: 'p8000-poids8s-1', sha256: lot.modeleSha256, octets: fs.statSync(MODELE).size } };
 const deposes = [];
-const app = express(); app.use(express.json());
+const app = express(); app.use(require('../../v2/banc-telephone/corps').analyseur()); app.use(express.json());
 app.get(`/api/modele-empreinte/${lot.modeleSha256}`, (req, res) => { res.setHeader('Content-Type', 'application/octet-stream'); res.setHeader('Content-Length', String(fs.statSync(MODELE).size)); fs.createReadStream(MODELE).pipe(res); });
 app.post('/api/banc/telephone/resultat', (req, res) => { const v = S.valider(req.body); if (!v.ok) { deposes.push({ refuse: v.detail }); return res.status(400).json({ success: false, detail: v.detail }); } deposes.push(v.doc); res.status(201).json({ success: true, id: 'local' }); });
-const router = express.Router(); routes.monter(router, cfg, { envBancTelephone: { V2_BANC_TELEPHONE: '1', V2_CIBLE: 'essai', RENDER_SERVICE_ID: 'srv-db7ticgm7kps73crjibg' } }); app.use(router);
+const router = express.Router(); routes.monter(router, cfg, { envBancTelephone: { V2_BANC_TELEPHONE: '1', V2_CIBLE: 'essai', RENDER_SERVICE_ID: 'srv-db7ticgm7kps73crjibg', MONGODB_BASE: 'rm_essai' } }); app.use(router);
 const srv = http.createServer(app);
 const attente = ms => new Promise(r => setTimeout(r, ms));
 (async () => {

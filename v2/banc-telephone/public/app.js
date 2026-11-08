@@ -6,13 +6,14 @@
 // Aucun innerHTML : tout passe par textContent.
 import { versTenseur, normaliserL2, vecteurDepuisSortie, nombreDeFils, COTE_MODELE } from './empreinte.js';
 import { cosinus, course, sonderAdaptateur, creerSessionGpu } from './moteur-ort.js';
+import { jugerLot, jugerMesure, gardeExtension, texteGarde, ecartChaine, moteurRealise, texteErreur, classerBlocage, hoteFinal } from './verdict.mjs';
+// NOTE (tour 1) : la page infère sur le FIL PRINCIPAL (l'extension le fait dans un Worker) : les temps et le p95 s'en lisent comme tels (le fil principal gèle l'affichage pendant l'inférence).
 
 const $ = id => document.getElementById(id);
 const meta = n => (document.querySelector(`meta[name="${n}"]`) || {}).content || '';
 const SHA = meta('modele-sha256'), OCTETS = Number(meta('modele-octets')) || 0;
-const SEUIL_IDENTIQUE = 0.9999;
 const aleaHex = n => Array.from(crypto.getRandomValues(new Uint8Array(n)), b => b.toString(16).padStart(2, '0')).join('');
-const E = { modele: null, shaVerifie: null, telechargementMs: null, verifShaMs: null, lot: null, vecWasm: null, runId: aleaHex(8), decodeurOptions: null, gpu: null, mesures: {} };
+const E = { modele: null, shaVerifie: null, telechargementMs: null, verifShaMs: null, lot: null, vecWasm: null, runId: aleaHex(8), gpu: null, reseau: null, infoModeleDeposee: false, mesures: {} };
 
 // ── affichage
 const ascii = s => String(s == null ? '' : s).replace(/[^\x20-\x7E]/g, '?');
@@ -23,11 +24,11 @@ const t0 = performance.now();
 const journal = m => { $('journal').textContent += `[${((performance.now() - t0) / 1000).toFixed(1)} s] ${m}\n`; };
 const etat = (mot, detail, classe) => { $('verdictMot').textContent = mot; $('verdictDetail').textContent = detail || ''; $('verdict').className = `verdict ${classe}`; };
 let stockage = null; try { stockage = window.localStorage; } catch { stockage = null; }
-const etape = x => { try { if (stockage) stockage.setItem('rm-banc-etape', x); } catch { /* sans stockage */ } };
+let ETAPE = 'debut';       // m1 : l'étape en cours, dite dans toute erreur
+const etape = x => { ETAPE = x; try { if (stockage) stockage.setItem('rm-banc-etape', x); } catch { /* sans stockage */ } };
 const pause = () => new Promise(r => setTimeout(r, 0));
 // une erreur de CETTE page porte un code lisible (`detail`) ; pour toute autre exception, seul le nom est dit (jamais le texte d'une exception du navigateur).
 class ErreurBanc extends Error { constructor(detail) { super(); this.detail = detail; } }
-const texteErreur = e => ascii(e && (typeof e.detail === 'string' ? e.detail : e.name) || 'erreur').slice(0, 200);
 
 // ── l'appareil
 function decrireAppareil() {
@@ -58,10 +59,20 @@ async function chargerModele() {
     if (!/^[0-9a-f]{64}$/.test(SHA)) throw new ErreurBanc('modele-non-configure : l\'API ne publie aucun sha256 de modèle');
     etape('telechargement-modele');
     const t = performance.now();
-    let rep;
-    try { rep = await fetch(`/api/modele-empreinte/${SHA}`, { credentials: 'omit', cache: 'no-store' }); }
-    catch (e) { throw new ErreurBanc('telechargement-modele-bloque : la requete a ete refusee par le navigateur (CORS du bucket R2 pour cette origine ?)'); }
-    if (!rep.ok) throw new ErreurBanc(`telechargement-modele : HTTP ${rep.status}`);
+    let rep; const url = `/api/modele-empreinte/${SHA}`;
+    E.reseau = { redirige: null, hoteFinal: null, blocage: null };
+    try { rep = await fetch(url, { credentials: 'omit', cache: 'no-store' }); }
+    catch (e) {
+        // M9 : un TypeError ne dit pas pourquoi. Sonde « no-cors » (réponse opaque, aucun octet lu, abandonnée aussitôt) : si elle aboutit, le réseau et la CSP laissent passer et c'est le CORS qui manque.
+        // Sous COEP (page isolée) une réponse opaque sans CORP est refusée elle aussi : la sonde ne peut alors rien séparer (dit « indetermine-isole » : rejouer avec ?iso=0).
+        let sondeOk = false; const ctl = new AbortController();
+        try { await fetch(url, { mode: 'no-cors', credentials: 'omit', cache: 'no-store', signal: ctl.signal }); sondeOk = true; } catch { sondeOk = false; }
+        try { ctl.abort(); } catch { /* deja termine */ }
+        E.reseau.blocage = classerBlocage(sondeOk, self.crossOriginIsolated === true);
+        throw new ErreurBanc(`telechargement-modele-bloque:${E.reseau.blocage}`);
+    }
+    E.reseau.redirige = rep.redirected === true; E.reseau.hoteFinal = hoteFinal(rep.url);
+    if (!rep.ok) throw new ErreurBanc(`telechargement-modele:HTTP-${rep.status}`);
     const total = Number(rep.headers.get('content-length')) || OCTETS;
     if (!total) throw new ErreurBanc('telechargement-modele : taille inconnue');
     const tampon = new Uint8Array(total); let recu = 0;
@@ -83,7 +94,7 @@ async function chargerModele() {
         E.verifShaMs = performance.now() - tv; E.shaVerifie = h === SHA;
         if (!E.shaVerifie) throw new ErreurBanc('modele-sha256-different : le fichier recu n\'est pas le modele attendu');
         journal(`sha256 vérifié (${f(E.verifShaMs / 1000, 1)} s)`);
-    } else { E.shaVerifie = null; journal('sha256 NON vérifié (crypto.subtle absent : contexte non sécurisé)'); }
+    } else { E.shaVerifie = null; journal('sha256 NON vérifié (crypto.subtle absent : contexte non sécurisé) : aucun verdict ne sera rendu'); }
     E.modele = tampon;
     return tampon;
 }
@@ -93,7 +104,9 @@ async function chargerLot() {
     if (!r.ok) throw new ErreurBanc(`lot : HTTP ${r.status}`);
     const lot = await r.json();
     if (lot.modeleSha256 !== SHA) throw new ErreurBanc('lot-pour-un-autre-modele : les references ne sont pas celles du modele servi');
-    for (const c of lot.cartes) { c.refV = new Float32Array(b64vers(c.ref).buffer); if (c.px) c.pxV = b64vers(c.px); }
+    if (Array.isArray(lot.cartes)) for (const c of lot.cartes) { c.refV = new Float32Array(b64vers(c.ref).buffer); if (c.px) c.pxV = b64vers(c.px); }
+    const cause = jugerLot(lot);        // M6 : un lot incomplet ou mal formé ne juge rien
+    if (cause) throw new ErreurBanc(`lot-invalide:${cause}`);
     E.lot = lot; return lot;
 }
 
@@ -101,8 +114,8 @@ async function chargerLot() {
 async function decoderCarte(c) {
     const blob = new Blob([b64vers(c.jpg)], { type: 'image/jpeg' });
     let bmp;
-    try { bmp = await createImageBitmap(blob, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' }); if (E.decodeurOptions === null) E.decodeurOptions = true; }
-    catch { bmp = await createImageBitmap(blob); E.decodeurOptions = false; }
+    try { bmp = await createImageBitmap(blob, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' }); }
+    catch { bmp = await createImageBitmap(blob); }
     const cv = document.createElement('canvas'); cv.width = bmp.width; cv.height = bmp.height;
     const x = cv.getContext('2d', { willReadFrequently: true }); x.drawImage(bmp, 0, 0);
     const w = bmp.width, h = bmp.height, d = x.getImageData(0, 0, w, h);
@@ -158,10 +171,13 @@ async function mesurer(moteur, ort, session, filsDemandes, creationMs) {
     }
     const mem2 = await memoire();
     const m = { moteur, fils, filsDemandes, creationSessionMs: arrondi(creationMs, 1), premiereMs: arrondi(runs[0], 1), medianeMs: arrondi(mediane(runs.slice(1)), 1), p95Ms: arrondi(p95(runs.slice(1)), 1),
-        pretraitementMedianeMs: arrondi(mediane(pre), 1), nEmpreintes: lot.cartes.length, nVecteursRefuses: refuses, cosMin: arrondi(Math.min(...cos), 7), cosMoy: arrondi(cos.reduce((s, x) => s + x, 0) / cos.length, 7),
+        pretraitementMedianeMs: arrondi(mediane(pre), 1), nEmpreintes: cos.length, nVecteursRefuses: refuses, cosMin: arrondi(Math.min(...cos), 7), cosMoy: arrondi(cos.reduce((s, x) => s + x, 0) / cos.length, 7),
         cosMinModeleSeul: cosPx.length ? arrondi(Math.min(...cosPx), 7) : null, nModeleSeul: cosPx.length,
         jsHeapApresCreationMo: mem1.jsHeapMo, jsHeapFinMo: mem2.jsHeapMo, uaApresCreationMo: mem1.uaMo, uaFinMo: mem2.uaMo };
-    m.verdict = m.cosMin !== null && m.cosMin >= SEUIL_IDENTIQUE && refuses === 0 ? 'IDENTIQUE' : 'ECART';
+    m.ecartChaineModele = arrondi(ecartChaine(m.cosMin, m.cosMinModeleSeul), 7);
+    // M5 / M6 : le verdict n'existe que si le modèle est PROUVÉ (sha256 vérifié) et le lot COMPLET ; sinon ERREUR avec sa cause (les chiffres restent affichés)
+    const j = jugerMesure({ nEmpreintes: m.nEmpreintes, nVecteursRefuses: refuses, cos, cosModeleSeul: cosPx, shaVerifie: E.shaVerifie });
+    m.verdict = j.verdict; if (j.erreur) m.erreur = texteErreur(ETAPE, new ErreurBanc(j.erreur));
     return { m, vecs };
 }
 
@@ -179,6 +195,7 @@ async function mesurerWasm() {
     const creation = performance.now() - ta; journal(`session WASM créée en ${f(creation, 0)} ms`);
     try {
         const { m, vecs } = await mesurer('wasm', ort, session, demande, creation);
+        m.gardeExtension = gardeExtension(m.cosMin);       // M8 : pour WASM, le cosinus contre la référence native
         E.vecWasm = vecs; return m;
     } finally { try { await session.release(); } catch { /* deja liberee */ } }
 }
@@ -187,7 +204,7 @@ async function mesurerWasm() {
 async function mesurerGpu() {
     etape('sonde-gpu');
     const sonde = await sonderAdaptateur(navigator.gpu);
-    if (!sonde.ok) return { moteur: 'webgpu', verdict: 'ERREUR', erreur: `webgpu-indisponible:${sonde.raison}` };
+    if (!sonde.ok) return { moteur: 'webgpu', verdict: 'ERREUR', erreur: texteErreur(ETAPE, new ErreurBanc(`webgpu-indisponible:${sonde.raison}`)), webgpuUtilise: false };
     E.gpu = { vendor: ascii(sonde.adaptateur.vendor).slice(0, 40), architecture: ascii(sonde.adaptateur.architecture).slice(0, 40) };
     journal(`adaptateur WebGPU : ${E.gpu.vendor} / ${E.gpu.architecture}`);
     etape('ort-webgpu');
@@ -199,14 +216,20 @@ async function mesurerGpu() {
     const ta = performance.now();
     const g = await creerSessionGpu({ ort, tampon: async () => modele.buffer });
     const creation = performance.now() - ta;
-    if (!g.ok) return { moteur: 'webgpu', verdict: 'ERREUR', erreur: `${g.raison} (apres ${Math.round(creation)} ms)`, creationSessionMs: arrondi(creation, 1) };
-    journal(`session WebGPU créée en ${f(creation, 0)} ms`);
+    if (!g.ok) return { moteur: 'webgpu', verdict: 'ERREUR', erreur: texteErreur(ETAPE, new ErreurBanc(`${g.raison}-apres-${Math.round(creation)}ms`)), webgpuUtilise: false, creationSessionMs: arrondi(creation, 1) };
+    // M7 : « webgpu » n'est dit que si le périphérique existe. ort.env.webgpu.device (promesse ou valeur) ; sinon la session est un repli WASM silencieux : rien n'est mesuré sous l'étiquette webgpu.
+    let device = null; try { const d = await course(Promise.resolve(ort.env.webgpu.device), 2000); device = d.ok ? d.valeur : null; } catch { device = null; }
+    const reel = moteurRealise('webgpu', device);
+    if (!reel.utilise) { try { await g.session.release(); } catch { /* deja liberee */ } journal(reel.texte); return { moteur: 'webgpu', verdict: 'ERREUR', erreur: texteErreur(ETAPE, new ErreurBanc(reel.texte)), webgpuUtilise: false, creationSessionMs: arrondi(creation, 1) }; }
+    journal(`session WebGPU créée en ${f(creation, 0)} ms (périphérique GPU présent)`);
     try {
         const { m, vecs } = await mesurer('webgpu', ort, g.session, 1, creation);
+        m.webgpuUtilise = true;
         if (E.vecWasm) {
             let mn = 1; for (let i = 0; i < vecs.length; i++) mn = Math.min(mn, vecs[i] && E.vecWasm[i] ? cosinus(vecs[i], E.vecWasm[i]) : 0);
             m.cosMinContreWasm = arrondi(mn, 7);
         } else m.cosMinContreWasm = null;
+        m.gardeExtension = gardeExtension(m.cosMinContreWasm);      // M8 : WebGPU contre WASM (« non évaluée » sans mesure WASM de cette exécution)
         return m;
     } finally { try { await g.session.release(); } catch { /* deja liberee */ } }
 }
@@ -214,11 +237,13 @@ async function mesurerGpu() {
 // ── l'envoi et l'écran
 function document_(mesure) {
     return { v: 1, runId: E.runId, modeleSha: SHA || '0'.repeat(64), ua: ascii(navigator.userAgent).slice(0, 300), isole: self.crossOriginIsolated === true, coeurs: Number.isInteger(navigator.hardwareConcurrency) && navigator.hardwareConcurrency > 0 ? navigator.hardwareConcurrency : null,
-        memoireAppareilGo: typeof navigator.deviceMemory === 'number' ? navigator.deviceMemory : null, gpuDispo: typeof navigator.gpu !== 'undefined', gpu: E.gpu, decodeurOptions: E.decodeurOptions,
-        modeleOctets: E.modele ? E.modele.length : null, telechargementMs: arrondi(E.telechargementMs, 0), verifShaMs: arrondi(E.verifShaMs, 0), shaVerifie: E.shaVerifie, mesure };
+        memoireAppareilGo: typeof navigator.deviceMemory === 'number' ? navigator.deviceMemory : null, gpuDispo: typeof navigator.gpu !== 'undefined', gpu: E.gpu, reseau: E.reseau,
+        // m2 : le téléchargement n'a eu lieu qu'UNE fois : la seconde mesure (le modèle est déjà en mémoire) ne redépose pas ses durées
+        modeleOctets: E.modele ? E.modele.length : null, telechargementMs: E.infoModeleDeposee ? null : arrondi(E.telechargementMs, 0), verifShaMs: E.infoModeleDeposee ? null : arrondi(E.verifShaMs, 0), shaVerifie: E.shaVerifie, mesure };
 }
 async function envoyer(mesure) {
     const doc = document_(mesure);
+    if (E.modele) E.infoModeleDeposee = true;
     $('brut').textContent = JSON.stringify(doc, null, 1);
     $('envoi').textContent = 'Envoi du résultat…';
     try {
@@ -229,13 +254,13 @@ async function envoyer(mesure) {
 function afficher(m) {
     const mem = m.uaFinMo != null ? `${m.uaFinMo} Mo (navigateur)` : m.jsHeapFinMo != null ? `${m.jsHeapFinMo} Mo (tas JS)` : 'non disponible';
     const moteur = String(m.moteur || '?').toUpperCase();
-    if (m.verdict === 'ERREUR') { etat('ERREUR', m.erreur || '', 'ko'); $('ligne1').textContent = `1 · verdict : ERREUR (${moteur})`; $('ligne2').textContent = `2 · moteur : ${moteur}`; $('ligne3').textContent = `3 · ${m.erreur || ''}`; }
+    if (m.verdict === 'ERREUR') { etat('ERREUR', m.erreur || '', 'ko'); $('ligne1').textContent = `1 · verdict : ERREUR (${moteur}) — ${m.erreur || ''}`; $('ligne2').textContent = `2 · moteur : ${moteur}${m.webgpuUtilise === false ? ' · WebGPU non utilisé (repli WASM)' : ''}`; $('ligne3').textContent = `3 · garde extension 0,998 : ${texteGarde(m.gardeExtension)}`; }
     else {
         const ok = m.verdict === 'IDENTIQUE';
         etat(ok ? 'IDENTIQUE' : `ÉCART ${f(m.cosMin, 5)}`, `${moteur} · cos min ${f(m.cosMin, 6)} sur ${m.nEmpreintes} cartes${m.cosMinModeleSeul != null ? ` · modèle seul ${f(m.cosMinModeleSeul, 6)}` : ''}`, ok ? 'ok' : 'ecart');
         $('ligne1').textContent = `1 · verdict : ${ok ? 'IDENTIQUE' : 'ÉCART'} (${moteur}) — cos min ${f(m.cosMin, 6)}`;
         $('ligne2').textContent = `2 · moteur : ${moteur} · ${m.fils == null ? '?' : m.fils} fil(s) · isolé ${self.crossOriginIsolated === true ? 'oui' : 'non'} · ${navigator.hardwareConcurrency || '?'} cœurs`;
-        $('ligne3').textContent = `3 · médiane ${f(m.medianeMs, 0)} ms (1re ${f(m.premiereMs, 0)}, p95 ${f(m.p95Ms, 0)}) · mémoire ${mem}`;
+        $('ligne3').textContent = `3 · médiane ${f(m.medianeMs, 0)} ms (1re ${f(m.premiereMs, 0)}, p95 ${f(m.p95Ms, 0)}) · mémoire ${mem} · garde extension 0,998 : ${texteGarde(m.gardeExtension)}`;
     }
     const t = $('chiffres'); t.textContent = '';
     const dico = [['moteur', m.moteur], ['verdict', m.verdict], ['erreur', m.erreur || '—'], ['fils utilisés (demandés)', `${m.fils == null ? '—' : m.fils} (${m.filsDemandes == null ? '—' : m.filsDemandes})`],
@@ -244,14 +269,16 @@ function afficher(m) {
         ['cos min / moyen, chaîne complète', `${f(m.cosMin, 7)} / ${f(m.cosMoy, 7)} (${m.nEmpreintes == null ? '—' : m.nEmpreintes} cartes)`], ['cos min, modèle seul', m.cosMinModeleSeul == null ? '—' : `${f(m.cosMinModeleSeul, 7)} (${m.nModeleSeul} cartes)`],
         ['vecteurs refusés par l\'encodeur', m.nVecteursRefuses == null ? '—' : m.nVecteursRefuses], ['cos min contre WASM (garde de l\'extension : 0,998)', m.cosMinContreWasm == null ? '—' : f(m.cosMinContreWasm, 7)],
         ['tas JS après création / fin (Mo)', `${m.jsHeapApresCreationMo == null ? 'non disponible' : f(m.jsHeapApresCreationMo, 1)} / ${m.jsHeapFinMo == null ? 'non disponible' : f(m.jsHeapFinMo, 1)}`],
-        ['mémoire navigateur après création / fin (Mo)', `${m.uaApresCreationMo == null ? 'non disponible' : m.uaApresCreationMo} / ${m.uaFinMo == null ? 'non disponible' : m.uaFinMo}`], ['décodeur d\'image : options acceptées', E.decodeurOptions === null ? '—' : E.decodeurOptions ? 'oui' : 'non (repli sans options)']];
+        ['mémoire navigateur après création / fin (Mo)', `${m.uaApresCreationMo == null ? 'non disponible' : m.uaApresCreationMo} / ${m.uaFinMo == null ? 'non disponible' : m.uaFinMo}`],
+        ['écart modèle seul − chaîne complète (décodeur + redimensionnement du navigateur)', m.ecartChaineModele == null ? '—' : f(m.ecartChaineModele, 7)], ['WebGPU réellement utilisé (périphérique présent)', m.webgpuUtilise == null ? '—' : m.webgpuUtilise ? 'oui' : 'NON (repli WASM)'],
+        ['garde de l\'extension (cosinus ≥ 0,998)', texteGarde(m.gardeExtension)], ['modèle reçu : redirigé / hôte final', E.reseau ? `${E.reseau.redirige === null ? '—' : E.reseau.redirige ? 'oui' : 'non'} / ${E.reseau.hoteFinal || '—'}` : '—'], ['blocage réseau', E.reseau && E.reseau.blocage ? E.reseau.blocage : '—']];
     for (const [k, v] of dico) ligne('chiffres', k, v);
 }
 async function lancer(moteur) {
     $('btnWasm').disabled = true; $('btnGpu').disabled = true;
     let m;
     try { m = moteur === 'wasm' ? await mesurerWasm() : await mesurerGpu(); }
-    catch (e) { journal(`ERREUR ${texteErreur(e)}`); m = { moteur, verdict: 'ERREUR', erreur: texteErreur(e) }; }
+    catch (e) { const t = texteErreur(ETAPE, e); journal(`ERREUR ${t}`); m = { moteur, verdict: 'ERREUR', erreur: t }; }
     E.mesures[moteur] = m;
     afficher(m); etape('fini');
     await envoyer(m);
@@ -262,6 +289,6 @@ decrireAppareil(); avertirReprise();
 $('btnWasm').addEventListener('click', () => { lancer('wasm'); });
 $('btnGpu').addEventListener('click', () => { lancer('webgpu'); });
 window.addEventListener('error', e => journal(`ERREUR-JS non rattrapee, ligne ${Number(e.lineno) || 0}`));
-window.addEventListener('unhandledrejection', e => journal(`REJET ${texteErreur(e.reason)}`));
+window.addEventListener('unhandledrejection', e => journal(`REJET ${texteErreur(ETAPE, e.reason)}`));
 // un point d'entrée pour le pilote local (headless) : lancer sans toucher les boutons
 window.__banc = { lancer, E };

@@ -6,6 +6,8 @@
 //   la constante est RECOPIÉE ici parce que cette branche ne contient pas encore L1 — test-banc-telephone.js la compare à celle de config.js dès qu'elle y existe.
 // Lue dans l'environnement AU MONTAGE (jamais dans config.js : aucune variable de plus à déclarer côté configuration), et injectable pour les bancs.
 const SERVICE_ESSAI = 'srv-db7ticgm7kps73crjibg';
+// Tour 1 (M2) : la base où les résultats s'écrivent est celle de l'essai, par son NOM (mongo-connexion.js : rm_essai), vérifiée au montage (MONGODB_BASE) ET à chaque écriture (databaseName de la connexion).
+const BASE_ESSAI = 'rm_essai';
 
 /** @returns {{actif: boolean, raison: string}} */
 function lire(env = process.env) {
@@ -22,4 +24,4 @@ function hoteR2(env = process.env) {
     try { const u = new URL(brut); return u.protocol === 'https:' && /^[a-z0-9.-]+$/i.test(u.hostname) ? u.host : null; } catch { return null; }
 }
 
-module.exports = { lire, hoteR2, SERVICE_ESSAI };
+module.exports = { lire, hoteR2, SERVICE_ESSAI, BASE_ESSAI };

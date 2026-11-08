@@ -3,6 +3,7 @@
 // Rien de personnel : ni IP, ni identifiant de compte ; l'agent utilisateur (ASCII imprimable, 300 caractères au plus) est la seule donnée de l'appareil, avec des mesures.
 // Le stockage vit dans la base de l'essai (v2/db.js : la base du service, jamais la production — et le montage n'existe que sur le service d'essai, voir garde.js).
 const { col } = require('../db');
+const { BASE_ESSAI } = require('./garde');
 
 const OCTETS_MAX = 8192, DOCUMENTS_MAX = 200, COLLECTION = 'banc_telephone';
 const ASCII = /^[\x20-\x7E]*$/;
@@ -24,14 +25,19 @@ const MESURE = {
     nEmpreintes: ouNul(entier(0, 100)), nVecteursRefuses: ouNul(entier(0, 100)),
     cosMin: ouNul(nombre(-1, 1.0001)), cosMoy: ouNul(nombre(-1, 1.0001)), cosMinModeleSeul: ouNul(nombre(-1, 1.0001)), nModeleSeul: ouNul(entier(0, 100)),
     cosMinContreWasm: ouNul(nombre(-1, 1.0001)),
+    ecartChaineModele: ouNul(nombre(-2, 2)),                                       // m3 : cosMinModeleSeul − cosMin (le décodeur et le redimensionnement du navigateur, séparés du modèle)
+    webgpuUtilise: ouNul(booleen),                                                 // M7 : ort.env.webgpu.device non nul après création de la session
+    gardeExtension: ouNul(parmi('PASSE', 'ECHOUE', 'NON_EVALUEE')),                // M8 : cosinus >= 0,998 (la garde de l'extension)
     jsHeapApresCreationMo: ouNul(nombre(0, 1e5)), jsHeapFinMo: ouNul(nombre(0, 1e5)), uaApresCreationMo: ouNul(nombre(0, 1e5)), uaFinMo: ouNul(nombre(0, 1e5)),
     erreur: ouNul(chaine(200))
 };
 const GPU = { vendor: chaine(40), architecture: chaine(40) };
+// M9 : le téléchargement du modèle — redirigé (302 vers R2) ou non, l'hôte final, et, en cas de blocage, la cause nommée par une sonde « no-cors »
+const RESEAU = { redirige: ouNul(booleen), hoteFinal: ouNul(chaine(80)), blocage: ouNul(parmi('cors-manquant', 'reseau-ou-csp', 'indetermine-isole')) };
 const RACINE = {
     v: v => v === 1, runId: hexN(16), modeleSha: hexN(64), ua: chaine(300),
     isole: booleen, coeurs: ouNul(entier(1, 1024)), memoireAppareilGo: ouNul(nombre(0, 1024)),
-    gpuDispo: booleen, gpu: ouNul(objetSimple), decodeurOptions: ouNul(booleen),
+    gpuDispo: booleen, gpu: ouNul(objetSimple), reseau: ouNul(objetSimple),
     modeleOctets: ouNul(entier(0, 2e9)), telechargementMs: ouNul(nombre(0, 1e8)), verifShaMs: ouNul(nombre(0, 1e8)), shaVerifie: ouNul(booleen),
     mesure: objetSimple
 };
@@ -54,6 +60,7 @@ function valider(corps) {
     let d = defaut(corps, RACINE); if (d) return { ok: false, detail: d };
     for (const k of ['v', 'runId', 'modeleSha', 'ua', 'mesure']) if (!(k in corps)) return { ok: false, detail: `manque:${k}` };
     if (corps.gpu !== null && corps.gpu !== undefined) { d = defaut(corps.gpu, GPU, 'gpu.'); if (d) return { ok: false, detail: d }; }
+    if (corps.reseau !== null && corps.reseau !== undefined) { d = defaut(corps.reseau, RESEAU, 'reseau.'); if (d) return { ok: false, detail: d }; }
     d = defaut(corps.mesure, MESURE, 'mesure.'); if (d) return { ok: false, detail: d };
     for (const k of ['moteur', 'verdict']) if (!(k in corps.mesure)) return { ok: false, detail: `manque:mesure.${k}` };
     return { ok: true, doc: corps };
@@ -63,7 +70,11 @@ function valider(corps) {
  * Stocke le document puis RAMÈNE la collection à DOCUMENTS_MAX au plus (le plus ancien est remplacé : on retire les plus anciens par `_id`).
  * Le retrait se fait après l'insertion : deux dépôts simultanés peuvent dépasser un instant la borne, jamais durablement.
  */
-async function stocker(doc, { max = DOCUMENTS_MAX, maintenant = new Date(), collection = col(COLLECTION) } = {}) {
+async function stocker(doc, { max = DOCUMENTS_MAX, maintenant = new Date(), collection = null, baseAttendue = BASE_ESSAI, nomBase = undefined } = {}) {
+    // M2 : on n'écrit QUE dans la base attendue (rm_essai), lue sur la connexion elle-même ; un nom différent (« test » : la production) ou illisible REFUSE, avant toute écriture
+    let nom; try { nom = nomBase !== undefined ? nomBase : require('../db').base().databaseName; } catch { nom = null; }
+    if (typeof nom !== 'string' || nom !== baseAttendue) throw Object.assign(new Error('base-refusee'), { code: 'BASE_REFUSEE' });
+    if (!collection) collection = col(COLLECTION);
     const r = await collection.insertOne({ ...doc, recuLe: maintenant });
     const n = await collection.countDocuments({});
     if (n > max) {

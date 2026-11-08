@@ -1,0 +1,11 @@
+{
+ "note": "sha256 complets des copies de l'extension v2 ; fichiers texte empreints sans CRLF ; outils/banc-telephone/verifier-copies.js --ecrire",
+ "sha256": {
+  "empreinte": "54e47625823cbdd3626ee799dc040b39b2e039b389346c955b5f72c20a4e9568",
+  "moteur": "56c6df07b212c6073121a75e60909a5eba824b88795cbba118fdd26e18485756",
+  "wasmBundle": "11e64bd8ffe11bd1a2a2f0d6275fdfbbba7262f0b76b99b53d228a8a22ef3d90",
+  "gpuBundle": "0730816731ce2cdfb06f273da065d4a1c7091eb9d1756a83b2916c8a89d015e2",
+  "wasm": "3398c10d07d229bd91b364548e130e0e51a8e5704b88c7c083ebbeb78842dee2",
+  "asyncify": "39f9f0894d478800487ed9f7dbe92618498db320cf55c8e3d89adff8dce658da"
+ }
+}

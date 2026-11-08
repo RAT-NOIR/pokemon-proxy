@@ -22,7 +22,7 @@ const aleaHex = i => String(i).padStart(16, '0');
 const sha12 = p => crypto.createHash('sha256').update(/\.(?:m?js)$/.test(p) ? Buffer.from(fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n'), 'utf8') : fs.readFileSync(p)).digest('hex').slice(0, 12);
 
 const doc = (o = {}) => ({ v: 1, runId: '0123456789abcdef', modeleSha: SHA, ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Safari/604.1', isole: true, coeurs: 6, memoireAppareilGo: null, gpuDispo: true, gpu: { vendor: 'apple', architecture: 'common-3' },
-    decodeurOptions: true, modeleOctets: 118202501, telechargementMs: 12000, verifShaMs: 900, shaVerifie: true,
+    modeleOctets: 118202501, telechargementMs: 12000, verifShaMs: 900, shaVerifie: true,
     mesure: { moteur: 'wasm', verdict: 'IDENTIQUE', fils: 3, filsDemandes: 3, creationSessionMs: 1200.5, premiereMs: 900, medianeMs: 700, p95Ms: 800, pretraitementMedianeMs: 40, nEmpreintes: 30, nVecteursRefuses: 0, cosMin: 0.9999987, cosMoy: 0.9999995, cosMinModeleSeul: 1, nModeleSeul: 12,
         cosMinContreWasm: null, jsHeapApresCreationMo: null, jsHeapFinMo: null, uaApresCreationMo: null, uaFinMo: null, erreur: null }, ...o });
 
@@ -40,7 +40,7 @@ const doc = (o = {}) => ({ v: 1, runId: '0123456789abcdef', modeleSha: SHA, ua: 
     H.v('1. l\'hôte R2 : exact, dérivé du compte, sans joker', [G.hoteR2({ V2_VISUELS_R2_COMPTE: 'moncompte123' }), G.hoteR2({ V2_VISUELS_R2_ENDPOINT: 'https://x.exemple.org' }), G.hoteR2({ V2_VISUELS_R2_ENDPOINT: 'http://x.exemple.org' }), G.hoteR2({ V2_VISUELS_R2_COMPTE: 'a b' }), G.hoteR2({})], ['moncompte123.r2.cloudflarestorage.com', 'x.exemple.org', null, null, null]);
 
     // ═══ 2. le montage ═══
-    const monter = async (env, extra = {}) => { const app = express(); app.use(express.json()); const router = express.Router(); monterBanc.routes(router, cfg, { banc: {}, purge: { purgerBanc: async () => ({}), anonymiserLiens: async () => ({}) }, envBancTelephone: env, ...extra }); app.use(router); app.use((err, req, res, next) => res.status(err.status || 500).json({ success: false })); return H.serveur(app); };
+    const monter = async (env, extra = {}) => { const app = express(); app.use(express.json()); const router = express.Router(); monterBanc.routes(router, cfg, { banc: {}, purge: { purgerBanc: async () => ({}), anonymiserLiens: async () => ({}) }, envBancTelephone: env, nomBaseBancTelephone: 'test_scratch', baseAttendueBancTelephone: 'test_scratch', globalHeureBancTelephone: 100000, ...extra }); app.use(router); app.use((err, req, res, next) => res.status(err.status || 500).json({ success: false })); return H.serveur(app); };
     const srv = await monter(ENV_BON, { ipHeureBancTelephone: 1000 }), srvOff = await monter({ ...ENV_BON, V2_BANC_TELEPHONE: undefined }), srvAutre = await monter({ ...ENV_BON, RENDER_SERVICE_ID: 'srv-autre' }), srvProd = await monter({ ...ENV_BON, V2_CIBLE: 'prod' });
     const brut = async (s, methode, chemin, corps) => { const x = await fetch(s.url + chemin, { method: methode, headers: corps !== undefined ? { 'content-type': 'application/json' } : {}, body: corps === undefined ? undefined : typeof corps === 'string' ? corps : JSON.stringify(corps) }); const texte = await x.text(); const h = Object.fromEntries(x.headers); delete h.date; delete h['content-length']; delete h.etag; return { statut: x.status, texte, h, tete: x.headers }; };
     const norm = (r, chemin) => ({ ...r, texte: r.texte.split(chemin).join('<CHEMIN>'), tete: undefined });
@@ -75,7 +75,7 @@ const doc = (o = {}) => ({ v: 1, runId: '0123456789abcdef', modeleSha: SHA, ua: 
         const sansHote = await monter({ ...ENV_BON, V2_VISUELS_R2_COMPTE: undefined });
         H.v('4. sans configuration R2 : connect-src = \'self\' seul (jamais un hôte inventé)', (/connect-src ([^;]+)/.exec((await brut(sansHote, 'GET', '/api/banc/telephone')).h['content-security-policy']) || [, ''])[1], '\'self\'');
         const echappe = express(); echappe.use(express.json());
-        const rr = express.Router(); routes.monter(rr, { modeleEmpreinte: { sha256: '"><script>x</script>', octets: 1 } }, { envBancTelephone: ENV_BON }); echappe.use(rr);
+        const rr = express.Router(); routes.monter(rr, { modeleEmpreinte: { sha256: '"><script>x</script>', octets: 1 } }, { envBancTelephone: ENV_BON, nomBaseBancTelephone: 'test_scratch', baseAttendueBancTelephone: 'test_scratch' }); echappe.use(rr);
         const sEch = await H.serveur(echappe); const pe = await brut(sEch, 'GET', '/api/banc/telephone');
         H.v('4. une valeur de configuration est ÉCHAPPÉE dans le gabarit', [pe.texte.includes('<script>x</script>'), pe.texte.includes('&lt;script&gt;')], [false, true]);
         await sEch.fermer(); await sansHote.fermer();
@@ -158,7 +158,7 @@ const doc = (o = {}) => ({ v: 1, runId: '0123456789abcdef', modeleSha: SHA, ua: 
     {
         H.v('8. la borne est 200', S.DOCUMENTS_MAX, 200);
         const C = db.col('banc_telephone'); await C.deleteMany({});
-        for (let i = 0; i < 205; i++) await S.stocker({ n: i }, { max: S.DOCUMENTS_MAX });
+        for (let i = 0; i < 205; i++) await S.stocker({ n: i }, { max: S.DOCUMENTS_MAX, baseAttendue: 'test_scratch' });
         const restants = (await C.find({}).sort({ _id: 1 }).toArray()).map(d => d.n);
         H.v('8. 205 dépôts ⇒ 200 documents, les 5 plus anciens sont partis', [restants.length, restants[0], restants[199], restants.includes(4), restants.includes(5)], [200, 5, 204, false, true]);
         await C.deleteMany({});
@@ -185,11 +185,11 @@ const doc = (o = {}) => ({ v: 1, runId: '0123456789abcdef', modeleSha: SHA, ua: 
     {
         const { assembler } = require('../index');
         let erreur = null;
-        try { assembler([monterBanc], cfg, { banc: {}, purge: { purgerBanc: async () => ({}), anonymiserLiens: async () => ({}) }, envBancTelephone: ENV_BON }); } catch (e) { erreur = e.message; }
+        try { assembler([monterBanc], cfg, { banc: {}, purge: { purgerBanc: async () => ({}), anonymiserLiens: async () => ({}) }, envBancTelephone: ENV_BON, nomBaseBancTelephone: 'test_scratch', baseAttendueBancTelephone: 'test_scratch' }); } catch (e) { erreur = e.message; }
         H.v('10. assembler() accepte les routes du lot (liste blanche des chemins, routes seulement)', erreur, null);
-        const r = express.Router(); routes.monter(r, cfg, { envBancTelephone: ENV_BON });
+        const r = express.Router(); routes.monter(r, cfg, { envBancTelephone: ENV_BON, nomBaseBancTelephone: 'test_scratch', baseAttendueBancTelephone: 'test_scratch' });
         const chemins = r.stack.map(c => `${Object.keys(c.route.methods).join()} ${c.route.path}`);
-        H.v('10. 11 routes : la page, 9 fichiers, le dépôt — toutes littérales', [chemins.length, chemins.filter(c => /[*?(]|:[a-z]/i.test(c.split(' ')[1])).length], [11, 0]);
+        H.v('10. 12 routes : la page, 10 fichiers, le dépôt — toutes littérales', [chemins.length, chemins.filter(c => /[*?(]|:[a-z]/i.test(c.split(' ')[1])).length], [12, 0]);
         const rOff = express.Router(); H.v('10. éteint : monter() ne monte rien et le dit', [routes.monter(rOff, cfg, { envBancTelephone: {} }), rOff.stack.length], [false, 0]);
     }
 
