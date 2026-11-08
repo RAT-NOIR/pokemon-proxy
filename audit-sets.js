@@ -110,6 +110,10 @@ async function lireBase() {
     console.log(`sets à 100 % ${T.sets100} · troués ${T.setsTroues} · trous ${T.trous} : ` + A.TYPES.map(t => `${A.TITRES[t]} ${T[t]}`).join(' · '));
     for (const t of A.TYPES) console.log(`  ${t} : ${JSON.stringify(audit.parCause[t])}`);
     console.log(`EXCLUS du compte (imprimés à part, jamais disparus) : ${audit.exclus.total} · par cause ${JSON.stringify(audit.exclus.parCause)} · sur ${Object.keys(audit.exclus.parSet).length} sets`);
+    for (const [t, f] of [['doublons', s => s.doublons.groupes.map(g => `${g.nom} n°${g.base} (${g.membres.map(m => `${m.carteId}:${m.numero}`).join(', ')})`)], ['manquants', s => s.manquants.items.map(m => `${m.numero ?? '?'}×${m.nombre} ${m.cause}`)]]) {
+        const l = audit.sets.filter(s => s[t].n > 0); console.log(`${t} restants : ${l.reduce((a, s) => a + s[t].n, 0)} sur ${l.length} sets`);
+        for (const s of l) console.log(`  ${t} ${s.set} (${s[t].n}) : ${f(s).join(' ; ')}`);
+    }
     console.log('10 sets les plus touchés par expansion-declaree-sans-impression :');
     for (const x of A.suspectsExpansion(audit)) console.log(`  ${x.set} ${x.n} · déclarée ${JSON.stringify(x.expansionsDeclarees)} · ` + x.exemples.map(e => `${e.nom} → ${e.plusProche ? `${e.plusProche.tirage}/« ${e.plusProche.expansion} »/${e.plusProche.numero}` : 'aucune'}`).join(' ; '));
     for (const id of args.filter(a => a.startsWith('--set=')).map(a => a.slice(6))) {   // détail par set demandé : trous, causes, exclusions
