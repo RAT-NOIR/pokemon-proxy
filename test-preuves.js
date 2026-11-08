@@ -1179,7 +1179,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.match(mt(trad({ codeSet: 's' }), pm), /code-set-different/, '« s » contre sKV refuse');
         assert.ok(!drap(trad(), ptrad()).some(d => d.startsWith('codeAlias')), 'aucun alias hors des deux paires : pas de drapeau');
     });
-    await test('alias de code thaï : M-P/TH→M-P, SV-P/TH→SV-P, S-P/TH→S-P (sens unique, ligne exacte, indépendant de l\'ordre des clés)', () => {
+    await test('alias de code thaï : M-P/TH→M-P seul (sens unique, ligne exacte, indépendant de l\'ordre des clés)', () => {
         const th = (code, o = {}) => { const t = trad({ langue: 'th', codeSet: code, numero: '069', ...o }); return { ...t, attendu: { ...t.attendu, numero: '069' } }; };
         const pth = (ligne, o = {}) => ptrad({ tirage: 'th', numero: '069', slug: 'Mareep-M-PTH069', codeSet: ligne, ...o });
         const e = th('M-P'), p = pth('M-P/TH');
@@ -1188,9 +1188,10 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.match(mt(e, pth('M-P/KR')), /code-set-different/, '(b) ligne non listée');
         assert.match(mt(th('SV-P'), p), /code-set-different/, '(c) SV-P lu sur ligne M-P/TH');
         assert.strictEqual(lue(th('M-P/TH'), p).ok, true, '(d) M-P/TH lu sur M-P/TH comme avant');
-        assert.strictEqual(lue(th('SV-P'), pth('SV-P/TH', { slug: 'Mareep-SV-PTH069' })).ok, true, 'SV-P/TH');
-        assert.strictEqual(lue(th('S-P'), pth('S-P/TH', { slug: 'Mareep-S-PTH069' })).ok, true, 'S-P/TH');
-        assert.match(mt(th('S-P'), p), /code-set-different/, 'S-P sur ligne M-P/TH');
+        assert.match(mt(th('SV-P'), pth('SV-P/TH', { slug: 'Mareep-SV-PTH069' })), /code-set-different/, 'SV-P/TH non admis (aucune planche)');
+        assert.match(mt(th('S-P'), pth('S-P/TH', { slug: 'Mareep-S-PTH069' })), /code-set-different/, 'S-P/TH non admis (aucune planche)');
+        assert.match(mt(e, pth('', { slug: 'Mareep-M-PTH069' })), /code-set-different/, 'ligne vide + slug M-PTH069 : la branche slug ne sert pas aux clés à « / »');
+        assert.match(mt(trad({ nom: 'サンダース', dex: 135, pv: 110, numero: '001', codeSet: 'mEE' }), ptrad({ numero: '001', slug: 'Jolteon-mEEv-001', codeSet: 'mEZ', nomEn: 'Jolteon' })), /code-set-different/, 'ligne mEZ + slug mEEv : la ligne non vide l\'emporte sur le slug');
         // (e) deux clés au même code imprimé : l'ordre des clés ne change rien
         const A = { 'X/1': 'ZZ', 'Y/2': 'ZZ' };
         assert.strictEqual(PV.cleAliasPour(A, 'zz', 'y/2'), 'Y/2');

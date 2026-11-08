@@ -198,10 +198,11 @@ const echapper = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
  *  · sKV → sK  : planche pl-sKV.png (phase4-b-visuels), 5 cartes VSTAR Premium Trainer Box (Cherubi 001/030 … Mew 007/030) portant « sK » ; Cardmarket : slugSet Premium-Trainer-Box-VSTAR, idExpansion 4515, codeSet « sKV ».
  * Aucun autre set ne porte « mEE » ou « sK » (univers-expansions.json, table-sets.js, table-sets-auto.json, table-sets-sans-page.json : aucune occurrence, vérifié le 2026-11-02).
  *  · M-P/TH → M-P : promos thaïes imprimant « NNN/M-P » (slug Cardmarket …-M-PTH069), cartes thaïes relues le 2026-11-08 sur couverture\S8\PHASE4\N8R1\validation\planche-07.png à planche-11.png.
- *  · SV-P/TH → SV-P et S-P/TH → S-P : même convention, à confirmer sur planche avant écriture (aucun scan cité).
+ *  · SV-P/TH et S-P/TH ne sont PAS admis : aucun scan cité ; ils reviendront avec leur planche.
  */
-const CODES_IMPRIMES_ALIAS = Object.freeze({ mEEv: 'mEE', sKV: 'sK', 'M-P/TH': 'M-P', 'SV-P/TH': 'SV-P', 'S-P/TH': 'S-P' });
-/** La clé de la table dont le code imprimé vaut `code` ET dont le code Cardmarket est celui du produit (`ligne`, ou, ligne vide, trouvé dans le slug) : indépendant de l'ordre des clés, deux clés au même code imprimé comprises. */
+const CODES_IMPRIMES_ALIAS = Object.freeze({ mEEv: 'mEE', sKV: 'sK', 'M-P/TH': 'M-P' });
+/** La clé de la table dont le code imprimé vaut `code` ET dont le code Cardmarket est celui du produit (`ligne`, ou, ligne vide, trouvé dans le slug) : indépendant de l'ordre des clés, deux clés au même code imprimé comprises.
+ *  La branche « slug quand la ligne est vide » ne sert pas aux clés contenant « / » (M-P/TH) : un slug n'a jamais de « / » (`…-M-PTH069`), elle ne peut y concorder ; ces clés exigent la ligne exacte. */
 function cleAliasPour(table, code, ligne, slug = null, n = '') {
     return Object.keys(table).find(k => {
         if (norm(table[k]) !== code) return false;
