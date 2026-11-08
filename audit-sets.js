@@ -105,6 +105,7 @@ async function lireBase() {
     audit.ecart = ec;
     if (!sansEcriture) { fs.writeFileSync(jsonSortie, JSON.stringify(audit)); fs.writeFileSync(mdSortie, A.formaterMd(audit, ec)); }
     const T = audit.totaux, D = audit.denominateurs;
+    console.log(`DÉFINITION de l'audit : ${audit.definition} (doublons et manquants redéfinis ; ne se comparent pas à une définition antérieure)`);
     console.log(`dénominateurs : ${JSON.stringify(D)}`);
     console.log(`sets à 100 % ${T.sets100} · troués ${T.setsTroues} · trous ${T.trous} : ` + A.TYPES.map(t => `${A.TITRES[t]} ${T[t]}`).join(' · '));
     for (const t of A.TYPES) console.log(`  ${t} : ${JSON.stringify(audit.parCause[t])}`);
@@ -115,6 +116,7 @@ async function lireBase() {
         const s = audit.sets.find(x => x.set === id);
         console.log(s ? `  [${id}] trous ${s.trous} · causes ${JSON.stringify(s.causes)} · exclus ${JSON.stringify(Object.fromEntries(Object.entries(s.exclusParCause || {}).map(([k, v]) => [k, v.length])))}` : `  [${id}] absent des sets publiés`);
     }
+    if (ec && ec.memeDefinition === false) console.log(`⚠️ DÉFINITION DIFFÉRENTE (${ec.definitionAvant} → ${ec.definitionApres}) : doublons et manquants NE SONT PAS COMPARÉS (changement de définition, pas un progrès)`);
     if (ec) console.log(`écart contre ${ec.avantLe} : ${JSON.stringify(ec.totaux)} · passés à 100 % ${ec.setsPassesA100.length} (par une vraie collecte ${ec.setsPassesA100ParCollecte.length} · uniquement par les exclusions ${ec.setsPassesA100ParExclusions.length})${ec.memeDenominateur ? '' : ' ⚠️ dénominateur différent'}`);
     console.log(sansEcriture ? `--sans-ecriture : rien d'écrit · ${Math.round((Date.now() - t0) / 1000)} s` : `écrit ${jsonSortie} et ${mdSortie} · ${Math.round((Date.now() - t0) / 1000)} s`);
 })().catch(e => { console.error(String(e && e.stack || e).replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>')); process.exit(1); });

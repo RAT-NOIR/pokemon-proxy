@@ -144,19 +144,48 @@ test('annexe « Yellow A » affichée dans le set de sa carte parente : 101a ent
     const avec = un(auditer(l, { ...regles, annexeDuSet: (i, id) => id === 'c1' && i.expansion === 'Yellow A' }));
     assert.strictEqual(avec.affichees, 2);
     assert.deepStrictEqual(avec.sansProduit.items.map(x => x.numero), ['101a']);
-    assert.strictEqual(avec.doublons.groupes[0].cause, 'doublon-suffixe-lettre');
+    assert.strictEqual(avec.doublons.n, 0);     // une seule carte : pas un doublon de fiches (définition 2)
     assert.strictEqual(un(auditer(l)).affichees, 1);     // sans la règle injectée : l'annexe n'existe pas
 });
 
 // ── doublons de faits
-test('doublon : même nom/PV/attaques/numéro de base (101 et 101a)', () => {
+// DÉFINITION 2 des doublons (2026-11-08) : plusieurs carteId, MÊME numéro normalisé (lettre comprise), et aucun produit propre à chaque membre
+test('pas un doublon : 101 et 101a (deux documents, numéros différents : annexe / impression distincte)', () => {
     const l = lecture({ sets: [set({ totalImprime: 101 })], cartes: [carte('c1', 'Evoli', '101'), carte('c2', 'Evoli', '101a')] });
-    const d = un(auditer(l)).doublons;
-    assert.strictEqual(d.n, 1); assert.strictEqual(d.groupes.length, 1); assert.strictEqual(d.groupes[0].cause, 'doublon-suffixe-lettre');
+    assert.strictEqual(un(auditer(l)).doublons.n, 0);
 });
-test('doublon : deux documents au même numéro', () => {
+test('pas un doublon : UNE seule carte portant deux numéros du set (une impression par section)', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', ['1', 'F1'])] });
+    assert.strictEqual(un(auditer(l)).doublons.n, 0);
+});
+test('doublon : deux documents au même numéro, sans aucun produit propre', () => {
     const l = lecture({ cartes: [carte('c1', 'A', '1'), carte('c2', 'A', '1')] });
-    assert.strictEqual(un(auditer(l)).doublons.groupes[0].cause, 'doublon-deux-documents');
+    const d = un(auditer(l)).doublons;
+    assert.strictEqual(d.groupes[0].cause, 'doublon-deux-documents'); assert.strictEqual(d.n, 1);
+});
+test('doublon : deux documents au même numéro et au MÊME produit', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', '1'), carte('c2', 'A', '1')], lignes: [lig('c1', 500, '1'), lig('c2', 500, '1')] });
+    assert.strictEqual(un(auditer(l)).doublons.n, 1);
+});
+test('doublon : un membre a son produit, l\'autre aucun → compté (l\'audit crie)', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', '1'), carte('c2', 'A', '1')], lignes: [lig('c1', 500, '1')] });
+    assert.strictEqual(un(auditer(l)).doublons.n, 1);
+});
+test('pas un doublon : même numéro mais un produit DISTINCT par membre', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', '1'), carte('c2', 'A', '1')], lignes: [lig('c1', 500, '1'), lig('c2', 501, '1')] });
+    assert.strictEqual(un(auditer(l)).doublons.n, 0);
+});
+test('la définition de l\'audit est nommée dans la sortie', () => {
+    const a = auditer(lecture({ cartes: [carte('c1', 'A', '1')] }));
+    assert.strictEqual(a.definition, A.DEFINITION); assert.ok(A.DEFINITION >= 2);
+    const md = A.formaterMd(a, null); assert.ok(md.includes(`définition ${A.DEFINITION}`));
+});
+test('écart : deux définitions différentes → doublons et manquants non comparés', () => {
+    const a = auditer(lecture({ cartes: [carte('c1', 'A', '1')] }));
+    const ec = A.ecart({ ...JSON.parse(JSON.stringify(a)), definition: 1 }, a);
+    assert.strictEqual(ec.memeDefinition, false);
+    assert.ok(A.formaterMd(a, ec).includes('doublons et manquants NE SONT PAS COMPARÉS'));
+    assert.strictEqual(A.ecart(JSON.parse(JSON.stringify(a)), a).memeDefinition, true);
 });
 test('pas un doublon : mêmes faits, numéros de base différents (réimpression secrète)', () => {
     const l = lecture({ cartes: [carte('c1', 'A', '1'), carte('c2', 'A', '90')] });
@@ -200,6 +229,34 @@ test('numéro manquant : un reste qui désigne CE numéro est nommé', () => {
 test('numéro manquant : un reste d\'un AUTRE numéro ne se colle pas au numéro manquant', () => {
     const l = lecture({ cartes: [carte('c1', 'A', '1'), carte('c3', 'B', '3')], produits: [prod(55, { fiche: { classe: 'SANS_LIGNE', motifs: [] } })], numerosProduits: [{ idProduct: 55, numero: '9' }], restesParProduit: { 55: 'sans-page' } });
     assert.strictEqual(un(auditer(l)).manquants.items[0].cause, 'aucune-source-en-base');
+});
+// DÉFINITION 2 des manquants : un set Additionals attend les numéros de SES produits ; un set dont des numéros de queue n'ont aucun produit numéroté n'en manque pas si ses produits sans numéro sont en nombre égal
+const additionals = { ...regles, estAdditionals: id => id === 'S1' };
+const pn = (id, numero, o = {}) => ({ prod: prod(id, o), num: { idProduct: id, numero } });
+const avecProduits = (liste, o = {}) => lecture({ ...o, produits: liste.map(x => x.prod), numerosProduits: liste.map(x => x.num).filter(x => x.numero != null) });
+test('Additionals : l\'attendu est l\'ensemble des numéros de ses produits, pas le total du set principal', () => {
+    const l = avecProduits([pn(1, '1'), pn(2, '2')], { sets: [set({ totalImprime: 50 })], cartes: [carte('c1', 'A', '1'), carte('c2', 'B', '2')] });
+    const s = un(auditer(l, additionals));
+    assert.strictEqual(s.manquants.n, 0); assert.strictEqual(s.attendu, 2);
+    assert.strictEqual(un(auditer(l)).manquants.n, 47);     // hors règle Additionals : 3..50 moins le 4 que la règle de test exclut
+});
+test('Additionals : un numéro de produit sans fiche reste un manquant, et se nomme', () => {
+    const l = avecProduits([pn(1, '1'), pn(2, '2'), pn(3, '003', { fiche: { classe: 'SANS_LIGNE', motifs: [] } })], { sets: [set({ totalImprime: 50 })], cartes: [carte('c1', 'A', '1'), carte('c2', 'B', '2')] });
+    const m = un(auditer(l, additionals)).manquants;
+    assert.deepStrictEqual(m.items.map(x => x.numero), ['3']); assert.strictEqual(m.items[0].cause, 'produit-cardmarket-existe-sans-fiche');
+});
+test('numéros de queue sans produit numéroté et produits sans numéro en nombre égal : pas des manquants (Pokémon VS : 9 Énergies)', () => {
+    const l = avecProduits([pn(1, '1'), pn(2, '2'), pn(3, '3'), pn(7, null), pn(8, null)], { sets: [set({ totalImprime: 5 })], cartes: [carte('c1', 'A', '1'), carte('c2', 'B', '2'), carte('c3', 'C', '3')] });
+    const s = un(auditer(l));
+    assert.strictEqual(s.manquants.n, 0); assert.deepStrictEqual(s.exclusPasUnTrou, ['4', '5']);
+});
+test('numéros de queue sans produit numéroté : un compte de produits sans numéro différent → toujours manquants', () => {
+    const l = avecProduits([pn(1, '1'), pn(2, '2'), pn(3, '3'), pn(7, null)], { sets: [set({ totalImprime: 6 })], cartes: [carte('c1', 'A', '1'), carte('c2', 'B', '2'), carte('c3', 'C', '3')] });
+    assert.deepStrictEqual(un(auditer(l)).manquants.items.map(x => x.numero), ['5', '6']);     // 4, 5, 6 sans produit numéroté pour 1 seul produit sans numéro ; le 4 est exclu par la règle de test
+});
+test('un numéro du MILIEU sans produit n\'est jamais absorbé par les produits sans numéro', () => {
+    const l = avecProduits([pn(1, '1'), pn(3, '3'), pn(4, '4'), pn(7, null)], { sets: [set({ totalImprime: 4 })], cartes: [carte('c1', 'A', '1'), carte('c3', 'C', '3'), carte('c4', 'D', '4')] });
+    assert.deepStrictEqual(un(auditer(l)).manquants.items.map(x => x.numero), ['2']);
 });
 test('produit sans fiche : le reste du produit (par idProduct) est nommé, après le trou nommé', () => {
     const l = lecture({ produits: [prod(1, { fiche: { classe: 'SANS_LIGNE', motifs: [] } }), prod(2, { fiche: { classe: 'LIGNE_SANS_FICHE', motifs: [] } }), prod(3, { fiche: { classe: 'SANS_LIGNE', motifs: [] } })],

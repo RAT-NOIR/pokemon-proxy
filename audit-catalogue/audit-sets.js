@@ -19,6 +19,11 @@
 const { numerosAttendus } = require('./numeros-attendus');
 const { SANS_NUMERO_IMPRIME, familleSansNumero } = require('./sans-numero-imprime');
 const { cleNumero } = require('../collecte-cartes/jointure');   // LA clé de numéro de la production (préfixe et suffixe gardés, zéros retirés) — jamais une copie
+// 🔑 DÉFINITION de l'audit (2026-11-08). Un changement de définition n'est PAS un progrès : deux audits de définitions différentes ne se comparent pas sur les types touchés.
+//  1 = définition d'origine ; 2 = doublons (plusieurs carteId, même numéro normalisé lettre comprise, sans produit propre par membre) et manquants (Additionals : numéros de leurs produits ;
+//      numéros de queue sans produit numéroté absorbés par des produits sans numéro en nombre égal). Types touchés : doublons, manquants.
+const DEFINITION = 2;
+const TYPES_DEFINITION = Object.freeze(['doublons', 'manquants']);
 const TYPES = Object.freeze(['sansVisuel', 'sansNumero', 'sansProduit', 'doublons', 'produitsSansFiche', 'manquants']);
 const CAUSES = Object.freeze({
     sansVisuel: ['regle-bloquante', 'aucune-image-en-base', 'image-d-un-autre-set-seulement', 'image-refusee-par-la-garde-de-langue', 'image-d-un-autre-numero', 'cause-inconnue'],
@@ -132,6 +137,7 @@ function auditer(lecture, regles) {
             const liés = new Set();
             for (const p of produitsParFiche.get(`${c._id}|${s._id}`) || []) if (memeNumero(p.fiche.numero)) liés.add(p.idProduct);
             for (const l of lignesParCarte.get(c._id) || []) if (l.slugSet === s._id && memeNumero(l.numeroFiche)) liés.add(l.idProduct);
+            e.liesIds = [...liés];   // lu par la règle des doublons (produit propre à chaque membre)
             const ps = [...liés].map(id => produitDe.get(id)).filter(Boolean);
             const imgsSet = (c.images || []).filter(i => i.set === s._id);
             // « image présente » = celle que le site choisirait : garde de langue du tirage du set PUIS image de l'impression (règles du site injectées)
@@ -173,11 +179,14 @@ function auditer(lecture, regles) {
         const groupes = [];
         for (const g of parFaits.values()) {
             if (g.length < 2) continue;
+            // DÉFINITION 2 : un doublon de FICHES = plusieurs documents (carteId) au MÊME numéro normalisé (lettre comprise) ET sans produit propre à chaque membre.
+            // Une seule carte portant plusieurs numéros (une impression par section, une annexe), ou des numéros différents (123 / 123a), est une carte à plusieurs impressions, pas deux fiches.
             const numeros = new Set(g.map(e => e.numero)), cartesIds = new Set(g.map(e => e.c._id));
-            let cause;
-            if (numeros.size === 1 && cartesIds.size > 1) cause = 'doublon-deux-documents';
-            else if (g.some(e => suffixeLettre(e.numero)) || numeros.size > 1) cause = g.some(e => suffixeLettre(e.numero)) ? 'doublon-suffixe-lettre' : 'doublon-numeros-distincts';
-            else cause = 'cause-inconnue';
+            if (cartesIds.size < 2 || numeros.size !== 1) continue;
+            const compte = new Map(); for (const e of g) for (const id of new Set(e.liesIds || [])) compte.set(id, (compte.get(id) || 0) + 1);
+            const chacunSonProduit = g.every(e => (e.liesIds || []).some(id => compte.get(id) === 1));
+            if (chacunSonProduit) continue;
+            const cause = 'doublon-deux-documents';
             groupes.push({ nom: g[0].c.nomEn, base: baseNumero(g[0].numero), cause: verifierCause('doublons', cause), membres: g.map(e => ({ carteId: e.c._id, numero: e.numero })) });
         }
         const doublonsN = groupes.reduce((a, g) => a + g.membres.length - 1, 0);
@@ -204,17 +213,35 @@ function auditer(lecture, regles) {
         }
         const manquants = []; let exclusPasUnTrou = [];
         // le total imprimé compte les sous-séries à numéro préfixé (TG, GG, SV, H, RC…) : règle pure numeros-attendus.js, les préfixés présents ne sont jamais « manquants »
-        const attenduDetail = numerosAttendus({ totalImprime: attendu, numerosPresents: nums });
+        let attenduDetail = numerosAttendus({ totalImprime: attendu, numerosPresents: nums });
+        // DÉFINITION 2 (a) : pour un set Additionals, l'attendu est l'ensemble des numéros de SES produits (même règle `numerosDeLExpansion` que sansProduit), jamais le total du set principal
+        const clesPresentes = new Set([...nums].map(cleNumero));
+        if (numerosDeLExpansion) {
+            const cles = [...numerosDeLExpansion].sort((a, b) => (parseInt(a.replace(/\D/g, ''), 10) || 0) - (parseInt(b.replace(/\D/g, ''), 10) || 0) || (a < b ? -1 : 1));
+            attendu = cles.length || null;
+            attenduDetail = { attendu, totalImprime: total, principaux: null, prefixes: null, annexes: null, manquants: cles.filter(k => !clesPresentes.has(k)), libelle: `attendu : Additionals — les ${cles.length} numéros de ses produits Cardmarket (pas le total ${total ?? '?'} du set principal)` };
+        }
         if (attendu && parNumeros) {
-            const liste = attenduDetail.manquants;
+            let liste = attenduDetail.manquants;
+            // DÉFINITION 2 (b) : des numéros de QUEUE (au-delà du plus grand numéro de produit) qui n'ont aucun produit numéroté ne sont pas manquants quand l'expansion a exactement autant de produits SANS numéro
+            // (Pokémon VS : 143-151 = 9 Énergies de base, sans numéro imprimé ni chez Cardmarket). Egalité stricte de comptes, queue seulement : un numéro du milieu n'est jamais absorbé.
+            let sansProduitNumerote = [];
+            if (!numerosDeLExpansion) {
+                const prodsNum = prods.filter(p => nonVide(numProd.get(p.idProduct)));
+                const nSansNumero = prods.length - prodsNum.length;
+                const clesProd = new Set(prodsNum.map(p => cleNumero(numProd.get(p.idProduct))));
+                const maxProd = [...clesProd].filter(k => /^\d+$/.test(k)).reduce((a, k) => Math.max(a, Number(k)), 0);
+                const candidats = liste.filter(n => !clesProd.has(cleNumero(n)));
+                if (candidats.length > 0 && candidats.length === nSansNumero && prodsNum.length > 0 && candidats.every(n => /^\d+$/.test(n) && Number(n) > maxProd)) { sansProduitNumerote = candidats; liste = liste.filter(n => !candidats.includes(n)); }
+            }
             const ex = exclure({ set: s._id, trous: liste, manque: liste.length });
-            exclusPasUnTrou = ex.exclus;
-            const numerosProdSansFiche = new Set(produitsSansFiche.map(p => numProd.get(p.idProduct)).filter(Boolean));
+            exclusPasUnTrou = ex.exclus.concat(sansProduitNumerote);
+            const numerosProdSansFiche = new Set(produitsSansFiche.map(p => numProd.get(p.idProduct)).filter(Boolean).map(cleNumero));
             // un reste ne se nomme que s'il désigne CE numéro (le produit du reste porte ce numéro) — jamais le type dominant du set
-            const resteDuNumero = n => { const p = prods.find(x => restesParProduit[x.idProduct] && numProd.get(x.idProduct) === n); return p ? restesParProduit[p.idProduct] : null; };
+            const resteDuNumero = n => { const p = prods.find(x => restesParProduit[x.idProduct] && numProd.get(x.idProduct) != null && cleNumero(numProd.get(x.idProduct)) === cleNumero(n)); return p ? restesParProduit[p.idProduct] : null; };
             for (const n of ex.trous) {
                 const r = resteDuNumero(n);
-                const cause = r ? `reste:${r}` : numerosProdSansFiche.has(n) ? 'produit-cardmarket-existe-sans-fiche' : 'aucune-source-en-base';
+                const cause = r ? `reste:${r}` : numerosProdSansFiche.has(cleNumero(n)) ? 'produit-cardmarket-existe-sans-fiche' : 'aucune-source-en-base';
                 manquants.push({ numero: n, nombre: 1, cause: verifierCause('manquants', cause) });
             }
         } else if (attendu && !parNumeros && attendu > portes) {
@@ -248,7 +275,7 @@ function auditer(lecture, regles) {
         for (const [k, n] of Object.entries(r.causes)) { const [t, ...c] = k.split('/'); const cause = c.join('/'); parCause[t][cause] = (parCause[t][cause] || 0) + n; }
     }
     totaux.exclus = exclus.total;
-    return { exclus, denominateurs: { sets: sets.length, setsPublies: publies.length, setsNonPublies: sets.length - publies.length, cartes: cartes.length, cartesAffichables: affichables.length, lignes: lignes.length, produits: produits.length, produitsSansSetPublie, entreesAffichees: sorted.reduce((a, r) => a + r.affichees, 0) },
+    return { definition: DEFINITION, exclus, denominateurs: { sets: sets.length, setsPublies: publies.length, setsNonPublies: sets.length - publies.length, cartes: cartes.length, cartesAffichables: affichables.length, lignes: lignes.length, produits: produits.length, produitsSansSetPublie, entreesAffichees: sorted.reduce((a, r) => a + r.affichees, 0) },
         sets: sorted, parCause, totaux };
 }
 
@@ -276,15 +303,20 @@ function ecart(avant, apres) {
     const xa = (avant.exclus || {}).parCause || {}, xb = (apres.exclus || {}).parCause || {}, exParCause = {};
     for (const k of new Set([...Object.keys(xa), ...Object.keys(xb)])) { const d = (xb[k] || 0) - (xa[k] || 0); if (d !== 0) exParCause[k] = d; }
     const exclus = { total: ((apres.exclus || {}).total || 0) - ((avant.exclus || {}).total || 0), parCause: exParCause };
-    return { avantLe: avant.le ?? null, memeDenominateur: d1.sets === d2.sets && d1.setsPublies === d2.setsPublies, totaux, parCause, exclus, setsPassesA100, setsPassesA100ParCollecte, setsPassesA100ParExclusions, setsNouvellementTroues };
+    const memeDefinition = (avant.definition ?? 1) === (apres.definition ?? 1);   // un audit sans champ `definition` est de définition 1
+    return { avantLe: avant.le ?? null, definitionAvant: avant.definition ?? 1, definitionApres: apres.definition ?? 1, memeDefinition, memeDenominateur: d1.sets === d2.sets && d1.setsPublies === d2.setsPublies, totaux, parCause, exclus, setsPassesA100, setsPassesA100ParCollecte, setsPassesA100ParExclusions, setsNouvellementTroues };
 }
 
 // ── LE MARKDOWN
+const descriptionDefinition = d => d >= 2
+    ? 'doublons = plusieurs documents au même numéro normalisé (lettre comprise) sans produit propre à chaque membre ; manquants = Additionals : numéros de leurs produits, queue sans produit numéroté absorbée par des produits sans numéro en nombre égal. Les doublons et manquants d\'une définition 1 ne se comparent pas à ceux-ci.'
+    : 'définition d\'origine (doublons par faits sans condition de numéro ni de produit ; manquants sur le total du set).';
 const signe = n => (n > 0 ? `+${n}` : String(n));
 function formaterMd(audit, ec, { lignes = 150, detail = 40, parSet = 8 } = {}) {
     const D = audit.denominateurs, T = audit.totaux, out = [];
     out.push('# AUDIT-SETS — l\'état de chaque set publié, trou par trou', '');
     out.push(`Généré le ${audit.le ?? '?'} · lecture seule · outil : audit-sets.js (module audit-catalogue/audit-sets.js).`, '');
+    out.push(`**Audit de définition ${audit.definition ?? 1}** — ${descriptionDefinition(audit.definition ?? 1)}`, '');
     out.push('**Score de tri = trous × log2(2 + offres Cardmarket de l\'expansion)** : les sets les plus troués ET les plus visités d\'abord. `trous` = sans visuel + sans numéro + sans produit CM + doublons (fiches en trop) + produits CM sans fiche + numéros manquants (un même défaut peut compter dans plusieurs colonnes). `offres` = produits de l\'expansion avec une offre en cours (substitut de popularité).', '');
     out.push('## Dénominateurs', '');
     out.push(`- sets lus ${D.sets} · publiés (audités) ${D.setsPublies} · non publiés (ignorés) ${D.setsNonPublies}`);
@@ -313,7 +345,8 @@ function formaterMd(audit, ec, { lignes = 150, detail = 40, parSet = 8 } = {}) {
     }
     if (ec) {
         out.push(`## Écart avec l'audit précédent (${ec.avantLe ?? '?'})${ec.memeDenominateur ? '' : ' — ⚠️ DÉNOMINATEUR DIFFÉRENT, un écart n\'est pas un progrès'}`, '');
-        out.push('- trous ' + signe(ec.totaux.trous || 0) + ' · ' + TYPES.map(t => `${TITRES[t]} ${signe(ec.totaux[t] || 0)}`).join(' · '));
+        if (ec.memeDefinition === false) out.push(`- ⚠️ **DÉFINITION DIFFÉRENTE (${ec.definitionAvant} → ${ec.definitionApres}) : doublons et manquants NE SONT PAS COMPARÉS** — leur écart est un changement de définition, pas un progrès (ni une régression) ; seuls les autres types se comparent.`);
+        out.push('- trous ' + signe(ec.totaux.trous || 0) + ' · ' + TYPES.map(t => ec.memeDefinition === false && TYPES_DEFINITION.includes(t) ? `${TITRES[t]} non comparé` : `${TITRES[t]} ${signe(ec.totaux[t] || 0)}`).join(' · '));
         out.push(`- exclus du compte ${signe(ec.exclus ? ec.exclus.total : 0)} (${Object.entries((ec.exclus || {}).parCause || {}).map(([c, n]) => `${c} ${signe(n)}`).join(' · ') || 'aucun changement'}) — une baisse des trous qui n'est qu'une hausse des exclus n'est PAS un progrès`);
         out.push(`- sets passés à 100 % PAR UNE VRAIE COLLECTE (${(ec.setsPassesA100ParCollecte || []).length}) : ${(ec.setsPassesA100ParCollecte || []).slice(0, 60).join(', ') || '—'}`);
         out.push(`- sets passés à 100 % UNIQUEMENT PAR LES EXCLUSIONS (${(ec.setsPassesA100ParExclusions || []).length}) — pas un progrès de collecte : ${(ec.setsPassesA100ParExclusions || []).slice(0, 60).join(', ') || '—'}`);
@@ -354,4 +387,4 @@ function suspectsExpansion(audit, n = 10) {
         .map(s => ({ set: s.set, n: s.diagnosticExpansion.n, expansionsDeclarees: s.diagnosticExpansion.expansionsDeclarees, exemples: s.diagnosticExpansion.exemples }));
 }
 
-module.exports = { suspectsExpansion, auditer, ecart, trier, score, formaterMd, verifierCause, verifierExclusion, EXCLUSIONS, CAUSES, TYPES, TITRES, baseNumero, suffixeLettre };
+module.exports = { DEFINITION, suspectsExpansion, auditer, ecart, trier, score, formaterMd, verifierCause, verifierExclusion, EXCLUSIONS, CAUSES, TYPES, TITRES, baseNumero, suffixeLettre };
