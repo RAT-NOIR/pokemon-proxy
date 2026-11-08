@@ -11,6 +11,8 @@
 // ⚠️ Ce que ces sites disent d'eux-mêmes (lu les 2026-09-23 et 24, §54, §57) : leurs conditions réservent la copie et la diffusion.
 // L'ouverture est une décision de l'éditeur, pas une lecture de ces conditions : c'est pourquoi tout ce qui vient d'ici doit pouvoir
 // partir en un seul lot (`retirer-visuels-tpc.js`).
+const fs = require('fs');
+const path = require('path');
 const { normaliserNom, cleNumero } = require('./jointure');
 
 // Les sites autorisés, écrits par ce qu'ils AUTORISENT (§51) : un site absent d'ici lève à la construction du client.
@@ -393,19 +395,56 @@ function autoriseParRobots(texteRobots, chemin, agent = UA) {
 }
 
 // ── LE CLIENT ───────────────────────────────────────────────────────────────────────────────────────────────────────
-const transportFetch = {
-    async get(url, { binaire = false } = {}) {
-        let r;
-        const entetes = { 'User-Agent': UA, ...(url.startsWith('https://www.pokemon-card.com/card-search/') ? { Referer: 'https://www.pokemon-card.com/card-search/' } : {}) };
-        // `manual` : une redirection n'est JAMAIS suivie par fetch — le client la juge (même site, robots.txt, trois sauts au plus)
-        try { r = await fetch(url, { headers: entetes, redirect: 'manual', signal: AbortSignal.timeout(45000) }); }
-        catch (e) { throw Object.assign(new Error(`${e.name === 'TimeoutError' ? 'ETIMEDOUT' : e.cause?.code || 'ERR_NETWORK'} ${url}`), { reseau: true }); }
-        if (r.status >= 300 && r.status < 400) return { status: r.status, location: r.headers.get('location') };
-        const type = r.headers.get('content-type') || '';
-        if (binaire && r.ok && /^image\//.test(type)) return { status: r.status, type, octets: Buffer.from(await r.arrayBuffer()) };
-        return { status: r.status, type, texte: await r.text() };
-    }
-};
+// 🔑 LA PORTE RÉSEAU (2026-11-08) : TOUTE requête de TPC passe par `collecte-cartes/porte-reseau.js` (hôtes admis, robots.txt, cadence, fermeture d'hôte sur défi).
+// Il n'existe plus ici aucun appel réseau direct. La porte S'AJOUTE aux gardes du client (verrou global, cadence ≥ 10 s, même site, robots.txt du client, arrêt au premier
+// blocage), elle n'en remplace aucune. Le transport traduit la porte en réponses de client : la porte écrit dans un fichier (dossier sorties\ de la porte), on le lit puis on l'efface.
+// LIMITES ÉCRITES : la porte juge elle-même les redirections de la même racine (3 sauts, robots relu à chaque saut) — le client n'en voit plus ; elle ne pose pas d'en-tête Referer
+// (pokemon-card.com/card-search en avait un) ; son propre robots.txt (cache 24 h) est une requête de plus, comptée par la porte et pas par le plafond du client.
+const PORTE_SORTIES = 'sorties';
+let compteurSorties = 0;
+/** @param {{porte?: object}} [o] — `porte` : le module de la porte (injecté par les bancs ; par défaut le vrai, chargé à la demande : il requiert ce module-ci). */
+function fabriquerTransportPorte({ porte = null } = {}) {
+    const P = () => porte || require('./porte-reseau');
+    return {
+        parLaPorte: true,
+        async get(url, { binaire = false } = {}) {
+            const p = P();
+            const dossier = path.join(p.DOSSIER_PORTE_FIXE, PORTE_SORTIES);
+            const sortie = path.join(dossier, `tpc-${process.pid}-${Date.now()}-${++compteurSorties}.tmp`);
+            try {
+                let r;
+                try { r = await p.lire(url, { mode: binaire ? 'image' : 'page', sortie }); }
+                catch (e) {
+                    // refusée par la porte (hôte fermé, robots, exclusion, garde) ou hôte fermé par elle (défi) : le client s'ARRÊTE, il ne réessaie pas
+                    if (e && (e.refus || e.arret)) throw Object.assign(new Error(`refusé par la porte réseau : ${e.message}`), { porte: true, bloque: true, status: e.status ?? null });
+                    if (e && e.issue) {       // image : la porte a classé la réponse — on rend au client de quoi la classer pareil
+                        const s = e.status ?? 200;
+                        if (e.issue === 'absente') return { status: 404, type: 'text/html', texte: '' };
+                        if (e.issue === 'fausse-absente') return { status: 200, type: 'text/html', texte: '<html></html>' };
+                        if (e.issue === 'ambigue') return { status: 200, type: 'text/html', texte: 'challenge' };
+                        if (e.issue === 'transitoire') return { status: s >= 500 ? s : 503, type: 'text/html', texte: '' };
+                        return { status: s, type: 'application/octet-stream', texte: '' };
+                    }
+                    if (e && Number.isInteger(e.status)) return { status: e.status, type: 'text/html', texte: '' };
+                    throw Object.assign(e, { reseau: true });
+                }
+                if (r.redirige) return { status: r.status || 302, location: r.redirige };
+                const corps = fs.readFileSync(sortie);
+                if (binaire) return { status: r.status, type: typeImage(corps), octets: corps };
+                return { status: r.status, type: 'text/html', texte: corps.toString('utf8') };
+            } finally { try { fs.unlinkSync(sortie); } catch { /* jamais écrite (refus) ou déjà retirée */ } }
+        }
+    };
+}
+/** Le type d'une image lu sur ses octets (la porte l'a déjà classée « image »). */
+function typeImage(b) {
+    if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8) return 'image/jpeg';
+    if (b.length > 8 && b.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))) return 'image/png';
+    if (b.length > 12 && b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP') return 'image/webp';
+    if (b.length > 3 && b.subarray(0, 3).toString('latin1') === 'GIF') return 'image/gif';
+    return 'image/png';
+}
+const transportFetch = fabriquerTransportPorte();      // nom conservé (mesurer-tpc-tw.js) : ce n'est plus un appel direct
 // 🔑 LA RÈGLE COMMUNE DE RÉPONSE (2026-10-18) : le défi, la fausse page introuvable, la pause et le compteur par hôte vivent dans reponse-hote.js — ce client les APPELLE, il n'en garde aucune copie.
 const RH = require('./reponse-hote');
 
@@ -439,7 +478,13 @@ function fabriquerClientTpc({ site, transport = transportFetch, cadenceMs = CADE
         if (plafond !== null && compte >= plafond) throw Object.assign(new Error(`${site} : plafond de ${plafond} requête(s) atteint (cumul ${compte}) — la requête n° ${compte + 1} est refusée, rien n'est envoyé`), { plafond: true });
         dernier = Date.now(); compte++;
         if (surRequete) surRequete(compte);
-        const rep = await transport.get(url, o);
+        let rep;
+        try { rep = await transport.get(url, o); }
+        catch (e) {
+            // la porte réseau a refusé ou fermé l'hôte : on s'arrête, définitivement pour ce client, et on le dit (une garde s'écrit par ce qu'elle autorise)
+            if (e && e.porte) { bloque = Object.assign(new Error(`${site} BLOQUÉ — ${e.message} sur ${url} — on s'arrête, plus aucune requête`), { bloque: true, porte: true, status: e.status ?? null }); throw bloque; }
+            throw e;
+        }
         statuts[rep.status] = (statuts[rep.status] || 0) + 1;       // le compte des statuts HTTP reçus (200, 3xx, 403, 429, 5xx…) : l'absence de blocage se LIT
         return rep;
     }
@@ -508,7 +553,7 @@ function fabriquerClientTpc({ site, transport = transportFetch, cadenceMs = CADE
         });
     }
     return {
-        site, hote: S.hote,
+        site, hote: S.hote, transport,
         lier(v) { lie = v; },
         page: async url => (await obtenir(url))?.texte ?? null,
         json: async url => { const r = await obtenir(url); if (r == null) return null; try { return JSON.parse(r.texte); } catch { throw new Error(`${site} : réponse non JSON sur ${url}`); } },
@@ -544,5 +589,5 @@ module.exports = {
     SITES, SOURCES_TPC, MENTION, LOT, CADENCE_MS, VERROU_GLOBAL_MS, UA,
     lireFicheAsie, lireListeAsie, lireApiPcc, lireFichePcc,
     preuveDeCorrespondance, planifierTpc, contexteNomJaPv, SEUIL_PART_SANS_NUMERO, dejaServi, construireTemoinNomJa, reglesDuNom, nomCompare, entites,
-    dexDuNom, nomEstEspeceEtRegle, nomQualifie, autoriseParRobots, delaiDesRobots, fabriquerClientTpc, idImageTpc, idAlerteBloquee, planRetrait, transportFetch
+    dexDuNom, nomEstEspeceEtRegle, nomQualifie, autoriseParRobots, delaiDesRobots, fabriquerClientTpc, idImageTpc, idAlerteBloquee, planRetrait, transportFetch, fabriquerTransportPorte
 };

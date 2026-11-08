@@ -292,6 +292,63 @@ const F = f => fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'tpc-fixt
     const Rv = T.planRetrait([{ _id: 1, images: [{ set: 'S', source: 'tpc-asie', cleR2: 'a', vignette: { cleR2: 'vignettes/a.webp', w: 200, h: 279 } }] }]);
     verifier('retrait : la VIGNETTE de l\'entrée part avec elle (relecture)', Rv.cles, ['a', 'vignettes/a.webp']);
 
+    // ── 8. LA PORTE RÉSEAU : toute requête de TPC passe par elle (2026-11-08) — aucun fetch brut, et la porte S'AJOUTE aux gardes du client ───
+    {
+        const os = require('os');
+        const src = f => fs.readFileSync(path.join(__dirname, f), 'utf8').split('\n').filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+        const appelBrut = new RegExp('\\bfet' + 'ch\\s*\\(');
+        verifier('aucun appel réseau brut (l\'API fetch) dans collecte-cartes/tpc.js ni collecteur-images-tpc.js', [appelBrut.test(src('collecte-cartes/tpc.js')), appelBrut.test(src('collecteur-images-tpc.js'))], [false, false]);
+        const dirS = fs.mkdtempSync(path.join(os.tmpdir(), 'tpc-sorties-'));
+        const faussePorte = (rep) => { const vus = []; return { vus, DOSSIER_PORTE_FIXE: dirS, async lire(url, o) { vus.push({ url, mode: o.mode, sortie: o.sortie, existait: fs.existsSync(o.sortie) }); const r = rep(url, o); if (r instanceof Error) throw r; if (r.redirige) return { ok: true, status: 302, redirige: r.redirige }; fs.mkdirSync(path.dirname(o.sortie), { recursive: true }); fs.writeFileSync(o.sortie, r.corps, { flag: 'wx' }); return { ok: true, status: 200, octets: r.corps.length, sortie: o.sortie }; } }; };
+        const refus = m => Object.assign(new Error(m), { refus: true });
+        const PNG = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.alloc(24)]);
+        const dp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'tpc-pauses-'));
+        require('./collecte-cartes/reponse-hote').reinitialiserSuiviProcessus();
+
+        verifier('le client par défaut n\'utilise PAS un fetch brut : son transport passe par la porte', [T.fabriquerClientTpc({ site: 'tpc-asie', verrou }).transport.parLaPorte, T.transportFetch.parLaPorte], [true, true]);
+        let fp = faussePorte(u => ({ corps: Buffer.from(u.endsWith('/robots.txt') ? '' : '<p>page</p>') }));
+        let C8 = T.fabriquerClientTpc({ site: 'tpc-asie', transport: T.fabriquerTransportPorte({ porte: fp }), cadenceMs: 0, reessaiMs: 0, verrou, dossierPauses: dp() });
+        const pg = await C8.page('/id/card-search/list/');
+        verifier('page : robots.txt PUIS la page, chacune par la porte (mode page, sortie neuve sous le dossier de la porte), lue puis effacée', [pg, fp.vus.map(v => v.url), fp.vus.map(v => v.mode), fp.vus.every(v => !v.existait && v.sortie.startsWith(path.join(dirS, 'sorties'))), fs.readdirSync(path.join(dirS, 'sorties')).length],
+            ['<p>page</p>', ['https://asia.pokemon-card.com/robots.txt', 'https://asia.pokemon-card.com/id/card-search/list/'], ['page', 'page'], true, 0]);
+        fp = faussePorte(u => ({ corps: u.endsWith('/robots.txt') ? Buffer.from('') : PNG }));
+        C8 = T.fabriquerClientTpc({ site: 'tpc-asie', transport: T.fabriquerTransportPorte({ porte: fp }), cadenceMs: 0, reessaiMs: 0, verrou, dossierPauses: dp() });
+        const im = await C8.image('/id/card-img/a.png');
+        verifier('image : mode image, octets rendus', [fp.vus[1].mode, Buffer.isBuffer(im) && im.equals(PNG)], ['image', true]);
+        // la porte refuse (hôte fermé, robots, exclusion) ou ferme l'hôte (défi) : le client s'ARRÊTE, le dit, et n'envoie plus rien
+        for (const [cas, err] of [['hôte fermé', refus('hôte fermé (ARRET-HOTE-pokemon-card.com.json) : arrêt définitif')], ['défi (arrêt écrit par la porte)', Object.assign(new Error('pokemon-card.com BLOQUÉ (défi)'), { arret: true, refus: true })]]) {
+            fp = faussePorte(u => (u.endsWith('/robots.txt') ? { corps: Buffer.from('') } : err));
+            C8 = T.fabriquerClientTpc({ site: 'tpc-asie', transport: T.fabriquerTransportPorte({ porte: fp }), cadenceMs: 0, reessaiMs: 0, verrou, dossierPauses: dp() });
+            let e1 = null, e2 = null; try { await C8.page('/id/card-search/list/'); } catch (x) { e1 = x; }
+            try { await C8.page('/id/card-search/detail/1/'); } catch (x) { e2 = x; }
+            verifier(`porte : ${cas} → BLOQUÉ (bloque + porte), message de la porte repris, plus aucune requête`, [e1?.bloque === true, e1?.porte === true, /porte/.test(e1?.message || ''), e2?.bloque === true, fp.vus.length, !!C8.bloque()], [true, true, true, true, 2, true]);
+        }
+        // un refus de la porte sur robots.txt lui-même
+        fp = faussePorte(() => refus('robots.txt interdit'));
+        C8 = T.fabriquerClientTpc({ site: 'tpc-asie', transport: T.fabriquerTransportPorte({ porte: fp }), cadenceMs: 0, reessaiMs: 0, verrou, dossierPauses: dp() });
+        { let x = null; try { await C8.page('/id/card-search/list/'); } catch (y) { x = y; } verifier('porte : refus dès robots.txt → bloqué, une seule requête tentée', [x?.bloque === true, fp.vus.length], [true, 1]); }
+        // les gardes du client restent : robots.txt du client (Disallow), 404, 5xx, redirection hors site
+        fp = faussePorte(u => ({ corps: Buffer.from(u.endsWith('/robots.txt') ? 'User-agent: *\nDisallow: /id/\n' : 'x') }));
+        C8 = T.fabriquerClientTpc({ site: 'tpc-asie', transport: T.fabriquerTransportPorte({ porte: fp }), cadenceMs: 0, reessaiMs: 0, verrou, dossierPauses: dp() });
+        { let x = null; try { await C8.page('/id/card-search/list/'); } catch (y) { x = y; } verifier('la porte s\'ajoute : le robots.txt du client interdit encore (aucune page demandée à la porte)', [x?.robots === true, fp.vus.length], [true, 1]); }
+        fp = faussePorte(u => (u.endsWith('/robots.txt') ? { corps: Buffer.from('') } : Object.assign(new Error('HTTP 404 sur x — rien n\'est écrit'), { status: 404 })));
+        C8 = T.fabriquerClientTpc({ site: 'tpc-asie', transport: T.fabriquerTransportPorte({ porte: fp }), cadenceMs: 0, reessaiMs: 0, verrou, dossierPauses: dp() });
+        verifier('404 de la porte → null, sans réessai', [await C8.page('/id/card-search/detail/9/'), fp.vus.length], [null, 2]);
+        fp = faussePorte(u => (u.endsWith('/robots.txt') ? { corps: Buffer.from('') } : Object.assign(new Error('HTTP 503'), { status: 503 })));
+        C8 = T.fabriquerClientTpc({ site: 'tpc-asie', transport: T.fabriquerTransportPorte({ porte: fp }), cadenceMs: 0, reessaiMs: 0, verrou, dossierPauses: dp() });
+        { let x = null; try { await C8.page('/id/card-search/detail/9/'); } catch (y) { x = y; } verifier('503 de la porte → un réessai puis erreur (pas un blocage)', [x?.status, !!x?.bloque, fp.vus.length], [503, false, 3]); }
+        fp = faussePorte(u => (u.endsWith('/robots.txt') ? { corps: Buffer.from('') } : { redirige: 'https://ailleurs.example/x' }));
+        C8 = T.fabriquerClientTpc({ site: 'tpc-asie', transport: T.fabriquerTransportPorte({ porte: fp }), cadenceMs: 0, reessaiMs: 0, verrou, dossierPauses: dp() });
+        { let x = null; try { await C8.page('/id/card-search/detail/9/'); } catch (y) { x = y.message; } verifier('redirection hors site rendue par la porte → refusée par le client', /hors du site/.test(x || ''), true); }
+        // image : 404 de la porte (issue « absente ») → null ; cadence du client inchangée (Crawl-delay relevé, jamais abaissé)
+        fp = faussePorte(u => (u.endsWith('/robots.txt') ? { corps: Buffer.from('User-agent: *\nCrawl-delay: 1\n') } : Object.assign(new Error('absente'), { issue: 'absente', status: 404 })));
+        C8 = T.fabriquerClientTpc({ site: 'tpc-asie', transport: T.fabriquerTransportPorte({ porte: fp }), cadenceMs: 0, reessaiMs: 0, verrou, dossierPauses: dp() });
+        verifier('image absente chez la porte → null ; Crawl-delay 1 s relève la cadence du client', [await C8.image('/id/card-img/z.png'), C8.cadence()], [null, 1000]);
+        // la cadence du client (10 s par défaut) n'est pas réduite par la porte
+        verifier('cadence par défaut du client inchangée', T.fabriquerClientTpc({ site: 'tpc-asie', verrou }).cadence(), 10000);
+        fs.rmSync(dirS, { recursive: true, force: true });
+    }
+
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
 })().catch(e => { console.error('❌ ERREUR DU BANC', e); process.exit(1); });

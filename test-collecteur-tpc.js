@@ -462,6 +462,14 @@ const LISTE = F('asie-id-liste-SV-P-page1.html').replace(/class="resultNumber">2
     r = silencieux();
     try { R = await require('./collecteur-images-tpc').planReel({ cx: { db: BP.db }, M: BP.M, sets: [SLUG_AS], fichierCache, verrouAttendu: vp, transport: tr, cadenceMs: 0, ligneDe: ligneAS }); } finally { r(); }
     verifier('verrou global tenu par un autre → on s\'arrête, 0 requête, le verrou d\'un autre n\'est pas rendu', [R.arret, tr.appels.length, vp.appels], ['verrou-tenu', 0, ['prendre']]);
+    // LA PORTE RÉSEAU (2026-11-08) : le plan réel passe par un transport « porte » ; une porte qui refuse l'hôte (fermé) arrête le plan, rien n'est écrit, le verrou est rendu
+    {
+        const BPo = fausseBase(); semerAS(BPo);
+        const vus = []; const fermee = { DOSSIER_PORTE_FIXE: dossier, async lire(url) { vus.push(url); throw Object.assign(new Error('hôte fermé (ARRET-HOTE-pokemon-card.com.json)'), { refus: true }); } };
+        vp = fauxVerrou(); r = silencieux();
+        try { R = await require('./collecteur-images-tpc').planReel({ cx: { db: BPo.db }, M: BPo.M, sets: [SLUG_AS], fichierCache: path.join(dossier, 'porte.json'), verrouAttendu: vp, transport: T.fabriquerTransportPorte({ porte: fermee }), cadenceMs: 0, ligneDe: ligneAS }); } finally { r(); }
+        verifier('plan réel, porte qui refuse l\'hôte : arrêt « bloque », UNE seule requête tentée (robots.txt), verrou rendu, rien en base', [R.arret, vus.length, vp.appels, [...BPo.col('collecte_images_etat').keys()]], ['bloque', 1, ['prendre', 'rendre'], []]);
+    }
 
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
