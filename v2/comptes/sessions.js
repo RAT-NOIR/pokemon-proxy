@@ -1,5 +1,6 @@
 'use strict';
 const { col } = require('../db'); const J = require('./jetons'); const { repondreErreur } = require('../erreurs');
+const { estOrigineSite } = require('./origines-site');
 const NOM = 'rm_session';
 /** `generation` : celle du compte LUE par l'appelant avant de décider d'ouvrir la session (la connexion la lit avec le compte, AVANT le hachage du mot de passe : si une réinitialisation passe pendant ce
  *  hachage, la session naît d'une génération révolue et ne résout aucun porteur). Absente (undefined) : relue sur le compte (commodité des bancs) ; `null` : posée telle quelle, jamais égale à rien. */
@@ -19,7 +20,7 @@ const cookieSession = (token, cfg) => `${NOM}=${token}; ${attributs(cfg, cfg.com
 const cookieEffacement = cfg => `${NOM}=; ${attributs(cfg, 0)}`;
 // Écrit par ce qu'il AUTORISE : l'origine exacte du site ET l'en-tête X-Rat-Market ; tout le reste (absent compris) est refusé.
 function exigerOrigineSite(cfg) {
-    return (req, res, next) => (req.headers.origin === cfg.origines.site && req.get('x-rat-market') === '1')
+    return (req, res, next) => (estOrigineSite(cfg, req.headers.origin) && req.get('x-rat-market') === '1')
         ? next() : repondreErreur(res, 'ORIGINE', 'Origine non autorisée');
 }
 module.exports = { creerSession, lireCookie, cookieSession, cookieEffacement, exigerOrigineSite, NOM };

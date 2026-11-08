@@ -199,12 +199,12 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         'POST /api/compte/lier': { auth: 'bearer', idemCle: true, base: () => ({ code: 'ABC123' }), nullables: [] },
         'POST /api/compte/delier': { auth: 'bearer', base: () => ({}), nullables: [] },
         'POST /api/compte/inscription': { auth: 'site', base: () => ({ email: mail(), turnstile: 't' }), nullables: [] },   // D6 : l'inscription ne prend plus de mot de passe
-        'POST /api/compte/connexion': { auth: 'site', base: () => ({ email: mail(), motDePasse: MDP }), nullables: [] },
+        'POST /api/compte/connexion': { auth: 'site', base: () => ({ email: mail(), motDePasse: MDP, turnstile: 't' }), nullables: [] },
         'POST /api/compte/deconnexion': { auth: 'site', base: () => ({}), nullables: [] },
         // 202 IDENTIQUE par construction (anti-énumération) : un e-mail de mauvais type n'est ni accepté ni refusé, il ne déclenche RIEN (aucune écriture, aucun courrier). Les objets d'opérateur, eux, sont refusés (400).
-        'POST /api/compte/mot-de-passe-oublie': { auth: 'site', base: () => ({ email: mail() }), nullables: [],
+        'POST /api/compte/mot-de-passe-oublie': { auth: 'site', base: () => ({ email: mail(), turnstile: 't' }), nullables: [],
             tolere: { email: { variantes: ['tableau', 'nombre', 'null'], ecriture: false, raison: '202 identique par construction (anti-énumération) : aucun traitement, aucune écriture' } } },
-        'POST /api/compte/renvoyer-verification': { auth: 'site', base: () => ({ email: mail() }), nullables: [],
+        'POST /api/compte/renvoyer-verification': { auth: 'site', base: () => ({ email: mail(), turnstile: 't' }), nullables: [],
             tolere: { email: { variantes: ['tableau', 'nombre', 'null'], ecriture: false, raison: '202 identique par construction (anti-énumération) : aucun traitement, aucune écriture' } } },
         'POST /api/compte/reinitialiser': { auth: 'site', base: () => ({ jeton: 'j'.repeat(43), motDePasse: MDP }), nullables: [] },
         'POST /api/compte/verification': { auth: 'site', base: () => ({ jeton: 'j'.repeat(43), motDePasse: MDP }), nullables: [] },   // D6 : lien + mot de passe choisi au clic
@@ -231,7 +231,11 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         'POST /api/scanner/analyses': { auth: 'session', multipart: true, idem: true, base: () => ({ source: 'camera' }), nullables: [] },
         'POST /api/scanner/analyses/:id/reponse': { auth: 'session', base: () => ({ choix: 'a' }), nullables: [], idem: true, chemin: () => `/api/scanner/analyses/${new mongoose.Types.ObjectId().toHexString()}/reponse` },
         // lot COLLECTION : le corps est un booléen (aucun champ texte à injecter : la cellule (a) est « sans objet », dite) ; le compte de l'acteur est vérifié ; la clé et le slug sont ceux d'une fiche plausible
-        'PUT /api/collection/sets/:slug/fiches/:cle': { auth: 'session', base: () => ({ possedee: true }), nullables: [], chemin: () => `/api/collection/sets/Banc-Set/fiches/${encodeURIComponent('895789|001')}` }
+        'PUT /api/collection/sets/:slug/fiches/:cle': { auth: 'session', base: () => ({ possedee: true }), nullables: [], chemin: () => `/api/collection/sets/Banc-Set/fiches/${encodeURIComponent('895789|001')}` },
+        // L5 : le PUT par produit — même corps que le PUT par fiche (+ etat, langue : deux listes fermées) ; le catalogue du banc n'a AUCUN lien fiche → produit, donc un produit plausible rend 404 INTROUVABLE (jamais une écriture) : c'est la forme qui est éprouvée ici
+        'PUT /api/collection/produits/:idproduct': { auth: 'session', base: () => ({ possedee: true }), nullables: [], chemin: () => '/api/collection/produits/9000001' },
+        // K5 : le détail par exemplaire d'une fiche — une liste d'objets { etat, langue } (deux listes fermées, null admis) ; la fiche du banc n'est pas cochée par l'acteur neuf : un détail non vide rend 409, jamais une écriture
+        'PUT /api/collection/sets/:slug/fiches/:cle/exemplaires': { auth: 'session', base: () => ({ exemplaires: [{ etat: 'NM', langue: 'fr' }] }), nullables: [], chemin: () => `/api/collection/sets/Banc-Set/fiches/${encodeURIComponent('895789|001')}/exemplaires` }
     };
     // les routes en LECTURE à paramètre de chemin : le banc les joue avec un paramètre ordinaire (un « :slug » littéral n'est pas un slug)
     const CHEMIN_LECTURE = { 'GET /api/collection/sets/:slug': '/api/collection/sets/Banc-Set' };
@@ -505,6 +509,18 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             if (rep.json && rep.json.possedees !== 0) ecart(r.cle, 'e', `B voit ${rep.json.possedees} fiche(s) cochée(s) dans le set de A`);
             if (!lu.json || lu.json.possedees.length) ecart(r.cle, 'e', 'la lecture de B montre une clé de A');
         }
+        else if (r.cle === 'PUT /api/collection/sets/:slug/fiches/:cle/exemplaires') {
+            // B écrit le détail de la clé de A : sa fiche n'est pas cochée CHEZ LUI → 409, jamais le détail ni la fiche de A (état de A comparé plus bas)
+            rep = await envoyer(V, { methode: 'PUT', chemin: cible.chemin(), entetes: siteH(CB.cookie), corps: { exemplaires: [{ etat: 'NM', langue: 'fr' }] } }); attendu = [409];
+            const lu = await envoyer(V, { methode: 'GET', chemin: '/api/collection/sets/Banc-Set', entetes: siteH(CB.cookie) });
+            if (!lu.json || lu.json.possedees.length || lu.json.exemplaires) ecart(r.cle, 'e', 'la lecture de B montre une clé ou un détail de A');
+        }
+        else if (r.cle === 'PUT /api/collection/produits/:idproduct') {
+            // B écrit par produit : la route ne prend aucun identifiant de compte, le produit ne désigne ici aucune fiche (404) — rien de la collection de A n'est lu ni changé (état de A comparé plus bas)
+            rep = await envoyer(V, { methode: 'PUT', chemin: cible.chemin(), entetes: siteH(CB.cookie), corps: { possedee: false } }); attendu = [404];
+            const lu = await envoyer(V, { methode: 'GET', chemin: '/api/collection/sets/Banc-Set', entetes: siteH(CB.cookie) });
+            if (!lu.json || lu.json.possedees.length) ecart(r.cle, 'e', 'la lecture de B montre une clé de A');
+        }
         else if (r.cle === 'POST /api/scanner/analyses/:id/reponse') { rep = await envoyer(V, { methode: 'POST', chemin: `/api/scanner/analyses/${scanSA}/reponse`, entetes: siteH(CB.cookie), corps: { choix: 'a' } }); attendu = [404]; }
         else if (r.cle === 'POST /api/compte/lier') { rep = await envoyer(V, { methode: 'POST', chemin: r.chemin, entetes: extH(B.jeton), corps: { code: codeA.code } }); attendu = [404, 410]; }
         else if (r.cle === 'POST /api/installation') {
@@ -542,6 +558,11 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         for (const qs of ['?a[$ne]=1', '?constructor[prototype][x]=1', '?suite[$ne]=x']) { n++; const rep = await envoyer(V, { methode: r.methode, chemin: ch + qs, entetes: siteH(c.cookie) }); if (rep.statut === 400) bons++; }
         const ok = await envoyer(V, { methode: r.methode, chemin: ch, entetes: siteH(c.cookie) });
         H.v(`(f) ${r.cle} : ${n} requêtes hostiles → 400, la requête ordinaire → 200`, [bons, ok.statut], [n, 200]);
+    }
+    // Décision du 31/10 (maintenue) : aucune valeur Cardmarket dans la collection — GET /api/collection/valeur n'est PAS montée (404 natif) : rien à boucler, rien à lire, pour aucun compte
+    {
+        const att = await compte(), r404 = await envoyer(V, { methode: 'GET', chemin: '/api/collection/valeur', entetes: siteH(att.cookie) });
+        H.v('(valeur) la route n\'existe pas : 404, aucune valeur dans le corps', [r404.statut, /valeurTotale|tendance/.test(r404.texte)], [404, false]);
     }
     for (const [t, n] of toleres) console.log(`   toléré (${n} variante(s)) : ${t}`);
     // les acceptations tolérées n'ont rien stocké d'opérateur : aucun document ne porte une clé $ne / $gt / $where
@@ -604,10 +625,10 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         const connus = [];
         for (let i = 0; i < 20; i++) { const adresse = mail(); await raw('comptes').insertOne(Object.assign(M.nouveauCompte({ email: adresse, emailCle: adresse, motDePasse: hash }), { verifie: true })); connus.push(adresse); }
         const t = { inconnue: [], faux: [] };
-        await envoyer(V, { methode: 'POST', chemin: '/api/compte/connexion', entetes: siteH(null), corps: { email: mail(), motDePasse: MDP } });   // échauffement
+        await envoyer(V, { methode: 'POST', chemin: '/api/compte/connexion', entetes: siteH(null), corps: { email: mail(), motDePasse: MDP, turnstile: 't' } });   // échauffement
         for (let i = 0; i < 20; i++) {
-            const r1 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/connexion', entetes: siteH(null), corps: { email: mail(), motDePasse: 'mot-de-passe-faux-1' } });
-            const r2 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/connexion', entetes: siteH(null), corps: { email: connus[i], motDePasse: 'mot-de-passe-faux-2' } });
+            const r1 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/connexion', entetes: siteH(null), corps: { email: mail(), motDePasse: 'mot-de-passe-faux-1', turnstile: 't' } });
+            const r2 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/connexion', entetes: siteH(null), corps: { email: connus[i], motDePasse: 'mot-de-passe-faux-2', turnstile: 't' } });
             t.inconnue.push(r1.ms); t.faux.push(r2.ms);
             if (r1.statut !== 401 || r2.statut !== 401 || r1.texte !== r2.texte) ecart('POST /api/compte/connexion', 'step2', `les deux échecs ne sont pas identiques (${r1.statut}/${r2.statut})`);
         }
@@ -624,22 +645,22 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         await svc.attendre();
         H.v('step 2 : inscription — adresse neuve et adresse déjà prise : 202, MÊMES OCTETS (corps et en-têtes)', [i1.statut, i2.statut, signature(i1) === signature(i2)], [202, 202, true]);
         // mot de passe oublié : adresse connue / inconnue
-        const o1 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/mot-de-passe-oublie', entetes: siteH(null), corps: { email: prise } });
-        const o2 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/mot-de-passe-oublie', entetes: siteH(null), corps: { email: mail() } });
+        const o1 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/mot-de-passe-oublie', entetes: siteH(null), corps: { email: prise, turnstile: 't' } });
+        const o2 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/mot-de-passe-oublie', entetes: siteH(null), corps: { email: mail(), turnstile: 't' } });
         await svc.attendre();
         H.v('step 2 : mot de passe oublié — adresse connue et inconnue : 202, MÊMES OCTETS', [o1.statut, o2.statut, signature(o1) === signature(o2)], [202, 202, true]);
         // renvoi de la vérification : compte non vérifié / vérifié / inconnu
         const nv = mail(); await raw('comptes').insertOne(Object.assign(M.nouveauCompte({ email: nv, emailCle: nv, motDePasse: hash }), { verifie: false }));
-        const v1 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/renvoyer-verification', entetes: siteH(null), corps: { email: nv } });
-        const v2 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/renvoyer-verification', entetes: siteH(null), corps: { email: prise } });
-        const v3 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/renvoyer-verification', entetes: siteH(null), corps: { email: mail() } });
+        const v1 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/renvoyer-verification', entetes: siteH(null), corps: { email: nv, turnstile: 't' } });
+        const v2 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/renvoyer-verification', entetes: siteH(null), corps: { email: prise, turnstile: 't' } });
+        const v3 = await envoyer(V, { methode: 'POST', chemin: '/api/compte/renvoyer-verification', entetes: siteH(null), corps: { email: mail(), turnstile: 't' } });
         await svc.attendre();
         H.v('step 2 : renvoi — non vérifié, vérifié, inconnu : 202, MÊMES OCTETS', [v1.statut, v2.statut, v3.statut, signature(v1) === signature(v2), signature(v2) === signature(v3)], [202, 202, 202, true, true]);
         // le courrier n'est pas une arme : une même adresse ne reçoit pas plus de `renvoiParCompteHeure` liens de réinitialisation par heure, d'où que viennent les demandes
         courrier.envoyes.length = 0;
         const victime = mail(); await raw('comptes').insertOne(Object.assign(M.nouveauCompte({ email: victime, emailCle: victime, motDePasse: hash }), { verifie: true }));
-        const reps = [];        for (let k = 0; k < 8; k++) reps.push(await envoyer(V, { methode: 'POST', chemin: '/api/compte/mot-de-passe-oublie', entetes: siteH(null), corps: { email: victime } }));
-        const inconnue = await envoyer(V, { methode: 'POST', chemin: '/api/compte/mot-de-passe-oublie', entetes: siteH(null), corps: { email: mail() } });
+        const reps = [];        for (let k = 0; k < 8; k++) reps.push(await envoyer(V, { methode: 'POST', chemin: '/api/compte/mot-de-passe-oublie', entetes: siteH(null), corps: { email: victime, turnstile: 't' } }));
+        const inconnue = await envoyer(V, { methode: 'POST', chemin: '/api/compte/mot-de-passe-oublie', entetes: siteH(null), corps: { email: mail(), turnstile: 't' } });
         await svc.attendre();
         const recus = courrier.envoyes.filter(e => e.email === victime).length;
         // O1 (corrigé, I-3) : au plus `renvoiParCompteHeure` courriers par adresse et par heure, d'où que viennent les demandes (le plafond par IP se contourne avec des IP). Et la LIMITE NE SE VOIT PAS :
@@ -799,6 +820,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             RM_API_V2: [c => c.actif, false, 'true', 'ignore', {}],
             V2_SECRET_EMPREINTE: [c => c.empreinte.secret, null, 'trop-court', 'leve', {}],
             V2_TURNSTILE: [c => c.turnstile, 'on', 'peut-etre', 'leve'],
+            V2_CIBLE: [c => c.mesure.actif, false, 'prod', 'ignore'], V2_SECRET_MESURE: [c => c.mesure.actif, false, 'trop-court', 'ignore'], RENDER_SERVICE_ID: [c => c.mesure.actif, false, 'srv-autre-service', 'ignore'],      // L1 : exemption du défi pour les outils de mesure, inerte sans les TROIS conditions (cible exactement « essai », secret >= 32, service Render de l'essai) ; une valeur mal formée est ignorée
             V2_ESSAIS: [c => c.quotas.essai, 3, 'abc', 'leve'], V2_ACCUEIL: [c => c.quotas.accueil, 25, 'abc', 'leve'], V2_HEBDO: [c => c.quotas.hebdo, 2, 'abc', 'leve'], V2_ABO_MENSUEL: [c => c.quotas.aboMensuel, 100, 'abc', 'leve'],
             V2_DECLARES_SANS_COMPTE: [c => c.plafonds.declares.sansCompte, 1, 'abc', 'leve'], V2_DECLARES_GRATUIT: [c => c.plafonds.declares.gratuit, 3, 'abc', 'leve'], V2_DECLARES_PRO: [c => c.plafonds.declares.pro, 30, 'abc', 'leve'], V2_PROBABLE_AUCUNE_SANS_COMPTE: [c => c.plafonds.probables.sansCompte, 1, 'abc', 'leve'], V2_PROBABLE_AUCUNE_GRATUIT: [c => c.plafonds.probables.gratuit, 3, 'abc', 'leve'], V2_PROBABLE_AUCUNE_PRO: [c => c.plafonds.probables.pro, 30, 'abc', 'leve'],     // PLAFOND-DECLARE : les déclarations du client, par offre (V2_PLAFOND_PANNES / _QUESTIONS, V2_SANS_PRIX_JOUR, V2_JUMEAUX_REMBOURSES_JOUR n'ont plus d'objet : test-plafond-declare.js)
             V2_CONSTATES_SANS_COMPTE: [c => c.plafonds.constates.sansCompte, 20, 'abc', 'leve'], V2_CONSTATES_GRATUIT: [c => c.plafonds.constates.gratuit, 50, 'abc', 'leve'], V2_CONSTATES_PRO: [c => c.plafonds.constates.pro, 100, 'abc', 'leve'],      // FREIN-CONSTATES : ce que le serveur constate, par offre
@@ -847,6 +869,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             V2_MODELE_EMPREINTE_IP_HEURE: [c => c.limites.modeleEmpreinteIpHeure, 10, '0', 'leve'],      // INDEX-EMPREINTES : le plafond par IP du téléchargement du modèle (entier >= 1)
             V2_EMPREINTES_BANC_FICHIER: [c => c.modeleEmpreinte.fichierBanc, null, 'C:\\tmp\\intrus.rmei', { ferme: c => c.modeleEmpreinte.fichierBanc === null }, PROD],      // honorée SEULEMENT en mode banc : en production elle est ignorée
             V2_COOKIE_SECURE: [c => c.cookieSecure, true, '2', 'leve'],
+            V2_COLLECTION_COTES: [c => c.collection.cotes, false, '2', 'leve'],      // aucune valeur Cardmarket dans la collection (décision du 31/10) : éteint par défaut, « 1 » refusé hors banc, autre que 0/1 = invalide
             V2_LEVIERS_ABDE: [c => c.leviersAbde, false, '2', 'leve'], V2_LEVIERS_ECART: [c => c.leviersEcart, 0.1, '0.04', 'leve'], V2_LEVIERS_UN_CANDIDAT: [c => c.leviersUnCandidat, false, 'true', 'ignore'],      // LEVIERS-ABDE : éteint par défaut ; écart refusé hors 0,05-0,5 ; UN_CANDIDAT : seul « 1 » l'allume
             V2_CONFIRMATION_NOMBREUX: [c => c.confirmationNombreux, false, 'true', 'ignore'],      // DESIGNATION-REGLES R5 : éteint par défaut ; seul « 1 » l'allume
             V2_PROMOTION_SURS: [c => c.promotionSurs, false, '2', 'leve'],      // DECISION-SURS : éteint par défaut ; « 0 » ou « 1 » seulement, toute autre valeur rend la configuration invalide

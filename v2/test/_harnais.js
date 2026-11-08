@@ -104,7 +104,11 @@ function serveur(app) {
             resolve({ url: `http://127.0.0.1:${s.address().port}`, fermer: () => new Promise(r => s.close(r)) }));
     });
 }
-async function appel(url, chemin, { methode = 'GET', corps, entetes = {} } = {}) {
+// L1 : connexion, mot-de-passe-oublie et renvoyer-verification exigent un jeton Turnstile. Les bancs qui jouent ces routes pour autre chose que le défi n'ont pas à le répéter à chaque appel :
+// `appel` ajoute `turnstile: 'ok'` à un corps OBJET qui n'en porte pas (clé absente seulement), sauf `sansDefi: true`. Le défi lui-même est jugé par test-comptes-defi.js, qui passe `sansDefi`.
+const ROUTES_A_DEFI = /^\/api\/compte\/(connexion|mot-de-passe-oublie|renvoyer-verification)$/;
+async function appel(url, chemin, { methode = 'GET', corps, entetes = {}, sansDefi = false } = {}) {
+    if (!sansDefi && methode === 'POST' && ROUTES_A_DEFI.test(chemin) && corps && typeof corps === 'object' && !Array.isArray(corps) && !('turnstile' in corps)) corps = { ...corps, turnstile: 'ok' };
     const r = await fetch(url + chemin, {
         method: methode, redirect: 'manual',
         headers: { ...(corps !== undefined ? { 'content-type': 'application/json' } : {}), ...entetes },

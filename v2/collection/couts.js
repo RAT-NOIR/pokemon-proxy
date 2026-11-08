@@ -32,12 +32,25 @@ function lireElementHors(e) {
     return i < 0 ? { cle: e, q: 1 } : { cle: e.slice(0, i), q: Number(e.slice(i + 1)) };
 }
 
-/** Le coût MODÉLISÉ de ce qui est stocké dans un document de compte (ce qu'une suppression rend). `doc` : { set, mots, hors, qte }. */
+// ── L5/L6 : le DÉTAIL par exemplaire (`ex`), un tableau d'éléments « cle\netat\nlangue\nN » (état et langue vides = non précisés ; N de 1 à 99). Absent des documents d'avant : le coût d'un document sans `ex` n'a pas bougé.
+//   · EX_BASE : le champ-tableau lui-même (type 1 + nom « ex\0 » 3 + longueur 4 + terminateur 1 = 9 o → 16), payé par la première entrée d'un document ;
+//   · une entrée : l'en-tête d'élément (ELEMENT, 12 o) + la clé + 3 « \n » + l'état (≤ 2 o) + la langue (≤ 7 o : « zh-hans ») + N (≤ 2 o) — majorée aux plus longs admis, jamais une moyenne.
+const EX_BASE = 16, EX_ETAT_MAX = 2, EX_LANGUE_MAX = 7, EX_QUANTITE_MAX = 2;
+const exemplaire = cle => ELEMENT + octets(cle) + 3 + EX_ETAT_MAX + EX_LANGUE_MAX + EX_QUANTITE_MAX;
+const elementEx = (cle, etat, langue, q) => `${cle}\n${etat || ''}\n${langue || ''}\n${q}`;
+/** « cle\netat\nlangue\nN » → { cle, etat ('' = non précisé), langue, q }. */
+function lireElementEx(e) {
+    const p = e.split('\n');
+    return { cle: p[0], etat: p[1] || '', langue: p[2] || '', q: Number(p[3]) };
+}
+
+/** Le coût MODÉLISÉ de ce qui est stocké dans un document de compte (ce qu'une suppression rend). `doc` : { set, mots, hors, qte, ex }. */
 function coutDuDocument(doc) {
     let n = document(doc.set);
     n += Object.keys(doc.mots || {}).length * mot;
     for (const e of doc.hors || []) { const { cle, q } = lireElementHors(e); n += hors(cle, q); }
     n += Object.keys(doc.qte || {}).length * qte;
+    if (doc.ex && doc.ex.length) { n += EX_BASE; for (const e of doc.ex) n += exemplaire(lireElementEx(e).cle); }
     return n;
 }
-module.exports = { EPOQUE, octets, mot, qte, document, hors, registreEntree, registreDocument, elementHors, lireElementHors, coutDuDocument, DOCUMENT_BASE, REGISTRE_BASE, ELEMENT, SUFFIXE_QUANTITE };
+module.exports = { EX_BASE, exemplaire, elementEx, lireElementEx, EPOQUE, octets, mot, qte, document, hors, registreEntree, registreDocument, elementHors, lireElementHors, coutDuDocument, DOCUMENT_BASE, REGISTRE_BASE, ELEMENT, SUFFIXE_QUANTITE };

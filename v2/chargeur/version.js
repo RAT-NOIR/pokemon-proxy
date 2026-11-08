@@ -126,6 +126,15 @@ function assembler(d) {
     for (const k of [...Object.values(cols), meta.cle, meta.produit, fiches.carte, fiches.num, fiches.debut, fiches.fin, fiches.produits, ...(jum ? JUM_COLS.map(k => jum[k]) : []), ...(mar ? MAR_COLS.map(k => mar[k]) : []), ...(mel ? MEL_COLS.map(k => mel[k]) : []), ...(emp ? EMP_COLS.map(k => emp[k]) : []), ...(ecr ? ECR_COLS.map(k => ecr[k]) : []), ...(msq ? MSQ_COLS.map(k => msq[k]) : [])]) octets.colonnes += k.byteLength;
     octets.total = octets.colonnes + octets.chaines;
     const parSet = new Map(fiches.sets);                                        // slug → [premier, dernier+1] dans les colonnes de fiches
+    // L5 — L'INDEX INVERSE produit → fiches, construit ICI, au chargement (la version est gelée) : deux Int32Array triés (produit, rang de fiche) et une table rang de fiche → set. Pas un objet par produit
+    // (même parti que le reste de la version). Un produit présent dans plusieurs fiches (de sets différents, ou de clés différentes) les nomme TOUTES : c'est l'appelant qui refuse l'ambiguïté, jamais l'index qui choisit.
+    const nbFiches = fiches.carte.length, setDeFiche = new Array(nbFiches).fill(null);
+    for (const [slug, [a, b]] of parSet) for (let i = a; i < b; i++) setDeFiche[i] = slug;
+    const paires = [], ficheDeK = new Int32Array(fiches.produits.length).fill(-1);                                    // k = position dans fiches.produits ; la fiche s'en déduit par ficheDeK
+    for (let i = 0; i < nbFiches; i++) for (let k = fiches.debut[i]; k < fiches.fin[i]; k++) { paires.push(k); ficheDeK[k] = i; }
+    paires.sort((x, y) => fiches.produits[x] - fiches.produits[y] || ficheDeK[x] - ficheDeK[y]);
+    const invProduit = Int32Array.from(paires, k => fiches.produits[k]), invFiche = Int32Array.from(paires, k => ficheDeK[k]);
+    const cleDeFiche = i => `${fiches.carte[i]}|${lire(texte, fiches.num[i])}`;
     const marquagesDe = r => {                                                  // les cinq champs d'une ligne ; null partout sans colonne (le même jeu de clés dans les deux cas)
         if (!mar) return { partageeHoloNonHolo: null, partageeTamponNonSepare: null, produitsPartages: null, tamponNonRepresente: null, basseDefinition: null };
         const f = mar.flags[r];
@@ -349,6 +358,21 @@ function assembler(d) {
             return out;
         },
         produitsDeLaFiche(slug, cle) { const f = V.fichesDuSet(slug).find(x => x.cle === cle); return f ? f.produits : []; },
+        /**
+         * L5 — les fiches (set, clé) qui portent ce produit, dédoublonnées et triées par (set, clé) : [] = conclu, aucune fiche ; null = pas un identifiant entier (on ne sait pas). Deux produits d'une même fiche
+         * rendent la même fiche ; un produit de plusieurs fiches les rend toutes (l'appelant refuse l'ambiguïté).
+         */
+        fichesDuProduit(id) {
+            if (!Number.isInteger(id)) return null;
+            let lo = 0, hi = invProduit.length;
+            while (lo < hi) { const m = (lo + hi) >>> 1; if (invProduit[m] < id) lo = m + 1; else hi = m; }
+            const vus = new Set(), out = [];
+            for (let i = lo; i < invProduit.length && invProduit[i] === id; i++) {
+                const f = invFiche[i], set = setDeFiche[f], cle = cleDeFiche(f), k = `${set}\u0000${cle}`;
+                if (!vus.has(k)) { vus.add(k); out.push({ set, cle }); }
+            }
+            return out.sort((a, b) => (a.set < b.set ? -1 : a.set > b.set ? 1 : a.cle < b.cle ? -1 : a.cle > b.cle ? 1 : 0));
+        },
         /** Le paquet à transmettre à un autre fil : des tampons à TRANSFÉRER (aucune copie) et le reste en données simples. */
         paquet() {
             const tous = [...Object.values(cols), meta.cle, meta.produit, fiches.carte, fiches.num, fiches.debut, fiches.fin, fiches.produits, texte.off, texte.octets, liens.off, liens.octets, ...(jum ? JUM_COLS.map(k => jum[k]) : []), ...(mar ? MAR_COLS.map(k => mar[k]) : []), ...(mel ? MEL_COLS.map(k => mel[k]) : []), ...(emp ? EMP_COLS.map(k => emp[k]) : []), ...(ecr ? ECR_COLS.map(k => ecr[k]) : []), ...(msq ? MSQ_COLS.map(k => msq[k]) : [])];

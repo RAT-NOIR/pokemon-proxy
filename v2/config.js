@@ -5,6 +5,7 @@
 // et les soldes anciens restent lisibles ; aucune ne se DÉBITE plus (essayerPoche) et V2_ORDRE_POCHES ne peut plus les nommer.
 // Les hôtes PUBLICS de production des images (CONTRAT-2 règle 6) : une seule définition, reprise par `images.hotesPublics` ET par la garde du stockage de la Communauté (galerie/r2.js : son adresse publique ne peut pas en être une).
 const HOTES_PUBLICS_PRODUCTION = Object.freeze(['pub-7d992e666c3d4a2b870b680a920045b6.r2.dev', 'rat-market.fr']);
+const SERVICE_ESSAI = 'srv-db7ticgm7kps73crjibg';   // L1 : le service Render de l'essai (rat-market-api-essai), seul où la dispense de mesure peut s'allumer
 const POCHES = Object.freeze(['jour']);
 const POCHES_ANCIENNES = Object.freeze(['essai', 'accueil', 'hebdo', 'abonnement', 'achete']);
 const entier = (nom, v, defaut, min = 0, max = Infinity) => {
@@ -88,6 +89,12 @@ function lireConfig(env = process.env) {
     const turnstile = (() => { const t = env.V2_TURNSTILE; if (t === undefined || t === '') return 'on'; if (t === 'on' || t === 'off') return t; throw new Error(`configuration invalide : V2_TURNSTILE="${t}" (attendu on ou off)`); })();
     if (actif && turnstile === 'off' && !banc) throw new Error('configuration invalide : V2_TURNSTILE=off n\'est accepté que sur une base de banc (MONGODB_BASE=test_scratch ET BANC_ISOLE=1)');
     // B8.1 : même garde que Turnstile — un cookie de session SANS Secure n'est admis que sur un banc (test_scratch) ; en production allumée, V2_COOKIE_SECURE=0 est une configuration invalide.
+    // DÉCISION DE L'UTILISATEUR (31/10, maintenue le 07/11) : AUCUNE valeur issue de Cardmarket dans les routes de la collection (ni `cotes` par fiche, ni valeur totale), même pour les cartes possédées, tant que l'accord de
+    // Cardmarket n'existe pas. Le code qui les sert reste derrière CE drapeau, ÉTEINT par défaut, et V2_COLLECTION_COTES=1 est REFUSÉ hors d'une base de banc : aucun accord n'existe, on ne l'allume pas en production.
+    const collectionCotes = booleen('V2_COLLECTION_COTES', env.V2_COLLECTION_COTES, false);
+    // La garde « banc » de CE drapeau lit l'environnement INJECTÉ (BANC_ISOLE dans l'objet passé) avant process.env : en production les deux sont le même objet ; un banc peut ainsi prouver le refus sans toucher au processus.
+    const bancCotes = base === 'test_scratch' && (env.BANC_ISOLE !== undefined ? env.BANC_ISOLE : process.env.BANC_ISOLE) === '1';
+    if (collectionCotes && !bancCotes) throw new Error('configuration invalide : V2_COLLECTION_COTES=1 n\'est accepté que sur une base de banc (MONGODB_BASE=test_scratch ET BANC_ISOLE=1) : aucune valeur Cardmarket dans la collection tant que l\'accord de Cardmarket n\'existe pas');
     const cookieSecure = booleen('V2_COOKIE_SECURE', env.V2_COOKIE_SECURE, true);
     if (actif && !cookieSecure && !banc) throw new Error('configuration invalide : V2_COOKIE_SECURE=0 n\'est accepté que sur une base de banc (MONGODB_BASE=test_scratch ET BANC_ISOLE=1)');
     // BANC-12 (décision du testeur, 2026-10-11) : le lien contribution ↔ compte dure 12 mois AU PLUS, puis anonymisation définitive. Au-delà de 12 (ou de la durée de l'image) : configuration invalide.
@@ -118,6 +125,19 @@ function lireConfig(env = process.env) {
         const raison = variableFautive || 'configuration du modèle';
         if (empreinteVoulue) { empreinteExtension = false; console.warn(`⚠️ [v2 config] empreintes de l'extension DÉSACTIVÉES : configuration du modèle mal formée (${raison})`); }
         else console.warn(`⚠️ [v2 config] configuration du modèle d'empreinte mal formée, ignorée (drapeau éteint) : ${raison}`);
+    }
+    // L1 : exemption ÉTROITE du défi Turnstile pour les outils de mesure. Écrite par ce qu'elle autorise : TROIS conditions positives, toutes requises —
+    // V2_CIBLE exactement « essai », V2_SECRET_MESURE d'au moins 32 caractères, ET RENDER_SERVICE_ID exactement le service de l'essai (variable posée par Render lui-même : un copier-coller
+    // des variables de l'essai vers un autre service ne l'emporte pas). Le secret n'est JAMAIS gardé : seul son condensé SHA-256 l'est, non énumérable (ni JSON.stringify ni console.log ne l'impriment).
+    const mesure = { actif: false, raison: '' };
+    {
+        const secret = env.V2_SECRET_MESURE;
+        if (typeof secret !== 'string' || !secret) mesure.raison = 'V2_SECRET_MESURE absent';
+        else if (env.V2_CIBLE !== 'essai') mesure.raison = 'V2_CIBLE n\'est pas « essai »';
+        else if (secret.length < 32) mesure.raison = 'V2_SECRET_MESURE trop court (moins de 32 caractères)';
+        else if (env.RENDER_SERVICE_ID !== SERVICE_ESSAI) mesure.raison = 'ce service n\'est pas celui de l\'essai (RENDER_SERVICE_ID)';
+        else { mesure.actif = true; mesure.raison = 'essai'; }
+        Object.defineProperty(mesure, 'sha', { value: mesure.actif ? require('crypto').createHash('sha256').update(secret).digest('hex') : null, enumerable: false, writable: false, configurable: false });
     }
     return gele({
         actif,
@@ -184,8 +204,9 @@ function lireConfig(env = process.env) {
         //   · horsCatalogueParCompte = 6 000 : les fiches que la règle du site donne et que l'archive ne porte pas (mesuré : 3 934, 128 sets, tous sets confondus), +52 % ; `hors` ne reçoit plus que les clés qu'un catalogue CHARGÉ ne connaît pas ;
         //   · quantitesParCompte = 10 000 : le nombre de clés à quantité ≥ 2 par compte (registre et hors) — sans lui un compte pèse ~3 fois plus (une quantité sur chacune de ses clés) ;
         //   · setsParCompte : 1 000 (le coût d'un document dépasse celui d'une clé) ; quantiteMax : 99, posée SANS mesure d'usage réel ;
-        //   · octetsService : le budget GLOBAL, en OCTETS mesurés par collStats (données + index des deux collections), VALEUR PROVISOIRE (10 Mo) : relevé au passage en Flex. Un compteur unique, voir collection/service.js.
-        collection: { clesParCompte: 100000, horsCatalogueParCompte: 6000, quantitesParCompte: 10000, setsParCompte: 1000, quantiteMax: 99, octetsService: 10485760 },
+        //   · octetsService : le budget GLOBAL, en OCTETS mesurés par collStats (données + index des deux collections), VALEUR PROVISOIRE (10 Mo) : relevé au passage en Flex. Un compteur unique, voir collection/service.js ;
+        //   · exemplairesParCompte = 5 000 (L5/L6) : les entrées de détail (fiche, état, langue) d'un compte, posée SANS mesure d'usage réel — au plus ~0,5 Mo par compte au modèle (couts.js::exemplaire), jugée AVANT l'écriture.
+        collection: { clesParCompte: 100000, horsCatalogueParCompte: 6000, quantitesParCompte: 10000, setsParCompte: 1000, quantiteMax: 99, octetsService: 10485760, exemplairesParCompte: 5000, cotes: collectionCotes },
         comptes: { motDePasseMin: 10, lienHeures: 24, codeLongueur: 6, codeMinutes: 10, codesVivants: 3, sessionJours: 30, libelleMax: 60, glissementHeures: 24,
                     // O3 : un compte non confirmé est INACTIF et supprimé après `nonConfirmeHeures` ; un seul courriel de confirmation par adresse et par `confirmationHeures` (inscription et renvoi confondus).
                     nonConfirmeHeures: 48, confirmationHeures: 24,
@@ -201,7 +222,8 @@ function lireConfig(env = process.env) {
         empreinte: { secret: secretEmpreinte, jours: entier('V2_EMPREINTE_JOURS', env.V2_EMPREINTE_JOURS, 365, 1) },
         origines: { extension: 'chrome-extension://fgibgdgmadfejkaapeohbhaoolhgpkhb',
                     extensionDev: banc ? (env.V2_ORIGINE_EXTENSION_DEV || null) : null,
-                    site: 'https://rat-market.fr' },
+                    site: 'https://rat-market.fr',
+                    siteWww: 'https://www.rat-market.fr' },       // L1 : admise au même titre que l'apex (CORS avec cookies, origine des écritures) ; liste FERMÉE à ces deux, voir comptes/origines-site.js
         // COTES-VISUELS : d'où l'API charge la décision des visuels et le lien fiche → produits. 'fichier' (défaut) : l'archive compacte précalculée HORS de l'API, objet R2 PRIVÉ lu avec des clés de lecture
         // dédiées et authentifié par un HMAC (variables V2_VISUELS_R2_* et V2_VISUELS_HMAC, lues par chargeur/montage.js, fermées par défaut : absentes ⇒ « sans visuel ») ; 'calcul' : calculée dans un fil plafonné
         // depuis `cartes` en lecture seule (pic mesuré ~320 Mo : à n'allumer que sur un service qui l'accepte).
@@ -328,6 +350,7 @@ function lireConfig(env = process.env) {
         // GALERIE (la Communauté du site, lot du 01/11) : ÉTEINT par défaut (V2_GALERIE=1 exactement) ; éteint, aucune route n'existe. Base DÉDIÉE (MONGO_URI_GALERIE), jamais la grappe de production. Ne lève jamais (voir galerie/config.js).
         galerie: require('./galerie/config').lireGalerie(env),
         turnstile,
+        mesure,   // L1 : exemption ÉTROITE du défi pour les outils de mesure (voir plus haut) : { actif, raison } ; le condensé du secret est non énumérable
         cookieSecure
     });
 }

@@ -7,20 +7,21 @@
  * tard : bouton désactivé « bientôt ». »
  *
  * Ces chiffres sont des CONSTANTES : la page (app/fr/tarifs) n'écrit jamais un montant ni un quota en dur, tout montant
- * passe par `prixAffiche()`, tout quota par sa constante (lib/tarifs.test.ts le vérifie). Les constantes du site
- * (`SCANS_ACCUEIL`, `ANALYSES_SANS_COMPTE` de lib/site.ts : pages publiques et promesse préparée) ne sont PAS lues ici.
+ * passe par `prixAffiche()`, tout quota par sa constante (lib/tarifs.test.ts le vérifie). Les QUOTAS sont ceux de l'offre v2,
+ * écrits une fois dans lib/offre.ts (la source unique, 2026-11-07) et repris ici sous leurs noms d'avant.
  *
  * La page est CACHÉE (`noindex`, aucun lien public, lib/pagesCachees.test.ts) et statique : `/fr/tarifs?depuis=extension`
  * (adresse ouverte par « Passer Pro » dans l'extension) répond directement et garde son paramètre. Aucun paiement.
  */
 import { formaterMontant } from "./montants.mjs";
+import { OFFRE_V2 } from "./offre.mjs";
 
 export const ADRESSE_TARIFS = "/fr/tarifs";
 
-/** Analyses par jour, sans compte. */
-export const ANALYSES_PAR_JOUR_SANS_COMPTE = 3;
-/** Analyses par jour avec un compte gratuit — « au lancement » (le mot est de l'éditeur : la page le dit). */
-export const ANALYSES_PAR_JOUR_COMPTE_GRATUIT = 10;
+/** Analyses par jour, sans compte (lib/offre.ts). */
+export const ANALYSES_PAR_JOUR_SANS_COMPTE = OFFRE_V2.sansCompte;
+/** Analyses par jour avec un compte gratuit (lib/offre.ts). */
+export const ANALYSES_PAR_JOUR_COMPTE_GRATUIT = OFFRE_V2.compteGratuit;
 
 /** Rat-Market Pro, en euros (TVA non applicable, art. 293 B du CGI : CONTRAT-STRIPE-V2 §2 quinquies). */
 export const PRO = { mensuel: 4.99, annuel: 39 }         ;
@@ -49,6 +50,12 @@ export const FONDATEURS = { places: 100, mensuel: 2.99, annuel: 29 }         ;
 
 /** La page réservée aux Fondateurs (code ou lien fourni par l'API). Non indexée, absente du sitemap et de robots.txt, liée de nulle part. */
 export const ADRESSE_FONDATEURS = "/fr/fondateurs";
+
+/**
+ * Les analyses des Fondateurs (écart 6 de l'entrée de l'API du 2026-11-07, lot « source unique de l'offre ») : l'API ne crée aucun quota
+ * propre à l'offre réservée — le sien est celui de Pro, aucun quota du jour montré (lib/offre.ts). La page réservée le dit.
+ */
+export const ANALYSES_FONDATEURS = "Vos analyses sont celles de Rat-Market Pro, sans quota du jour affiché.";
 
 /** Parrainage : mois de Pro offerts au parrain quand son filleul paie sa première échéance. */
 export const PARRAINAGE_MOIS_PRO = 1;
@@ -126,8 +133,10 @@ export function economieAnnuelle()                                              
 
 /**
  * LES TEXTES QUI DÉPENDENT D'UN LANCEMENT (tour 1 de l'étape 2, 2026-10-31) : la page Tarifs ne promet pas ce qui n'est pas lancé.
- * « au lancement » (le quota du compte gratuit) tombe quand les comptes sont lancés (`COMPTES_LANCES`, lib/promesse.ts) ; la Communauté
- * n'est nommée que si elle est visible (`COMMUNAUTE_VISIBLE`, lib/communaute.ts : le drapeau qui garde la galerie).
+ * Éteint, « au lancement » dit « quand les comptes ouvriront » ; allumé, il tombe — Tarifs ne le dit jamais une fois les comptes lancés,
+ * quelle que soit `DIRE_AU_LANCEMENT` (lib/offre.ts), qui ne gouverne que les AUTRES passages (FAQ, CGU, CGV… : tour 1 de la relecture du
+ * lot « source unique de l'offre », 2026-11-07, lib/tarifsVivants.test.ts). La Communauté n'est nommée que si elle est visible
+ * (`COMMUNAUTE_VISIBLE`, lib/communaute.ts : le drapeau qui garde la galerie).
  */
 export const libelleCompteGratuit = (comptesLances         )         => (comptesLances ? "avec un compte gratuit" : "avec un compte gratuit, au lancement");
 export const ligneMaCollection = (communaute         )         =>

@@ -12,7 +12,7 @@
 //     (jamais l'adresse seule, jamais une marque seule) ; confirmé ; AUCUN rôle (un compte qui porte un rôle, même faux, n'y est pas) ;
 //   · et la base RÉELLE connectée est celle de l'essai (`rm_essai`, ou `test_scratch` sous BANC_ISOLE=1 pour les bancs) : en production, ou sur toute autre base, ce compte n'est pas exempté (l'exemption est inopérante).
 // Cette exemption ne vaut QUE pour la limite d'installations : le compte de test garde ses débits, quotas, plafonds et sa surface de compte gratuit ordinaire.
-const { resoudrePorteur } = require('../porteur'); const S = require('../comptes/sessions'); const { emailCle } = require('../comptes/email-cle');
+const { resoudrePorteur } = require('../porteur'); const S = require('../comptes/sessions'); const { emailCle } = require('../comptes/email-cle'); const { estOrigineSite } = require('../comptes/origines-site');   // L1 : UNE définition des origines du site (apex + www)
 const ADRESSE_ORDINAIRE = 'banc-ordinaire@rat-market.invalid';
 
 /** Le nom de la base RÉELLEMENT connectée (jamais une étiquette de configuration). Peut lever : l'appelant traite toute exception comme « pas la base de l'essai ». */
@@ -36,7 +36,7 @@ function exemptionBanc(cfg, deps = {}) {
     return async function compteExempte(req) {
         try {
             if (cfg.installationBancExempte !== true) return null;
-            if (!(req.headers.origin === cfg.origines.site && req.get('x-rat-market') === '1')) return null;
+            if (!(estOrigineSite(cfg, req.headers.origin) && req.get('x-rat-market') === '1')) return null;
             if (req.headers.authorization !== undefined) return null;       // une requête d'installation (Bearer) n'est pas une session de site
             if (!S.lireCookie(req)) return null;
             // resoudrePorteur répond lui-même (res) quand sa lecture lève ; ici une réponse n'est jamais envoyée : un res muet note l'échec, et l'échec vaut « pas exempté ».

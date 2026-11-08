@@ -16,6 +16,8 @@
 //   (`n + coût ≤ plafond`), le coût au PIRE du modèle mesuré (couts.js) ; le surplus est rendu quand l'écriture n'a rien ajouté. Retrait réel, document vidé supprimé et suppression de compte rendent ce qu'ils
 //   ont RÉELLEMENT retiré (le modèle de ce qui était stocké). Au montage le compteur est RECOMPTÉ depuis `collStats` (`size` + `totalIndexSize`) des DEUX collections ; un recompte qui échoue FERME les
 //   écritures (503) et se rejoue à l'écriture suivante ; un compteur ABSENT les ferme aussi (seul le recompte le crée) ; il ne descend jamais sous 0. Toute dérive possible va vers le HAUT (fermeture).
+//   · L5/L6 — `ex` (facultatif, absent des documents d'avant) : le DÉTAIL par exemplaire, un tableau d'éléments « cle\netat\nlangue\nN » ; la quantité de la clé (bit + `qte`, ou `hors`) reste le TOTAL, la somme du détail
+//     est au plus ce total. Une entrée est réservée au pire AVANT d'écrire et rendue au retrait (couts.js::exemplaire, EX_BASE). Voir `ecrireVariante`.
 // Le stockage ne juge pas si une clé désigne une fiche réelle autrement que par l'appartenance au catalogue chargé : la forme est jugée à la porte (forme.js).
 const crypto = require('crypto');
 const { Long } = require('mongoose').mongo;
@@ -24,7 +26,7 @@ const etat = require('../chargeur/etat');
 const C = require('./couts');
 const NOM = 'collection_fiches', REGISTRE = 'collection_registre', COMPTEURS = 'compteurs', CLE_TOTAL = 'collection-octets';
 const LECTURE = { promoteLongs: false };                       // les mots sont des Long : jamais promus en nombre (un entier de 64 bits ne tient pas dans un Number)
-const PROJ = { set: 1, mots: 1, hors: 1, qte: 1, epoque: 1 };
+const PROJ = { set: 1, mots: 1, hors: 1, qte: 1, epoque: 1, ex: 1 };
 const REESSAI_CATALOGUE_S = 5;                                  // « le catalogue n'est pas chargé » : le chargement vient en quelques secondes, le site réessaie
 
 // ── les bits
@@ -142,7 +144,19 @@ async function ajouterAuRegistre(slug, cle) {
 }
 
 // ── lectures
-const docsDuCompte = compteId => col(NOM).find({ compteId }, { projection: { set: 1, mots: 1, hors: 1, qte: 1 }, ...LECTURE }).toArray();
+const docsDuCompte = compteId => col(NOM).find({ compteId }, { projection: { set: 1, mots: 1, hors: 1, qte: 1, ex: 1 }, ...LECTURE }).toArray();
+// L5/L6 — le DÉTAIL par exemplaire d'une clé dans un document : [{ cle, etat, langue, q }] (état et langue '' = non précisés)
+const exDe = (doc, cle) => (doc && doc.ex ? doc.ex.map(C.lireElementEx).filter(x => x.cle === cle) : []);
+const sommeEx = (doc, cle) => exDe(doc, cle).reduce((n, x) => n + x.q, 0);
+const EXEMPLAIRES_DEFAUT = 5000;
+// les expressions de mise à jour par pipeline du détail : les éléments de `ex` qui ne sont PAS cette clé (ou cette clé, cet état, cette langue) ; le champ disparaît quand plus rien n'y reste
+const champEx = i => ({ $arrayElemAt: [{ $split: ['$$this', '\n'] }, i] });
+function exSans(cle, etat, langue) {
+    const egaux = [{ $eq: [champEx(0), { $literal: cle }] }];
+    if (etat !== undefined) egaux.push({ $eq: [champEx(1), { $literal: etat }] }, { $eq: [champEx(2), { $literal: langue }] });
+    return { $filter: { input: { $ifNull: ['$ex', []] }, cond: { $not: [{ $and: egaux }] } } };
+}
+const exOuAbsent = tab => ({ $cond: [{ $eq: [{ $size: tab }, 0] }, '$$REMOVE', tab] });
 async function totalDuCompte(compteId) { return (await docsDuCompte(compteId)).reduce((n, d) => n + nbCoches(d), 0); }
 /** Les clés à quantité ≥ 2 d'un document : les entrées `qte` (registre) et les clés `hors` qui portent « \n N ». */
 const nbQuantites = d => Object.keys(d.qte || {}).length + (d.hors || []).filter(e => e.includes('\n')).length;
@@ -158,15 +172,29 @@ async function situation(compteId, slug, cle) {
 
 // ── écritures
 const sansCe = cle => ({ $ne: [{ $arrayElemAt: [{ $split: ['$$this', '\n'] }, 0] }, { $literal: cle }] });   // les éléments de `hors` qui ne sont PAS cette clé (avec ou sans quantité)
-async function ecrireBit(c, { compteId, slug, p, q, epoque, maintenant }) {
+// L'ATOMICITÉ (relecture 1, G1) : l'invariant « somme du détail ≤ total de la fiche » est garanti par la BASE, pas par une lecture d'avant. Toute écriture de QUANTITÉ porte dans son filtre « la somme du détail
+// de cette clé ≤ la quantité écrite » (`sommeExpr`) : une écriture qui perd la course contre un détail posé entre-temps ne trouve plus son document (l'upsert tente alors une insertion, refusée par l'index
+// unique : `ajouter` rejoue, relit, et refuse `exemplaires` sur le vrai état). Le détail, lui, ne s'écrit que sous la condition « la fiche est cochée avec au moins autant d'exemplaires » (`remplacerExemplaires`).
+const entierDe = (v, i) => ({ $toInt: { $arrayElemAt: [{ $split: [`$$${v}`, '\n'] }, i] } });
+const sommeExpr = cle => ({ $sum: { $map: { input: { $filter: { input: { $ifNull: ['$ex', []] }, as: 'e', cond: { $eq: [{ $arrayElemAt: [{ $split: ['$$e', '\n'] }, 0] }, { $literal: cle }] } } }, as: 'e', in: entierDe('e', 3) } } });
+// MongoDB refuse `$expr` dans le filtre d'un upsert : la mise à jour GARDÉE (sans upsert) passe d'abord ; si aucun document ne la satisfait, soit le document n'existe pas (création, sans garde : un document neuf n'a pas
+// de détail), soit un détail l'en empêche — alors l'écriture échoue comme une création simultanée perdue (code 11000), `ajouter` relit et refuse `exemplaires` sur le vrai état.
+async function ecrireGardee(c, compteId, slug, cle, q, maj) {
+    const options = { returnDocument: 'before', projection: PROJ, ...LECTURE };
+    const r = await c.findOneAndUpdate({ compteId, set: slug, $expr: { $lte: [sommeExpr(cle), q] } }, maj, options);
+    if (r) return r;
+    if (await c.findOne({ compteId, set: slug }, { projection: { _id: 1 } })) throw Object.assign(new Error('garde du détail'), { code: 11000 });
+    return c.findOneAndUpdate({ compteId, set: slug }, maj, { upsert: true, ...options });
+}
+async function ecrireBit(c, { compteId, slug, cle, p, q, epoque, maintenant }) {
     const champ = `mots.${Math.floor(p / 64)}`, b = p % 64;
     const maj = { $bit: { [champ]: { or: masque(b) } }, $set: { majLe: maintenant, epoque }, $setOnInsert: { hors: [] } };
     if (q >= 2) maj.$set[`qte.${p}`] = q; else maj.$unset = { [`qte.${p}`]: '' };
-    return c.findOneAndUpdate({ compteId, set: slug }, maj, { upsert: true, returnDocument: 'before', projection: PROJ, ...LECTURE });
+    return ecrireGardee(c, compteId, slug, cle, q, maj);
 }
 async function ecrireHors(c, { compteId, slug, cle, q, maintenant }) {
     const pipe = [{ $set: { hors: { $concatArrays: [{ $filter: { input: { $ifNull: ['$hors', []] }, cond: sansCe(cle) } }, [{ $literal: C.elementHors(cle, q) }]] }, majLe: { $literal: maintenant } } }];
-    return c.findOneAndUpdate({ compteId, set: slug }, pipe, { upsert: true, returnDocument: 'before', projection: PROJ, ...LECTURE });
+    return ecrireGardee(c, compteId, slug, cle, q, pipe);
 }
 
 /** La clé est-elle AUSSI un bit de ce document ? (la position se relit : un concurrent a pu l'ajouter au registre depuis) */
@@ -195,6 +223,7 @@ async function ajouter(a, essai = 0) {
     const { doc, h, reg, qAvant } = await situation(compteId, slug, cle);
     const q = a.quantite === undefined ? (qAvant > 0 ? qAvant : 1) : a.quantite;                             // `quantite` absente : 1 sur une clé NEUVE, INCHANGÉE sur une clé déjà cochée (un ancien onglet ne rétrograde pas un double)
     if (qAvant === q) return { possedees: nbCoches(doc) };                                                  // idempotent : rien ne change, rien n'est consommé, même au plafond
+    if (q < sommeEx(doc, cle)) return { refus: 'exemplaires' };                                              // L5/L6 : la quantité totale ne peut pas être inférieure au détail (état, langue) déjà enregistré
     const pos = reg.pos;
     // ORDRE DE DÉCISION : (1) la clé est déjà dans `hors` → elle y reste ; (2) elle est déjà au registre (sa position est en base) → bit ; (3) sinon le catalogue CHARGÉ tranche : il la connaît → ajout au registre,
     // il ne la connaît pas → `hors` (une fiche sans produit) ; aucun catalogue chargé → on n'écrit RIEN (503 « catalogue ») : `hors` ne reçoit jamais une clé par accident.
@@ -233,7 +262,7 @@ async function ajouter(a, essai = 0) {
     try {
         if (registre) {
             if (p < 0) { const r = await ajouterAuRegistre(slug, cle); p = r.pos; epoque = r.epoque; payeRegistre = (r.ajoute ? C.registreEntree(cle) : 0) + (r.docCree ? C.registreDocument(slug) : 0); }
-            avant = await ecrireBit(c, { compteId, slug, p, q, epoque, maintenant: a.maintenant });
+            avant = await ecrireBit(c, { compteId, slug, cle, p, q, epoque, maintenant: a.maintenant });
         } else {
             avant = await ecrireHors(c, { compteId, slug, cle, q, maintenant: a.maintenant });
             const dp = await doublonAvecBit(c, compteId, slug, cle);                                         // la course INVERSE : un autre PUT de la même clé a posé le bit (le catalogue venait de la connaître) pendant ce temps
@@ -266,6 +295,7 @@ async function ajouter(a, essai = 0) {
 /** Le document n'a plus aucun bit à 1 ni aucune clé `hors` : le test est celui de la BASE, au moment de la suppression (une clé remise entre-temps l'en empêche). */
 const VIDE = { $expr: { $and: [
     { $eq: [{ $size: { $ifNull: ['$hors', []] } }, 0] },
+    { $eq: [{ $size: { $ifNull: ['$ex', []] } }, 0] },
     { $eq: [{ $size: { $filter: { input: { $objectToArray: { $ifNull: ['$mots', {}] } }, cond: { $ne: ['$$this.v', 0] } } } }, 0] }] } };
 
 async function retirer({ compteId, slug, cle, maintenant }) {
@@ -285,6 +315,16 @@ async function retirer({ compteId, slug, cle, maintenant }) {
             { returnDocument: 'before', projection: { qte: 1 }, ...LECTURE });
         if (avant) { change = true; if (avant.qte && avant.qte[reg.pos] >= 2) rendu += C.qte; }
     }
+    // L5/L6 : décocher la fiche efface AUSSI son détail par exemplaire (une clé décochée ne garde aucun état ni aucune langue). ORDRE (relecture 1, M2) : le bit et `hors` sont retirés AVANT le détail, et le détail est
+    // retiré SANS regarder la lecture d'avant (un détail posé entre-temps est retiré aussi) : `remplacerExemplaires` ne s'écrit que sur une fiche cochée, donc une écriture de détail qui passe avant le retrait est
+    // effacée ici, et une qui passe après est refusée — aucun orphelin dans les deux ordres.
+    {
+        const avant = await c.findOneAndUpdate({ compteId, set: slug, ex: { $exists: true } }, [{ $set: { ex: exOuAbsent(exSans(cle)), majLe: { $literal: maintenant } } }], { returnDocument: 'before', projection: { ex: 1 }, ...LECTURE });
+        if (avant && avant.ex) {
+            const retires = avant.ex.map(C.lireElementEx).filter(x => x.cle === cle);
+            if (retires.length) { rendu += retires.reduce((n, x) => n + C.exemplaire(x.cle), 0) + (retires.length === avant.ex.length ? C.EX_BASE : 0); change = true; }
+        }
+    }
     if (change) {
         const supprime = await c.findOneAndDelete({ compteId, set: slug, ...VIDE }, { projection: PROJ, ...LECTURE });   // plus rien : le document disparaît (sauf si une clé vient d'y être remise)
         if (supprime) rendu += C.coutDuDocument(supprime);
@@ -303,6 +343,87 @@ function cocher({ compteId, slug, cle, possedee, quantite, cfg, maintenant = new
     return ajouter({ compteId, slug, cle, quantite, cfg, maintenant });
 }
 
+// ── L5/L6 : LE DÉTAIL PAR EXEMPLAIRE (forme K5 du site)
+const cmpEx = (a, b) => (a.etat < b.etat ? -1 : a.etat > b.etat ? 1 : a.langue < b.langue ? -1 : a.langue > b.langue ? 1 : 0);
+/** Le détail groupé [{ etat, langue, q }] → UN élément { etat, langue } par exemplaire (null quand non précisé), trié (état, langue) : la forme de K5. */
+const developper = (entrees, total = 0) => {
+    const out = [];
+    for (const x of [...entrees].sort(cmpEx)) for (let i = 0; i < x.q; i++) out.push({ etat: x.etat || null, langue: x.langue || null });
+    // R2 (relecture 3) : la liste est COMPLÉTÉE par des { null, null } (exemplaires non précisés) jusqu'à la quantité de la fiche, APRÈS les précisés — sans rien changer au stockage ; une fiche sans aucun détail rend [].
+    if (out.length) while (out.length < total) out.push({ etat: null, langue: null });
+    return out;
+};
+const nbEx = d => (d.ex ? d.ex.length : 0);
+// les conditions de l'écriture du détail, dans le FILTRE de la mise à jour : la fiche est cochée, avec au moins n exemplaires (dans `hors` : l'élément porte la clé et une quantité ≥ n ; au registre : le bit est posé, `qte` ≥ n,
+// la clé n'est pas aussi dans `hors`, l'époque est celle lue)
+const nomHors = { $map: { input: { $ifNull: ['$hors', []] }, in: { $arrayElemAt: [{ $split: ['$$this', '\n'] }, 0] } } };
+const pasDansHors = cle => ({ $not: [{ $in: [{ $literal: cle }, nomHors] }] });
+const enHorsAuMoins = (cle, n) => ({ $anyElementTrue: [{ $map: { input: { $ifNull: ['$hors', []] }, as: 'e', in: { $and: [
+    { $eq: [{ $arrayElemAt: [{ $split: ['$$e', '\n'] }, 0] }, { $literal: cle }] },
+    { $gte: [{ $cond: [{ $gt: [{ $size: { $split: ['$$e', '\n'] } }, 1] }, entierDe('e', 1), 1] }, n] }] } } }] });
+
+/**
+ * L5/L6 (K5) — REMPLACE tout le détail par exemplaire d'une fiche. `elements` : [{ etat|null, langue|null }] déjà jugés par la forme (au plus 99). Un élément { null, null } est un exemplaire non précisé : il n'est pas
+ * stocké (c'est le reste du total). Le total de la fiche (K3) ne bouge pas ; il doit être AU MOINS le nombre d'éléments, et la fiche doit être cochée (sinon { refus: 'exemplaires' }, rien d'écrit — sauf un tableau vide
+ * sur une fiche non cochée : rien à faire). ATOMIQUE : la mise à jour porte dans son FILTRE « la fiche est cochée avec au moins n exemplaires » ; si l'état a changé depuis la lecture, elle ne trouve rien, rend la
+ * réservation d'octets et REJOUE (3 essais), sur l'état relu. Les octets : les entrées neuves sont réservées au pire AVANT l'écriture, le réel est déduit du document d'AVANT que la mise à jour rend (exact même sous
+ * concurrence), la différence est rendue ou comptée. Rend { exemplaires } (la liste développée, K5) ou { refus, borne? }.
+ */
+async function remplacerExemplaires({ compteId, slug, cle, elements, cfg, maintenant = new Date() }) {
+    const c = col(NOM);
+    await assurer(cfg);
+    const groupes = new Map();
+    for (const x of elements) { if (x.etat == null && x.langue == null) continue; const k = `${x.etat || ''}\n${x.langue || ''}`; groupes.set(k, (groupes.get(k) || 0) + 1); }
+    const entrees = [...groupes].map(([k, q]) => { const [etat, langue] = k.split('\n'); return { etat, langue, q }; }).sort(cmpEx);
+    const n = elements.length;
+    if (n === 0) {                                                                                           // r2 : EFFACER le détail ne demande aucune fiche cochée (et ne lit pas le registre) : un détail orphelin s'efface aussi
+        // le filtre exige qu'un élément du détail porte CETTE clé (« cle\n… », caractères spéciaux échappés) : un [] qui ne retire rien ne touche ni le document ni `majLe`
+        const avant = await c.findOneAndUpdate({ compteId, set: slug, ex: { $regex: `^${cle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\n` } }, [{ $set: { ex: exOuAbsent(exSans(cle)), majLe: { $literal: maintenant } } }], { returnDocument: 'before', projection: { ex: 1 }, ...LECTURE });
+        if (avant) {
+            const tout = (avant.ex || []).map(C.lireElementEx), retire = tout.filter(x => x.cle === cle).length;
+            if (retire) await rendre(retire * C.exemplaire(cle) + (retire === tout.length ? C.EX_BASE : 0));
+        }
+        return { exemplaires: [] };
+    }
+    for (let essai = 0; essai < 3; essai++) {
+        const { doc, h, reg, qAvant } = await situation(compteId, slug, cle);
+        const anciens = exDe(doc, cle), rendu = { exemplaires: developper(entrees, qAvant) };
+        if (n > qAvant) return { refus: 'exemplaires' };
+        if (anciens.length === entrees.length && entrees.every(x => anciens.some(a => a.etat === x.etat && a.langue === x.langue && a.q === x.q))) return rendu;   // idempotent : rien ne change, rien n'est consommé
+        const max = cfg.collection.exemplairesParCompte ?? EXEMPLAIRES_DEFAUT;
+        if (entrees.length > anciens.length && (await docsDuCompte(compteId)).reduce((s, d) => s + nbEx(d), 0) - anciens.length + entrees.length > max) return { refus: 'borne-exemplaires', borne: max };
+        const aDeja = Boolean(doc && doc.ex && doc.ex.length);
+        const plus = Math.max(0, entrees.length - anciens.length) * C.exemplaire(cle) + (entrees.length && !aDeja ? C.EX_BASE : 0);
+        if (plus > 0 && !(await reserver(cfg, plus))) return { refus: 'borne-service', borne: cfg.collection.octetsService };
+        const filtre = { compteId, set: slug };
+        if (h >= 0) filtre.$expr = enHorsAuMoins(cle, n);
+        else {
+            const champ = `mots.${Math.floor(reg.pos / 64)}`;
+            Object.assign(filtre, { [champ]: { $bitsAllSet: [reg.pos % 64] }, epoque: reg.epoque, $expr: pasDansHors(cle) });
+            if (n >= 2) filtre[`qte.${reg.pos}`] = { $gte: n };
+        }
+        const nouveau = { $concatArrays: [exSans(cle), entrees.map(x => ({ $literal: C.elementEx(cle, x.etat, x.langue, x.q) }))] };
+        const avant = await c.findOneAndUpdate(filtre, [{ $set: { ex: exOuAbsent(nouveau), majLe: { $literal: maintenant } } }], { returnDocument: 'before', projection: { ex: 1 }, ...LECTURE });
+        if (!avant) { if (plus > 0) await rendre(plus); continue; }                                          // l'état a changé depuis la lecture : on relit et on rejoue
+        const avantEx = (avant.ex || []).map(C.lireElementEx), retire = avantEx.filter(x => x.cle === cle).length;
+        const net = (entrees.length - retire) * C.exemplaire(cle) + (entrees.length && !avantEx.length ? C.EX_BASE : 0) - (!entrees.length && retire && retire === avantEx.length ? C.EX_BASE : 0);
+        const du = Math.max(0, net);
+        if (plus > du) await rendre(plus - du); else if (du > plus) await forcer(du - plus);
+        if (net < 0) await rendre(-net);
+        return rendu;
+    }
+    return { refus: 'concurrence' };                                                                          // r1 : trois essais perdus contre des écritures simultanées : un « réessayer » (503), pas une fausse raison de fond ; rien n'est écrit à moitié
+}
+
+/** La fiche à jour pour la réponse d'une écriture (K3, produit) : { quantite, exemplaires } quand la fiche porte un détail, {} sinon (la réponse d'avant, à l'octet). */
+async function detailDeLaFiche(compteId, slug, cle) {
+    const doc = await col(NOM).findOne({ compteId, set: slug }, { projection: { ex: 1 }, ...LECTURE });
+    const ex = exDe(doc, cle);
+    if (!ex.length) return {};
+    const { qAvant } = await situation(compteId, slug, cle);
+    return qAvant > 0 ? { quantite: qAvant, exemplaires: developper(ex, qAvant) } : {};
+}
+
 /** Les mots d'un document, lus contre le registre de LEUR époque (LÈVE RegistreIllisible sinon). */
 async function metaDuRegistre(slug) {
     const r = await col(REGISTRE).aggregate([{ $match: { _id: slug } }, { $project: { epoque: 1, n: { $size: '$cles' } } }]).toArray();
@@ -310,7 +431,7 @@ async function metaDuRegistre(slug) {
 }
 async function lireSet(compteId, slug) {
     const doc = await col(NOM).findOne({ compteId, set: slug }, { ...LECTURE });
-    if (!doc) return { cles: [], quantites: {}, majLe: null };
+    if (!doc) return { cles: [], quantites: {}, exemplaires: {}, majLe: null };
     const toutes = new Map();                                                                                // clé → quantité
     for (const e of doc.hors || []) { const { cle, q } = C.lireElementHors(e); toutes.set(cle, q); }
     const positions = positionsPosees(doc.mots);
@@ -321,18 +442,25 @@ async function lireSet(compteId, slug) {
     }
     const cles = [...toutes.keys()].sort(), quantites = {};
     for (const k of cles) if (toutes.get(k) >= 2) quantites[k] = toutes.get(k);
-    return { cles, quantites, majLe: doc.majLe };
+    // L5/L6 : le détail par exemplaire, par clé cochée, trié (état, langue) ; {} quand aucune fiche n'en porte (le champ est alors absent de la réponse)
+    const parCle = new Map();
+    for (const x of (doc.ex || []).map(C.lireElementEx)) { if (!toutes.has(x.cle)) continue; (parCle.get(x.cle) || parCle.set(x.cle, []).get(x.cle)).push(x); }   // un détail dont la fiche n'est plus cochée n'est pas servi
+    const exemplaires = {};
+    for (const k of cles) if (parCle.has(k)) exemplaires[k] = developper(parCle.get(k), toutes.get(k));                      // UN élément { etat, langue } par exemplaire détaillé (K5)
+    return { cles, quantites, exemplaires, majLe: doc.majLe };
 }
 
 /** Les sets où au moins une fiche est cochée : [{ slug, possedees, majLe }], triés par slug. LÈVE RegistreIllisible si les bits d'un set ne se lisent pas : `possedees` et `lireSet` ne divergent jamais. */
 async function lireSets(compteId) {
-    const docs = await col(NOM).find({ compteId }, { projection: { set: 1, mots: 1, hors: 1, majLe: 1, epoque: 1 }, ...LECTURE }).toArray();
+    const docs = await col(NOM).find({ compteId }, { projection: { set: 1, mots: 1, hors: 1, qte: 1, majLe: 1, epoque: 1 }, ...LECTURE }).toArray();
     const avecBits = docs.filter(d => nbBits(d.mots) > 0);
     if (avecBits.length) {
         const metas = new Map((await col(REGISTRE).aggregate([{ $match: { _id: { $in: avecBits.map(d => d.set) } } }, { $project: { epoque: 1, n: { $size: '$cles' } } }]).toArray()).map(r => [r._id, { existe: true, epoque: r.epoque, n: r.n }]));
         for (const d of avecBits) verifierBits(d, metas.get(d.set) || { existe: false, epoque: null, n: 0 }, d.set);
     }
-    return docs.map(d => ({ slug: d.set, possedees: nbCoches(d), majLe: d.majLe })).filter(s => s.possedees > 0).sort((a, b) => (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0));
+    // `doublons` (L6) = Σ(quantité − 1) du set, lu sans écriture : les entrées `qte` (toutes ≥ 2) et les clés `hors` à quantité ; 0 quand le set n'a aucun double (le champ est alors absent de la réponse)
+    const doublons = d => Object.values(d.qte || {}).reduce((n, q) => n + (q >= 2 ? q - 1 : 0), 0) + (d.hors || []).reduce((n, e) => n + Math.max(0, C.lireElementHors(e).q - 1), 0);
+    return docs.map(d => ({ slug: d.set, possedees: nbCoches(d), majLe: d.majLe, doublons: doublons(d) })).filter(s => s.possedees > 0).sort((a, b) => (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0));
 }
 
 /** La collection d'un compte part avec lui (comptes/service.js supprimerCompte). Document par document (au plus `setsParCompte`) : chaque suppression rend le MODÈLE de ce qu'elle a RÉELLEMENT retiré, jamais une
@@ -347,5 +475,5 @@ async function supprimerDuCompte(compteId, cfg) {
     await rendre(rendu);
     return n;
 }
-module.exports = { NOM, REGISTRE, RegistreIllisible, cocher, lireSet, lireSets, totalDuCompte, supprimerDuCompte, recompter, initialiser, attendreInitialisation, avecDelai };
+module.exports = { NOM, REGISTRE, RegistreIllisible, cocher, remplacerExemplaires, detailDeLaFiche, lireSet, lireSets, totalDuCompte, supprimerDuCompte, recompter, initialiser, attendreInitialisation, avecDelai };
 // Limite connue (M-C, relecture finale) : le recompte est ABSOLU ; avec plusieurs instances, un recompte lancé pendant que l'autre écrit peut écraser des incréments en vol (dérive basse d'au plus le nombre d'écritures en vol). Une seule instance aujourd'hui.

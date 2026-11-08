@@ -1,0 +1,9 @@
+{
+  "success": true,
+  "exemplaires": [
+    { "etat": "MT", "langue": "ja" },
+    { "etat": "NM", "langue": null },
+    { "etat": "NM", "langue": "fr" },
+    { "etat": null, "langue": null }
+  ]
+}

@@ -77,6 +77,22 @@ H.v(`paths : ${schemasDesChemins.length} schémas de chemins lisibles`, lev, nul
 H.vrai(`dénominateur : ${OPERATIONS.length} opérations`, OPERATIONS.length >= 20);
 H.v('chaque opération déclare sa sécurité (ouverte = [] écrit, jamais omise)', OPERATIONS.filter(o => !Array.isArray(o.op.security)).map(o => `${o.methode} ${o.chemin}`), []);
 H.v('chaque opération a un operationId distinct', new Set(OPERATIONS.map(o => o.op.operationId)).size, OPERATIONS.length);
+// L5 (relecture 3, C1) : TOUT paramètre de chemin d'un gabarit est déclaré, casse comprise, et tout paramètre `in: path` déclaré figure dans le gabarit (un générateur de types rejette ou ignore l'écart)
+{
+    const ecartsDe = d => {
+        const resoudre = p => (p && p.$ref ? p.$ref.split('/').slice(1).reduce((x, k) => x[k], d) : p);
+        const ecarts = [];
+        for (const o of OPERATIONS) {
+            const gabarit = [...o.chemin.matchAll(/\{([^}]+)\}/g)].map(m => m[1]).sort();
+            const declares = [...(d.paths[o.chemin].parameters || []), ...(d.paths[o.chemin][o.methode.toLowerCase()].parameters || [])].map(resoudre).filter(p => p && p.in === 'path').map(p => p.name).sort();
+            if (JSON.stringify(gabarit) !== JSON.stringify(declares)) ecarts.push(`${o.methode} ${o.chemin} : gabarit ${JSON.stringify(gabarit)}, paramètres ${JSON.stringify(declares)}`);
+        }
+        return ecarts;
+    };
+    H.v('noms des paramètres de chemin = variables du gabarit, sur TOUT l\'OpenAPI (casse comprise)', ecartsDe(doc), []);
+    const abime = JSON.parse(JSON.stringify(doc)); abime.components.parameters.IdDeProduit.name = 'idProduct';
+    H.vrai('   ↳ le banc sait dire NON : `idProduct` pour le gabarit `{idproduct}` est vu', ecartsDe(abime).length === 1);
+}
 
 // ── 3. les listes fermées : schéma ↔ code ──
 // (1) codes d'erreur : ensemble pour ensemble avec v2/erreurs.js

@@ -2,7 +2,8 @@
 // CORS v2 — origines EXACTES, deux profils. Écrit par ce qu'il AUTORISE : tout ce qui n'est pas (origine exacte ET chemin du profil)
 // ne reçoit aucun en-tête CORS (le cors() hérité décide alors, comme aujourd'hui). Jamais '*'.
 // Monté AVANT toute route, limiteur ou gestionnaire d'erreur : les en-têtes figurent donc aussi sur les 4xx/5xx/429.
-const EXPOSE = 'Retry-After, Idempotency-Replayed';
+const { originesSite } = require('../comptes/origines-site');
+const EXPOSE ='Retry-After, Idempotency-Replayed';
 // INDEX-EMPREINTES : le fichier du modèle (GET /api/modele-empreinte/<sha256>, SEULEMENT si V2_EMPREINTE_EXTENSION=1) a son propre profil (la route répond 302 vers R2 : seul Retry-After des refus est lisible ; Range est autorisé en entrée).
 // Les profils existants ne changent pas d'un octet.
 
@@ -18,7 +19,7 @@ function profils(cfg) {
           // PHOTOS-MULTIPLES (7d) : /api/photo n'a de profil CORS que si la route existe (drapeau allumé) ; éteint, aucun en-tête propre à v2 pour ce chemin
           chemins: [/^\/ping$/, /^\/api\/(installation|solde|retour-live|identifier|identifier\/reponse|creer-recharge)$/, /^\/api\/compte\/(lier|delier)$/, /^\/api\/banc\/.+$/, ...(cfg.photosMultiples === true ? [/^\/api\/photo(\/.+)?$/] : [])],      // le sous-arbre entier, comme /api/banc/.+ : un chemin voisin inexistant porte les mêmes en-têtes que la route (le 404 natif d'un non-administrateur ne se distingue pas)
           methodes: 'GET, POST', entetes: 'Authorization, Content-Type, Idempotency-Key' },
-        { nom: 'site', origines: new Set([o.site]), credentials: true,
+        { nom: 'site', origines: new Set(originesSite(cfg)), credentials: true,   // L1 : l'apex ET www, liste fermée (comptes/origines-site.js)
           // INST-BANC-CORS : POST /api/installation, ce chemin EXACT seulement (l'exemption du compte de mesure exige l'Origin du site + X-Rat-Market + la session) ; aucun voisin
           chemins: [/^\/ping$/, /^\/api\/installation$/, /^\/api\/compte(\/.*)?$/, /^\/api\/scanner\/.+$/, /^\/api\/solde$/, /^\/api\/creer-recharge$/, /^\/api\/collection(\/.*)?$/, /^\/api\/abonnement(\/.*)?$/],
           methodes: 'GET, POST, DELETE', entetes: 'Content-Type, X-Rat-Market, Idempotency-Key' }

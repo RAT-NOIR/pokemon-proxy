@@ -1,0 +1,13 @@
+{
+  "success": false,
+  "erreur": {
+    "code": "CONFLIT",
+    "message": "Ce produit désigne plusieurs fiches : choisissez la fiche",
+    "detail": "ambigu",
+    "fiches": [
+      { "set": "Fictif-Set-A", "cle": "9000002|003" },
+      { "set": "Fictif-Set-B", "cle": "9000003|010" }
+    ]
+  },
+  "facturation": null
+}

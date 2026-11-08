@@ -1,0 +1,10 @@
+{
+  "success": true,
+  "possedees": 2,
+  "quantite": 3,
+  "exemplaires": [
+    { "etat": "NM", "langue": "fr" },
+    { "etat": "PL", "langue": null },
+    { "etat": null, "langue": null }
+  ]
+}

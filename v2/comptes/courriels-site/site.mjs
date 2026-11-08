@@ -21,14 +21,8 @@ export const SITE = {
 export const CHROME_STORE_URL =
   "https://chromewebstore.google.com/detail/rat-market/fgibgdgmadfejkaapeohbhaoolhgpkhb?hl=fr";
 
-/**
- * Analyses offertes (doit rester aligné avec le serveur) : à l’installation aujourd’hui ;
- * avec un compte gratuit vérifié dès le lancement des comptes (lib/promesse.ts).
- */
-export const SCANS_ACCUEIL = 25;
-
-/** Analyses d’essai SANS compte, au lancement des comptes (plan de l’éditeur, 2026-10-06). */
-export const ANALYSES_SANS_COMPTE = 3;
+// Les chiffres de l'offre (analyses offertes de la 1.0.5, quotas du jour de la v2) ne vivent plus ici : lib/offre.ts, la source
+// unique (lot « source unique de l'offre », 2026-11-07).
 
 /**
  * Informations légales de l’éditeur.

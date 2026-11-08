@@ -9,7 +9,7 @@ const mongoose = require('mongoose');
 const express = require('express');
 const db = require('../db'); const M = require('../modeles'); const J = require('../comptes/jetons');
 const { lireConfig } = require('../config');
-const cfg = lireConfig({ MONGODB_BASE: 'test_scratch' });
+const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_COLLECTION_COTES: '1' });      // drapeau des cotes ALLUMÉ (banc seulement) : ce banc éprouve le code des cotes ; drapeau éteint = test-collection-sans-cotes.js
 const SITE = cfg.origines.site, EXT = cfg.origines.extension;
 const raw = n => mongoose.connection.db.collection(n);
 const NOM = 'collection_fiches';
@@ -91,7 +91,7 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
         H.v('1. GET /api/collection d\'un compte sans rien de coché : 200, sets []', [vide.statut, vide.json], [200, { success: true, sets: [] }]);
         H.v('   Cache-Control: no-store (données privées)', vide.entetes['cache-control'], 'no-store');
         const set0 = await lireSet(sv, A, 'Set-Essai');
-        H.v('   GET d\'un set jamais touché : 200, possedees [], majLe null (catalogue chargé SANS guide : une cote null par fiche du set, jamais inventée)', [set0.statut, set0.json], [200, { success: true, set: 'Set-Essai', possedees: [], cotes: { '895789|001': null, '895790|-': null }, majLe: null }]);
+        H.v('   GET d\'un set jamais touché : 200, possedees [], majLe null (drapeau des cotes ALLUMÉ dans ce banc : une cote null par fiche du set, jamais inventée)', [set0.statut, set0.json], [200, { success: true, set: 'Set-Essai', possedees: [], cotes: { '895789|001': null, '895790|-': null }, majLe: null }]);
         const p1 = await put(sv, A, 'Set-Essai', '895789|001', true);
         H.v('   PUT true : 200, possedees 1', [p1.statut, p1.json], [200, { success: true, possedees: 1 }]);
         const d1 = (await docs(A))[0]; await attendre(15);

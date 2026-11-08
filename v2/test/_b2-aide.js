@@ -13,6 +13,8 @@ function construireApp(cfg) {
     app.use(express.json());
     const { assembler } = require('../index');
     pret.armer(verifierIndex);
+    // L1 : un banc qui n'a pas fourni de vérificateur Turnstile en reçoit un qui accepte 'ok' (et seulement 'ok') ; le défi lui-même se juge dans test-comptes-defi.js.
+    try { registre.obtenir('turnstile'); } catch { registre.fournir('turnstile', { verifier: async jeton => jeton === 'ok' }); }
     app.use(assembler([require('../installations/monter'), require('../comptes/monter')], cfg, {}));
     return app;
 }

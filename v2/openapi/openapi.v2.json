@@ -1238,6 +1238,16 @@
               }
             }
           },
+          "422": {
+            "description": "ENTREE avec detail `defi-anti-robot` (L1 : jeton Turnstile absent, vide, non texte ou refusé). Rendu avant toute lecture du compte : il ne révèle rien sur l'adresse.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
           "429": {
             "description": "QUOTA (avec `solde`) ou DEBIT (avec `reessayerDans`).",
             "content": {
@@ -1376,6 +1386,16 @@
           },
           "403": {
             "description": "VERIFICATION (adresse non confirmée) ou ORIGINE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ENTREE avec detail `defi-anti-robot` (L1 : jeton Turnstile absent, vide, non texte ou refusé). Rendu avant toute lecture du compte : il ne révèle rien sur l'adresse.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1901,6 +1921,16 @@
           },
           "403": {
             "description": "ORIGINE (Origin exacte du site et X-Rat-Market obligatoires).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ENTREE avec detail `defi-anti-robot` (L1 : jeton Turnstile absent, vide, non texte ou refusé). Rendu avant toute lecture du compte : il ne révèle rien sur l'adresse.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2967,7 +2997,7 @@
         "tags": [
           "collection"
         ],
-        "summary": "Ma collection : les fiches cochées d'un set (et leurs cotes, `{}` dans cette version)",
+        "summary": "Ma collection : les fiches cochées d'un set (quantités et détail par exemplaire ; aucune cote ni valeur Cardmarket)",
         "security": [
           {
             "session": []
@@ -2980,7 +3010,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Les clés cochées du set (triées), `cotes` toujours `{}` dans cette version (voir CONTRAT-API-V2.md §1.8), `majLe` nul si rien n'est coché.",
+            "description": "Les clés cochées du set (triées), `quantites` et `exemplaires` quand il y en a, `majLe` nul si rien n'est coché. Aucune cote ni valeur Cardmarket n'est servie (décision du 31/10) : le champ `cotes` n'existe plus dans la réponse.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3107,7 +3137,7 @@
             }
           },
           "409": {
-            "description": "CONFLIT, detail `borne-compte` (100 000 fiches cochées par compte : le catalogue complet plus 45 %), `borne-hors` (6 000 fiches hors catalogue par compte), `borne-quantites` (10 000 fiches à plus d'un exemplaire par compte), `borne-sets` (1 000 sets par compte) ou `borne-service` (budget de stockage de TOUS les comptes ensemble, en OCTETS mesurés par collStats ; valeur provisoire de 10 Mo, relevée au passage en Flex) : rien n'est écrit, rien n'est perdu.",
+            "description": "CONFLIT, detail `borne-compte` (100 000 fiches cochées par compte : le catalogue complet plus 45 %), `borne-hors` (6 000 fiches hors catalogue par compte), `borne-quantites` (10 000 fiches à plus d'un exemplaire par compte), `borne-sets` (1 000 sets par compte), `exemplaires` (une quantité inférieure au nombre d'exemplaires détaillés) ou `borne-service` (budget de stockage de TOUS les comptes ensemble, en OCTETS mesurés par collStats ; valeur provisoire de 10 Mo, relevée au passage en Flex) : rien n'est écrit, rien n'est perdu.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3143,6 +3173,109 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/collection/sets/{slug}/fiches/{cle}/exemplaires": {
+      "put": {
+        "operationId": "detaillerExemplaires",
+        "tags": ["collection"],
+        "summary": "Ma collection : REMPLACER l'état et la langue des exemplaires d'une fiche cochée (K5 du site) — idempotent ; compte vérifié",
+        "description": "K5 (DEMANDE-SERVEUR-SITE.md, O13). Le corps est la liste des exemplaires { etat, langue } (null admis), au plus `quantite` éléments (le total de la fiche, K3) ; la fiche doit être cochée. L'écriture REMPLACE tout le détail ; un élément { null, null } est un exemplaire non précisé (non stocké). La quantité totale ne bouge pas. Mêmes gardes que K3 et limiteur partagé. Lecture : `exemplaires` de `GET /api/collection/sets/{slug}`.",
+        "security": [{ "session": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/XRatMarket" },
+          { "$ref": "#/components/parameters/SlugDeSet" },
+          { "$ref": "#/components/parameters/CleDeFiche" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RequeteExemplaires" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Le détail stocké après l'écriture (développé, trié état puis langue).",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseExemplaires" } } },
+            "headers": { "Cache-Control": { "schema": { "type": "string", "enum": ["no-store"] } } }
+          },
+          "400": {
+            "description": "ENTREE (detail `slug`, `cle`, `exemplaires` pour la structure, `etat` ou `langue` pour une valeur hors liste).",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } }
+          },
+          "401": {
+            "description": "SESSION (cookie absent, expiré ou révoqué).",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } }
+          },
+          "403": {
+            "description": "ORIGINE (Origin exacte du site et X-Rat-Market obligatoires) ou VERIFICATION.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } }
+          },
+          "409": {
+            "description": "CONFLIT, detail `exemplaires` (la fiche n'est pas cochée, ou plus d'éléments que sa quantité : rien n'est écrit, le détail d'avant est intact ; peut aussi dire trois écritures simultanées perdues : réessayer), `borne-exemplaires` (5 000 entrées de détail distinctes par compte, posée sans mesure d'usage) ou `borne-service` (budget de stockage de tous les comptes).",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } }
+          },
+          "429": {
+            "description": "DEBIT : plus de 1 000 écritures par heure pour ce compte (limiteur partagé avec K3), avec `reessayerDans` et `Retry-After`.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } },
+            "headers": { "Retry-After": { "schema": { "type": "integer", "minimum": 0 } } }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable, bits du set illisibles contre son registre). Avec `detail: \"reessayer\"` (et `reessayerDans`, `Retry-After`) : trois essais perdus contre des écritures simultanées sur la fiche — RIEN n'est écrit à moitié, le détail d'avant est intact, réessayer (ce n'est pas un refus de fond).",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } }
+          }
+        }
+      }
+    },
+    "/api/collection/produits/{idproduct}": {
+      "put": {
+        "operationId": "cocherProduit",
+        "tags": ["collection"],
+        "summary": "Ma collection : cocher ou décocher une fiche depuis un PRODUIT (verdict du scanner, recherche) — idempotent ; compte vérifié",
+        "description": "L5. Le serveur résout le produit en UNE fiche par l'index inverse du catalogue chargé en mémoire ; il ne devine jamais : aucun catalogue chargé → 503 `catalogue`, aucune fiche → 404 INTROUVABLE, plusieurs fiches distinctes → 409 CONFLIT `ambigu` (les candidates dans `erreur.fiches` : le site choisit et écrit par fiche, `PUT /api/collection/sets/{slug}/fiches/{cle}`). Une seule fiche : exactement le PUT par fiche (même corps, mêmes gardes, mêmes bornes, même stockage), la réponse nomme en plus la fiche. Deux produits d'une même fiche désignent la même fiche. Aucune cote ni aucun prix dans la réponse : les cotes ne sortent que de `GET /api/collection/sets/{slug}`, sur la session du propriétaire.",
+        "security": [{ "session": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/XRatMarket" },
+          { "$ref": "#/components/parameters/IdDeProduit" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RequeteCocher" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Le nombre de fiches cochées du set APRÈS l'écriture, et la fiche désignée (set, clé). Idempotent.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseCocherProduit" } } },
+            "headers": { "Cache-Control": { "schema": { "type": "string", "enum": ["no-store"] } } }
+          },
+          "400": {
+            "description": "ENTREE (detail `idProduct`, `possedee` ou `quantite`) : la forme n'est pas admise.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } }
+          },
+          "401": {
+            "description": "SESSION (cookie absent, expiré ou révoqué).",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } }
+          },
+          "403": {
+            "description": "ORIGINE (Origin exacte du site et X-Rat-Market obligatoires) ou VERIFICATION.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } }
+          },
+          "404": {
+            "description": "INTROUVABLE (detail `produit`) : aucune fiche du catalogue chargé ne porte ce produit (inconnu, ou connu sans fiche). Rien n'est écrit.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } }
+          },
+          "409": {
+            "description": "CONFLIT, detail `ambigu` (le produit désigne plusieurs fiches : `erreur.fiches`, rien n'est écrit) ou l'une des bornes du PUT par fiche (`borne-compte`, `borne-hors`, `borne-quantites`, `borne-sets`, `borne-service`, `exemplaires`).",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } }
+          },
+          "429": {
+            "description": "DEBIT : plus de 1 000 écritures par heure pour ce compte (le limiteur est celui du PUT par fiche, partagé), avec `reessayerDans` et `Retry-After`.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } },
+            "headers": { "Retry-After": { "schema": { "type": "integer", "minimum": 0 } } }
+          },
+          "503": {
+            "description": "INDISPONIBLE. Avec `detail: \"catalogue\"` : aucun catalogue chargé (ou un catalogue d'avant l'index inverse, ou un index qui ne répond pas) — « je ne sais pas » n'est jamais « introuvable » : RIEN n'est écrit, `reessayerDans` (et `Retry-After`) en secondes.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReponseErreur" } } }
           }
         }
       }
@@ -7320,7 +7453,7 @@
         "name": "X-Rat-Market",
         "in": "header",
         "required": true,
-        "description": "Obligatoire sur toute écriture authentifiée par cookie (avec `Origin: https://rat-market.fr`).",
+        "description": "Obligatoire sur toute écriture authentifiée par cookie (avec `Origin: https://rat-market.fr` ou `https://www.rat-market.fr`, liste fermée).",
         "schema": {
           "type": "string",
           "enum": [
@@ -7348,6 +7481,17 @@
           "type": "string",
           "pattern": "^-?[1-9][0-9]{0,11}\\|[A-Za-z0-9().!?-](?:[A-Za-z0-9 ().!?-]{0,30}[A-Za-z0-9().!?-])?$",
           "maxLength": 50
+        }
+      },
+      "IdDeProduit": {
+        "name": "idproduct",
+        "in": "path",
+        "required": true,
+        "description": "L'identifiant du produit Cardmarket (celui d'un verdict du scanner ou d'une recherche) : un entier décimal sans zéro de tête, 10 chiffres au plus.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,9}$",
+          "maxLength": 10
         }
       }
     },
@@ -10009,10 +10153,10 @@
                   "CREDITS_ACHETES",
                   "ENTREE",
                   "INTERDIT",
-                        "INTROUVABLE",
-                        "FICHIER",
-                        "LIMITE_DEBIT",
-                        "EN_RECONCILIATION"
+                  "INTROUVABLE",
+                  "FICHIER",
+                  "LIMITE_DEBIT",
+                  "EN_RECONCILIATION"
                 ]
               },
               "message": {
@@ -10029,6 +10173,20 @@
                 "type": "integer",
                 "minimum": 1,
                 "description": "GALERIE : avec `CONFLIT` `detail: version` (PUT /api/classeurs/{id}), la version que l'autre fenêtre a écrite."
+              },
+              "fiches": {
+                "type": "array",
+                "maxItems": 10,
+                "description": "PUT /api/collection/produits/{idproduct}, CONFLIT `ambigu` seulement : les fiches (set, clé) que le produit désigne, triées. Le site choisit et écrit par fiche.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "set": { "type": "string" },
+                    "cle": { "type": "string" }
+                  },
+                  "required": ["set", "cle"],
+                  "additionalProperties": false
+                }
               }
             },
             "required": [
@@ -10352,6 +10510,11 @@
                 "majLe": {
                   "type": "string",
                   "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                },
+                "doublons": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "L6 — Σ(quantité − 1) des fiches du set (le nombre d'exemplaires en trop). Champ ABSENT d'un set sans aucun double (la réponse d'avant, à l'octet près) ; calculé à la lecture, rien n'est stocké."
                 }
               },
               "required": [
@@ -10366,24 +10529,6 @@
         "required": [
           "success",
           "sets"
-        ],
-        "additionalProperties": false
-      },
-      "CoteFiche": {
-        "type": "object",
-        "description": "La cote du GUIDE d'une fiche : la tendance et la date du guide. Règle au contrat (§1.8) ; le serveur n'en sert pas encore.",
-        "properties": {
-          "tendance": {
-            "type": "number",
-            "minimum": 0
-          },
-          "date": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "tendance",
-          "date"
         ],
         "additionalProperties": false
       },
@@ -10412,18 +10557,13 @@
               "maximum": 99
             }
           },
-          "cotes": {
+          "exemplaires": {
             "type": "object",
-            "description": "Par clé de fiche : sa cote, ou `null`. Une fiche absente vaut `null`. `{}` tant qu'aucun chargement n'a réussi (l'état « sans visuel ») ou pour un set sans lien fiche → produits. Au-delà de 5 000 produits dans un set, les cotes sont PARTIELLES : les fiches qui ne tiennent pas dans la borne sont absentes (= `null`).",
+            "description": "K5 (le site, O13) — le détail par exemplaire, par clé de fiche cochée : UN élément { etat, langue } par exemplaire, les précisés d'abord triés (état, langue), puis COMPLÉTÉ par des { null, null } (exemplaires non précisés) jusqu'à la quantité de la fiche : la longueur de la liste = `quantite`. Rien ne change au stockage. Champ ABSENT quand aucune fiche du set n'a de détail (la réponse d'avant, à l'octet près).",
             "additionalProperties": {
-              "oneOf": [
-                {
-                  "type": "null"
-                },
-                {
-                  "$ref": "#/components/schemas/CoteFiche"
-                }
-              ]
+              "type": "array",
+              "maxItems": 99,
+              "items": { "$ref": "#/components/schemas/ExemplaireDetail" }
             }
           },
           "majLe": {
@@ -10442,7 +10582,6 @@
           "success",
           "set",
           "possedees",
-          "cotes",
           "majLe"
         ],
         "additionalProperties": false
@@ -10457,12 +10596,65 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 99,
-            "description": "FACULTATIF (avec `possedee: true` seulement) : le nombre d'exemplaires, de 1 à 99 ; absent vaut 1. `possedee: false` efface la quantité. 99 est posé sans mesure d'usage réel."
+            "description": "FACULTATIF (avec `possedee: true` seulement) : le nombre d'exemplaires, de 1 à 99 ; absent vaut 1 sur une clé neuve et laisse la quantité inchangée sur une clé déjà cochée. `possedee: false` efface la quantité. 99 est posé sans mesure d'usage réel. Ne peut pas passer sous le nombre d'exemplaires détaillés (409 `exemplaires`)."
           }
         },
         "required": [
           "possedee"
         ],
+        "additionalProperties": false
+      },
+      "EtatExemplaire": {
+        "type": "string",
+        "enum": ["MT", "NM", "EX", "GD", "LP", "PL", "PO"],
+        "description": "L'état d'un exemplaire (échelle de Cardmarket) : MT mint, NM near mint, EX excellent, GD good, LP light played, PL played, PO poor. Liste fermée."
+      },
+      "ExemplaireDetail": {
+        "type": "object",
+        "description": "K5 : UN exemplaire détaillé. Les deux clés sont obligatoires, `null` = non précisé.",
+        "properties": {
+          "etat": { "oneOf": [{ "type": "null" }, { "$ref": "#/components/schemas/EtatExemplaire" }] },
+          "langue": { "oneOf": [{ "type": "null" }, { "$ref": "#/components/schemas/LangueExemplaire" }] }
+        },
+        "required": ["etat", "langue"],
+        "additionalProperties": false
+      },
+      "RequeteExemplaires": {
+        "type": "object",
+        "description": "K5 : REMPLACE tout le détail des exemplaires de la fiche (cochée). Au plus `quantite` éléments (le total de la fiche, 99 au plus). Un élément { null, null } est un exemplaire non précisé : il n'est pas stocké (c'est le reste du total) ; la réponse le rend en fin de liste, jusqu'à la quantité. Un tableau vide efface le détail.",
+        "properties": {
+          "exemplaires": { "type": "array", "maxItems": 99, "items": { "$ref": "#/components/schemas/ExemplaireDetail" } }
+        },
+        "required": ["exemplaires"],
+        "additionalProperties": false
+      },
+      "ReponseExemplaires": {
+        "type": "object",
+        "description": "K5 : le détail de la fiche après l'écriture, développé : les exemplaires précisés triés (état, puis langue), puis des { null, null } jusqu'à la quantité de la fiche (longueur = quantité) ; [] quand le détail est effacé ou vide.",
+        "properties": {
+          "success": { "const": true },
+          "exemplaires": { "type": "array", "maxItems": 99, "items": { "$ref": "#/components/schemas/ExemplaireDetail" } }
+        },
+        "required": ["success", "exemplaires"],
+        "additionalProperties": false
+      },
+      "LangueExemplaire": {
+        "type": "string",
+        "enum": ["fr", "en", "de", "es", "it", "pt", "nl", "pl", "ru", "cs", "hu", "ja", "ko", "zh-hans", "zh-hant", "id", "th"],
+        "description": "La langue d'un exemplaire : celles du catalogue plus `id` et `th`. Liste fermée."
+      },
+      "ReponseCocherProduit": {
+        "type": "object",
+        "description": "PUT /api/collection/produits/{idproduct} : la réponse du PUT par fiche, plus la fiche que le produit a désignée.",
+        "properties": {
+          "success": { "const": true },
+          "possedees": { "type": "integer", "minimum": 0 },
+          "set": { "type": "string" },
+          "cle": { "type": "string" },
+          "quantite": { "type": "integer", "minimum": 1, "maximum": 99, "description": "La quantité TOTALE de la fiche écrite, seulement quand elle porte un détail." },
+          "exemplaires": { "type": "array", "maxItems": 99, "items": { "$ref": "#/components/schemas/ExemplaireDetail" }, "description": "Le détail de la fiche écrite, seulement quand elle en porte un." }
+        },
+        "required": ["success", "possedees", "set", "cle"],
         "additionalProperties": false
       },
       "ReponseCocher": {
@@ -10474,7 +10666,9 @@
           "possedees": {
             "type": "integer",
             "minimum": 0
-          }
+          },
+          "quantite": { "type": "integer", "minimum": 1, "maximum": 99, "description": "La quantité TOTALE de la fiche écrite, seulement quand elle porte un détail (champ additif : absent, la réponse d'avant à l'octet)." },
+          "exemplaires": { "type": "array", "maxItems": 99, "items": { "$ref": "#/components/schemas/ExemplaireDetail" }, "description": "Le détail de la fiche écrite, seulement quand elle en porte un (champ additif)." }
         },
         "required": [
           "success",
@@ -11012,28 +11206,40 @@
       },
       "RequeteConnexion": {
         "type": "object",
+        "description": "L1 : le jeton Turnstile est exigé, comme à l'inscription. Ordre des refus : origine (403), limite par IP (429), défi (422), limite par adresse (429), identifiants (401).",
         "properties": {
           "email": {
             "type": "string"
           },
           "motDePasse": {
             "type": "string"
+          },
+          "turnstile": {
+            "type": "string",
+            "description": "Jeton Cloudflare Turnstile du widget du site (le même que pour l'inscription). OBLIGATOIRE (L1) : absent, vide, non texte ou refusé => 422 ENTREE, detail `defi-anti-robot`. Usage unique."
           }
         },
         "required": [
           "email",
-          "motDePasse"
+          "motDePasse",
+          "turnstile"
         ]
       },
       "RequeteMotDePasseOublie": {
         "type": "object",
+        "description": "L1 : le jeton Turnstile est exigé, comme à l'inscription. Un défi refusé est le seul refus de la route avant le 202 (hors origine et limites).",
         "properties": {
           "email": {
             "type": "string"
+          },
+          "turnstile": {
+            "type": "string",
+            "description": "Jeton Cloudflare Turnstile du widget du site (le même que pour l'inscription). OBLIGATOIRE (L1) : absent, vide, non texte ou refusé => 422 ENTREE, detail `defi-anti-robot`. Usage unique."
           }
         },
         "required": [
-          "email"
+          "email",
+          "turnstile"
         ]
       },
       "RequeteReinitialisation": {
@@ -11054,13 +11260,19 @@
       },
       "RequeteRenvoiVerification": {
         "type": "object",
+        "description": "L1 : le jeton Turnstile est exigé, comme à l'inscription. Un défi refusé est le seul refus de la route avant le 202 (hors origine et limites).",
         "properties": {
           "email": {
             "type": "string"
+          },
+          "turnstile": {
+            "type": "string",
+            "description": "Jeton Cloudflare Turnstile du widget du site (le même que pour l'inscription). OBLIGATOIRE (L1) : absent, vide, non texte ou refusé => 422 ENTREE, detail `defi-anti-robot`. Usage unique."
           }
         },
         "required": [
-          "email"
+          "email",
+          "turnstile"
         ]
       },
       "RequeteEtiquetteBanc": {

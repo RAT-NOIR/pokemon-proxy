@@ -1,0 +1,9 @@
+{
+  "success": false,
+  "erreur": {
+    "code": "CONFLIT",
+    "message": "Le détail (état, langue) doit porter sur une fiche cochée et ne peut pas dépasser sa quantité ; la quantité ne peut pas passer sous le détail",
+    "detail": "exemplaires"
+  },
+  "facturation": null
+}

@@ -37,7 +37,9 @@ function lireVariable(nom, env, fichierEnv, lire = f => fs.readFileSync(f, 'utf8
 /** Les deux identifiants du compte de mesure, ou null si l'un manque. */
 function lireIdentifiants(env, fichierEnv, lire, noms = { identifiant: NOM_IDENTIFIANT, motDePasse: NOM_MOT_DE_PASSE }) {
     const identifiant = lireVariable(noms.identifiant, env, fichierEnv, lire), motDePasse = lireVariable(noms.motDePasse, env, fichierEnv, lire);
-    return identifiant && motDePasse ? { identifiant, motDePasse } : null;
+    // L1 : le secret d'exemption du défi Turnstile (essai seulement, voir comptes/routes.js) ; facultatif, jamais imprimé. Absent : l'objet reste { identifiant, motDePasse }.
+    const secretMesure = lireVariable('V2_SECRET_MESURE', env, fichierEnv, lire);
+    return identifiant && motDePasse ? { identifiant, motDePasse, ...(secretMesure ? { secretMesure } : {}) } : null;
 }
 
 /**
@@ -67,7 +69,10 @@ const entetesDuSite = origineSite => ({ Origin: origineSite, 'X-Rat-Market': '1'
 
 /** La SESSION du compte de mesure : POST /api/compte/connexion → la valeur du cookie `rm_session` (texte). Lève un Arret sur tout refus. L'appelant la garde EN MÉMOIRE, jamais ailleurs. */
 async function ouvrirSession({ appeler, ids, origineSite = ORIGINE_SITE }) {
-    const cx = await appeler('/api/compte/connexion', { method: 'POST', headers: entetesDuSite(origineSite), body: JSON.stringify({ email: ids.identifiant, motDePasse: ids.motDePasse }) }, null);
+    const cx = await appeler('/api/compte/connexion', { method: 'POST', headers: { ...entetesDuSite(origineSite), ...(ids.secretMesure ? { 'X-Rat-Market-Mesure': ids.secretMesure } : {}) }, body: JSON.stringify({ email: ids.identifiant, motDePasse: ids.motDePasse }) }, null);
+    // L1 : le défi Turnstile refusé n'est pas un mauvais mot de passe. On NOMME la variable (jamais sa valeur).
+    if (cx.statut === 422 && cx.corps && cx.corps.erreur && cx.corps.erreur.detail === 'defi-anti-robot')
+        throw new Arret(`connexion du compte de mesure : défi anti-robot refusé (422) — ${ids.secretMesure ? 'V2_SECRET_MESURE est posée ici mais l\'essai ne l\'accepte pas (secret différent, service sans V2_CIBLE=essai / V2_SECRET_MESURE, ou RENDER_SERVICE_ID autre)' : 'V2_SECRET_MESURE est absente (.env ou environnement) : la poser, identique à celle de l\'essai (32 caractères au moins)'}`);
     const session = cx.cookie ? /(?:^|[\s,;])rm_session=([^;\s,]+)/.exec(String(cx.cookie)) : null;
     if (cx.statut !== 200 || !session) refusDe('connexion', cx);
     return session[1];

@@ -1,0 +1,10 @@
+{
+  "success": false,
+  "erreur": {
+    "code": "INDISPONIBLE",
+    "message": "Le catalogue des fiches n'est pas encore chargé : réessayez dans quelques secondes",
+    "detail": "catalogue",
+    "reessayerDans": 5
+  },
+  "facturation": null
+}

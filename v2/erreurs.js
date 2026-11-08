@@ -4,6 +4,7 @@ const CODES = Object.freeze({
     JETON: 401, VERIFICATION: 403, QUOTA: 429, DEBIT: 429, INDISPONIBLE: 503, IMAGE: 200, IA: 200, SERVEUR: 500, VERSION: 426, MARCHE: 422,
     SESSION: 401, ORIGINE: 403, IDENTIFIANTS: 401, MOT_DE_PASSE_FAIBLE: 422, CODE_INVALIDE: 404, CODE_EXPIRE: 410, DEJA_LIE: 409,
     CONFLIT: 409, CREDITS_ACHETES: 409, ENTREE: 400,
+    // L5 : INTROUVABLE sert aussi « Ma collection » par produit (le produit n'a aucune fiche du catalogue chargé).
     // GALERIE (Communauté) : INTROUVABLE (uniforme : absent, privé, en attente, refusé ou retiré), INTERDIT (detail pseudo-requis | admin | pas-l-auteur), FICHIER (413 trop-lourde, 415 format, 422 trop-de-pixels|illisible|animee ; le statut se passe à repondreErreur),
     // LIMITE_DEBIT (429 + reessayerDans : une limite de débit qui ne facture RIEN ; DEBIT reste réservé à ce qui débite)
     INTERDIT: 403, INTROUVABLE: 404, FICHIER: 422, LIMITE_DEBIT: 429,
@@ -25,6 +26,7 @@ function corpsErreur(code, message, extra = {}) {
     const corps = { success: false, erreur, facturation: extra.facturation ?? null };
     if (extra.solde !== undefined) corps.solde = extra.solde;
     // OFFRE-QUOTA : `achat` n'existe plus (la vente est arrêtée) — un appelant qui en passerait un est ignoré, aucun lien de vente ne sort jamais d'un corps d'erreur
+    if (extra.fiches !== undefined) erreur.fiches = extra.fiches;   // L5 : les fiches candidates d'un produit ambigu ([{ set, cle }], au plus 10)
     if (extra.declaration !== undefined) corps.declaration = extra.declaration;   // PLAFOND-DECLARE : le jugement d'un remboursement de DÉCLARATION (rendue, ou refusée par `plafond-declarations`)
     if (extra.offre !== undefined) corps.offre = extra.offre;   // OFFRE-QUOTA : { nom, restant, remiseAZero } — le refus QUOTA joint l'offre (restant 0)
     return corps;

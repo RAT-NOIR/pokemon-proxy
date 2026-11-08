@@ -90,11 +90,12 @@ const { creerCourrierMemoire } = require('../comptes/courrier'); const { verifie
     await srv2.fermer();
 
     // Turnstile réel : fetch injecté, aucune requête réelle
-    const vus = []; const fetchFaux = async (url, o) => { vus.push([url, String(o.body)]); return { ok: true, json: async () => ({ success: true }) }; };
-    H.v('turnstile réel : success true', await verifierTurnstile('tok', '1.2.3.4', { fetch: fetchFaux, secret: 'S' }), true);
+    const vus = []; const fetchFaux = async (url, o) => { vus.push([url, String(o.body)]); return { ok: true, json: async () => ({ success: true, hostname: 'rat-market.fr', action: 'inscription' }) }; };
+    H.v('turnstile réel : success true', await verifierTurnstile('tok', '1.2.3.4', { fetch: fetchFaux, secret: 'S', action: 'inscription' }), true);
     H.v('turnstile réel : POST formulaire vers siteverify', [vus[0][0], vus[0][1]], ['https://challenges.cloudflare.com/turnstile/v0/siteverify', 'secret=S&response=tok&remoteip=1.2.3.4']);
     H.v('turnstile réel : success false => false', await verifierTurnstile('t', 'ip', { fetch: async () => ({ ok: true, json: async () => ({ success: false }) }), secret: 'S' }), false);
-    H.v('turnstile réel : réponse non 2xx => false', await verifierTurnstile('t', 'ip', { fetch: async () => ({ ok: false, json: async () => ({ success: true }) }), secret: 'S' }), false);
+    let non2xx = null; try { await verifierTurnstile('t', 'ip', { fetch: async () => ({ ok: false, status: 502, json: async () => ({ success: true }) }), secret: 'S' }); } catch (e) { non2xx = e.message; }
+    H.v('turnstile réel : réponse non 2xx => LÈVE (503 côté route, jamais un refus 422)', non2xx, 'turnstile-http-502');
     let leve = null; try { await verifierTurnstile('t', 'ip', { fetch: fetchFaux, secret: '' }); } catch (e) { leve = e.message; }
     H.v('turnstile réel : secret absent => lève', leve, 'turnstile-non-configure');
     let brevo = null; try { require('../comptes/courrier').creerCourrierBrevo({ cle: 'k' }); } catch (e) { brevo = e.message; }

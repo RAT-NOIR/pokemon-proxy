@@ -40,8 +40,15 @@ function entetesDeLApi({ cookie = null, entetes = {}, avecCorps = false }) {
     return { ...(cookie ? { cookie } : {}), ...(avecCorps ? { 'content-type': 'application/json', origin: 'https://rat-market.fr', 'x-rat-market': '1' } : {}), ...entetes };
 }
 /** Une ouverture de session par compte : le cookie rm_session, jamais affiché. */
-async function connecter(essai, c, fetchFn = fetch) {          // `fetchFn` : substituable par un banc
-    const r = await fetchFn(`${essai}/api/compte/connexion`, { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://rat-market.fr', 'x-rat-market': '1' }, body: JSON.stringify({ email: c.email, motDePasse: c.motDePasse }), signal: AbortSignal.timeout(90000) });
+async function connecter(essai, c, fetchFn = fetch, secretMesure = null) {          // `fetchFn` : substituable par un banc ; `secretMesure` (V2_SECRET_MESURE du .env) dispense du seul défi Turnstile sur l'ESSAI, jamais imprimé
+    const avecSecret = typeof secretMesure === 'string' && secretMesure !== '';
+    // L1 (F2) : le secret ne part QU'À l'hôte exact de l'essai (liste fermée) ; ailleurs, refus local avant toute requête.
+    if (avecSecret && essai !== 'https://rat-market-api-essai.onrender.com') throw new Error('V2_SECRET_MESURE n\'est envoyée qu\'à https://rat-market-api-essai.onrender.com : refus local, aucune requête');
+    const r = await fetchFn(`${essai}/api/compte/connexion`, { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://rat-market.fr', 'x-rat-market': '1', ...(avecSecret ? { 'x-rat-market-mesure': secretMesure } : {}) }, body: JSON.stringify({ email: c.email, motDePasse: c.motDePasse }), signal: AbortSignal.timeout(90000) });
+    if (r.status === 422) {
+        let j = null; try { j = await r.json(); } catch { /* corps non JSON */ }
+        if (j && j.erreur && j.erreur.detail === 'defi-anti-robot') throw new Error(`connexion du compte « ${c.role} » : défi anti-robot refusé (422) — ${avecSecret ? 'V2_SECRET_MESURE est posée ici mais l\'essai ne l\'accepte pas (secret différent ou service sans la variable)' : 'V2_SECRET_MESURE est absente du .env : la poser, identique à celle de l\'essai'}`);
+    }
     if (r.status !== 200) throw new Error(`connexion du compte « ${c.role} » refusée (HTTP ${r.status})`);
     const m = (r.headers.getSetCookie ? r.headers.getSetCookie() : [r.headers.get('set-cookie') || '']).join(';').match(/rm_session=([A-Za-z0-9_-]+)/);
     if (!m) throw new Error(`connexion du compte « ${c.role} » : pas de cookie de session`);
@@ -70,7 +77,7 @@ if (require.main === module) (async () => {
     const stripe = require('../../abonnements/sdk').creerClient(cle);
     const comptes = Object.fromEntries(liste.filter(c => requis.includes(c.role)).map(c => [c.role, { id: c.id }]));
     const cookies = {};
-    for (const c of liste.filter(c => requis.includes(c.role))) cookies[c.role] = await connecter(a.essai, c);
+    for (const c of liste.filter(c => requis.includes(c.role))) cookies[c.role] = await connecter(a.essai, c, fetch, ENV.V2_SECRET_MESURE || null);
     // `role` null : aucun cookie (les routes de l'extension, par jeton d'installation passé en `entetes`)
     const api = async (role, methode, chemin, corps, entetes = {}) => {
         const r = await fetch(a.essai + chemin, { method: methode, headers: entetesDeLApi({ cookie: role ? cookies[role] : null, entetes, avecCorps: corps !== undefined }), body: corps !== undefined ? JSON.stringify(corps) : undefined, signal: AbortSignal.timeout(90000) });
