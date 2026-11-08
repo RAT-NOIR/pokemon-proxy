@@ -161,12 +161,61 @@ const memeNomQueLeProduit = (lu, nomProduit) => {
 /** Égalité de deux noms japonais : NFKC, espaces et points médians retirés ; l'un ou l'autre côté vide = non (rien à comparer n'est jamais une concordance). */
 const cleJaponaise = s => (texte(s) ? String(s).normalize('NFKC').replace(/[\s・･·]/g, '') : '');
 const memeNomJaponais = (lu, nomJa) => cleJaponaise(lu) !== '' && cleJaponaise(lu) === cleJaponaise(nomJa);
+// ── (08/11, décision du testeur) A : le nom lu contre la langue lue — AVANT tout autre jugement du nom ───────────────────────────────────────────────────────────────
+// Des chasseurs ont écrit dans `lu.nom` le nom ANGLAIS du produit au lieu du nom IMPRIMÉ (« Energy Search » sur une carte qui imprime « Transfer Energi ») : la règle du nom traduit comparait le produit à lui-même.
+// Écrit par ce qu'il AUTORISE : pour th, zh-hans, zh-hant, ja, ko, `lu.nom` contient au moins un caractère de l'écriture de la langue lue ; sinon `nom-lu-hors-langue`.
+const HAN = '\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uF900-\\uFAFF';
+const ECRITURES_PAR_LANGUE = Object.freeze({
+    th: /[฀-๿]/u,
+    'zh-hans': new RegExp(`[${HAN}]`, 'u'),
+    'zh-hant': new RegExp(`[${HAN}]`, 'u'),
+    ja: new RegExp(`[\\u3040-\\u30FF\\u31F0-\\u31FF\\uFF66-\\uFF9F${HAN}]`, 'u'),   // kana (hira, kata, demi-chasse) et han
+    ko: /[ᄀ-ᇿ㄰-㆏가-힯]/u
+});
+/**
+ * Liste FERMÉE des noms imprimés EN LATIN sur une carte d'une de ces langues, chacun PROUVÉ sur l'image (planches relues le 2026-11-08, scans de la chasse) :
+ *  · « ENERGY » (japonais, produit de catégorie `energie`) : le mot imprimé dans l'en-tête des Énergies japonaises — pcgp_ja-55 / -59 (N8J3, PCG-P 055 à 059/PCG-P) et cll-34 (N8I2, CLL) le montrent en toutes lettres ;
+ *  · « POKEMON MACHINE » (japonais, produit 549156 seulement) : dessin de la feuille du professeur (V4JA2, EXS), le texte est écrit en lettres latines sur la machine.
+ * Tout autre nom latin (« Grass Energy », « Lightning Energy (ENERGY, foil) », nom du produit) est refusé : ce que le chasseur écrit dans `lu.nom` est ce qui est IMPRIMÉ, jamais le nom du produit.
+ */
+const NOMS_LATINS_IMPRIMES = Object.freeze([
+    Object.freeze({ langue: 'ja', nom: 'ENERGY', categorie: 'energie' }),
+    Object.freeze({ langue: 'ja', nom: 'POKEMON MACHINE', idProduct: 549156 })
+]);
+const nomLatinImprime = (lu, produit) => NOMS_LATINS_IMPRIMES.some(x => x.langue === lu.langue && x.nom === String(lu.nom ?? '').trim() && (x.categorie == null || produit?.categorie === x.categorie) && (x.idProduct == null || produit?.idProduct === x.idProduct));
+/** @returns {string|null} `nom-lu-hors-langue` ou null (langue sans contrôle d'écriture, écriture conforme, ou exception de la liste fermée). */
+function motifNomLuHorsLangue(lu, produit) {
+    if (!lu || !Object.hasOwn(ECRITURES_PAR_LANGUE, lu.langue)) return null;
+    if (ECRITURES_PAR_LANGUE[lu.langue].test(String(lu.nom ?? '').normalize('NFC'))) return null;
+    return nomLatinImprime(lu, produit) ? null : 'nom-lu-hors-langue';
+}
+/** Un produit n'est pas un Pokémon : catégorie connue ≠ pokemon, sinon (catégorie inconnue) un nom sans Pokédex. */
+const horsPokemonDeProduit = produit => {
+    if (produit?.categorie != null) return produit.categorie !== 'pokemon';
+    const n = texte(produit?.nomEnCarte ?? produit?.nomEn) ? J.decomposerNomCardmarket(produit.nomEnCarte ?? produit.nomEn).nom : null;
+    return !(n && TPC.dexDuNom(n));
+};
+/**
+ * Noms PROPRES réellement imprimés à l'identique sur une carte indonésienne de Dresseur (Dawn, Judge, Guzma, Gladion…) : liste FERMÉE, chaque entrée avec sa preuve (planche relue). VIDE tant qu'aucune n'est prouvée.
+ */
+const NOMS_ID_IMPRIMES_IDENTIQUES = Object.freeze([]);
+/**
+ * Le latin ne dit rien de la langue : un Dresseur ou une Énergie indonésiens dont `lu.nom` est IDENTIQUE au nom du produit anglais est le nom du produit recopié, pas le nom imprimé (les Dresseurs sont traduits, « Tukar Pokémon »),
+ * sauf nom propre de la liste fermée. Un Pokémon (qui imprime son nom anglais) reste jugé par la règle existante.
+ */
+function motifNomLuIdentiqueProduit(lu, produit, exceptions = NOMS_ID_IMPRIMES_IDENTIQUES) {
+    if (lu?.langue !== 'id' || !horsPokemonDeProduit(produit)) return null;
+    if (!(memeNomQueLeProduit(lu.nom, produit?.nomEn) || memeNomQueLeProduit(lu.nom, produit?.nomEnCarte))) return null;
+    return exceptions.some(x => texte(x) && memeNomQueLeProduit(lu.nom, x)) ? null : 'nom-lu-identique-produit';
+}
 /**
  * Tour 4 (1) : le nom lu est exigé PARTOUT. Lu en anglais, il se compare au nom anglais du produit (`nomEn`).
  * Décision du testeur (27/10) : lu en français, il se compare au nom FRANÇAIS du produit (`nomFr`, numeros_cartes) — SEULEMENT si le produit est un tirage français (langue du produit = langue lue) ;
  * jamais au nom anglais. Toute autre langue lue = refus.
  */
 const motifDeNom = (lu, produit, langueProduit, drapeaux = []) => {
+    const hors = motifNomLuHorsLangue(lu, produit) ?? motifNomLuIdentiqueProduit(lu, produit);   // (08/11) A : avant tout autre jugement du nom
+    if (hors) return hors;
     if (lu.langue === 'en') return memeNomQueLeProduit(lu.nom, produit?.nomEn) ? null : 'nom-different';
     if (lu.langue === 'fr' && langueProduit === 'fr') return memeNomQueLeProduit(lu.nom, produit?.nomFr) ? null : 'nom-different';
     // a-reste (japonais) : un nom lu en japonais se compare au nom JAPONAIS de la carte désignée par la ligne (`produit.nomJa`, témoin de lecture, jamais écrit en public), SEULEMENT pour un tirage japonais ; jamais au nom anglais.
@@ -343,6 +392,27 @@ function motifSansPokedex(lu, produit, np, nom, nomCarte, drapeaux) {
     if (aUnJumeauDansLeSet(produit, cleDuTemoin(nom), np)) drapeaux.push('jumeau-dans-le-set');
     return null;
 }
+/**
+ * (08/11, décision du testeur) B : un Dresseur ou une Énergie au nom traduit n'a ni Pokédex ni PV ; il se prouve par numéro + code + langue + illustration RELUE par le coordinateur, sur une liste FERMÉE de lignes `codes_set`.
+ * Ouverte SEULEMENT si : la ligne du produit est dans la liste, la catégorie est `dresseur` ou `energie` (un Pokémon n'emprunte jamais cette voie), et la preuve porte `lu.illustrationRelue` (absente : le refus d'avant, inchangé).
+ * Ouverte, elle exige : un nom lu non vide dans l'écriture de sa langue (A), la langue lue = la langue du tirage, et `illustrationRelue = { par: 'coordinateur', reference: <cleR2 d'un visuel de CETTE carte en base>, le: <date ISO> }`.
+ * Le code et le numéro ont déjà passé leurs contrôles habituels quand on arrive ici (motifDeCode en tête de motifDeNomTraduit ; le numéro est comparé par l'appelant).
+ * @returns {string|null|undefined} undefined = voie non ouverte ; null = acceptée (drapeau posé) ; sinon le motif de refus.
+ */
+const REGLES_NOM_TRADUIT_DRESSEUR = Object.freeze(['M-P/ID', 'SV-P/ID', 'S-P/ID', 'SM-P/ID', 'M-P/TH']);
+function motifIllustrationRelue(lu, produit, drapeaux) {
+    const ligne = REGLES_NOM_TRADUIT_DRESSEUR.find(l => texte(produit?.codeSet) && norm(l) === norm(produit.codeSet));
+    if (!ligne || !['dresseur', 'energie'].includes(produit?.categorie) || lu.illustrationRelue == null) return undefined;
+    if (!texte(lu.nom)) return 'nom-different';
+    const hors = motifNomLuHorsLangue(lu, produit); if (hors) return hors;
+    if (lu.langue !== langueDuProduit({ idExpansion: produit.idExpansion, tirage: produit.tirage, langueLue: lu.langue })) return 'langue-differente';
+    const r = lu.illustrationRelue;
+    const dateIso = typeof r?.le === 'string' && /^\d{4}-\d{2}-\d{2}/.test(r.le) && !Number.isNaN(Date.parse(r.le));
+    const dansLaCarte = texte(r?.reference) && Array.isArray(produit.cleR2Carte) && produit.cleR2Carte.includes(r.reference);
+    if (!(objet(r) && r.par === 'coordinateur' && dateIso && dansLaCarte)) return 'illustration-non-relue';
+    drapeaux.push(`temoin-illustration-relue:${ligne}`);
+    return null;
+}
 function motifDeNomTraduit(lu, produit, np, drapeaux = []) {
     if (!texte(lu.nom)) return 'nom-different';
     if (np == null) return 'nom-traduit-numero-absent';
@@ -369,6 +439,7 @@ function motifDeNomTraduit(lu, produit, np, drapeaux = []) {
         const p = preuveParTableCroisee(lu.nom, nom, produit?.tableJaCroisee, produit?.carteId);
         if (p) { drapeaux.push(`nom-ja-par-table-d-un-autre-set:${p.carteId}`); return null; }
     }
+    const il = motifIllustrationRelue(lu, produit, drapeaux); if (il !== undefined) return il;   // (08/11) B : Dresseur / Énergie des lignes fermées, illustration relue par le coordinateur
     const sansTemoin = tableUtilisable ? 'table-ja-insuffisante' : 'nom-traduit-sans-temoin';
     // sinon seul un Pokémon a de quoi témoigner : un Dresseur ou une Énergie au nom traduit n'a ni Pokédex ni PV
     if (!nom || (produit?.categorie != null && produit.categorie !== 'pokemon')) return sansTemoin;
@@ -855,4 +926,4 @@ function trousDuManifeste({ trous, recus, famille }) {
 }
 
 module.exports = { cleAliasPour, POSITIONS_RONDES, CODES_IMPRIMES_ADMIS, CODES_SANS_TOTAL, sansTotalAdmis, SOURCE, LOT, SRC, LANGUE_PREUVE, EDITIONS_LOCALES, REGLES, REGLE_MEME_DESSIN, LANGUES_NON_LATINES, MOYENS_DE_LECTURE, MOYENS_DE_LANGUE, SEUIL_PLANCHER, SCORE_PLANCHER, VIDE_PLANCHER, lienAvecLEntree, evaluerRemplacementMemeDessin, langueDuProduit, formeEntree, lireManifeste, lireValidations, rapprocher, evaluerPreuveLue, evaluerDeuxSources, evaluerEntree,
-    verifierCache, setAdmisPourPosition, preuvesDe, motifDeNom, motifDeNomTraduit, REGLES_SANS_POKEDEX, construireTableJaCroisee, preuveParTableCroisee, porteUnTemoinTraduit, CHAMPS_TEMOIN_TRADUIT, LANGUES_A_NOM_TRADUIT, TAMPONS_ATTENDUS, tamponAttendu, cleFiche, grouperUnites, MOTIFS_DE_TROU, motifDeTrou, trousDuManifeste, sha256De, racineDe };
+    verifierCache, setAdmisPourPosition, preuvesDe, motifDeNom, motifDeNomTraduit, REGLES_SANS_POKEDEX, NOMS_LATINS_IMPRIMES, NOMS_ID_IMPRIMES_IDENTIQUES, motifNomLuHorsLangue, motifNomLuIdentiqueProduit, REGLES_NOM_TRADUIT_DRESSEUR, construireTableJaCroisee, preuveParTableCroisee, porteUnTemoinTraduit, CHAMPS_TEMOIN_TRADUIT, LANGUES_A_NOM_TRADUIT, TAMPONS_ATTENDUS, tamponAttendu, cleFiche, grouperUnites, MOTIFS_DE_TROU, motifDeTrou, trousDuManifeste, sha256De, racineDe };
