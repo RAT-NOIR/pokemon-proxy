@@ -98,7 +98,7 @@ function requete(port, { methode = 'POST', chemin = '/x', entetes = {}, morceaux
     const ip = await requete(port, { methode: 'GET', chemin: '/ip', entetes: { 'x-forwarded-for': '9.9.9.9, 5.6.7.8' } });
     v('req.ip = dernier saut ajoute par le proxy (5.6.7.8), pas la valeur forgee 9.9.9.9', ip.json && ip.json.ip, '5.6.7.8');
     const ipSans = await requete(port, { methode: 'GET', chemin: '/ip' });
-    v('sans X-Forwarded-For : req.ip = adresse du socket', ipSans.json && ipSans.json.ip, '::ffff:127.0.0.1');
+    v('sans X-Forwarded-For : req.ip = adresse du socket', ipSans.json && ipSans.json.ip, '127.0.0.1');
 
     // ── qs : analyse des requetes
     const q1 = await requete(port, { methode: 'GET', chemin: '/q?a[]=1&a[]=2&b[c]=3' });
