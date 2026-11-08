@@ -50,7 +50,7 @@ function fauxS3(initial = {}) {
 const ecritures = s3 => s3.appels.filter(a => a.nom === 'PutObjectCommand').length;
 
 // faux fetch : serveur public simulé
-function fauxFetch({ corps = contenus, base = 'https://img.test/', rep429 = {}, sans206 = false, tousLes429 = false, ctype = types } = {}) {
+function fauxFetch({ corps = contenus, base = 'https://img.test/', rep429 = {}, sans206 = false, tousLes429 = false, ctype = types, cache = CC } = {}) {
     const appels = [];
     const f = async (url, opts = {}) => {
         appels.push({ url, range: opts.headers && opts.headers.Range });
@@ -60,7 +60,7 @@ function fauxFetch({ corps = contenus, base = 'https://img.test/', rep429 = {}, 
         const rep = (status, body, extra = {}) => ({ status, headers: { get: k => (extra[k.toLowerCase()] ?? h[k.toLowerCase()] ?? null) }, arrayBuffer: async () => { const u = new Uint8Array(body); return u.buffer.slice(u.byteOffset, u.byteOffset + u.byteLength); } });
         if (tousLes429 || (rep429[cle] || 0) > 0) { if (!tousLes429) rep429[cle]--; return rep(429, Buffer.alloc(0)); }
         if (!b) return rep(404, Buffer.alloc(0));
-        Object.assign(h, { 'content-type': ctype[cle], 'cache-control': CC, 'accept-ranges': 'bytes', 'access-control-allow-origin': '*' });
+        Object.assign(h, { 'content-type': ctype[cle], 'cache-control': cache, 'accept-ranges': 'bytes', 'access-control-allow-origin': '*' });
         if (opts.headers && opts.headers.Range && !sans206) return rep(206, b.subarray(0, 1024), { 'content-range': `bytes 0-${Math.min(1023, b.length - 1)}/${b.length}` });
         return rep(200, b);
     };
@@ -270,6 +270,25 @@ t('contrôle : contenu public différent = ko', async () => {
     const f = fauxFetch({ corps: { ...contenus, 'c.avif': Buffer.from('avif-XXX') } });
     const r = await D.controler({ manifeste: manifeste(), attendu: 3, base, fetch: f, sommeil: fauxSommeil() });
     assert.strictEqual(r.ok, 2); assert.strictEqual(r.cles.find(c => c.cle.endsWith('.avif')).statut, 'ko');
+});
+t('contrôle : Content-Type public ≠ manifeste = ko', async () => {
+    const r = await D.controler({ manifeste: manifeste(), attendu: 3, base, fetch: fauxFetch({ ctype: { ...types, 'c.avif': 'application/octet-stream' } }), sommeil: fauxSommeil() });
+    assert.strictEqual(r.ok, 2);
+    const c = r.cles.find(x => x.cle.endsWith('.avif'));
+    assert.strictEqual(c.statut, 'ko'); assert.match(c.raison, /Content-Type/);
+});
+t('contrôle : Content-Type avec paramètre (≠ exact) = ko', async () => {
+    const r = await D.controler({ manifeste: manifeste(), attendu: 3, base, fetch: fauxFetch({ ctype: { ...types, 'a.webm': 'video/webm; codecs=av01' } }), sommeil: fauxSommeil() });
+    assert.strictEqual(r.cles.find(x => x.cle.endsWith('.webm')).statut, 'ko');
+});
+t('contrôle : Cache-Control ≠ exact = ko', async () => {
+    const r = await D.controler({ manifeste: manifeste(), attendu: 3, base, fetch: fauxFetch({ cache: 'public, max-age=3600' }), sommeil: fauxSommeil() });
+    assert.strictEqual(r.ok, 0);
+    assert.ok(r.cles.every(c => c.statut === 'ko' && /Cache-Control/.test(c.raison)));
+});
+t('contrôle : Cache-Control absent = ko', async () => {
+    const r = await D.controler({ manifeste: manifeste(), attendu: 3, base, fetch: fauxFetch({ cache: null }), sommeil: fauxSommeil() });
+    assert.strictEqual(r.ok, 0);
 });
 t('contrôle : clé absente (404) = ko', async () => {
     const c2 = { ...contenus }; delete c2['b.mp4'];
