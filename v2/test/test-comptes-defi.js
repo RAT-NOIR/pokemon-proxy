@@ -141,31 +141,36 @@ async function demarrerAvecCors(cfg) {
     // Exemption ÉTROITE des outils de mesure : essai seulement + secret >= 32 + en-tête égal ; dispense du DÉFI et de rien d'autre
     {
         const SEC = 'secret-de-mesure-' + 'x'.repeat(20);   // 37 caractères
-        const cas = async (env, entetes, route = '/api/compte/connexion', corps = { email: 'bob@exemple.fr', motDePasse: MDP }) => {
+        // PARCOURS DU SITE : l'exemption est liée à l'adresse EXACTE du compte de test (et n'existe que sur l'essai : base rm_essai) ; tout le bloc se joue donc sur CETTE adresse, pour que chaque refus soit un vrai refus.
+        const ADR = 'ratmarket.contact+essai@gmail.com';
+        { const cT = M.nouveauCompte({ email: ADR, emailCle: require('../comptes/email-cle').emailCle(ADR), motDePasse: await P.hacher(MDP) }); cT.verifie = true; await db.col('comptes').insertOne(cT); }
+        const cas = async (env, entetes, route = '/api/compte/connexion', corps = { email: ADR, motDePasse: MDP }) => {
             A.registre.vider(); A.registre.fournir('courrier', courrier); A.registre.fournir('turnstile', turnstile);
             const s = await A.demarrer(lireConfig({ MONGODB_BASE: 'test_scratch', ...env }));
             const r = await H.appel(s.url, route, { methode: 'POST', corps, sansDefi: true, entetes: { ...A.SITE, ...A.ip(++n + 3000), ...entetes } });
             await s.fermer(); return r;
         };
         const SERVICE_ESSAI = 'srv-db7ticgm7kps73crjibg';
-        const ESSAI = { V2_CIBLE: 'essai', V2_SECRET_MESURE: SEC, RENDER_SERVICE_ID: SERVICE_ESSAI }, EN = { 'x-rat-market-mesure': SEC };
+        const ESSAI = { MONGODB_BASE: 'rm_essai', V2_CIBLE: 'essai', V2_SECRET_MESURE: SEC, RENDER_SERVICE_ID: SERVICE_ESSAI }, EN = { 'x-rat-market-mesure': SEC };
         const st = r => [r.statut, r.json && r.json.erreur && r.json.erreur.detail];
         H.v('mesure : sans en-tête => 422 defi-anti-robot', st(await cas(ESSAI, {})), [422, 'defi-anti-robot']);
         H.v('mesure : en-tête faux => 422', st(await cas(ESSAI, { 'x-rat-market-mesure': SEC + 'z' })), [422, 'defi-anti-robot']);
         H.v('mesure : en-tête vide => 422', st(await cas(ESSAI, { 'x-rat-market-mesure': '' })), [422, 'defi-anti-robot']);
-        H.v('mesure : secret trop court (31) => inerte, 422 même avec le bon en-tête', st(await cas({ V2_CIBLE: 'essai', V2_SECRET_MESURE: 'y'.repeat(31) }, { 'x-rat-market-mesure': 'y'.repeat(31) })), [422, 'defi-anti-robot']);
-        H.v('mesure : secret absent, en-tête vide ou absent => 422', [st(await cas({ V2_CIBLE: 'essai' }, EN))[0], st(await cas({ V2_CIBLE: 'essai' }, { 'x-rat-market-mesure': 'undefined' }))[0]], [422, 422]);
-        H.v('mesure : cible prod (V2_CIBLE=prod) => 422 même avec le bon en-tête', st(await cas({ V2_CIBLE: 'prod', V2_SECRET_MESURE: SEC }, EN)), [422, 'defi-anti-robot']);
-        H.v('mesure : V2_CIBLE absente => 422 même avec le bon en-tête', st(await cas({ V2_SECRET_MESURE: SEC }, EN)), [422, 'defi-anti-robot']);
-        H.v('mesure : V2_CIBLE « Essai » (casse) => 422', st(await cas({ V2_CIBLE: 'Essai', V2_SECRET_MESURE: SEC }, EN)), [422, 'defi-anti-robot']);
+        H.v('mesure : secret trop court (31) => inerte, 422 même avec le bon en-tête', st(await cas({ ...ESSAI, V2_SECRET_MESURE: 'y'.repeat(31) }, { 'x-rat-market-mesure': 'y'.repeat(31) })), [422, 'defi-anti-robot']);
+        H.v('mesure : secret absent, en-tête vide ou absent => 422', [st(await cas({ ...ESSAI, V2_SECRET_MESURE: undefined }, EN))[0], st(await cas({ ...ESSAI, V2_SECRET_MESURE: undefined }, { 'x-rat-market-mesure': 'undefined' }))[0]], [422, 422]);
+        H.v('mesure : cible prod (V2_CIBLE=prod) => 422 même avec le bon en-tête', st(await cas({ ...ESSAI, V2_CIBLE: 'prod' }, EN)), [422, 'defi-anti-robot']);
+        H.v('mesure : V2_CIBLE absente => 422 même avec le bon en-tête', st(await cas({ ...ESSAI, V2_CIBLE: undefined }, EN)), [422, 'defi-anti-robot']);
+        H.v('mesure : V2_CIBLE « Essai » (casse) => 422', st(await cas({ ...ESSAI, V2_CIBLE: 'Essai' }, EN)), [422, 'defi-anti-robot']);
+        H.v('mesure : base de production (MONGODB_BASE=test) sur le service de l\'essai => 422 même avec le bon en-tête', st(await cas({ ...ESSAI, MONGODB_BASE: 'test' }, EN)), [422, 'defi-anti-robot']);
+        H.v('mesure : le bon secret avec une AUTRE adresse => 422 (l\'exemption est liée à l\'adresse du compte de test)', st(await cas(ESSAI, EN, '/api/compte/connexion', { email: 'bob@exemple.fr', motDePasse: MDP })), [422, 'defi-anti-robot']);
         const bon = await cas(ESSAI, EN);
         H.v('mesure : bon en-tête sur l\'essai => défi sauté, connexion 200 + cookie', [bon.statut, /^rm_session=/.test(bon.entetes['set-cookie'] || '')], [200, true]);
-        H.v('mesure : le mot de passe reste vérifié (401, même corps qu\'ailleurs)', (await cas(ESSAI, EN, '/api/compte/connexion', { email: 'bob@exemple.fr', motDePasse: 'faux-faux-faux' })).statut, 401);
+        H.v('mesure : le mot de passe reste vérifié (401, même corps qu\'ailleurs)', (await cas(ESSAI, EN, '/api/compte/connexion', { email: ADR, motDePasse: 'faux-faux-faux' })).statut, 401);
         H.v('mesure : l\'origine reste vérifiée (403 sans l\'Origin du site)', (await cas(ESSAI, { ...EN, origin: 'https://evil.fr' })).statut, 403);
-        H.v('mesure : oubli et renvoi dispensés aussi (202)', [(await cas(ESSAI, EN, '/api/compte/mot-de-passe-oublie', { email: 'bob@exemple.fr' })).statut, (await cas(ESSAI, EN, '/api/compte/renvoyer-verification', { email: 'bob@exemple.fr' })).statut], [202, 202]);
-        const prod = await cas({ V2_CIBLE: 'prod', V2_SECRET_MESURE: SEC }, EN, '/api/compte/mot-de-passe-oublie', { email: 'bob@exemple.fr' });
+        H.v('mesure : oubli et renvoi dispensés aussi (202)', [(await cas(ESSAI, EN, '/api/compte/mot-de-passe-oublie', { email: ADR })).statut, (await cas(ESSAI, EN, '/api/compte/renvoyer-verification', { email: ADR })).statut], [202, 202]);
+        const prod = await cas({ ...ESSAI, V2_CIBLE: 'prod' }, EN, '/api/compte/mot-de-passe-oublie', { email: ADR });
         H.v('mesure : oubli en prod avec le bon en-tête => 422', prod.statut, 422);
-        H.v('mesure : l\'inscription n\'est PAS dispensée (essai, bon en-tête, sans jeton) => 422', st(await cas(ESSAI, EN, '/api/compte/inscription', { email: 'nouveau@exemple.fr' })), [422, 'defi-anti-robot']);
+        H.v('mesure : l\'inscription d\'une AUTRE adresse n\'est pas dispensée (essai, bon en-tête, sans jeton) => 422 ; celle du compte de test l\'est (202)', [st(await cas(ESSAI, EN, '/api/compte/inscription', { email: 'nouveau@exemple.fr' })), (await cas(ESSAI, EN, '/api/compte/inscription', { email: ADR })).statut], [[422, 'defi-anti-robot'], 202]);
         const L = env => lireConfig({ MONGODB_BASE: 'test_scratch', ...env });
         H.v('configuration : dispense inactive hors essai / sans service de l\'essai, active sur l\'essai', [L({ V2_CIBLE: 'prod', V2_SECRET_MESURE: SEC, RENDER_SERVICE_ID: SERVICE_ESSAI }).mesure.actif, L(ESSAI).mesure.actif], [false, true]);
         // M1 : les variables de l'essai copiées sur un AUTRE service (ou hors Render) n'allument rien

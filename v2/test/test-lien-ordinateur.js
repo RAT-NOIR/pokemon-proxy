@@ -92,7 +92,7 @@ const lever = async f => { try { await f(); return null; } catch (e) { return e;
         H.vrai('(témoin) le dernier appel avant ce test n\'avait pas déjà cette forme', JSON.stringify(dernier) !== JSON.stringify(vus[vus.length - 1]));
         // la dispense des outils de mesure (comptes/routes.js) ne s'applique PAS ici : Turnstile est obligatoire
         const SEC = 'secret-de-mesure-' + 'x'.repeat(20), SERVICE = 'srv-db7ticgm7kps73crjibg';
-        const cfgM = lireConfig({ ...BASE, V2_CIBLE: 'essai', V2_SECRET_MESURE: SEC, RENDER_SERVICE_ID: SERVICE });
+        const cfgM = lireConfig({ ...BASE, MONGODB_BASE: 'rm_essai', V2_CIBLE: 'essai', V2_SECRET_MESURE: SEC, RENDER_SERVICE_ID: SERVICE });
         H.vrai('(témoin) la dispense de mesure est bien active dans cette configuration', cfgM.mesure.actif === true);
         const sm = await demarrer(cfgM);
         const m = await H.appel(sm.url, '/api/lien-ordinateur', { methode: 'POST', corps: { email: 'mesure@exemple.fr' }, sansDefi: true, entetes: { ...A.SITE, ...ip(), 'x-rat-market-mesure': SEC } });

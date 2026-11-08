@@ -22,11 +22,11 @@ const courrierDe = () => { try { return registre.obtenir('courrier'); } catch { 
  *  (422 ENTREE `defi-anti-robot`, 503 si le pilote manque ou tombe). Il se place APRÈS l'origine et la limite par IP, AVANT tout budget par adresse et toute lecture de compte :
  *  un robot sans jeton ne consomme ni le budget d'un titulaire ni un hachage. `avecCourrier` : l'oubli et le renvoi n'ont pas de sens sans courrier (503 d'abord, comme l'inscription). */
 /** Exemption des outils de mesure : `cfg.mesure` ACTIVE (essai + secret >= 32 + service Render de l'essai, voir config.js) ET l'en-tête X-Rat-Market-Mesure dont le SHA-256 égale le condensé gardé, à temps constant (deux condensés de même longueur). */
+// PARCOURS DU SITE : la décision vit dans v2/essai-parcours/ (secret en temps constant ET adresse EXACTE du compte de test) ; `cfg.mesure.autorise` n'existe que sur l'essai (v2/config.js, garde-essai.js).
+// Ici rien ne la décide : sans fonction, c'est NON (production comprise).
 function mesureAutorisee(cfg, req) {
-    const m = cfg.mesure, recu = req.get('x-rat-market-mesure');
-    if (!m || m.actif !== true || typeof m.sha !== 'string' || typeof recu !== 'string') return false;
-    const crypto = require('crypto');
-    return crypto.timingSafeEqual(Buffer.from(m.sha, 'hex'), crypto.createHash('sha256').update(recu).digest());
+    const m = cfg.mesure;
+    return Boolean(m && m.actif === true && typeof m.autorise === 'function' && m.autorise(req) === true);
 }
 /** `action` : l'`action` que le widget du site pose pour CE formulaire (liste fermée : inscription, connexion, oubli, renvoi) ; le vérificateur la compare à celle que Cloudflare rend. */
 const exigerDefi = (cfg, { avecCourrier = false, action } = {}) => async (req, res, next) => {
@@ -56,7 +56,7 @@ function routesComptes(router, cfg) {
             if (!cle) return repondreErreur(res, 'ENTREE', 'Adresse invalide', { detail: 'adresse-invalide' }, 422);
             if (estJetable(cle.split('@')[1])) return repondreErreur(res, 'ENTREE', 'Adresse refusée', { detail: 'adresse-refusee' }, 422);
             const courrier = courrierDe(); if (!courrier) return indispo(res);   // pas de compte qu'on ne saurait pas vérifier
-            const d = await defi(cfg, b, req.ip, 'inscription');
+            const d = mesureAutorisee(cfg, req) ? 'ok' : await defi(cfg, b, req.ip, 'inscription');   // dispense du DÉFI seulement (secret + adresse exacte du compte de test) ; le reste de la route est inchangé
             if (d === 'indispo') return indispo(res);
             if (d === 'refuse') return repondreErreur(res, 'ENTREE', 'Vérification anti-robot échouée', { detail: 'defi-anti-robot' }, 422);
             svc.inscrire({ email: b.email.normalize('NFKC').trim(), emailCle: cle, cfg, courrier });   // détaché : la réponse ne dépend pas de l'adresse

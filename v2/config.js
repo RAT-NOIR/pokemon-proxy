@@ -5,7 +5,8 @@
 // et les soldes anciens restent lisibles ; aucune ne se DÉBITE plus (essayerPoche) et V2_ORDRE_POCHES ne peut plus les nommer.
 // Les hôtes PUBLICS de production des images (CONTRAT-2 règle 6) : une seule définition, reprise par `images.hotesPublics` ET par la garde du stockage de la Communauté (galerie/r2.js : son adresse publique ne peut pas en être une).
 const HOTES_PUBLICS_PRODUCTION = Object.freeze(['pub-7d992e666c3d4a2b870b680a920045b6.r2.dev', 'rat-market.fr']);
-const SERVICE_ESSAI = 'srv-db7ticgm7kps73crjibg';   // L1 : le service Render de l'essai (rat-market-api-essai), seul où la dispense de mesure peut s'allumer
+const GARDE_ESSAI = require('./garde-essai');   // la garde de service de l'essai (liste permise : base rm_essai ET service Render ET V2_CIBLE=essai) ; elle ne charge rien
+const SERVICE_ESSAI = GARDE_ESSAI.SERVICE_ESSAI;   // L1 : le service Render de l'essai (rat-market-api-essai), seul où la dispense de mesure peut s'allumer (une seule définition : garde-essai.js)
 const POCHES = Object.freeze(['jour']);
 const POCHES_ANCIENNES = Object.freeze(['essai', 'accueil', 'hebdo', 'abonnement', 'achete']);
 const entier = (nom, v, defaut, min = 0, max = Infinity) => {
@@ -131,16 +132,11 @@ function lireConfig(env = process.env) {
     // L1 : exemption ÉTROITE du défi Turnstile pour les outils de mesure. Écrite par ce qu'elle autorise : TROIS conditions positives, toutes requises —
     // V2_CIBLE exactement « essai », V2_SECRET_MESURE d'au moins 32 caractères, ET RENDER_SERVICE_ID exactement le service de l'essai (variable posée par Render lui-même : un copier-coller
     // des variables de l'essai vers un autre service ne l'emporte pas). Le secret n'est JAMAIS gardé : seul son condensé SHA-256 l'est, non énumérable (ni JSON.stringify ni console.log ne l'impriment).
-    const mesure = { actif: false, raison: '' };
-    {
-        const secret = env.V2_SECRET_MESURE;
-        if (typeof secret !== 'string' || !secret) mesure.raison = 'V2_SECRET_MESURE absent';
-        else if (env.V2_CIBLE !== 'essai') mesure.raison = 'V2_CIBLE n\'est pas « essai »';
-        else if (secret.length < 32) mesure.raison = 'V2_SECRET_MESURE trop court (moins de 32 caractères)';
-        else if (env.RENDER_SERVICE_ID !== SERVICE_ESSAI) mesure.raison = 'ce service n\'est pas celui de l\'essai (RENDER_SERVICE_ID)';
-        else { mesure.actif = true; mesure.raison = 'essai'; }
-        Object.defineProperty(mesure, 'sha', { value: mesure.actif ? require('crypto').createHash('sha256').update(secret).digest('hex') : null, enumerable: false, writable: false, configurable: false });
-    }
+    // PARCOURS DU SITE (décision de l'éditeur, 2026-11-08) : la garde de service (garde-essai.js : base rm_essai ET service Render ET V2_CIBLE=essai) décide AVANT tout ; le module v2/essai-parcours/ — l'exemption
+    // (liée à l'adresse du compte de test) et la route d'administration — n'est CHARGÉ que si elle passe. Hors de l'essai (production comprise) : `{ actif: false, raison }`, aucun module, aucune fonction.
+    // UN SEUL point de chargement ; le retirer d'un geste = supprimer cette ligne et le dossier.
+    const refusEssai = GARDE_ESSAI.raisonRefus(env);
+    const mesure = refusEssai === null ? require('./essai-parcours').depuis(env) : { actif: false, raison: refusEssai };
     return gele({
         actif,
         base,

@@ -1258,6 +1258,12 @@ Un visiteur **sans compte**, au téléphone, donne une adresse ; il reçoit **UN
 
 ---
 
+### 1.12 ESSAI SEUL — les parcours automatiques du site : exemption du défi et lien de confirmation (2026-11-08, décision de l'éditeur)
+
+**Ne vaut que sur le service de l'essai** (base `rm_essai` ET service Render de l'essai ET `V2_CIBLE=essai`, garde `v2/garde-essai.js`, une liste permise). Ailleurs, production comprise : le module `v2/essai-parcours/` n'est pas chargé (prouvé par `require.cache`, `test-essai-parcours.js`), la route n'est pas montée (404 natif), `cfg.mesure` ne porte aucune fonction.
+- **Exemption** (défi Turnstile seul) : en-tête `X-Rat-Market-Mesure` (secret `V2_SECRET_MESURE`, 32 caractères au moins, comparé en temps constant) ET `email` = `ratmarket.contact+essai@gmail.com` (comparaison exacte), sur `POST /api/compte/inscription`, `/connexion`, `/mot-de-passe-oublie`, `/renvoyer-verification`. Sans secret, mauvais secret ou autre adresse : `422 defi-anti-robot`, comme avant. Origine, limites et mot de passe restent. Le secret n'est jamais journalisé ni rendu.
+- **Route d'administration** : `POST /api/essai/lien-confirmation` `{ email }` + le même en-tête → `200 { success, lien, expire }` (`no-store`, **usage unique**, **15 minutes**, gardé en mémoire du processus et seulement pour l'adresse de test) ; `404 INTROUVABLE` s'il n'y a rien ; tout autre cas (sans secret, mauvais secret, autre adresse, autre méthode) : le 404 natif d'Express. Texte complet pour le site : `ENTREE-JOURNAL-SITE-PARCOURS.md`.
+
 ## 2. Les règles du contrat
 
 1. **Additif.** Sans `contrat: 2` dans la requête, la réponse d'aujourd'hui, octet pour octet : la 1.0.x publiée continue de marcher.
