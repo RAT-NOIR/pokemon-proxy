@@ -6,7 +6,7 @@
 // Aucun innerHTML : tout passe par textContent.
 import { versTenseur, normaliserL2, vecteurDepuisSortie, nombreDeFils, COTE_MODELE, rgbVersRgba, redimPIL } from './empreinte.js';
 import { cosinus, course, sonderAdaptateur, creerSessionGpu } from './moteur-ort.js';
-import { jugerLot, jugerMesure, gardeExtension, texteGarde, ecartChaine, moteurRealise, texteErreur, classerBlocage, hoteFinal, detecterIOS, choisirMoteur, webgpuForce, optionsSession, statsPixels, assemblerDiagnostic, texteDiagnostic, TEXTE_WEBGPU_IOS } from './verdict.mjs';
+import { jugerLot, jugerMesure, gardeExtension, texteGarde, ecartChaine, moteurRealise, texteErreur, classerBlocage, hoteFinal, detecterIOS, choisirMoteur, webgpuForce, optionsSession, statsPixels, assemblerDiagnostic, texteDiagnostic, TEXTE_WEBGPU_IOS, libererOctets } from './verdict.mjs';
 // NOTE (tour 1) : la page infère sur le FIL PRINCIPAL (l'extension le fait dans un Worker) : les temps et le p95 s'en lisent comme tels (le fil principal gèle l'affichage pendant l'inférence).
 // LOT iOS : (1) WebGPU est désactivé sur iOS/iPadOS (l'onglet y est tué par manque de mémoire : RAPPORT-BANC-IOS.md), `?webgpu=forcer` le rouvre pour un diagnostic ;
 // (2) le modèle (113 Mo) n'est plus GARDÉ après la création de la session : un seul exemplaire côté JS, jeté dès que la session existe ; (3) une ligne de diagnostic des pixels dit si l'écart de la chaîne vient du décodeur du navigateur.
@@ -107,8 +107,6 @@ async function chargerModele() {
     } else { E.shaVerifie = null; journal('sha256 NON vérifié (crypto.subtle absent : contexte non sécurisé) : aucun verdict ne sera rendu'); }
     return tampon;
 }
-// Rend les 113 Mo au système SANS attendre le ramasse-miettes : ArrayBuffer.prototype.transfer(0) détache le tampon et libère son stockage (Chrome 114+, Safari 17.4+, Firefox 122+) ; sinon, le ramasse-miettes s'en charge plus tard.
-function libererOctets(u8) { try { if (u8 && u8.buffer && typeof u8.buffer.transfer === 'function') u8.buffer.transfer(0); } catch { /* déjà détaché ou non détachable : le ramasse-miettes s'en charge */ } }
 async function chargerLot() {
     if (E.lot) return E.lot;
     etape('lot'); const r = await fetch('/api/banc/telephone/lot.json', { cache: 'no-store' });
@@ -129,14 +127,12 @@ async function decoderCarte(c, variante = 'pipeline') {
     if (variante === 'defaut') bmp = await createImageBitmap(blob);
     else if (variante === 'sans-conversion') bmp = await createImageBitmap(blob, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
     else { try { bmp = await createImageBitmap(blob, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' }); } catch { bmp = await createImageBitmap(blob); } }
-    const cv = canvasDecodage(); cv.width = bmp.width; cv.height = bmp.height;          // un seul canvas pour toute la page (changer sa taille le remet à zéro) : pas un canvas jeté par carte
+    const cv = document.createElement('canvas'); cv.width = bmp.width; cv.height = bmp.height;
     const x = cv.getContext('2d', { willReadFrequently: true }); x.drawImage(bmp, 0, 0);
     const w = bmp.width, h = bmp.height, d = x.getImageData(0, 0, w, h);
     if (bmp.close) bmp.close();
     return { rgb: rgbaVersRgb(d.data, w * h), w, h };
 }
-let CANVAS_DECODAGE = null;
-const canvasDecodage = () => (CANVAS_DECODAGE || (CANVAS_DECODAGE = document.createElement('canvas')));
 // LE DIAGNOSTIC DES PIXELS (une fois par page) : sépare le décodeur du navigateur du reste de la chaîne. Trois mesures, contre les pixels de PIL du lot :
 //   décodage (2 cartes, pleine taille 420 x 587) : pixels décodés par le navigateur contre `dec` (PIL) · redimensionnement : redimPIL appliqué au décodage de PIL contre les 224 de PIL (`px`), le plancher du redimensionnement JS ·
 //   chaîne (12 cartes) : redimPIL appliqué au décodage du navigateur contre `px`. Les variantes « sans conversion » et « par défaut » du bitmap disent si c'est la couleur. Ne lève jamais : un trou reste null (cause « indetermine »).

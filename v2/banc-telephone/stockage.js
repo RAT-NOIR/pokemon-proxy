@@ -36,7 +36,7 @@ const MESURE = {
 };
 const STAT = { n: entier(0, 1e8), max: entier(0, 255), somme: entier(0, 1e11), nDiff: entier(0, 1e8), moy: nombre(0, 255), pctDiff: nombre(0, 100) };
 const DIAGNOSTIC = {
-    cause: parmi('decodeur', 'autre-etape', 'aucune', 'indetermine'), cartesDecodage: entier(0, 100), cartesChaine: entier(0, 100),
+    cause: parmi('decodeur', 'autre-etape', 'aucune', 'non-etablie', 'indetermine'), cartesDecodage: entier(0, 100), cartesChaine: entier(0, 100),
     decodage: ouNul(objetSimple), redimensionnement: ouNul(objetSimple), chaine: ouNul(objetSimple), bitmapSansConversion: ouNul(objetSimple), bitmapAvecConversion: ouNul(objetSimple),
     couleurCanvas: ouNul(chaine(20))
 };

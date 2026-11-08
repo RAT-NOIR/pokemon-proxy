@@ -62,7 +62,7 @@ export const TEXTE_WEBGPU_FORCE = 'WebGPU forcé sur iOS (diagnostic) : plantage
  *  · le reste n'est pas iOS.
  */
 export function detecterIOS({ ua, platform, maxTouchPoints } = {}) {
-    if (typeof ua !== 'string') return { ios: true, raison: 'indetermine' };
+    if (typeof ua !== 'string' || ua.trim() === '') return { ios: true, raison: 'indetermine' };
     if (/\b(iPhone|iPad|iPod)\b/.test(ua)) return { ios: true, raison: 'iphone-ipad-ipod' };
     if (platform === 'MacIntel' && Number.isInteger(maxTouchPoints) && maxTouchPoints > 1) return { ios: true, raison: 'ipad-bureau' };
     return { ios: false, raison: 'non' };
@@ -93,6 +93,11 @@ export function optionsSession(search) {
     return r;
 }
 
+/** Rend les octets du modèle au système sans attendre le ramasse-miettes : ArrayBuffer.prototype.transfer(0) détache le tampon. Sans la méthode, sans tampon ou si elle lève : rien (le ramasse-miettes s'en charge) ; ne lève jamais. */
+export function libererOctets(u8) {
+    try { if (u8 && u8.buffer && typeof u8.buffer.transfer === 'function') u8.buffer.transfer(0); } catch { /* déjà détaché ou non détachable */ }
+}
+
 // ── le diagnostic des pixels : d'où vient l'écart entre « modèle seul » et « chaîne complète » ? Un navigateur diffère d'un autre par le DÉCODAGE du JPEG (et sa couleur), jamais par le redimensionnement (JS déterministe).
 /** Écart octet à octet de deux tableaux de même longueur : { n, max, somme, nDiff, moy, pctDiff } ; null si l'un manque, est vide, ou de longueur différente (jamais « 0 écart » faute de mesure). */
 export function statsPixels(a, b) {
@@ -117,16 +122,19 @@ export function fusionnerStats(liste) {
 export function causeEcart(d) {
     if (!d || !d.decodage || !d.redimensionnement || !d.chaine) return 'indetermine';
     if (d.decodage.max > 0) return 'decodeur';
-    return d.chaine.max > d.redimensionnement.max ? 'autre-etape' : 'aucune';
+    if (d.chaine.max <= d.redimensionnement.max) return 'aucune';
+    // la chaîne dépasse le plancher alors que le décodage est identique : « autre-etape » n'est établi que si le décodage a été jugé sur TOUTES les cartes de la chaîne ; sinon le décodeur peut différer sur les autres
+    return Number.isInteger(d.cartesDecodage) && Number.isInteger(d.cartesChaine) && d.cartesDecodage < d.cartesChaine ? 'non-etablie' : 'autre-etape';
 }
 /** Assemble le document déposé à partir des listes de statistiques par carte. */
 export function assemblerDiagnostic({ decodage, redimensionnement, chaine, bitmapSansConversion, bitmapAvecConversion, couleurCanvas }) {
     const f = l => (Array.isArray(l) && l.length ? fusionnerStats(l) : null);
     const d = { decodage: f(decodage), redimensionnement: f(redimensionnement), chaine: f(chaine) };
-    return { cause: causeEcart(d), cartesDecodage: Array.isArray(decodage) ? decodage.length : 0, cartesChaine: Array.isArray(chaine) ? chaine.length : 0, ...d,
+    const cartesDecodage = Array.isArray(decodage) ? decodage.length : 0, cartesChaine = Array.isArray(chaine) ? chaine.length : 0;
+    return { cause: causeEcart({ ...d, cartesDecodage, cartesChaine }), cartesDecodage, cartesChaine, ...d,
         bitmapSansConversion: f(bitmapSansConversion), bitmapAvecConversion: f(bitmapAvecConversion), couleurCanvas: typeof couleurCanvas === 'string' ? couleurCanvas : null };
 }
-const NOMS_CAUSE = { decodeur: 'décodeur du navigateur', 'autre-etape': 'autre étape (couleur, canal alpha, bitmap)', aucune: 'aucune (pixels identiques au plancher)', indetermine: 'indéterminée' };
+const NOMS_CAUSE = { decodeur: 'décodeur du navigateur', 'autre-etape': 'autre étape (couleur, canal alpha, bitmap)', aucune: 'aucune (pixels identiques au plancher)', 'non-etablie': 'non établie (décodage jugé sur moins de cartes que la chaîne)', indetermine: 'indéterminée' };
 const fmt = s => (s ? `max ${s.max} · moy ${String(s.moy).replace('.', ',')}` : 'non mesuré');
 /** L'UNE ligne de diagnostic affichée à l'écran. */
 export function texteDiagnostic(d) {

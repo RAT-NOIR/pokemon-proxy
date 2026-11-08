@@ -30,6 +30,23 @@ const PUB = path.join(__dirname, '..', 'banc-telephone', 'public');
     H.v('1. agent illisible (absent, non texte) ⇒ la garde ne peut pas conclure : elle BLOQUE WebGPU et le dit (« indetermine »)', [ios(undefined, 'MacIntel', 0), ios(12, undefined, undefined)], [{ ios: true, raison: 'indetermine' }, { ios: true, raison: 'indetermine' }]);
     H.v('1. agent texte et plateforme/tactile absents sur un agent non Apple ⇒ pas iOS (rien ne le désigne)', ios(UA_CHROME_PC, undefined, undefined).ios, false);
 
+    H.v('1. agent VIDE ou blanc = illisible : la garde BLOQUE WebGPU (indetermine)', [ios('', 'Win32', 0), ios('   ', 'Win32', 0)], [{ ios: true, raison: 'indetermine' }, { ios: true, raison: 'indetermine' }]);
+
+    // ═══ 1 bis. rendre les octets du modèle : repli sans transfer JOUÉ (stub), jamais d'exception ═══
+    {
+        const appels = [];
+        V.libererOctets({ buffer: { transfer: n => appels.push(n) } });
+        H.v('1b. transfer présent ⇒ appelé avec 0', appels, [0]);
+        let leve = false; try { V.libererOctets({ buffer: {} }); V.libererOctets({}); V.libererOctets(null); V.libererOctets(undefined); } catch { leve = true; }
+        H.v('1b. SANS transfer (stub), sans buffer, null, undefined : aucune exception', leve, false);
+        H.v('1b. transfer qui lève (tampon déjà détaché) : avalé', (() => { try { V.libererOctets({ buffer: { transfer() { throw new TypeError('detached'); } } }); return 'ok'; } catch { return 'leve'; } })(), 'ok');
+        const vrai = new Uint8Array(1024); V.libererOctets(vrai);
+        H.v('1b. vrai ArrayBuffer de node : détaché (longueur 0) si la méthode existe, sinon intact', vrai.buffer.byteLength, typeof ArrayBuffer.prototype.transfer === 'function' ? 0 : 1024);
+        const sauve = ArrayBuffer.prototype.transfer; let apres;
+        try { ArrayBuffer.prototype.transfer = undefined; const v2 = new Uint8Array(512); V.libererOctets(v2); apres = v2.buffer.byteLength; } finally { ArrayBuffer.prototype.transfer = sauve; }
+        H.v('1b. méthode retirée du prototype réel : le tampon reste intact (ramasse-miettes), aucune exception', apres, 512);
+    }
+
     // ═══ 2. le choix du moteur ═══
     H.v('2. WebGPU demandé sur iOS ⇒ WASM, désactivé, avec le texte à l\'écran', V.choisirMoteur({ demande: 'webgpu', ios: true, forcer: false }), { moteur: 'wasm', desactive: true, forcee: false, texte: 'WebGPU désactivé sur iOS (plantage mémoire) : WASM utilisé' });
     H.v('2. le texte écran est exporté tel quel', V.TEXTE_WEBGPU_IOS, 'WebGPU désactivé sur iOS (plantage mémoire) : WASM utilisé');
@@ -58,6 +75,10 @@ const PUB = path.join(__dirname, '..', 'banc-telephone', 'public');
     H.v('5. décodage identique, chaîne identique ⇒ « aucune »', V.causeEcart({ decodage: zero, redimensionnement: petit, chaine: petit }), 'aucune');
     H.v('5. décodage identique mais chaîne pire que le redimensionnement de référence ⇒ « autre-etape » (couleur, canal alpha, bitmap)', V.causeEcart({ decodage: zero, redimensionnement: petit, chaine: grand }), 'autre-etape');
     H.v('5. une mesure manquante ⇒ « indetermine », jamais « aucune »', [V.causeEcart({ decodage: null, redimensionnement: petit, chaine: petit }), V.causeEcart({ decodage: zero, redimensionnement: null, chaine: petit }), V.causeEcart({ decodage: zero, redimensionnement: petit, chaine: null }), V.causeEcart(null)], ['indetermine', 'indetermine', 'indetermine', 'indetermine']);
+    H.v('5. décodage jugé sur 2 cartes (max 0), chaîne sur 12 au-dessus du plancher ⇒ « non-etablie », jamais « autre-etape »', [V.causeEcart({ decodage: zero, redimensionnement: petit, chaine: grand, cartesDecodage: 2, cartesChaine: 12 }), V.causeEcart({ decodage: zero, redimensionnement: petit, chaine: grand, cartesDecodage: 12, cartesChaine: 12 }), V.causeEcart({ decodage: zero, redimensionnement: petit, chaine: petit, cartesDecodage: 2, cartesChaine: 12 }), V.causeEcart({ decodage: grand, redimensionnement: petit, chaine: grand, cartesDecodage: 2, cartesChaine: 12 })], ['non-etablie', 'autre-etape', 'aucune', 'decodeur']);
+    H.v('5. assemblerDiagnostic porte la couverture et en tire « non-etablie »', V.assemblerDiagnostic({ decodage: [zero, zero], redimensionnement: [petit, petit], chaine: Array(12).fill(grand) }).cause, 'non-etablie');
+    H.v('5. la ligne dit « non établie »', /non établie/.test(V.texteDiagnostic({ cause: 'non-etablie', cartesDecodage: 2, cartesChaine: 12, decodage: zero, redimensionnement: petit, chaine: grand })), true);
+    H.v('7. cause « non-etablie » acceptée au dépôt', S.valider({ v: 1, runId: '0123456789abcdef', modeleSha: 'a'.repeat(64), ua: 'x', isole: true, coeurs: 4, gpuDispo: true, mesure: { moteur: 'wasm', verdict: 'ECART', diagnosticPixels: { cause: 'non-etablie' } } }).ok, true);
     const diag = { cause: 'decodeur', cartesDecodage: 2, cartesChaine: 12, decodage: grand, redimensionnement: petit, chaine: grand, bitmapSansConversion: grand, bitmapAvecConversion: grand, couleurCanvas: 'srgb' };
     const ligne = V.texteDiagnostic(diag);
     H.v('5. la ligne de diagnostic nomme la cause et les trois écarts maximaux', [/décodeur/.test(ligne), /9/.test(ligne), /2 cartes/.test(ligne), ligne.includes('\n')], [true, true, true, false]);
@@ -87,7 +108,8 @@ const PUB = path.join(__dirname, '..', 'banc-telephone', 'public');
         H.v('8. le modèle n\'est PAS gardé en mémoire après la création de la session (E.modele jamais affecté du tampon)', /E\.modele\s*=\s*tampon/.test(app), false);
         H.v('8. la session WASM est libérée (release) dans un finally', /finally\s*\{[^}]*session\.release\(\)/.test(app), true);
         H.v('8. la page ne contient aucun innerHTML (tout passe par textContent)', /innerHTML/.test(app), false);
-        H.v('8. les octets du modèle sont rendus au système dès que la session existe (transfer(0)), sur WASM comme sur WebGPU, et seulement si la session est créée', [/transfer\(0\)/.test(app), (app.match(/libererOctets\(modele\)/g) || []).length, /if \(cree\) libererOctets/.test(app), /g && g\.ok\) libererOctets/.test(app)], [true, 2, true, true]);
+        H.v('8. les octets du modèle sont rendus au système (libererOctets de verdict.mjs, joué en 1b) sur WASM comme sur WebGPU, et seulement si la session est créée', [(app.match(/libererOctets\(modele\)/g) || []).length, /if \(cree\) libererOctets/.test(app), /g && g\.ok\) libererOctets/.test(app), /import \{[^}]*libererOctets/.test(app)], [2, true, true, true]);
+        H.v('8. le décodage et le redimensionnement sont ceux d\'origine : un canvas par carte, aucun canvas partagé', [/canvasDecodage|CANVAS_DECODAGE/.test(app), /const cv = document\.createElement\('canvas'\); cv\.width = bmp\.width; cv\.height = bmp\.height;/.test(app)], [false, true]);
         H.v('8. le diagnostic des pixels est calculé APRÈS la mesure (il ne coexiste ni avec le modèle ni avec une session)', app.indexOf('diagnostiquerPixels(await') > app.indexOf('m = moteur === \'wasm\' ? await mesurerWasm()'), true);
         H.v('8. lancer() passe par choisirMoteur AVANT toute mesure, et dépose moteurDemande / webgpuDesactive / webgpuForce', [app.indexOf('choisirMoteur({') < app.indexOf('mesurerWasm() : await mesurerGpu()'), /m\.moteurDemande/.test(app), /m\.webgpuDesactive = choix\.desactive/.test(app), /m\.webgpuForce = choix\.forcee/.test(app)], [true, true, true, true]);
         H.v('8. le bouton WebGPU reste désactivé après une mesure sur iOS (E.gpuPropose)', /disabled = !E\.gpuPropose/.test(app), true);
