@@ -1180,7 +1180,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.ok(!drap(trad(), ptrad()).some(d => d.startsWith('codeAlias')), 'aucun alias hors des deux paires : pas de drapeau');
     });
     await test('alias de code thaï : M-P/TH→M-P, SV-P/TH→SV-P, S-P/TH→S-P (sens unique, ligne exacte, indépendant de l\'ordre des clés)', () => {
-        const th = (code, o = {}) => { const t = trad({ langue: 'th', codeSet: code, numero: '069', total: null, ...o }); return { ...t, attendu: { ...t.attendu, numero: '069' } }; };
+        const th = (code, o = {}) => { const t = trad({ langue: 'th', codeSet: code, numero: '069', ...o }); return { ...t, attendu: { ...t.attendu, numero: '069' } }; };
         const pth = (ligne, o = {}) => ptrad({ tirage: 'th', numero: '069', slug: 'Mareep-M-PTH069', codeSet: ligne, ...o });
         const e = th('M-P'), p = pth('M-P/TH');
         assert.deepStrictEqual(lue(e, p), { ok: true, motifs: [] }, '(a) M-P imprimé contre la ligne M-P/TH');
