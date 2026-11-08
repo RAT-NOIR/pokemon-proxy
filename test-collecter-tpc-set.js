@@ -9,6 +9,7 @@ const path = require('path');
 const DIR = process.env.TOOL_DIR || __dirname;
 process.chdir(DIR);
 require(path.join(DIR, 'bancs-dossier-arrets'));
+require(path.join(__dirname, 'banc-sans-porte'));      // aucun banc ne touche le réseau ni la vraie porte (incident du 2026-11-08)
 const sharp = require('sharp');
 const T = require(path.join(DIR, 'collecte-cartes', 'tpc'));
 const { ligneTpc } = require(path.join(DIR, 'collecte-cartes', 'tpc-sets'));

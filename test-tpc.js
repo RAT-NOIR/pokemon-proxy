@@ -4,6 +4,7 @@
 // Ce que le banc garde : la LECTURE des pages (le parseur lit ce que la page porte), la PREUVE de correspondance (numéro + nom + set ;
 // un doute est un trou), le PLAN (jamais l'illustration d'une autre impression), le CLIENT (verrou, cadence, robots.txt, ARRÊT au
 // premier blocage) et le RETRAIT en un seul lot.
+const BANC = require('./banc-sans-porte');      // aucun banc ne touche le réseau ni la vraie porte (incident du 2026-11-08) ; il charge bancs-dossier-arrets
 require('./bancs-dossier-arrets');      // les arrêts et pauses durables d'hôtes : un dossier TEMPORAIRE, jamais le vrai (correction 2, M1)
 const fs = require('fs');
 const path = require('path');
@@ -305,7 +306,13 @@ const F = f => fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'tpc-fixt
         const dp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'tpc-pauses-'));
         require('./collecte-cartes/reponse-hote').reinitialiserSuiviProcessus();
 
-        verifier('le client par défaut n\'utilise PAS un fetch brut : son transport passe par la porte', [T.fabriquerClientTpc({ site: 'tpc-asie', verrou }).transport.parLaPorte, T.transportFetch.parLaPorte], [true, true]);
+        // INCIDENT 2026-11-08 : dans un banc, le transport par défaut (la vraie porte) ne se construit pas, ne se sert pas, et la vraie `lire` n'est jamais appelée
+        const refuse = f => { try { f(); return 'accepté'; } catch (y) { return /banc : aucun accès réseau/.test(y.message) ? 'refusé' : y.message; } };
+        verifier('banc : fabriquerTransportPorte() sans porte injectée → refusé avant toute requête', refuse(() => T.fabriquerTransportPorte()), 'refusé');
+        verifier('banc : le client par défaut (transport par défaut) → refusé à la construction', refuse(() => T.fabriquerClientTpc({ site: 'tpc-asie', verrou })), 'refusé');
+        verifier('banc : le nom transportFetch (défaut) → refusé', refuse(() => T.transportFetch()), 'refusé');
+        { let x = null; try { await T.fabriquerTransportPorte({ porte: require('./collecte-cartes/porte-reseau') }).get('https://asia.pokemon-card.com/robots.txt'); } catch (y) { x = y.message; }
+          verifier('banc : la vraie porte injectée à la main → refusée à la requête, la vraie `lire` n\'est jamais appelée', [/banc : aucun accès réseau/.test(x || ''), BANC.appels().length], [true, 0]); }
         let fp = faussePorte(u => ({ corps: Buffer.from(u.endsWith('/robots.txt') ? '' : '<p>page</p>') }));
         let C8 = T.fabriquerClientTpc({ site: 'tpc-asie', transport: T.fabriquerTransportPorte({ porte: fp }), cadenceMs: 0, reessaiMs: 0, verrou, dossierPauses: dp() });
         const pg = await C8.page('/id/card-search/list/');
@@ -375,7 +382,8 @@ const F = f => fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'tpc-fixt
         { const f0 = require.main.filename; require.main.filename = path.join(__dirname, 'collecteur-images-tpc.js');
           try { verifier('transportDeBanc hors banc (processus de production) → refusé', essai({ transportDeBanc: faux }), 'refusé'); } finally { require.main.filename = f0; } }
         // la cadence du client (10 s par défaut) n'est pas réduite par la porte
-        verifier('cadence par défaut du client inchangée', T.fabriquerClientTpc({ site: 'tpc-asie', verrou }).cadence(), 10000);
+        verifier('cadence par défaut du client inchangée', T.fabriquerClientTpc({ site: 'tpc-asie', verrou, transportDeBanc: { async get() { return { status: 200, texte: '' }; } } }).cadence(), 10000);
+        verifier('FIN du banc : aucun appel à la vraie porte ni au réseau', BANC.appels(), []);
         fs.rmSync(dirS, { recursive: true, force: true });
     }
 
