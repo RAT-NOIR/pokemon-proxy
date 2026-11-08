@@ -9,7 +9,7 @@
 //   V2_PARCOURS_COMPTES       un JSON : [{ "role": "essai", "id": "<id du compte>", "email": "…", "motDePasse": "…" }, …] — NEUF comptes VÉRIFIÉS et NEUFS de l'essai, un par rôle :
 //                             route · essai · echec · resiliation · parrain · filleul · fond1 · fond2 · fond3 · sanscarte · carteajoutee
 //                             (seuls les rôles des scénarios joués sont exigés — table fermée scénario → rôles dans parcours-lib.js ; une horloge d'essai par scénario)
-// DISPENSE DU DÉFI : l'essai ne dispense du défi Turnstile que les adresses d'une liste fermée (module des parcours du site, essai seulement) ; les adresses de ces comptes n'y sont que si la MÊME variable V2_PARCOURS_COMPTES est posée sur le service de l'essai.
+// DISPENSE DU DÉFI : l'essai ne dispense du défi Turnstile que les adresses d'une liste fermée (module des parcours du site, essai seulement) ; les adresses de ces comptes n'y sont que si elles figurent dans V2_ESSAI_ADRESSES_MESURE (adresses seules, séparées par des virgules) posée sur le service de l'essai ; V2_PARCOURS_COMPTES (avec les mots de passe) reste côté outil et n'est jamais posée sur l'essai.
 // L'identifiant d'un compte est celui de la base de l'essai (comptes._id) ; aucun mot de passe n'est affiché ni écrit. Les provisions (prix) viennent de provision-test.json.
 // Pour le scénario d'épuisement des places : poser V2_FONDATEURS_PLACES=2 sur l'essai, redéployer, puis --places=2. Jamais un vrai paiement : cartes de test seulement.
 const fs = require('fs'), path = require('path');
@@ -48,7 +48,7 @@ async function connecter(essai, c, fetchFn = fetch, secretMesure = null) {      
     const r = await fetchFn(`${essai}/api/compte/connexion`, { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://rat-market.fr', 'x-rat-market': '1', ...(avecSecret ? { 'x-rat-market-mesure': secretMesure } : {}) }, body: JSON.stringify({ email: c.email, motDePasse: c.motDePasse }), signal: AbortSignal.timeout(90000) });
     if (r.status === 422) {
         let j = null; try { j = await r.json(); } catch { /* corps non JSON */ }
-        if (j && j.erreur && j.erreur.detail === 'defi-anti-robot') throw new Error(`connexion du compte « ${c.role} » : défi anti-robot refusé (422) — ${avecSecret ? 'V2_SECRET_MESURE est posée ici mais l\'essai ne dispense pas ce compte : secret différent, essai sans MONGODB_BASE=rm_essai / V2_CIBLE=essai / RENDER_SERVICE_ID de l\'essai, ou adresse du compte absente de V2_PARCOURS_COMPTES posée sur l\'essai (liste fermée : adresses exactes)' : 'V2_SECRET_MESURE est absente du .env : la poser, identique à celle de l\'essai'}`);
+        if (j && j.erreur && j.erreur.detail === 'defi-anti-robot') throw new Error(`connexion du compte « ${c.role} » : défi anti-robot refusé (422) — ${avecSecret ? 'V2_SECRET_MESURE est posée ici mais l\'essai ne dispense pas ce compte : secret différent, essai sans MONGODB_BASE=rm_essai / V2_CIBLE=essai / RENDER_SERVICE_ID de l\'essai, ou adresse du compte absente de V2_ESSAI_ADRESSES_MESURE posée sur l\'essai (liste fermée : adresses exactes)' : 'V2_SECRET_MESURE est absente du .env : la poser, identique à celle de l\'essai'}`);
     }
     if (r.status !== 200) throw new Error(`connexion du compte « ${c.role} » refusée (HTTP ${r.status})`);
     const m = (r.headers.getSetCookie ? r.headers.getSetCookie() : [r.headers.get('set-cookie') || '']).join(';').match(/rm_session=([A-Za-z0-9_-]+)/);

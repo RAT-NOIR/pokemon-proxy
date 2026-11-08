@@ -27,16 +27,16 @@ const ADRESSE_MESURE = 'banc-mesure@rat-market.invalid', ADRESSE_MESURE_ORDINAIR
 const ADRESSES_EXEMPTEES = Object.freeze([ADRESSE_TEST, ADRESSE_MESURE, ADRESSE_MESURE_ORDINAIRE]);
 const estAdresseExemptee = s => { const f = forme(s); return f !== null && ADRESSES_EXEMPTEES.includes(f); };
 
-// ADRESSES DÉCLARÉES (arbitrage du coordinateur, tour 1) : les comptes de `parcours-test` (v2/admin/abonnements/parcours-test.js) sont déclarés dans `V2_PARCOURS_COMPTES` (un JSON : liste d'objets `{ email, … }` ou d'adresses).
-// Cette variable n'est lue QU'ICI, donc seulement après la garde de service ; seules les ADRESSES en sont extraites (jamais un mot de passe, jamais une valeur imprimée), comparées EXACTEMENT, jamais par domaine ni motif.
-// Une entrée vide, qui n'est pas du texte ou qui n'a pas la forme d'une adresse est ignorée ; une variable absente ou illisible ne déclare rien (les trois adresses de la liste fermée seulement) ; 50 adresses au plus.
+// ADRESSES DÉCLARÉES (arbitrage du coordinateur, tour 2) : les comptes de `parcours-test` (v2/admin/abonnements/parcours-test.js) sont déclarés, côté serveur, dans `V2_ESSAI_ADRESSES_MESURE` : une liste d'ADRESSES séparées par des virgules,
+// et rien d'autre (les identifiants de l'outil restent côté outil : le serveur ne lit JAMAIS la variable qui porte leurs mots de passe, un banc le vérifie).
+// Cette variable n'est lue QU'ICI, donc seulement après la garde de service ; comparaison EXACTE, jamais par domaine ni motif, rien d'imprimé.
+// Une entrée vide ou qui n'a pas la forme d'une adresse est ignorée ; une variable absente ne déclare rien (les trois adresses de la liste fermée seulement) ; 50 adresses au plus.
 const FORME_ADRESSE = /^[^\s@<>"',;\\()[\]]{1,64}@[^\s@<>"',;\\()[\]]+\.[a-z0-9-]{2,}$/;
 function adressesDeclarees(brut) {
-    let liste; try { liste = JSON.parse(brut); } catch { return []; }
-    if (!Array.isArray(liste)) return [];
+    if (typeof brut !== 'string' || brut.length > 20000) return [];
     const sortie = [];
-    for (const e of liste.slice(0, 200)) {
-        const f = forme(typeof e === 'string' ? e : (e && typeof e === 'object' && !Array.isArray(e) ? e.email : null));
+    for (const e of brut.split(',').slice(0, 200)) {
+        const f = forme(e);
         if (f !== null && FORME_ADRESSE.test(f) && !sortie.includes(f)) sortie.push(f);
         if (sortie.length >= 50) break;
     }
@@ -63,7 +63,7 @@ function depuis(env, { maintenant = () => Date.now() } = {}) {
     const sha = mesure.actif ? crypto.createHash('sha256').update(secret).digest('hex') : null;
     let garde = null;   // { lien, expireA } : le dernier lien de confirmation du compte de test, un seul
 
-    const liste = Object.freeze([...ADRESSES_EXEMPTEES, ...adressesDeclarees(env.V2_PARCOURS_COMPTES).filter(a => !ADRESSES_EXEMPTEES.includes(a))]);
+    const liste = Object.freeze([...ADRESSES_EXEMPTEES, ...adressesDeclarees(env.V2_ESSAI_ADRESSES_MESURE).filter(a => !ADRESSES_EXEMPTEES.includes(a))]);
     const exemptee = s => { const f = forme(s); return f !== null && liste.includes(f); };
     const autorise = req => mesure.actif === true && secretEgal(sha, req.get(ENTETE)) && exemptee(adresseDuCorps(req));
     // Une requête dispensée du défi ne doit JAMAIS faire partir un courriel vers une adresse hors de la liste : le compte est retrouvé par `emailCle` (qui efface points et « +… » de Gmail), donc l'adresse

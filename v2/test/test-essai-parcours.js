@@ -72,11 +72,12 @@ const EN = { 'x-rat-market-mesure': SEC };
     H.v('production : connexion, inscription, oubli, renvoi avec le bon en-tête et l\'adresse de test => 422 defi-anti-robot', [natif.connexion, natif.inscription, natif.oubli, natif.renvoi].map(st), Array(4).fill(DEFI));
     // LISTE FERMÉE : chacune des trois adresses (test + deux comptes de mesure), avec le bon secret, sous un environnement où UNE des trois conditions de la garde manque => 422 sur connexion, oubli et renvoi
     const LISTE = ['ratmarket.contact+essai@gmail.com', 'banc-mesure@rat-market.invalid', 'banc-ordinaire@rat-market.invalid'];
-    // + les adresses déclarées dans V2_PARCOURS_COMPTES (lues seulement APRÈS la garde : sous une garde qui échoue, elles ne dispensent rien)
+    // + les adresses déclarées dans V2_ESSAI_ADRESSES_MESURE (lues seulement APRÈS la garde : sous une garde qui échoue, elles ne dispensent rien)
     const MDP_PARCOURS = 'mdp-parcours-' + 'q'.repeat(12), ADR_P1 = 'parcours-route@rat-market.invalid', ADR_P2 = 'parcours-essai@rat-market.invalid';
-    const PARCOURS = JSON.stringify([{ role: 'route', id: 'a'.repeat(24), email: ADR_P1, motDePasse: MDP_PARCOURS }, { role: 'essai', id: 'b'.repeat(24), email: ADR_P2.toUpperCase(), motDePasse: MDP_PARCOURS }]);
+    const PARCOURS = `${ADR_P1}, ${ADR_P2.toUpperCase()}`;   // la variable du serveur : des adresses, séparées par des virgules, rien d'autre
+    const COMPTES_OUTIL = JSON.stringify([{ role: 'route', id: 'a'.repeat(24), email: ADR_P1, motDePasse: MDP_PARCOURS }]);   // la variable de L'OUTIL (avec mots de passe) : le serveur ne la lit pas
     for (const [nom, env] of [['base de production (test)', { ...ESSAI, MONGODB_BASE: 'test' }], ['autre service Render', { ...ESSAI, RENDER_SERVICE_ID: 'srv-autre' }], ['V2_CIBLE absente', (({ V2_CIBLE, ...r }) => r)(ESSAI)]]) {
-        const r = await cas({ ...env, V2_PARCOURS_COMPTES: PARCOURS }, async appel => { const o = []; for (const a of [...LISTE, ADR_P1, ADR_P2]) for (const [ch, c] of [['/api/compte/connexion', { email: a, motDePasse: MDP }], ['/api/compte/mot-de-passe-oublie', { email: a }], ['/api/compte/renvoyer-verification', { email: a }]]) o.push(st(await appel(ch, c, EN))); return o; });
+        const r = await cas({ ...env, V2_ESSAI_ADRESSES_MESURE: PARCOURS }, async appel => { const o = []; for (const a of [...LISTE, ADR_P1, ADR_P2]) for (const [ch, c] of [['/api/compte/connexion', { email: a, motDePasse: MDP }], ['/api/compte/mot-de-passe-oublie', { email: a }], ['/api/compte/renvoyer-verification', { email: a }]]) o.push(st(await appel(ch, c, EN))); return o; });
         H.v(`liste fermée, ${nom} : les 3 adresses + 2 déclarées x 3 routes avec le bon secret => 422 defi-anti-robot (aucune exemption)`, r, Array(15).fill(DEFI));
     }
     H.vrai('production : après un montage réel et des requêtes portant le secret, le module n\'est TOUJOURS pas chargé (require.cache)', !chargeEssai());
@@ -177,22 +178,25 @@ const EN = { 'x-rat-market-mesure': SEC };
         H.vrai('essai : la route du lien de confirmation ne répond pas pour un compte de mesure (404 natif)', r.lien);
     }
 
-    // ---- 2 ter. B1 : les comptes déclarés dans V2_PARCOURS_COMPTES (parcours-test), liste fermée, adresses EXACTES ----
+    // ---- 2 ter. B1 : les comptes déclarés dans V2_ESSAI_ADRESSES_MESURE (parcours-test), liste fermée, adresses EXACTES ----
     {
         const sansVar = n => cas(ESSAI, async appel => [st(await appel('/api/compte/connexion', { email: n, motDePasse: MDP }, EN))[0]]);
-        const avec = (v, adresses) => cas({ ...ESSAI, V2_PARCOURS_COMPTES: v }, async appel => { const o = []; for (const a of adresses) o.push((await appel('/api/compte/connexion', { email: a, motDePasse: MDP }, EN)).statut); return o; });
-        const BRUIT = JSON.stringify([{ email: ADR_P1, motDePasse: MDP_PARCOURS }, { email: '' }, { email: 42 }, { email: null }, 'sans-arobase', '', null, 7, [ADR_P2], { role: 'x' }, '*', '@rat-market.invalid', 'a b@rat-market.invalid', ADR_P2]);
+        const avec = (v, adresses) => cas({ ...ESSAI, V2_ESSAI_ADRESSES_MESURE: v }, async appel => { const o = []; for (const a of adresses) o.push((await appel('/api/compte/connexion', { email: a, motDePasse: MDP }, EN)).statut); return o; });
+        const BRUIT = [ADR_P1, '', ' ', ',', 'sans-arobase', '*', '@rat-market.invalid', 'a b@rat-market.invalid', '{"email":"x@rat-market.invalid"}', ADR_P2].join(',');
         H.v('B1 : un compte déclaré passe le défi (connexion 401 faute de compte), casse tolérée ; adresses voisines, domaine seul, motifs, entrées vides ou non adresses => 422', await avec(PARCOURS, [ADR_P1, ADR_P2, 'PARCOURS-ROUTE@RAT-MARKET.INVALID', 'parcours-route@rat-market.invalid.evil.fr', 'xparcours-route@rat-market.invalid', 'parcours-route@rat-market.fr', 'autre@rat-market.invalid', 'sans-arobase', '*@rat-market.invalid', '']), [401, 401, 401, 422, 422, 422, 422, 422, 422, 422]);
         H.v('B1 : variable absente = les trois adresses seules (une adresse déclarée ailleurs reçoit 422 ; le compte de mesure passe)', [await sansVar(ADR_P1), await sansVar('banc-mesure@rat-market.invalid')], [[422], [401]]);
         H.v('B1 : variable illisible (pas du JSON, ou pas une liste) = les trois adresses seules', [await avec('pas du json', [ADR_P1, 'banc-mesure@rat-market.invalid']), await avec('{"email":"parcours-route@rat-market.invalid"}', [ADR_P1, 'banc-mesure@rat-market.invalid'])], [[422, 401], [422, 401]]);
         H.v('B1 : entrées mêlées (vides, nombres, tableaux, motifs, non-adresses) : seules les deux vraies adresses passent', await avec(BRUIT, [ADR_P1, ADR_P2, 'sans-arobase', '@rat-market.invalid', 'a b@rat-market.invalid', '*@rat-market.invalid']), [401, 401, 422, 422, 422, 422]);
         // les mots de passe de la variable ne sortent nulle part : ni configuration, ni réponse
-        const cfgP = lireConfig({ ...ESSAI, V2_PARCOURS_COMPTES: PARCOURS });
+        const cfgP = lireConfig({ ...ESSAI, V2_ESSAI_ADRESSES_MESURE: PARCOURS, V2_PARCOURS_COMPTES: COMPTES_OUTIL });
         const sortie = JSON.stringify(cfgP) + require('util').inspect(cfgP, { depth: 8 }) + JSON.stringify(cfgP.mesure);
         H.vrai('B1 : ni les mots de passe ni les adresses déclarées ne sont dans la configuration sérialisée ou inspectée', !sortie.includes(MDP_PARCOURS) && !sortie.includes(ADR_P1) && !sortie.includes(ADR_P2));
         // la route du lien ne vaut JAMAIS pour une adresse déclarée
-        const lienP = await cas({ ...ESSAI, V2_PARCOURS_COMPTES: PARCOURS }, async appel => (await appel('/api/essai/lien-confirmation', { email: ADR_P1 }, EN)).texte.startsWith('<'));
+        const lienP = await cas({ ...ESSAI, V2_ESSAI_ADRESSES_MESURE: PARCOURS }, async appel => (await appel('/api/essai/lien-confirmation', { email: ADR_P1 }, EN)).texte.startsWith('<'));
         H.vrai('B1 : la route du lien de confirmation reste muette (404 natif) pour une adresse déclarée', lienP);
+        // tour 2 : la variable de L'OUTIL (V2_PARCOURS_COMPTES, avec mots de passe) posée sur l'essai ne dispense RIEN : le serveur ne la lit pas
+        const seule = await cas({ ...ESSAI, V2_PARCOURS_COMPTES: COMPTES_OUTIL }, async appel => st(await appel('/api/compte/connexion', { email: ADR_P1, motDePasse: MDP }, EN)));
+        H.v('tour 2 : V2_PARCOURS_COMPTES posée seule (la variable de l\'outil) ne dispense aucune adresse : 422', seule, DEFI);
     }
 
     // ---- 2 quater. F1/F5 : un compte de MÊME CLÉ (emailCle) inscrit AVANT le compte de test : aucun courriel ne part vers lui, aucun lien n'est retenu ----
@@ -265,6 +269,10 @@ const EN = { 'x-rat-market-mesure': SEC };
         const racine = path.join(__dirname, '..'), fautifs = [];
         (function parcourir(d) { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) { if (e.name !== 'test' && e.name !== 'node_modules') parcourir(p); } else if (e.name.endsWith('.js') && !p.includes(`${path.sep}essai-parcours${path.sep}`) && /essai-parcours/.test(fs.readFileSync(p, 'utf8').split('\n').filter(l => !/^\s*\/\//.test(l)).map(l => l.replace(/\/\/.*$/, '')).join('\n'))) fautifs.push(path.relative(racine, p).replace(/\\/g, '/')); } })(racine);
         H.v('hors du dossier et des bancs, SEUL v2/config.js nomme le module essai-parcours (hors commentaires)', fautifs, ['config.js']);
+        // tour 2 : le code SERVEUR ne relit jamais la variable de l'outil (elle porte des mots de passe) ; seuls les outils en ligne de commande (admin/, mesures/, migrations/, test/) peuvent la nommer
+        const lecteurs = [];
+        (function chercher(d, rel) { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const r = rel ? `${rel}/${e.name}` : e.name; if (e.isSymbolicLink()) continue; if (e.isDirectory()) { if (!['test', 'admin', 'mesures', 'migrations', 'node_modules'].includes(rel ? '' : e.name) && e.name !== 'node_modules') chercher(path.join(d, e.name), r); } else if (/\.(?:js|cjs|mjs)$/.test(e.name) && fs.readFileSync(path.join(d, e.name), 'utf8').includes('V2_PARCOURS_COMPTES')) lecteurs.push(r); } })(racine, '');
+        H.v('tour 2 : aucun fichier du code serveur (hors outils en ligne de commande et bancs) ne nomme V2_PARCOURS_COMPTES', lecteurs, []);
         H.v('le module ne journalise rien (aucun console.)', /console\./.test(fs.readFileSync(path.join(racine, 'essai-parcours', 'index.js'), 'utf8')), false);
     }
     await H.fermerBac(); H.bilan();

@@ -1,5 +1,8 @@
 # RAPPORT-PARCOURS-SITE — parcours automatiques du site sur l'essai (mis à jour au tour de correction 1 sur 3, 2026-11-09)
 
+## TOUR 2 (arbitrage : plus de lecture serveur de `V2_PARCOURS_COMPTES`)
+Le serveur lit désormais `V2_ESSAI_ADRESSES_MESURE` : des ADRESSES séparées par des virgules, rien d'autre ; lue seulement après la garde de service, comparaison exacte (NFKC/trim/minuscules), entrée vide ou sans forme d'adresse ignorée, 50 au plus, absente = les trois adresses, rien d'imprimé. `V2_PARCOURS_COMPTES` (mots de passe) reste côté outil `parcours-test` ; le message et l'en-tête de l'outil nomment la nouvelle variable. Table d'audit : la ligne de l'ancienne variable est remplacée ; `CONTRAT-API-V2.md` §1.12 mis à jour. Bancs : `test-essai-parcours` 71/0 (le cas B1 rejoué avec la liste à virgules, bruit compris ; la variable de l'outil posée seule ne dispense rien ; **un test échoue si un fichier du code serveur, hors outils en ligne de commande et bancs, nomme `V2_PARCOURS_COMPTES`**), `test-abus-routes` 89/0, `test-abonnements-parcours` 60/0, `test-comptes-defi` 114/0. Rouge vu : le serveur relu avec `|| env.V2_PARCOURS_COMPTES` fait échouer ce test (1 échec). À poser par vous sur l'essai si besoin : `V2_ESSAI_ADRESSES_MESURE` = les adresses des onze comptes de `parcours-test` (facultative). Le point « mots de passe dans l'environnement de l'essai » du tour 1 est levé.
+
 Branche `v2-parcours-site` depuis `origin/api-v2` (`cf85673b`). Rien poussé, rien déployé, aucune variable posée sur Render, aucun compte ni courriel réel, `lancer-tout.js` non lancé, aucun sous-agent.
 
 ## 1. Défaut de départ (signalé en tête)
