@@ -53,7 +53,7 @@ const ecritures = s3 => s3.appels.filter(a => a.nom === 'PutObjectCommand').leng
 function fauxFetch({ corps = contenus, base = 'https://img.test/', rep429 = {}, sans206 = false, tousLes429 = false, ctype = types, cache = CC } = {}) {
     const appels = [];
     const f = async (url, opts = {}) => {
-        appels.push({ url, range: opts.headers && opts.headers.Range });
+        appels.push({ url, range: opts.headers && opts.headers.Range, signal: opts.signal });
         const cle = url.slice(base.length).slice(PRE.length);
         const b = corps[cle];
         const h = {};
@@ -351,6 +351,111 @@ t('main --ecrire : conflit = code 1, 0 écriture', async () => {
     const s3 = fauxS3({ [PRE + 'a.webm']: { Body: Buffer.from('autre'), ContentType: 'video/webm' } });
     const code = await D.main([`--manifeste=${mf}`, '--ecrire', '--attendu=3'], { R2_BUCKET_IMAGES: 'img' }, { verifierBucket: async () => {}, creerClient: () => s3, log() {} });
     assert.strictEqual(code, 1); assert.strictEqual(ecritures(s3), 0);
+});
+
+// ---------- tour de correction 1 ----------
+// 1. exceptions réseau au contrôle
+t('contrôle : fetch qui rejette sur une clé = ko de cette clé, les autres continuent', async () => {
+    const f0 = fauxFetch();
+    const f = async (u, o) => { if (u.endsWith('b.mp4')) throw new Error('ECONNRESET'); return f0(u, o); };
+    const r = await D.controler({ manifeste: manifeste(), attendu: 3, base, fetch: f, sommeil: fauxSommeil() });
+    assert.strictEqual(r.ok, 2); assert.strictEqual(r.total, 3);
+    const c = r.cles.find(x => x.cle.endsWith('b.mp4'));
+    assert.strictEqual(c.statut, 'ko'); assert.match(c.raison, /ECONNRESET/);
+});
+t('contrôle : arrayBuffer qui échoue = ko de la clé', async () => {
+    const f0 = fauxFetch();
+    const f = async (u, o) => { const r = await f0(u, o); if (u.endsWith('c.avif')) r.arrayBuffer = async () => { throw new Error('flux coupé'); }; return r; };
+    const r = await D.controler({ manifeste: manifeste(), attendu: 3, base, fetch: f, sommeil: fauxSommeil() });
+    assert.strictEqual(r.ok, 2); assert.match(r.cles.find(x => x.cle.endsWith('c.avif')).raison, /flux coupé/);
+});
+t('contrôle : fetch qui rejette pendant la requête Range = ko', async () => {
+    const f0 = fauxFetch();
+    const f = async (u, o) => { if (o && o.headers && o.headers.Range) throw new Error('timeout Range'); return f0(u, o); };
+    const r = await D.controler({ manifeste: manifeste(), attendu: 3, base, fetch: f, sommeil: fauxSommeil() });
+    assert.strictEqual(r.ok, 1); assert.match(r.cles.find(x => x.cle.endsWith('a.webm')).raison, /timeout Range/);
+});
+t('contrôle : chaque requête porte un AbortSignal (délai maximal)', async () => {
+    const f = fauxFetch();
+    await D.controler({ manifeste: manifeste(), attendu: 3, base, fetch: f, sommeil: fauxSommeil() });
+    assert.ok(f.appels.length > 0);
+    assert.ok(f.appels.every(a => a.signal instanceof AbortSignal));
+});
+t('main --controler : toutes les requêtes échouent = rapport écrit, code 1', async () => {
+    const mf = path.join(dir, 'm.json'); fs.writeFileSync(mf, JSON.stringify(manifeste()));
+    const rf = path.join(dir, 'r-panne.json');
+    const code = await D.main([`--manifeste=${mf}`, '--controler', '--attendu=3', `--rapport=${rf}`], { R2_IMAGES_BASE_URL: base }, { fetch: async () => { throw new Error('réseau coupé'); }, sommeil: fauxSommeil(), log() {} });
+    assert.strictEqual(code, 1);
+    const rap = JSON.parse(fs.readFileSync(rf, 'utf8'));
+    assert.strictEqual(rap.ok, 0); assert.strictEqual(rap.total, 3);
+    assert.ok(rap.cles.every(c => c.statut === 'ko' && /réseau coupé/.test(c.raison)));
+});
+t('main --controler : arrêt pour débit = rapport écrit', async () => {
+    const mf = path.join(dir, 'm.json'); fs.writeFileSync(mf, JSON.stringify(manifeste()));
+    const rf = path.join(dir, 'r-arret.json');
+    const code = await D.main([`--manifeste=${mf}`, '--controler', '--attendu=3', `--rapport=${rf}`], { R2_IMAGES_BASE_URL: base }, { fetch: fauxFetch({ tousLes429: true }), sommeil: fauxSommeil(), log() {} });
+    assert.strictEqual(code, 1);
+    assert.strictEqual(JSON.parse(fs.readFileSync(rf, 'utf8')).arret, true);
+});
+t('main --controler : exception avant les requêtes (compte faux) = rapport écrit avec l’erreur', async () => {
+    const mf = path.join(dir, 'm.json'); fs.writeFileSync(mf, JSON.stringify(manifeste()));
+    const rf = path.join(dir, 'r-compte.json');
+    const f = fauxFetch();
+    const code = await D.main([`--manifeste=${mf}`, '--controler', '--attendu=9', `--rapport=${rf}`], { R2_IMAGES_BASE_URL: base }, { fetch: f, sommeil: fauxSommeil(), log() {} });
+    assert.strictEqual(code, 1); assert.strictEqual(f.appels.length, 0);
+    const rap = JSON.parse(fs.readFileSync(rf, 'utf8'));
+    assert.strictEqual(rap.ok, 0); assert.match(rap.erreur, /attendu/);
+});
+t('main --controler : base http = rapport écrit avec l’erreur', async () => {
+    const mf = path.join(dir, 'm.json'); fs.writeFileSync(mf, JSON.stringify(manifeste()));
+    const rf = path.join(dir, 'r-http.json');
+    const code = await D.main([`--manifeste=${mf}`, '--controler', '--attendu=3', `--rapport=${rf}`], { R2_IMAGES_BASE_URL: 'http://img.test' }, { fetch: fauxFetch(), sommeil: fauxSommeil(), log() {} });
+    assert.strictEqual(code, 1);
+    assert.match(JSON.parse(fs.readFileSync(rf, 'utf8')).erreur, /https/);
+});
+
+// 2. 412 et comptes en cas de panne
+t('dépôt : 412 (IfNoneMatch) = arrêt nommé, comptes imprimés', async () => {
+    const s3 = fauxS3(); const o = s3.send.bind(s3); let puts = 0;
+    s3.send = async c => { if (c.constructor.name === 'PutObjectCommand' && ++puts === 2) { const e = new Error('Precondition Failed'); e.name = 'PreconditionFailed'; e.$metadata = { httpStatusCode: 412 }; throw e; } return o(c); };
+    const lignes = [];
+    await assert.rejects(D.deposer({ manifeste: manifeste(), attendu: 3, s3, bucket: 'b', fs, log: l => lignes.push(l) }), /412.*(créée|existe)|jamais d'écrasement/);
+    const txt = lignes.join('\n');
+    assert.match(txt, /1 déposés?/); assert.match(txt, /déjà là|deja-la/);
+});
+t('dépôt : panne en cours d’écriture = comptes « déposés / déjà là » imprimés', async () => {
+    const m = manifeste();
+    const s3 = fauxS3({ [PRE + 'a.webm']: { Body: contenus['a.webm'], ContentType: 'video/webm', Metadata: { sha256: sha(contenus['a.webm']) } } });
+    const o = s3.send.bind(s3); let puts = 0;
+    s3.send = async c => { if (c.constructor.name === 'PutObjectCommand' && ++puts === 2) throw new Error('socket hang up'); return o(c); };
+    const lignes = [];
+    await assert.rejects(D.deposer({ manifeste: m, attendu: 3, s3, bucket: 'b', fs, log: l => lignes.push(l) }), /socket hang up/);
+    assert.match(lignes.join('\n'), /1 déposés?.*1 (déjà là|deja-la)/s);
+});
+t('main --ecrire : panne = comptes dans le journal et code 1', async () => {
+    const mf = path.join(dir, 'm.json'); fs.writeFileSync(mf, JSON.stringify(manifeste()));
+    const s3 = fauxS3(); const o = s3.send.bind(s3); let puts = 0;
+    s3.send = async c => { if (c.constructor.name === 'PutObjectCommand' && ++puts === 3) throw new Error('coupure'); return o(c); };
+    const lignes = [];
+    const code = await D.main([`--manifeste=${mf}`, '--ecrire', '--attendu=3'], { R2_BUCKET_IMAGES: 'img' }, { verifierBucket: async () => {}, creerClient: () => s3, log: l => lignes.push(l) });
+    assert.strictEqual(code, 1); assert.match(lignes.join('\n'), /2 déposés?/);
+});
+
+// 3. octets envoyés = octets hachés
+t('dépôt : le Body du Put est exactement le Buffer dont la sha256 égale le manifeste', async () => {
+    const s3 = fauxS3();
+    await D.deposer({ manifeste: manifeste(), attendu: 3, s3, bucket: 'b', fs });
+    const puts = s3.appels.filter(a => a.nom === 'PutObjectCommand');
+    assert.strictEqual(puts.length, 3);
+    for (const p of puts) { assert.ok(Buffer.isBuffer(p.input.Body)); assert.strictEqual(sha(p.input.Body), manifeste().fichiers.find(f => f.cleR2 === p.input.Key).sha256); }
+});
+t('dépôt : fichier modifié entre la vérification et l’envoi = refus avant le Put', async () => {
+    const lus = {};
+    const fsMuant = { statSync: p => fs.statSync(p), readFileSync: p => { lus[p] = (lus[p] || 0) + 1; const b = fs.readFileSync(p); return lus[p] === 1 ? b : Buffer.concat([b, Buffer.from('X')]); } };
+    const s3 = fauxS3();
+    await assert.rejects(D.deposer({ manifeste: manifeste(), attendu: 3, s3, bucket: 'b', fs: fsMuant }), /sha256/);
+    for (const p of s3.appels.filter(a => a.nom === 'PutObjectCommand')) assert.strictEqual(sha(p.input.Body), manifeste().fichiers.find(f => f.cleR2 === p.input.Key).sha256);
+    assert.strictEqual(ecritures(s3), 0);
 });
 
 (async () => {
