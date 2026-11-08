@@ -6,6 +6,7 @@
 // RÉPONSE : 202 { success: true } dans TOUS les cas où le défi passe — adresse valide ou non, déjà servie ou non : elle ne révèle rien sur l'adresse. 429 au-delà de la limite par IP ou du plafond du jour, 503 si le service est indisponible.
 // Le défi réutilise `exigerDefi` des comptes (comptes/routes.js) SANS la dispense des outils de mesure : ici Turnstile est obligatoire, sans exception.
 const L = require('../transport/limites');
+const { ipKeyGenerator } = require('express-rate-limit');
 const registre = require('../registre');
 const { repondreErreur } = require('../erreurs');
 const S = require('../comptes/sessions');
@@ -17,7 +18,8 @@ const courrierDe = () => { try { return registre.obtenir('courrier'); } catch { 
 
 function routesLien(router, cfg) {
     const sansStocker = (req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); };
-    const parIp = L.limiteur({ nom: 'lien-ordinateur-ip', max: cfg.lienOrdinateur.parIpJour, fenetreMs: JOUR_MS, cle: q => L.empreinteIp(q.ip), code: 'LIMITE_DEBIT' });
+    // La clé est l'empreinte de l'IP REGROUPÉE comme celle du limiteur hérité (`ipKeyGenerator` : un IPv6 compte par bloc /56, sinon un visiteur change d'adresse à chaque requête et la limite ne mord plus).
+    const parIp = L.limiteur({ nom: 'lien-ordinateur-ip', max: cfg.lienOrdinateur.parIpJour, fenetreMs: JOUR_MS, cle: q => L.empreinteIp(ipKeyGenerator(String(q.ip || '?'))), code: 'LIMITE_DEBIT' });
     const corpsLisible = (req, res, next) => (objet(req.body) ? next() : repondreErreur(res, 'ENTREE', 'Requête invalide'));
     // Un pilote qui ne part nulle part (mémoire, sans clé Brevo) répondrait 202 sans rien envoyer : refusé ici, AVANT de consommer un jeton Turnstile.
     const piloteReel = (req, res, next) => { const c = courrierDe(); return c && c.reel === true && typeof c.envoyerLienOrdinateur === 'function' ? next() : indispo(res); };

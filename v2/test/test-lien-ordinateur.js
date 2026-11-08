@@ -159,6 +159,12 @@ const lever = async f => { try { await f(); return null; } catch (e) { return e;
         H.v('   le 429 n\'a ni lu l\'adresse ni appelé le vérificateur ni écrit de marque', (await MARQUES()).filter(d => d.cle.includes('ip3')).length, 0);
         const autre = await ok('ip-autre@exemple.fr', {}, { 'x-forwarded-for': '198.51.100.78' });
         H.v('une autre IP n\'est pas touchée', autre.statut, 202);
+        // IPv6 : le compteur porte sur le bloc /56 (ipKeyGenerator), pas sur l'adresse — changer d'adresse dans son bloc ne remet rien à zéro
+        const v6 = i => ({ 'x-forwarded-for': `2001:db8:abcd:ef${(i % 2) + 1}:${i}::1` });   // 2001:db8:abcd:ef1x… : même /56 (2001:db8:abcd:ef)
+        const codes6 = []; for (let i = 0; i < 4; i++) codes6.push((await post({ email: `v6-${i}@exemple.fr`, turnstile: 'mauvais' }, v6(i))).statut);
+        H.v('IPv6 : quatre adresses d\'un même bloc /56 comptent ensemble (422, 422, 422, puis 429)', codes6, [422, 422, 422, 429]);
+        const autreBloc = await post({ email: 'v6-autre@exemple.fr', turnstile: 'mauvais' }, { 'x-forwarded-for': '2001:db8:1234:5600::1' });
+        H.v('   un autre bloc /56 n\'est pas touché', autreBloc.statut, 422);
         const cle = (await db.col('limites').find({ cle: /^lien-ordinateur-ip:/ }).toArray()).map(d => d.cle);
         H.vrai('la clé du compteur IP est l\'empreinte (pas l\'IP en clair)', cle.length > 0 && cle.every(c => !c.includes('198.51.100.77')));
     }
@@ -222,6 +228,8 @@ const lever = async f => { try { await f(); return null; } catch (e) { return e;
         // un compteur de jour de Paris : le jour change à minuit à Paris, pas à minuit UTC
         const jour = require('../comptes/plafond-courriels').jourDeParis;
         H.v('jourDeParis : 2026-06-30 22:30 UTC est déjà le 1er juillet à Paris ; 2026-12-31 22:30 UTC est le 31 (heure d\'hiver)', [jour(new Date('2026-06-30T22:30:00Z')), jour(new Date('2026-12-31T22:30:00Z'))], ['2026-07-01', '2026-12-31']);
+        const { secondesAvantMinuitParis } = require('../lien-ordinateur/service');
+        H.v('secondesAvantMinuitParis : 23 h 59 min 30 s à Paris (été puis hiver) => 30 ; minuit passé d\'une seconde => 86 399', [secondesAvantMinuitParis(new Date('2026-06-30T21:59:30Z')), secondesAvantMinuitParis(new Date('2026-12-31T22:59:30Z')), secondesAvantMinuitParis(new Date('2026-12-31T23:00:01Z'))], [30, 30, 86399]);
         await s2.fermer();
         // le compteur du lien est le SIEN : il ne consomme pas celui des courriels de comptes (courriels_jour)
         const comptesJour = await db.col('courriels_jour').find({}).toArray();

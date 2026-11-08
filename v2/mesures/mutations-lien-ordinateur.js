@@ -16,6 +16,7 @@ const MUTANTS = [
     ['Turnstile : la dispense des outils de mesure s\'applique', R, "exigerDefi({ ...cfg, mesure: null }", "exigerDefi({ ...cfg }", BANC],
     ['sans contrôle d\'origine', R, "S.exigerOrigineSite(cfg), parIp", "parIp", BANC],
     ['sans limite par IP', R, "parIp, corpsLisible,", "corpsLisible,", BANC],
+    ['la limite par IP porte sur l\'adresse brute (un IPv6 change d\'adresse à chaque requête)', R, "L.empreinteIp(ipKeyGenerator(String(q.ip || '?')))", "L.empreinteIp(q.ip)", BANC],
     ['la limite par IP passe APRÈS le défi', R, "parIp, corpsLisible, piloteReel, defi, async", "corpsLisible, piloteReel, defi, parIp, async", BANC],
     ['sans no-store', R, "router.post('/api/lien-ordinateur', sansStocker, ", "router.post('/api/lien-ordinateur', ", BANC],
     ['corps non lisible accepté', R, "parIp, corpsLisible, piloteReel", "parIp, piloteReel", BANC],
