@@ -54,6 +54,11 @@ const clesDe = base => [`${base}.webp`, `${base}-480.webp`];
 async function purgerAttente(stockage, d, raison) { for (const k of clesDe(d.cle)) await supprimerOuFile(stockage, k, raison); }
 /** Les copies publiques ET celles d'attente d'un art retiré. */
 async function purgerCopies(stockage, d, raison) { for (const k of [...clesDe(d.clePublique), ...clesDe(d.cle)]) await supprimerOuFile(stockage, k, raison); }
+/** LECTURE seule : l'empreinte de ce jeton est-elle déjà gardée (rejeu) ? true : déjà vu. */
+async function jetonVu(jeton) {
+    const h = crypto.createHash('sha256').update(`galerie-turnstile|${jeton}`).digest('hex');
+    return Boolean(await G.col('jetons_turnstile').findOne({ h }, { projection: { _id: 1 } }));
+}
 /** Un jeton Turnstile n'est accepté qu'UNE fois : seule son empreinte est gardée, dix minutes. true : jeton neuf ; false : déjà vu. */
 async function jetonNeuf(jeton, maintenant = new Date()) {
     const h = crypto.createHash('sha256').update(`galerie-turnstile|${jeton}`).digest('hex');
@@ -247,12 +252,15 @@ async function remixer({ compteId, id, max, maintenant = new Date() }) {
     const source = F.idValide(id) ? await G.col('publications').findOne({ _id: id, etat: 'public', pagesBlocs: { $exists: true } }) : null;
     if (!source) return { introuvable: true };
     const mien = String(compteId);
-    if ((await G.col('classeurs').countDocuments({ auteurId: mien }, { limit: max })) >= max) return { borne: max };
     const cites = P.artsCites(source.pagesBlocs);
     const publics = new Set(cites.length ? (await G.col('arts').find({ _id: { $in: cites }, etat: 'public' }, { projection: { _id: 1 } }).toArray()).map(a => a._id) : []);
     const pages = source.pagesBlocs.map(p => ({ nb: p.nb, blocs: p.blocs.map(b => (b.genre === 'carte' ? { ...b, contenu: null } : (b.contenu && publics.has(b.contenu.artId) ? b : { ...b, contenu: null }))) }));
     const classeur = { _id: F.nouvelId(), auteurId: mien, titre: `Remix de ${source.titre}`.slice(0, 80), etiquettes: [], couleur: null, couverture: null, pages, repriseDe: { id: source._id, pseudo: source.pseudo }, version: 1, creeLe: maintenant, majLe: maintenant };
-    await G.col('classeurs').insertOne(classeur);
+    // TOUR 1 (M1) : la borne de classeurs est CUMULÉE avec la création (même fonction : réservation puis contrôle a posteriori, avec annulation)
+    const b = await require('./classeurs').insererBorne(classeur, max);
+    if (b.borne) return { borne: max };
+    // TOUR 1 (G2) : le compte (son profil) a pu être supprimé pendant ce temps : une copie n'est jamais laissée à un compte disparu
+    if (!(await G.col('profils').findOne({ _id: mien }, { projection: { _id: 1 } }))) { await G.col('classeurs').deleteOne({ _id: classeur._id }); return { introuvable: true }; }
     return { classeurId: classeur._id };
 }
 
@@ -324,6 +332,8 @@ async function decider({ id, decision, motif = null, precision = null, moderateu
         if (decision === 'retirer' && cible && cible.etat === 'public') {
             const r = await G.col(COLL[s.cibleType]).updateOne({ _id: cible._id, etat: 'public' }, { $set: { etat: 'retire', motif: note, retireLe: maintenant } });
             if (r.modifiedCount === 1 && s.cibleType === 'banque') await purgerCopies(stockage, cible, 'retrait');
+            // TOUR 1 (M8) : une mise à jour en attente ne survit pas à la publication qu'elle remplaçait (elle sortirait de la file sans cible)
+            if (r.modifiedCount === 1 && s.cibleType === 'galerie') await G.col('publications').deleteMany({ remplace: cible._id, etat: 'en-attente' });
         }
         await G.col('signalements').updateMany({ cibleType: s.cibleType, cibleId: s.cibleId, etat: 'ouvert', ...(decision === 'classer' ? { _id: s._id } : {}) }, { $set: { etat: decision === 'classer' ? 'classe' : 'traite', decideLe: maintenant } });
         await resultat('applique');
@@ -341,7 +351,10 @@ async function decider({ id, decision, motif = null, precision = null, moderateu
         // une MISE À JOUR d'un classeur déjà public : accepter la met à la place de la version publique (même identifiant : les votes restent) ; refuser la garde pour l'auteur, avec le motif, et la version publique reste servie
         if (decision === 'accepter') {
             const cible = await coll.findOne({ _id: d.remplace, etat: 'public' }, { projection: { _id: 1 } });
-            if (!cible) { await resultat('conflit'); return { conflit: true };}       // la version publique a été retirée ou dépubliée entre-temps
+            if (!cible) {      // la version publique a été retirée ou dépubliée entre-temps : la mise à jour est ORPHELINE, elle sort de la file (refusée, avec la raison) au lieu d'y rester pour toujours (M8)
+                await coll.updateOne({ _id: brut, etat: 'en-attente' }, { $set: { etat: 'refuse', motif: { code: 'autre', texte: 'publication-retiree' } } });
+                await resultat('conflit'); return { conflit: true };
+            }
             const champs = Object.fromEntries(CHAMPS_INSTANTANE.filter(k => d[k] !== undefined).map(k => [k, d[k]]));
             const r = await coll.updateOne({ _id: d.remplace, etat: 'public' }, { $set: { ...champs, motif: null } });
             if (r.modifiedCount !== 1) { await resultat('conflit'); return { conflit: true }; }
@@ -367,6 +380,7 @@ async function decider({ id, decision, motif = null, precision = null, moderateu
         if (r.modifiedCount !== 1) { await resultat('conflit'); return { conflit: true }; }
         if (decision === 'refuser' && type === 'banque') await purgerAttente(stockage, d, 'refus');
         if (decision === 'retirer' && type === 'banque') await purgerCopies(stockage, d, 'retrait');
+        if (decision === 'retirer' && type === 'galerie') await coll.deleteMany({ remplace: brut, etat: 'en-attente' });      // M8 : la mise à jour en attente part avec la publication retirée
     }
     await resultat('applique');
     return { ok: true };
@@ -397,5 +411,5 @@ async function supprimerDuCompte(compteId, stockage = null, secret = null) {
     return n;
 }
 
-module.exports = { PAGE, PAGE_ART, SEUIL_PETIT, motsDe, filtreRecherche, mettreEnFile, supprimerOuFile, clesDe, jetonNeuf, refCompte, compteur, pseudoDe, poserPseudo, listerPublications, filtresDeLaGalerie, pageDePublication, versPublication, listerArts, formatsDeLaBanque, versArt,
+module.exports = { PAGE, PAGE_ART, SEUIL_PETIT, motsDe, filtreRecherche, mettreEnFile, supprimerOuFile, clesDe, jetonVu, jetonNeuf, refCompte, compteur, pseudoDe, poserPseudo, listerPublications, filtresDeLaGalerie, pageDePublication, versPublication, listerArts, formatsDeLaBanque, versArt,
     publierPourExploitation, voter, recompterVotes, mesVotes, remixer, signaler, fileModeration, decider, supprimerDuCompte, COLL };

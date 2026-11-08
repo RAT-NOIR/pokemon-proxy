@@ -40,10 +40,10 @@ function lireGalerie(env = process.env) {
     if (!r.ok) return gele({ ...vide, bornes, limites, raison: r.raison });
     // Turnstile : les clés factices de Cloudflare valident TOUT ; en production elles ouvriraient le signalement anonyme. NODE_ENV et V2_CIBLE se lisent sur l'environnement jugé.
     const secretTurnstile = typeof env.V2_GALERIE_TURNSTILE_SECRET === 'string' ? env.V2_GALERIE_TURNSTILE_SECRET.trim() : '';
-    const production = (env.NODE_ENV === 'production' || env.V2_CIBLE === 'prod') && env.V2_CIBLE !== 'essai';
-    if (production && secretTurnstile) {
-        if (FACTICES.includes(secretTurnstile)) return gele({ ...vide, bornes, limites, raison: 'V2_GALERIE_TURNSTILE_SECRET est une clé FACTICE de Cloudflare (elle valide tout) alors que la cible est la production : refusé.' });
-    }
+    // TOUR 1 (M9) : une clé FACTICE n'est admise que sur l'ESSAI, prouvé par DEUX conditions positives : `V2_CIBLE === 'essai'` ET `RENDER_SERVICE_ID` = le service de l'essai (constante de v2/config.js).
+    // Tout le reste (production, cible absente, autre service, autre cible) refuse : la garde n'énumère plus ses refus.
+    if (FACTICES.includes(secretTurnstile) && !(env.V2_CIBLE === 'essai' && typeof env.RENDER_SERVICE_ID === 'string' && env.RENDER_SERVICE_ID !== '' && env.RENDER_SERVICE_ID === require('../config').SERVICE_ESSAI))      // lu à l'appel : v2/config.js appelle ce module (cycle de chargement)
+        return gele({ ...vide, bornes, limites, raison: 'V2_GALERIE_TURNSTILE_SECRET est une clé FACTICE de Cloudflare (elle valide tout) hors de l\'essai (V2_CIBLE=essai et le service de l\'essai exigés) : refusé.' });
     return gele({ actif, pret: true, raison: null, bornes, limites, balayageMs });
 }
 module.exports = { lireGalerie };

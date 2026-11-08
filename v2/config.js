@@ -354,4 +354,4 @@ function lireConfig(env = process.env) {
         cookieSecure
     });
 }
-module.exports = { lireConfig, POCHES, POCHES_ANCIENNES, HOTES_PUBLICS_PRODUCTION };
+module.exports = { lireConfig, POCHES, POCHES_ANCIENNES, HOTES_PUBLICS_PRODUCTION, SERVICE_ESSAI };

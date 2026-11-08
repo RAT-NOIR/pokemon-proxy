@@ -66,9 +66,11 @@ function routesClasseurs(router, x) {
         return res.status(200).json({ success: true });
     }));
     router.post('/api/classeurs/:id/publication', ...PUBLIER, protege('classeur-publier', async (req, res) => {
-        const r = await C.publier({ compteId: req.v2.porteur.id, pseudo: req.galerie.pseudo, id: req.params.id, corps: req.body, maintenant: maintenant() });
+        const r = await C.publier({ compteId: req.v2.porteur.id, pseudo: req.galerie.pseudo, id: req.params.id, corps: req.body, reserver: x.reserverPublication, rendre: x.rendrePublication, maintenant: maintenant() });
         if (r.introuvable) return introuvable(res);
         if (r.refus) return entree(res, r.refus);
+        if (r.limite !== undefined) return repondreErreur(res, 'LIMITE_DEBIT', 'Trop de requêtes, réessayez plus tard.', { reessayerDans: r.limite });
+        if (r.conflit) return repondreErreur(res, 'CONFLIT', 'Le classeur n\'est pas dans l\'état attendu', { detail: 'etat' });
         privee(res);
         return res.status(200).json({ success: true, classeur: await C.vueDe(req.v2.porteur.id, req.params.id) });
     }));

@@ -33,10 +33,11 @@ function routesIllustrations(router, x) {
         return res.status(200).json({ success: true });
     }));
     router.post('/api/illustrations/:id/publication', ...PUBLIER, protege('illustration-publier', async (req, res) => {
-        const r = await I.publier({ compteId: req.v2.porteur.id, pseudo: req.galerie.pseudo, id: req.params.id, corps: req.body, stockage: stock(), maintenant: maintenant() });
+        const r = await I.publier({ compteId: req.v2.porteur.id, pseudo: req.galerie.pseudo, id: req.params.id, corps: req.body, stockage: stock(), reserver: x.reserverPublication, rendre: x.rendrePublication, maintenant: maintenant() });
         if (r.introuvable) return introuvable(res);
         if (r.detail) return entree(res, r.detail);
         if (r.conflit) return conflitEtat(res);
+        if (r.limite !== undefined) return repondreErreur(res, 'LIMITE_DEBIT', 'Trop de requêtes, réessayez plus tard.', { reessayerDans: r.limite });
         privee(res);
         return res.status(200).json({ success: true, illustration: r.illustration });
     }));

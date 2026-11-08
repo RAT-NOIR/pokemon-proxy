@@ -91,7 +91,16 @@ const H = A.H;
         const pret = (x) => lireGalerie({ ...A.ENV_VALIDE, ...x });
         H.v('3. une clé secrète FACTICE de Cloudflare avec NODE_ENV=production : le lot ne se monte pas, la raison NOMME la variable', FACTICES.map(k => { const c = pret({ V2_GALERIE_TURNSTILE_SECRET: k, NODE_ENV: 'production' }); return [c.pret, /V2_GALERIE_TURNSTILE_SECRET/.test(c.raison || '')]; }), FACTICES.map(() => [false, true]));
         H.v('   idem avec V2_CIBLE=prod', FACTICES.map(k => pret({ V2_GALERIE_TURNSTILE_SECRET: k, V2_CIBLE: 'prod' }).pret), [false, false, false]);
-        H.v('   la même clé factice hors production (essai, banc) : admise ; V2_CIBLE=essai l\'admet même sous NODE_ENV=production', [pret({ V2_GALERIE_TURNSTILE_SECRET: FACTICES[0] }).pret, pret({ V2_GALERIE_TURNSTILE_SECRET: FACTICES[0], NODE_ENV: 'production', V2_CIBLE: 'essai' }).pret], [true, true]);
+        {   // TOUR 1 (M9) : la garde est écrite par ce qu'elle AUTORISE — factice admise SEULEMENT si V2_CIBLE === 'essai' ET RENDER_SERVICE_ID = le service de l'essai
+            const { SERVICE_ESSAI } = require('../config');
+            const k = FACTICES[0], essai = { V2_GALERIE_TURNSTILE_SECRET: k, V2_CIBLE: 'essai', RENDER_SERVICE_ID: SERVICE_ESSAI };
+            H.v('   M9 : factice ADMISE sur l\'essai prouvé (V2_CIBLE=essai ET le service de l\'essai), même sous NODE_ENV=production', [pret(essai).pret, pret({ ...essai, NODE_ENV: 'production' }).pret], [true, true]);
+            H.v('   M9 : factice REFUSÉE — cible absente, production, essai sans service, essai sur un AUTRE service, service sans cible essai, service vide', [
+                pret({ V2_GALERIE_TURNSTILE_SECRET: k }).pret, pret({ ...essai, V2_CIBLE: 'prod' }).pret, pret({ V2_GALERIE_TURNSTILE_SECRET: k, V2_CIBLE: 'essai' }).pret, pret({ ...essai, RENDER_SERVICE_ID: 'srv-autre' }).pret,
+                pret({ V2_GALERIE_TURNSTILE_SECRET: k, RENDER_SERVICE_ID: SERVICE_ESSAI }).pret, pret({ ...essai, RENDER_SERVICE_ID: '' }).pret], Array(6).fill(false));
+            const mEssai = A.charger('config.js', [["env.V2_CIBLE === 'essai' && typeof env.RENDER_SERVICE_ID === 'string'", "env.V2_CIBLE === 'essai' || typeof env.RENDER_SERVICE_ID === 'string'"]]);
+            H.v('   MUTANT « une seule des deux conditions suffit » : essai sans service, le réel refuse, le mutant admet', [pret({ V2_GALERIE_TURNSTILE_SECRET: k, V2_CIBLE: 'essai' }).pret, mEssai.lireGalerie({ ...A.ENV_VALIDE, V2_GALERIE_TURNSTILE_SECRET: k, V2_CIBLE: 'essai' }).pret], [false, true]);
+        }
         H.v('   une vraie clé en production : admise ; aucune clé : admise (les signalements anonymes répondent 503)', [pret({ NODE_ENV: 'production' }).pret, pret({ NODE_ENV: 'production', V2_GALERIE_TURNSTILE_SECRET: undefined }).pret], [true, true]);
         H.vrai('   la raison n\'imprime pas la clé', !/1x0{10}/.test(pret({ V2_GALERIE_TURNSTILE_SECRET: FACTICES[0], NODE_ENV: 'production' }).raison));
         const cible = `galerie:${await publier(luma)}`;
@@ -118,10 +127,20 @@ const H = A.H;
         // MUTANTS
         const attendu = async (rempl, jeton, ts2) => { const s = await B.serveur(B.cfg, { routes: A.charger('routes.js', rempl), ts: ts2 }); const r = await H.appel(s.url, '/api/signalements', { methode: 'POST', corps: { cible, motif: 'autre', turnstile: jeton }, entetes: { origin: B.SITE, 'x-rat-market': '1', 'x-forwarded-for': B.IP() } }); return r.statut; };
         const mauvaisHote = A.fauxTurnstile({ hostname: 'evil.example' }), mauvaiseAction = A.fauxTurnstile({ action: 'autre' }), memeJeton = A.fauxTurnstile();
-        H.v('   MUTANT « le hostname n\'est plus comparé » : le jeton d\'un autre site passe (réel : 422)', [(await attendu([], 'jeton-valide-i', mauvaisHote)), (await attendu([["hotesDuSite, action: 'signalement' }", "hotesDuSite: null, action: 'signalement' }"]], 'jeton-valide-j', mauvaisHote))], [422, 201]);
-        H.v('   MUTANT « l\'action n\'est plus comparée »', [(await attendu([], 'jeton-valide-k', mauvaiseAction)), (await attendu([["action: 'signalement' }", "action: null }"]], 'jeton-valide-l', mauvaiseAction))], [422, 201]);
+        // TOUR 1 (m2) : le jugement est écrit par ce qu'il AUTORISE : on l'éprouve sur le module lui-même (réel et copies mutées), sans passer par la route
+        {
+            const T = require('../galerie/turnstile'), HOTES = T.hotesDuSiteDe(), SEC = 'secret-turnstile-essai';
+            const juge = (m, ts, o = {}) => m.jugerJeton('jeton-valide', '1.2.3.4', { fetch: ts, secret: SEC, hotesDuSite: HOTES, action: 'signalement', ...o });
+            H.v('   m2 : le bon hostname et la bonne action passent ; un autre site, une autre action, un hostname en CAPITALES, un hostname absent : refusés', [await juge(T, A.fauxTurnstile()), await juge(T, A.fauxTurnstile({ hostname: 'evil.example' })), await juge(T, A.fauxTurnstile({ action: 'autre' })),
+                await juge(T, A.fauxTurnstile({ hostname: 'RAT-MARKET.FR' })), await juge(T, A.fauxTurnstile({ hostname: null }))], [true, false, false, false, false]);
+            H.v('   m2 : un jugement SANS hôtes attendus, avec une liste vide, sans action ou avec une action vide REFUSE (il ne laisse jamais passer faute de critère)', [await juge(T, A.fauxTurnstile(), { hotesDuSite: undefined }), await juge(T, A.fauxTurnstile(), { hotesDuSite: [] }), await juge(T, A.fauxTurnstile(), { action: undefined }), await juge(T, A.fauxTurnstile(), { action: '' })], [false, false, false, false]);
+            const mH = A.charger('turnstile.js', [["hotesDuSite.includes(j.hostname)", "true"]]), mA = A.charger('turnstile.js', [["j.action === action", "true"]]), mC = A.charger('turnstile.js', [["action === '' ||", "false ||"]]);
+            H.v('   MUTANT « le hostname n\'est plus comparé » : le jeton d\'un autre site passe (réel : refusé)', [await juge(T, A.fauxTurnstile({ hostname: 'evil.example' })), await juge(mH, A.fauxTurnstile({ hostname: 'evil.example' }))], [false, true]);
+            H.v('   MUTANT « l\'action n\'est plus comparée »', [await juge(T, A.fauxTurnstile({ action: 'autre' })), await juge(mA, A.fauxTurnstile({ action: 'autre' }))], [false, true]);
+            H.v('   MUTANT « l\'action vide n\'est plus refusée » : action vide ET jeton sans action, le réel refuse, le mutant admet', [await juge(T, A.fauxTurnstile({ action: '' }), { action: '' }), await juge(mC, A.fauxTurnstile({ action: '' }), { action: '' })], [false, true]);
+        }
         const dbl = async (rempl) => { const s = await B.serveur(B.cfg, { routes: A.charger('routes.js', rempl), ts: memeJeton }); const f = () => H.appel(s.url, '/api/signalements', { methode: 'POST', corps: { cible, motif: 'autre', turnstile: 'jeton-valide-m' + rempl.length }, entetes: { origin: B.SITE, 'x-rat-market': '1', 'x-forwarded-for': B.IP() } }); await f(); return (await f()).statut; };
-        H.v('   MUTANT « le rejeu n\'est plus vu » : le même jeton passe deux fois', [await dbl([]), await dbl([["if (!(await svc.jetonNeuf(b.turnstile)))", "if (false)"]])], [422, 201]);
+        H.v('   MUTANT « le rejeu n\'est plus vu » : le même jeton passe deux fois', [await dbl([]), await dbl([["if (await svc.jetonVu(b.turnstile))", "if (false)"], ["if (!(await svc.jetonNeuf(b.turnstile)))", "if (false)"]])], [422, 201]);
         const mc = A.charger('config.js', [["if (FACTICES.includes(secretTurnstile)", "if (false && FACTICES.includes(secretTurnstile)"]]);
         H.v('   MUTANT « les clés factices ne sont plus refusées en production »', [pret({ V2_GALERIE_TURNSTILE_SECRET: FACTICES[0], NODE_ENV: 'production' }).pret, mc.lireGalerie({ ...A.ENV_VALIDE, V2_GALERIE_TURNSTILE_SECRET: FACTICES[0], NODE_ENV: 'production' }).pret], [false, true]);
     }

@@ -12,7 +12,7 @@ const svc = require('./service');
 
 const AMBIANCES = Object.freeze(['douce', 'sombre', 'lumineuse', 'nature', 'ville', 'nuit', 'mer', 'espace', 'retro', 'pixel', 'aquarelle', 'abstraite']);
 const FORMATS_POCHETTES = Object.freeze(['2x2', '3x2', '2x3', '3x3', '4x3', '4x4', 'double-page']);
-const EXPIRE_LECTURE_S = 3600, LISTE_MAX = 200;
+const EXPIRE_LECTURE_S = 3600, LISTE_MAX = 1000;       // m5 : la borne d'illustrations est réglable jusqu'à 1 000 (V2_ILLUSTRATIONS_MAX) : la liste n'est donc JAMAIS tronquée (un compte ne peut pas en stocker davantage)
 const iso = d => (d instanceof Date ? d.toISOString() : null);
 
 /** L'illustration de CET auteur, ou null (absente, mal formée, ou d'un autre : le même résultat). */
@@ -73,8 +73,11 @@ async function modifier({ compteId, id, corps, stockage = null }) {
     if (m.artisteDeclare !== undefined) maj.artisteDeclare = m.artisteDeclare === null ? d.pseudo : m.artisteDeclare;
     if (m.ambiances !== undefined) maj.ambiances = m.ambiances;
     if (m.formats !== undefined) maj.formats = m.formats;
-    const apres = await G.col('arts').findOneAndUpdate({ _id: id }, { $set: maj }, { returnDocument: 'after' });
-    return { illustration: vue(apres || { ...d, ...maj }, stockage) };
+    // m3, m4 : l'AUTEUR est dans le filtre d'écriture, et pour le titre ou l'artiste l'ÉTAT aussi (un art devenu public entre la lecture et l'écriture n'est pas retouché) ; 0 trouvé : on relit
+    const texte = m.titre !== undefined || m.artisteDeclare !== undefined;
+    const apres = await G.col('arts').findOneAndUpdate({ _id: id, auteurId: mien, ...(texte ? { etat: { $ne: 'public' } } : {}) }, { $set: maj }, { returnDocument: 'after' });
+    if (!apres) return texte && (await trouver(id, mien)) ? { conflit: 'etat' } : { introuvable: true };
+    return { illustration: vue(apres, stockage) };
 }
 
 /** { introuvable } | { ok: true }. Le document part d'abord (l'autorité), puis les objets R2 : un objet qui ne part pas entre dans la file de reprise. */
@@ -82,7 +85,7 @@ async function supprimer({ compteId, id, stockage }) {
     const mien = String(compteId);
     const d = await trouver(id, mien);
     if (!d) return { introuvable: true };
-    await G.col('arts').deleteOne({ _id: id });
+    await G.col('arts').deleteOne({ _id: id, auteurId: mien });
     await G.col('votes').deleteMany({ type: 'banque', cible: id });
     await G.col('depots').deleteMany({ artId: id });
     for (const k of [...svc.clesDe(d.cle), ...svc.clesDe(d.clePublique)]) await svc.supprimerOuFile(stockage, k, 'suppression-illustration');
@@ -90,19 +93,30 @@ async function supprimer({ compteId, id, stockage }) {
 }
 
 /** { introuvable } | { detail } | { conflit: 'etat' } | { ok: true, illustration }. « prive » passe « en-attente » (certification des droits, version des CGU) ; en attente et public : rien ne change ; refusé ou retiré : conflit (les objets sont partis). */
-async function publier({ compteId, pseudo, id, corps, stockage = null, maintenant = new Date() }) {
+async function publier({ compteId, pseudo, id, corps, stockage = null, reserver = null, rendre = null, maintenant = new Date() }) {
     const mien = String(compteId);
     const d = await trouver(id, mien);
     if (!d) return { introuvable: true };
     const l = lireMeta(corps, { publication: true });
     if (l.detail) return { detail: l.detail };
-    if (d.etat === 'en-attente' || d.etat === 'public') return { ok: true, illustration: vue(d, stockage) };
+    if (d.etat === 'en-attente' || d.etat === 'public') {
+        // M6 : l'auteur la publie LUI-MÊME : un classeur dépublié plus tard ne la ramène plus à « prive » ; m1 : rien n'est compté (déjà en attente ou publique)
+        if (d.etat === 'en-attente' && d.publieeParAuteur !== true) await G.col('arts').updateOne({ _id: id, auteurId: mien, etat: 'en-attente' }, { $set: { publieeParAuteur: true } });
+        return { ok: true, illustration: vue(d, stockage) };
+    }
     if (d.etat !== 'prive') return { conflit: 'etat' };
+    // m1, G1 : la place du jour (Paris) se prend ICI, quand la publication va réellement être faite, et se rend si elle n'a pas eu lieu
+    let reserve = false;
+    if (reserver) { const q = await reserver(mien); if (!q.permis) return { limite: q.reessayerDans }; reserve = true; }
     const m = l.meta;
     const maj = { etat: 'en-attente', recuLe: maintenant, motif: null, certification: { droits: true, nonOfficielle: true, cgu: m.cgu, le: maintenant },
         artisteDeclare: m.artisteDeclare === undefined || m.artisteDeclare === null ? (d.artisteDeclare || pseudo) : m.artisteDeclare, ambiances: m.ambiances === undefined ? (d.ambiances || []) : m.ambiances, formats: m.formats === undefined ? (d.formats || []) : m.formats };
-    const apres = await G.col('arts').findOneAndUpdate({ _id: id, etat: 'prive' }, { $set: maj }, { returnDocument: 'after' });
-    return { ok: true, illustration: vue(apres || (await G.col('arts').findOne({ _id: id })) || d, stockage) };
+    maj.publieeParAuteur = true;
+    let apres;
+    try { apres = await G.col('arts').findOneAndUpdate({ _id: id, auteurId: mien, etat: 'prive' }, { $set: maj }, { returnDocument: 'after' }); }
+    catch (e) { if (reserve && rendre) await rendre(mien); throw e; }
+    if (!apres && reserve && rendre) await rendre(mien);                   // un autre appel l'avait déjà publiée : rien n'a eu lieu ici
+    return { ok: true, illustration: vue(apres || (await trouver(id, mien)) || d, stockage) };
 }
 
 /** { introuvable } | { indispo: true } | { ok: true, illustration }. En attente → privé : rien à déplacer. Public → privé : la copie PRIVÉE est refaite AVANT le changement d'état (elle échoue : rien n'a changé), puis la copie publique et les votes partent. */
@@ -110,11 +124,11 @@ async function depublier({ compteId, id, stockage, maintenant = new Date() }) {
     const mien = String(compteId);
     const d = await trouver(id, mien);
     if (!d) return { introuvable: true };
-    if (d.etat === 'en-attente') await G.col('arts').updateOne({ _id: id, etat: 'en-attente' }, { $set: { etat: 'prive', motif: null } });
+    if (d.etat === 'en-attente') await G.col('arts').updateOne({ _id: id, auteurId: mien, etat: 'en-attente' }, { $set: { etat: 'prive', motif: null, publieeParAuteur: false, viaClasseurs: [] } });
     else if (d.etat === 'public') {
         try { for (const s of ['.webp', '-480.webp']) { await stockage.copier(`${d.clePublique}${s}`, `${d.cle}${s}`); } }
         catch (e) { console.error(`❌ [galerie] copie privée en échec (${(e && (e.name || e.code)) || 'erreur'}) : l'illustration reste publique`); return { indispo: true }; }
-        const r = await G.col('arts').updateOne({ _id: id, etat: 'public' }, { $set: { etat: 'prive', publieLe: null, nbJaime: 0, nbEnregistre: 0, motif: null, depublieLe: maintenant } });
+        const r = await G.col('arts').updateOne({ _id: id, auteurId: mien, etat: 'public' }, { $set: { etat: 'prive', publieLe: null, nbJaime: 0, nbEnregistre: 0, motif: null, depublieLe: maintenant, publieeParAuteur: false, viaClasseurs: [] } });
         if (r.modifiedCount === 1) {
             await G.col('votes').deleteMany({ type: 'banque', cible: id });
             for (const k of svc.clesDe(d.clePublique)) await svc.supprimerOuFile(stockage, k, 'depublication');

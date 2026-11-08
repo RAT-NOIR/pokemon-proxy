@@ -204,12 +204,14 @@ const OPENAPI = require('../openapi/openapi.v2.json'); const { valider } = requi
         { m: 'GET', modele: '/api/classeurs/{id}', url: `/api/classeurs/${idCl}`, session: false, absent: `/api/classeurs/${inconnu()}`, mauvais: `/api/classeurs/${idCl}?zzz=1` },
         { m: 'PUT', modele: '/api/classeurs/{id}', url: `/api/classeurs/${idCl}`, session: true, ecriture: true, corps: { version: 1, titre: 'Pilote', pages: [page9()] }, mauvaisCorps: { titre: 'Pilote' }, absent: `/api/classeurs/${inconnu()}` },
         { m: 'DELETE', modele: '/api/classeurs/{id}', url: `/api/classeurs/${idCl}`, session: true, ecriture: true, absent: `/api/classeurs/${inconnu()}` },
-        { m: 'POST', modele: '/api/classeurs/{id}/publication', url: `/api/classeurs/${idCl}/publication`, session: true, ecriture: true, corps: { certifieAuteur: true, cgu: 'c' }, mauvaisCorps: { cgu: 'c', zzz: 1 }, absent: `/api/classeurs/${inconnu()}/publication` },
+        { m: 'POST', modele: '/api/classeurs/{id}/publication', url: `/api/classeurs/${idCl}/publication`, session: true, ecriture: true, corps: { certifieAuteur: true, cgu: 'c' }, mauvaisCorps: { cgu: 'c', zzz: 1 }, absent: `/api/classeurs/${inconnu()}/publication`,
+            pour429: async c => `/api/classeurs/${(await require('../galerie/classeurs').creer({ compteId: c.id, champs: { titre: 'Q', etiquettes: [], couleur: null, couverture: null, pages: [page9()] }, max: 50 })).classeur.id}/publication` },
         { m: 'DELETE', modele: '/api/classeurs/{id}/publication', url: `/api/classeurs/${idCl}/publication`, session: true, ecriture: true, absent: `/api/classeurs/${inconnu()}/publication` },
         { m: 'GET', modele: '/api/illustrations', url: '/api/illustrations', session: true, mauvais: '/api/illustrations?zzz=1' },
         { m: 'PUT', modele: '/api/illustrations/{id}', url: `/api/illustrations/${idPriv}`, session: true, ecriture: true, corps: { ambiances: ['douce'] }, mauvaisCorps: {}, absent: `/api/illustrations/${inconnu()}` },
         { m: 'DELETE', modele: '/api/illustrations/{id}', url: `/api/illustrations/${idPriv}`, session: true, ecriture: true, absent: `/api/illustrations/${inconnu()}` },
-        { m: 'POST', modele: '/api/illustrations/{id}/publication', url: `/api/illustrations/${idPriv}/publication`, session: true, ecriture: true, corps: { certifieAuteur: true, cgu: 'c' }, mauvaisCorps: { cgu: 'c', zzz: 1 }, absent: `/api/illustrations/${inconnu()}/publication` },
+        { m: 'POST', modele: '/api/illustrations/{id}/publication', url: `/api/illustrations/${idPriv}/publication`, session: true, ecriture: true, corps: { certifieAuteur: true, cgu: 'c' }, mauvaisCorps: { cgu: 'c', zzz: 1 }, absent: `/api/illustrations/${inconnu()}/publication`,
+            pour429: async c => `/api/illustrations/${await artFabrique(c, 'lim')}/publication` },
         { m: 'DELETE', modele: '/api/illustrations/{id}/publication', url: `/api/illustrations/${idPriv}/publication`, session: true, ecriture: true, absent: `/api/illustrations/${inconnu()}/publication` },
         { m: 'PUT', modele: '/api/compte/pseudo', url: '/api/compte/pseudo', session: true, ecriture: true, corps: { pseudo: 'pilote-pseudo' }, mauvaisCorps: { pseudo: 'a' } },
         { m: 'POST', modele: '/api/illustrations/depot', url: '/api/illustrations/depot', session: true, ecriture: true, corps: { type: 'image/png', octets: 1000 }, mauvaisCorps: { type: 'image/png' } },
@@ -264,7 +266,8 @@ const OPENAPI = require('../openapi/openapi.v2.json'); const { valider } = requi
         const sv3 = await H.serveur(app3); const obtenus = [];
         for (const o of OPS) {
             const c = o.moderation ? await compte('modo-' + (++n), { role: 'moderateur' }) : await compte('lim-' + (++n)), ip = IP();
-            const deux = []; for (let i = 0; i < 3 && !deux.some(x => x.statut === 429); i++) deux.push(await H.appel(sv3.url, o.url, { methode: o.m, corps: corpsDe(o), entetes: { 'x-forwarded-for': ip, origin: SITE, 'x-rat-market': '1', cookie: c.cookie } }));
+            // TOUR 1 (m1) : le quota de publications ne compte que les publications FAITES (ni 404, ni rejeu) : ces opérations reçoivent, à chaque appel, un objet NEUF du compte à publier
+            const deux = []; for (let i = 0; i < 3 && !deux.some(x => x.statut === 429); i++) deux.push(await H.appel(sv3.url, o.pour429 ? await o.pour429(c) : o.url, { methode: o.m, corps: corpsDe(o), entetes: { 'x-forwarded-for': ip, origin: SITE, 'x-rat-market': '1', cookie: c.cookie } }));
             const r429 = deux.find(x => x.statut === 429); obtenus.push([o.m + ' ' + o.modele, Boolean(r429)]);
             if (r429) verifier(`429 — ${o.m} ${o.modele.replace('/api/', '')}`.slice(0, 50), o.modele, o.m, r429);
         }

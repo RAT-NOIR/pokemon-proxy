@@ -1,6 +1,8 @@
 # CONTRAT-GALERIE — PROPOSITION de l'API (guichet, 31/10) pour la galerie, l'atelier et la modération du site
 
-**Statut : PROPOSITION, pas de code.** À relire par le coordinateur. Rien ici n'est dans `CONTRAT-API-V2.md` ni dans l'OpenAPI tant que le lot d'implémentation (trois relectures dont sécurité) n'est pas fait.
+> 🔁 **REMPLACÉ (2026-11-08) par `CONTRAT-API-V2.md` §1.10 (A à G) et l'OpenAPI, qui seuls font foi.** Document gardé pour l'historique des décisions. Écarts connus : un seul stockage `/api/classeurs` (page `{ nb, blocs }`, ni `michi` ni `fonds`) ; `Publication.nb` à la place de `n` ; `cartes[]` = `{ cle, setSlug }` (plus de `nom`) ; quota de publications au jour civil de Paris ; pas de route `/reprise`.
+
+**Statut d'origine : PROPOSITION, pas de code.** À relire par le coordinateur. Rien ici n'est dans `CONTRAT-API-V2.md` ni dans l'OpenAPI tant que le lot d'implémentation (trois relectures dont sécurité) n'est pas fait.
 **Point de départ** : la demande du site, `C:\Users\Yung\Desktop\rat-market-site\DEMANDE-SERVEUR-SITE.md` §2 à §10 (classeurs, illustrations, galerie, signalements, modération, stockage). Ce document en reprend les routes et les formes TELLES QUELLES sauf là où il écrit « **amendement API** ». Là où il ne dit rien, la demande du site fait foi.
 **Modèle de code existant** : « Ma collection » (`v2/collection/`, CONTRAT §1.8), les comptes (`v2/comptes/`, sessions, `turnstile.js`), l'idempotence (`v2/transport/idempotence.js`).
 

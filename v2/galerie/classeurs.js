@@ -103,12 +103,22 @@ async function citationsPermises(champs, mien) {
     const ok = await artsAccessibles(ids, mien);
     return ids.every(i => ok.has(i));
 }
+/**
+ * Insère un classeur sous la borne de `max` par compte. Un compte-puis-insère n'est pas atomique (deux créations simultanées passent toutes les deux) : RÉSERVATION (l'insertion), puis CONTRÔLE A POSTERIORI
+ * avec annulation. Chaque requête compte tout ce qui existe, la sienne comprise : la dernière arrivée voit toutes les autres et s'annule ; deux arrivées exactement simultanées s'annulent toutes les deux (jamais plus que la borne).
+ * Même fonction pour la création et la reprise (remix) : les deux comptent dans la MÊME borne. { ok: true } | { borne, max }.
+ */
+async function insererBorne(doc, max) {
+    await G.col('classeurs').insertOne(doc);
+    if ((await G.col('classeurs').countDocuments({ auteurId: doc.auteurId }, { limit: max + 2 })) > max) { await G.col('classeurs').deleteOne({ _id: doc._id }); return { borne: 'borne-classeurs', max }; }
+    return { ok: true };
+}
 async function creer({ compteId, champs, max, maintenant = new Date() }) {
     const mien = String(compteId);
     if (!(await citationsPermises(champs, mien))) return { detail: 'illustration-inconnue' };
-    if ((await G.col('classeurs').countDocuments({ auteurId: mien }, { limit: max })) >= max) return { borne: 'borne-classeurs', max };
     const doc = { _id: F.nouvelId(), auteurId: mien, ...champs, repriseDe: null, version: 1, creeLe: maintenant, majLe: maintenant };
-    await G.col('classeurs').insertOne(doc);
+    const b = await insererBorne(doc, max);
+    if (b.borne) return b;
     return { classeur: vueAuteur(doc, { visibilite: 'prive', motif: null }, await artsAccessibles(illustrationsCitees(doc), mien)) };
 }
 async function lister({ compteId, o = 0 }) {
@@ -162,15 +172,35 @@ function lireCorpsPublication(b, nbPages) {
 }
 /** Dépose (ou remplace) la mise à jour en attente d'un classeur DÉJÀ public : une seule par classeur (index unique sur `remplace`). */
 async function deposerMiseAJour(id, auteurId, pseudo, snap, maintenant) {
+    // TOUR 1 (M2) : une synchronisation PLUS ANCIENNE n'écrase jamais une plus récente : le filtre exige que la version déjà posée ne soit pas supérieure. Quand elle l'est, l'upsert se heurte à l'index unique `remplace` : rien n'est écrit.
     for (let essai = 0; essai < 2; essai++) {
         try {
-            await G.col('publications').updateOne({ remplace: id }, { $set: { auteurId, pseudo, ...snap, etat: 'en-attente', recuLe: maintenant, motif: null }, $setOnInsert: { _id: F.nouvelId(), publieLe: null, nbJaime: 0, nbEnregistre: 0 } }, { upsert: true });
+            await G.col('publications').updateOne({ remplace: id, auteurId, versionClasseur: { $not: { $gt: snap.versionClasseur } } }, { $set: { pseudo, ...snap, etat: 'en-attente', recuLe: maintenant, motif: null }, $setOnInsert: { _id: F.nouvelId(), publieLe: null, nbJaime: 0, nbEnregistre: 0 } }, { upsert: true });
             return;
-        } catch (e) { if (!estDup(e) || essai === 1) throw e; }
+        } catch (e) { if (!estDup(e)) throw e; }          // doublon : une mise à jour existe déjà (plus récente, ou posée à l'instant) — on retente UNE fois contre elle
     }
 }
+const ETATS_ECRITURE = Object.freeze(['en-attente', 'refuse']);
+/** Pose la copie en attente d'une publication qui n'est pas publique : insertion, ou remplacement conditionné à l'ÉTAT lu et à la version (M3 : on n'écrase jamais un état modéré entre la lecture et l'écriture ; 0 modifié : on relit). 'retire' : la modération a retiré, rien n'est écrit. */
+async function ecrirePublication(id, mien, pseudo, snap, maintenant) {
+    for (let essai = 0; essai < 4; essai++) {
+        const main = await G.col('publications').findOne({ _id: id }, { projection: { etat: 1 } });
+        if (!main) {
+            try { await G.col('publications').insertOne({ _id: id, auteurId: mien, pseudo, ...snap, etat: 'en-attente', recuLe: maintenant, publieLe: null, nbJaime: 0, nbEnregistre: 0, motif: null }); return 'ecrite'; }
+            catch (e) { if (!estDup(e)) throw e; continue; }
+        }
+        if (main.etat === 'retire') return 'retire';
+        if (main.etat === 'public') { await deposerMiseAJour(id, mien, pseudo, snap, maintenant); return 'ecrite'; }
+        if (!ETATS_ECRITURE.includes(main.etat)) return 'retire';
+        const r = await G.col('publications').updateOne({ _id: id, auteurId: mien, etat: main.etat, versionClasseur: { $not: { $gt: snap.versionClasseur } } }, { $set: { pseudo, ...snap, etat: 'en-attente', recuLe: maintenant, motif: null } });
+        if (r.matchedCount === 1) return 'ecrite';
+        const apres = await G.col('publications').findOne({ _id: id }, { projection: { etat: 1, versionClasseur: 1 } });
+        if (apres && apres.etat === main.etat && apres.versionClasseur > snap.versionClasseur) return 'ecrite';      // une copie plus récente est déjà posée
+    }
+    return 'ecrite';
+}
 /** { introuvable } | { refus } (classeur-vide, illustration-refusee) | { ok } */
-async function publier({ compteId, pseudo, id, corps, maintenant = new Date() }) {
+async function publier({ compteId, pseudo, id, corps, reserver = null, rendre = null, maintenant = new Date() }) {
     const mien = String(compteId);
     const d = F.idValide(id) ? await G.col('classeurs').findOne({ _id: id, auteurId: mien }) : null;
     if (!d) return { introuvable: true };
@@ -178,28 +208,49 @@ async function publier({ compteId, pseudo, id, corps, maintenant = new Date() })
     if (l.detail) return { refus: l.detail };
     const snap = instantane(d, { categories: l.categories, pagesPubliees: l.pagesPubliees, certification: { cgu: l.cgu, le: maintenant } });
     if (snap.vide) return { refus: 'classeur-vide' };
-    const ids = P.artsCites(snap.pagesBlocs);
+    const ids = unique([...P.artsCites(snap.pagesBlocs), ...(d.couverture && d.couverture.illustration ? [d.couverture.illustration] : [])]);      // m6 : la couverture passe en modération comme les pages
     const lus = new Map((ids.length ? await G.col('arts').find({ _id: { $in: ids } }, { projection: { auteurId: 1, etat: 1 } }).toArray() : []).map(a => [a._id, a]));
     if (ids.some(i => { const a = lus.get(i); return a && a.auteurId === mien && ['refuse', 'retire'].includes(a.etat); })) return { refus: 'illustration-refusee' };
     const main = await G.col('publications').findOne({ _id: id }, { projection: { etat: 1 } });
-    if (!main) {
-        try { await G.col('publications').insertOne({ _id: id, auteurId: mien, pseudo, ...snap, etat: 'en-attente', recuLe: maintenant, publieLe: null, nbJaime: 0, nbEnregistre: 0, motif: null }); }
-        catch (e) { if (!estDup(e)) throw e; await G.col('publications').updateOne({ _id: id, etat: { $ne: 'public' } }, { $set: { pseudo, ...snap, etat: 'en-attente', recuLe: maintenant, motif: null } }); }
-    } else if (main.etat === 'public') await deposerMiseAJour(id, mien, pseudo, snap, maintenant);
-    else await G.col('publications').updateOne({ _id: id }, { $set: { pseudo, ...snap, etat: 'en-attente', recuLe: maintenant, motif: null } });
-    // ses illustrations PRIVÉES passent en modération AVEC le classeur, sous la même certification (les publiques d'autrui restent ce qu'elles sont)
-    if (ids.length) await G.col('arts').updateMany({ _id: { $in: ids }, auteurId: mien, etat: 'prive' }, { $set: { etat: 'en-attente', recuLe: maintenant, certification: { droits: true, nonOfficielle: true, le: maintenant } } });
+    if (main && main.etat === 'retire') return { conflit: 'etat' };         // M7 : retirée par la modération, elle ne se republie pas (comme une illustration retirée)
+    // m1 : la place du jour ne se prend que si une publication est RÉELLEMENT posée (une copie encore en attente qu'on remplace ne compte pas) ; G1 : le jour de Paris (quota-publications.js)
+    const compte = !main || main.etat !== 'en-attente';
+    let reserve = false;
+    if (compte && reserver) { const q = await reserver(mien); if (!q.permis) return { limite: q.reessayerDans }; reserve = true; }
+    const annuler = async () => { if (reserve && rendre) await rendre(mien); };
+    let issue;
+    try { issue = await ecrirePublication(id, mien, pseudo, snap, maintenant); } catch (e) { await annuler(); throw e; }
+    if (issue === 'retire') { await annuler(); return { conflit: 'etat' }; }
+    // G2 : le classeur (ou le compte) a pu disparaître ENTRE la lecture et l'écriture (DELETE concurrent, suppression de compte) : une publication ne reste jamais sans classeur
+    const vivant = await G.col('classeurs').findOne({ _id: id, auteurId: mien }, { projection: { _id: 1 } }) && await G.col('profils').findOne({ _id: mien }, { projection: { _id: 1 } });
+    if (!vivant) { await retirerPublication(id, mien); await annuler(); return { introuvable: true }; }
+    // ses illustrations PRIVÉES passent en modération AVEC le classeur, sous la même certification (les publiques d'autrui restent ce qu'elles sont) ; M6 : marquées `viaClasseurs` pour redevenir privées au retrait
+    if (ids.length) {
+        await G.col('arts').updateMany({ _id: { $in: ids }, auteurId: mien, etat: 'prive' }, { $set: { etat: 'en-attente', recuLe: maintenant, certification: { droits: true, nonOfficielle: true, le: maintenant } } });
+        await G.col('arts').updateMany({ _id: { $in: ids }, auteurId: mien, etat: { $in: ['prive', 'en-attente'] } }, { $addToSet: { viaClasseurs: id } });
+    }
     return { ok: true };
 }
+/** M6 : au retrait d'une publication, ses illustrations privées qu'elle avait fait passer « en-attente » redeviennent privées — sauf si un autre classeur de l'auteur les cite encore (`viaClasseurs`) ou si l'auteur les a publiées lui-même (`publieeParAuteur`). */
+async function libererIllustrations(id, auteurId, docs) {
+    const ids = unique(docs.flatMap(d => [...P.artsCites(d.pagesBlocs || []), ...(d.couverture && d.couverture.illustration ? [d.couverture.illustration] : [])]));
+    if (!ids.length) return;
+    await G.col('arts').updateMany({ _id: { $in: ids }, auteurId, viaClasseurs: id }, { $pull: { viaClasseurs: id } });
+    await G.col('arts').updateMany({ _id: { $in: ids }, auteurId, etat: 'en-attente', viaClasseurs: { $size: 0 }, publieeParAuteur: { $ne: true } }, { $set: { etat: 'prive', motif: null } });
+}
 /** Retire la publication (et la mise à jour en attente) ET les votes qui visaient la copie publiée. Le classeur de travail est intact. */
-async function retirerPublication(id) {
-    await G.col('publications').deleteMany({ $or: [{ _id: id }, { remplace: id }] });
+async function retirerPublication(id, auteurId) {
+    const docs = await G.col('publications').find({ $or: [{ _id: id }, { remplace: id }] }, { projection: { etat: 1, pagesBlocs: 1, couverture: 1, remplace: 1 } }).toArray();
+    // M7 : une publication RETIRÉE par la modération n'est ni effacée ni privée de son motif par l'auteur (la mise à jour en attente, elle, part)
+    const aSupprimer = docs.filter(d => !(d._id === id && d.etat === 'retire')).map(d => d._id);
+    if (aSupprimer.length) await G.col('publications').deleteMany({ _id: { $in: aSupprimer }, auteurId });
     await G.col('votes').deleteMany({ type: 'galerie', cible: id });
+    await libererIllustrations(id, auteurId, docs);
 }
 async function depublier({ compteId, id }) {
     const mien = String(compteId);
     if (!F.idValide(id) || !(await G.col('classeurs').findOne({ _id: id, auteurId: mien }, { projection: { _id: 1 } }))) return { introuvable: true };
-    await retirerPublication(id);
+    await retirerPublication(id, mien);
     return { ok: true };
 }
 /** Écrit un classeur (PUT) : comparer-et-écrire atomique sur `version`. { introuvable } | { detail } | { borne } | { conflit: { versionActuelle } } | { classeur }. */
@@ -217,22 +268,27 @@ async function ecrire({ compteId, id, champs, version, maintenant = new Date() }
     return { classeur: vueAuteur(d, etats.get(id), ok) };
 }
 /** Un classeur en attente ou public MODIFIÉ : la copie en attente suit (en attente : sur place ; public : une mise à jour à côté, l'ancienne version reste servie). Refusé, retiré, privé : rien. */
+const COMPARES = Object.freeze(['titre', 'categories', 'nb', 'pages', 'pagesBlocs', 'etiquettes', 'couleur', 'couverture', 'repriseDe', 'pagesPubliees']);
+const memeContenu = (a, b) => JSON.stringify(COMPARES.map(k => a[k] ?? null)) === JSON.stringify(COMPARES.map(k => b[k] ?? null));
 async function synchroniser(d, maintenant) {
-    const main = await G.col('publications').findOne({ _id: d._id }, { projection: { etat: 1, categories: 1, pagesPubliees: 1, certification: 1, pseudo: 1 } });
+    const main = await G.col('publications').findOne({ _id: d._id }, { projection: { etat: 1, categories: 1, pagesPubliees: 1, certification: 1, pseudo: 1, titre: 1, nb: 1, pages: 1, pagesBlocs: 1, etiquettes: 1, couleur: 1, couverture: 1, repriseDe: 1 } });
     if (!main || !['en-attente', 'public'].includes(main.etat)) return;
     const pp = main.pagesPubliees ? main.pagesPubliees.filter(n => n <= d.pages.length) : null;
     if (pp && !pp.length) return;
     const snap = instantane(d, { categories: main.categories || [], pagesPubliees: pp, certification: main.certification || null });
     if (snap.vide) return;
-    if (main.etat === 'en-attente') await G.col('publications').updateOne({ _id: d._id }, { $set: { ...snap, recuLe: maintenant } });
+    if (main.etat === 'en-attente') await G.col('publications').updateOne({ _id: d._id, auteurId: d.auteurId, etat: 'en-attente', versionClasseur: { $not: { $gt: snap.versionClasseur } } }, { $set: { ...snap, recuLe: maintenant } });      // M2, M3 : ni plus ancienne que la copie posée, ni sur un état changé entre-temps
+    else if (memeContenu(main, snap)) await G.col('publications').deleteMany({ remplace: d._id, etat: 'en-attente', auteurId: d.auteurId });      // m7 : un PUT identique à la version publique ne met rien en file (et retire la mise à jour qui attendait)
     else await deposerMiseAJour(d._id, d.auteurId, main.pseudo, snap, maintenant);
+    // G2 : le classeur a pu être supprimé pendant la synchronisation (DELETE concurrent) : la publication (et la mise à jour) qu'on vient de poser est retirée avec lui
+    if (!(await G.col('classeurs').findOne({ _id: d._id, auteurId: d.auteurId }, { projection: { _id: 1 } }))) await retirerPublication(d._id, d.auteurId);
 }
 async function supprimer({ compteId, id }) {
     const mien = String(compteId);
     if (!F.idValide(id)) return { introuvable: true };
     const r = await G.col('classeurs').deleteOne({ _id: id, auteurId: mien });
     if (r.deletedCount !== 1) return { introuvable: true };
-    await retirerPublication(id);
+    await retirerPublication(id, mien);
     return { ok: true };
 }
 /** La vue d'un classeur de l'auteur après une opération (publication, dépublication). */
@@ -241,4 +297,4 @@ async function vueDe(compteId, id) {
     return r.classeur;
 }
 
-module.exports = { OCTETS_MAX, COULEURS, lireCorps, lireCorpsPublication, artsAccessibles, etatsDe, creer, lister, lire, publier, depublier, ecrire, supprimer, vueDe, instantane, synchroniser };
+module.exports = { OCTETS_MAX, COULEURS, lireCorps, lireCorpsPublication, artsAccessibles, etatsDe, insererBorne, creer, lister, lire, publier, depublier, ecrire, supprimer, vueDe, instantane, synchroniser };

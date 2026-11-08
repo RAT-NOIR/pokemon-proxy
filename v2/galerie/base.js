@@ -35,6 +35,11 @@ async function creerIndex(d = null) {
         c('arts').createIndex({ etat: 1, nbJaime: -1, publieLe: -1 }, { name: 'etat_aimes' }),
         c('arts').createIndex({ mots: 1, etat: 1 }, { name: 'mots_1_etat_1' }),
         c('arts').createIndex({ auteurId: 1, etat: 1 }, { name: 'auteur' }),
+        // TOUR 1 (M4) : un dépôt ne donne qu'UN art, même si la finalisation est rejouée ou reprise (le rejeu rend l'art existant)
+        c('arts').createIndex({ depotId: 1 }, { unique: true, partialFilterExpression: { depotId: { $type: 'string' } }, name: 'un_art_par_depot' }),
+        // TOUR 1 (M5) : les suppressions par cible (dépublier, supprimer un art ou un classeur) et par art ne parcourent plus la collection
+        c('votes').createIndex({ cible: 1 }, { name: 'votes_de_la_cible' }),
+        c('depots').createIndex({ artId: 1 }, { name: 'depot_de_l_art' }),
         c('depots').createIndex({ purgeLe: 1 }, { expireAfterSeconds: 0, name: 'ttl_depots' }),
         c('depots').createIndex({ compteId: 1, etat: 1 }, { name: 'compte' }),
         c('votes').createIndex({ compte: 1, genre: 1, type: 1, cible: 1 }, { unique: true, name: 'vote_unique' }),

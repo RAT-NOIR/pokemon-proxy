@@ -155,8 +155,10 @@ function routesGalerie(router, cfg, deps = {}) {
     }));
 
     // ═══ B bis. les CLASSEURS privés de l'Atelier (L9) et les ILLUSTRATIONS privées (L10) : le même compteur de publications (5 par jour, classeur ou illustration) ═══
-    const limitePublications = lim('publication-compte', li.publicationsCompteJour, JOUR, compteDe);
-    const contexte = { cfg, li, dispo, SESSION, ECRITURE, exigerPseudo, lim, HEURE, JOUR, compteDe, ipSalee, protege, entree, introuvable, indispo, privee, maintenant, limitePublications, stockage };
+    // TOUR 1 (G1, m1) : le quota suit le JOUR DE PARIS ; le middleware lit sans consommer, la place se prend (atomiquement) quand la publication est faite (quota-publications.js)
+    const quotaPublications = require('./quota-publications').creer({ max: li.publicationsCompteJour, maintenant });
+    const limitePublications = quotaPublications.verifier, reserverPublication = id => quotaPublications.reserver(id), rendrePublication = id => quotaPublications.rendre(id);
+    const contexte = { cfg, li, dispo, SESSION, ECRITURE, exigerPseudo, lim, HEURE, JOUR, compteDe, ipSalee, protege, entree, introuvable, indispo, privee, maintenant, limitePublications, reserverPublication, rendrePublication, stockage };
     require('./routes-classeurs').routesClasseurs(router, contexte);
     require('./routes-illustrations').routesIllustrations(router, contexte);
 
@@ -196,11 +198,13 @@ function routesGalerie(router, cfg, deps = {}) {
             if (typeof b.turnstile !== 'string' || !b.turnstile) return repondreErreur(res, 'ENTREE', 'Vérification anti-robot échouée', { detail: 'defi-anti-robot' }, 422);
             if (!env.V2_GALERIE_TURNSTILE_SECRET) return indispo(res);
             // un jeton n'est accepté qu'UNE fois (empreinte gardée 10 min) : le rejeu est refusé SANS rappeler le fournisseur
-            if (!(await svc.jetonNeuf(b.turnstile))) return repondreErreur(res, 'ENTREE', 'Vérification anti-robot échouée', { detail: 'defi-anti-robot' }, 422);
+            // TOUR 1 (m2) : l'empreinte est LUE avant (rejeu : refus sans fournisseur) mais CONSOMMÉE après le verdict : une panne du fournisseur (503) ne brûle pas le jeton
+            if (await svc.jetonVu(b.turnstile)) return repondreErreur(res, 'ENTREE', 'Vérification anti-robot échouée', { detail: 'defi-anti-robot' }, 422);
             let ok;
             try { ok = await jugerJeton(b.turnstile, req.ip, { fetch: fetchTurnstile(), secret: env.V2_GALERIE_TURNSTILE_SECRET, hotesDuSite, action: 'signalement' }); }
             catch (e) { console.error(`❌ [v2 galerie] Turnstile en échec (${nomErreur(e)})`); return indispo(res); }
             if (ok !== true) return repondreErreur(res, 'ENTREE', 'Vérification anti-robot échouée', { detail: 'defi-anti-robot' }, 422);
+            if (!(await svc.jetonNeuf(b.turnstile))) return repondreErreur(res, 'ENTREE', 'Vérification anti-robot échouée', { detail: 'defi-anti-robot' }, 422);      // deux requêtes simultanées avec le même jeton : une seule passe
         }
         // la réponse est la MÊME que la cible existe ou non (rien ne dit si un objet privé existe)
         await svc.signaler({ compteId: session ? req.v2.porteur.id : null, cibleType: c[1], cibleId: c[2], motif: b.motif, precision: b.precision === undefined || b.precision === '' ? null : b.precision.normalize('NFKC'), maintenant: maintenant() });

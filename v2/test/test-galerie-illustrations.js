@@ -172,7 +172,7 @@ const H = A.H;
         const p = await compte({}, 'mut-ill'), autre = await compte({}, 'mut-autre');
         const a = await artPublic(p, { etat: 'prive', publieLe: null });
         const reel = require('../galerie/illustrations');
-        const sansAuteur = A.charger('illustrations.js', [["const d = await trouver(id, mien);", "const d = await G.col('arts').findOne({ _id: id });"]]);
+        const sansAuteur = A.charger('illustrations.js', [["const d = await trouver(id, mien);", "const d = await G.col('arts').findOne({ _id: id });"], ["{ _id: id, auteurId: mien, ...(texte ? { etat: { $ne: 'public' } } : {}) }", "{ _id: id }"]]);
         const r1 = await reel.modifier({ compteId: autre.id, id: a, corps: { ambiances: ['douce'] } }), m1 = await sansAuteur.modifier({ compteId: autre.id, id: a, corps: { ambiances: ['douce'] } });
         H.v('garde d\'auteur : le réel répond introuvable à un autre compte, le mutant (sans l\'auteur dans la recherche) modifie l\'illustration d\'autrui', [Boolean(r1.introuvable), Boolean(m1.illustration)], [true, true]);
         const sansCopie = A.charger('illustrations.js', [["await stockage.copier(`${d.clePublique}${s}`, `${d.cle}${s}`);", "/* copie retirée */"]]);

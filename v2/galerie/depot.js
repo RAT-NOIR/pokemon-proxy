@@ -29,6 +29,9 @@ async function ouvrirDepot({ compteId, ref, type, octets, bornes, stockage, main
     const depotId = F.nouvelId(), cle = `galerie/depot/${ref}/${depotId}`;
     const urlDepot = stockage.presignerDepot({ cle, type, octets, expire: EXPIRE_S });
     await G.col('depots').insertOne({ _id: depotId, compteId: mien, cle, type, octets, etat: 'ouvert', creeLe: maintenant, finaliseAvant: new Date(maintenant.getTime() + GRACE_FINALISATION_MS), purgeLe: new Date(maintenant.getTime() + PURGE_MS), artId: null });
+    // TOUR 1 (M1) : la borne n'est pas atomique (deux dépôts simultanés passent le premier contrôle) : réservation (le document ci-dessus), puis CONTRÔLE A POSTERIORI avec annulation.
+    // Chaque requête compte tout ce qui existe, la sienne comprise : la dernière arrivée voit toutes les autres et s'annule ; deux arrivées exactement simultanées s'annulent toutes les deux (jamais plus que la borne).
+    if ((await enStock(mien)) > bornes.illustrationsMax) { await G.col('depots').deleteOne({ _id: depotId }); return refus(409, 'CONFLIT', 'borne-illustrations'); }
     return { ok: { depotId, urlDepot, expireDans: EXPIRE_S } };
 }
 
@@ -93,8 +96,18 @@ async function finaliser({ compteId, pseudo, depotId, corps, bornes, stockage, m
         for (const s of ['.webp', '-480.webp']) { try { await stockage.supprimer(`${cle}${s}`); } catch { /* le cycle de vie ne couvre pas attente/ : reprise à la main */ } }
         await clore('ouvert'); throw e;
     }
-    await G.col('arts').insertOne({ _id: artId, auteurId: mien, pseudo, nom: l.nom, mots: svc.motsDe(l.nom, pseudo), fmt: l.format, largeur: t.largeur, hauteur: t.hauteur, couleur: t.couleur, poids: t.image.length, cle, clePublique, etat: 'en-attente', recuLe: maintenant, creeLe: maintenant, publieLe: null,
-        nbJaime: 0, nbEnregistre: 0, motif: null, certification: { droits: true, nonOfficielle: true, le: maintenant }, depotId, artisteDeclare: pseudo, ambiances: [], formats: [] });
+    try {
+        await G.col('arts').insertOne({ _id: artId, auteurId: mien, pseudo, nom: l.nom, mots: svc.motsDe(l.nom, pseudo), fmt: l.format, largeur: t.largeur, hauteur: t.hauteur, couleur: t.couleur, poids: t.image.length, cle, clePublique, etat: 'en-attente', recuLe: maintenant, creeLe: maintenant, publieLe: null,
+            nbJaime: 0, nbEnregistre: 0, motif: null, certification: { droits: true, nonOfficielle: true, le: maintenant }, depotId, artisteDeclare: pseudo, ambiances: [], formats: [] });
+    } catch (e) {
+        // TOUR 1 (M4) : l'index unique `un_art_par_depot` : une finalisation déjà passée (reprise, rejeu) a posé l'art — on rend CET art, et les objets de cette tentative partent
+        if (!e || e.code !== 11000) throw e;
+        for (const s of ['.webp', '-480.webp']) await svc.supprimerOuFile(stockage, `${cle}${s}`, 'finalisation-doublon');
+        const existant = await G.col('arts').findOne({ depotId, auteurId: mien }, { projection: { _id: 1 } });
+        if (!existant) throw e;
+        await supprimerBrut(stockage, depot.cle); await clore('finalise', { artId: existant._id });
+        return { ok: { id: existant._id, statut: 'en-attente' } };
+    }
     await supprimerBrut(stockage, depot.cle);                                                 // l'octet reçu n'est jamais gardé
     await clore('finalise', { artId });
     return { ok: { id: artId, statut: 'en-attente' } };
