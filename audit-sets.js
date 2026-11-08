@@ -82,9 +82,9 @@ async function lireBase() {
     const { exclure } = require(`${OUTILS}/faux-trous-f3`);
     // les annexes (« Yellow A ») : le site les range dans le set de leur carte parente (lib/annexes.ts) — importées, jamais recopiées ; une fonction absente lève
     const site = async f => import(require('url').pathToFileURL(`C:/Users/Yung/Desktop/rat-market-site/lib/${f}`).href);
-    const [{ annexeDuSet }, { expansionsDuSet, tirageDuSet, editionLocaleDuSet }, { imageDeLImpression }, { visuelAdmisPourLaRegion }] = await Promise.all([site('annexes.ts'), site('entreesDuSet.ts'), site('imageDeLImpression.ts'), site('langueDuVisuel.ts')]);
-    for (const [k, f] of Object.entries({ annexeDuSet, expansionsDuSet, tirageDuSet, editionLocaleDuSet, imageDeLImpression, visuelAdmisPourLaRegion })) if (typeof f !== 'function') throw new Error(`règle du site non importée : ${k}`);
-    const regles = { impressionDuSet, normaliserNumero, memeCodeSaufFin, exclure: s => exclure(s), annexeDuSet, expansionsDuSet, tirageDuSet, editionLocaleDuSet, imageDeLImpression, visuelAdmisPourLaRegion };
+    const [{ annexeDuSet }, { expansionsDuSet, tirageDuSet, editionLocaleDuSet }, { imageDeLImpression }, { visuelAdmisPourLaRegion }, { estAdditionals }] = await Promise.all([site('annexes.ts'), site('entreesDuSet.ts'), site('imageDeLImpression.ts'), site('langueDuVisuel.ts'), site('additionals.ts')]);
+    for (const [k, f] of Object.entries({ estAdditionals, annexeDuSet, expansionsDuSet, tirageDuSet, editionLocaleDuSet, imageDeLImpression, visuelAdmisPourLaRegion })) if (typeof f !== 'function') throw new Error(`règle du site non importée : ${k}`);
+    const regles = { impressionDuSet, normaliserNumero, memeCodeSaufFin, exclure: s => exclure(s), estAdditionals, annexeDuSet, expansionsDuSet, tirageDuSet, editionLocaleDuSet, imageDeLImpression, visuelAdmisPourLaRegion };
 
     const cache = autoriser(path.join(DOSSIER_CACHE, 'lecture.json'), [DOSSIER]);
     let lecture;
@@ -108,6 +108,7 @@ async function lireBase() {
     console.log(`dénominateurs : ${JSON.stringify(D)}`);
     console.log(`sets à 100 % ${T.sets100} · troués ${T.setsTroues} · trous ${T.trous} : ` + A.TYPES.map(t => `${A.TITRES[t]} ${T[t]}`).join(' · '));
     for (const t of A.TYPES) console.log(`  ${t} : ${JSON.stringify(audit.parCause[t])}`);
+    console.log(`EXCLUS du compte (imprimés à part, jamais disparus) : ${audit.exclus.total} · par cause ${JSON.stringify(audit.exclus.parCause)} · sur ${Object.keys(audit.exclus.parSet).length} sets`);
     console.log('10 sets les plus touchés par expansion-declaree-sans-impression :');
     for (const x of A.suspectsExpansion(audit)) console.log(`  ${x.set} ${x.n} · déclarée ${JSON.stringify(x.expansionsDeclarees)} · ` + x.exemples.map(e => `${e.nom} → ${e.plusProche ? `${e.plusProche.tirage}/« ${e.plusProche.expansion} »/${e.plusProche.numero}` : 'aucune'}`).join(' ; '));
     for (const id of args.filter(a => a.startsWith('--set=')).map(a => a.slice(6))) {   // détail par set demandé : trous, causes, exclusions

@@ -17,6 +17,8 @@
 //   numerosProduits[{idProduct,numero}], offresParExpansion{idExpansion:n}, trousNommes{idProduct:motif}, restesParSet{set:{type:n}}
 
 const { numerosAttendus } = require('./numeros-attendus');
+const { SANS_NUMERO_IMPRIME, familleSansNumero } = require('./sans-numero-imprime');
+const { cleNumero } = require('../collecte-cartes/jointure');   // LA clé de numéro de la production (préfixe et suffixe gardés, zéros retirés) — jamais une copie
 const TYPES = Object.freeze(['sansVisuel', 'sansNumero', 'sansProduit', 'doublons', 'produitsSansFiche', 'manquants']);
 const CAUSES = Object.freeze({
     sansVisuel: ['regle-bloquante', 'aucune-image-en-base', 'image-d-un-autre-set-seulement', 'image-refusee-par-la-garde-de-langue', 'image-d-un-autre-numero', 'cause-inconnue'],
@@ -26,6 +28,21 @@ const CAUSES = Object.freeze({
     produitsSansFiche: ['sans-ligne', 'ligne-sans-fiche', 'reste', 'cause-inconnue'],
     manquants: ['produit-cardmarket-existe-sans-fiche', 'reste', 'aucune-source-en-base', 'aucune-impression-numerotee', 'cause-inconnue'],
 });
+// 🔑 EXCLUS DU COMPTE DES TROUS (testeur, 2026-11-08 : « le compte des trous doit dire la vérité »). Liste FERMÉE, par type de trou. Une entrée exclue ne disparaît JAMAIS de la sortie :
+// elle est comptée par cause et par set (`exclusParCause` du set, `audit.exclus`, `totaux.exclus`, section du Markdown, écart) — un contrôle qui s'améliore en rétrécissant son périmètre l'imprime.
+//  · sansNumero/numero-non-imprime:<famille> : la carte n'imprime aucun numéro de collection ; le set est dans la table fermée SANS_NUMERO_IMPRIME (preuve sur scans), et seule une entrée
+//    « impression-sans-numero » y entre (jamais « expansion-declaree-sans-impression »).
+//  · sansProduit/impression-hors-additionals : set Additionals (règle du SITE `estAdditionals`, injectée) dont l'expansion n'a AUCUN produit à ce numéro (cleNumero de la production) : l'impression
+//    est celle du set de base, pas un produit manquant. Un produit sans numéro lisible dans l'expansion empêche l'exclusion (on ne sait pas s'il porte ce numéro).
+const EXCLUSIONS = Object.freeze({
+    sansNumero: ['numero-non-imprime'],
+    sansProduit: ['impression-hors-additionals'],
+});
+function verifierExclusion(type, cause) {
+    const base = String(cause).split(':')[0];
+    if (!EXCLUSIONS[type] || !EXCLUSIONS[type].includes(base)) throw new Error(`exclusion « ${cause} » hors de la liste fermée de ${type} (${(EXCLUSIONS[type] || []).join(', ')})`);
+    return cause;
+}
 const TITRES = Object.freeze({ sansVisuel: 'sans visuel', sansNumero: 'sans numéro', sansProduit: 'sans produit CM', doublons: 'doublons', produitsSansFiche: 'produits CM sans fiche', manquants: 'numéros manquants' });
 
 /** Une cause porte un préfixe de la liste fermée, suivi éventuellement de « :détail ». Hors liste : LÈVE. */
@@ -45,7 +62,7 @@ const baseNumero = n => { const m = /(\d+)/.exec(String(n ?? '')); return m ? St
 const suffixeLettre = n => /\d[a-z]+$/i.test(String(n ?? ''));
 
 function auditer(lecture, regles) {
-    const { impressionDuSet, normaliserNumero, memeCodeSaufFin, exclure, expansionsDuSet, tirageDuSet, editionLocaleDuSet, imageDeLImpression, visuelAdmisPourLaRegion, annexeDuSet = null } = regles || {};   // annexeDuSet : facultatif (lib/annexes.ts du site)
+    const { impressionDuSet, normaliserNumero, memeCodeSaufFin, exclure, expansionsDuSet, tirageDuSet, editionLocaleDuSet, imageDeLImpression, visuelAdmisPourLaRegion, annexeDuSet = null, estAdditionals = null, sansNumeroImprime = SANS_NUMERO_IMPRIME } = regles || {};   // annexeDuSet (lib/annexes.ts) et estAdditionals (lib/additionals.ts) : facultatifs, règles du site ; sans eux, aucune exclusion de ce genre
     for (const [k, f] of Object.entries({ impressionDuSet, normaliserNumero, memeCodeSaufFin, exclure, expansionsDuSet, tirageDuSet, editionLocaleDuSet, imageDeLImpression, visuelAdmisPourLaRegion })) if (typeof f !== 'function') throw new Error(`auditer : règle injectée absente (${k}) — jamais de repli`);
     const sets = lecture.sets || [], cartes = lecture.cartes || [], lignes = lecture.lignes || [], produits = lecture.produits || [];
     if (!sets.length) throw new Error('auditer : population vide (0 set) — un audit sur zéro set n\'est pas une mesure (§41)');
@@ -102,6 +119,11 @@ function auditer(lecture, regles) {
         }
         const nums = new Set(entrees.filter(e => e.numero !== null).map(e => e.numero));
         const sansVisuel = [], sansNumero = [], sansProduit = [];
+        const exclusParCause = {};   // { 'type/cause': [{carteId, nom, numero}] } — sortis du compte, JAMAIS de la sortie
+        const exclure1 = (type, cause, c, numero) => { const k = `${type}/${verifierExclusion(type, cause)}`; (exclusParCause[k] = exclusParCause[k] || []).push({ carteId: c._id, nom: c.nomEn, numero }); };
+        const familleNumero = familleSansNumero(s._id, sansNumeroImprime);
+        const numerosDeLExpansion = estAdditionals && estAdditionals(s._id) ? new Set(prods.map(p => numProd.get(p.idProduct)).filter(n => n != null && n !== '').map(cleNumero)) : null;
+        const produitSansNumero = estAdditionals && estAdditionals(s._id) ? prods.some(p => !nonVide(numProd.get(p.idProduct))) : false;
         for (const e of entrees) {
             const { c } = e;
             const memeNumero = x => x == null ? (e.nEntreesCarte === 1 || e.numero === null) : (e.numero === null || normaliserNumero(x) === e.numero);
@@ -125,7 +147,10 @@ function auditer(lecture, regles) {
                 else cause = 'image-d-un-autre-numero';
                 sansVisuel.push({ carteId: c._id, nom: c.nomEn, numero: e.numero, cause: verifierCause('sansVisuel', cause) });
             }
-            if (e.numero === null) sansNumero.push({ carteId: c._id, nom: c.nomEn, numero: null, cause: verifierCause('sansNumero', e.causeSansNumero) });
+            if (e.numero === null) {
+                if (familleNumero && e.causeSansNumero === 'impression-sans-numero') exclure1('sansNumero', `numero-non-imprime:${familleNumero}`, c, null);
+                else sansNumero.push({ carteId: c._id, nom: c.nomEn, numero: null, cause: verifierCause('sansNumero', e.causeSansNumero) });
+            }
             if (!liés.size) {
                 let cause;
                 const sansLigne = prods.filter(p => p.fiche && p.fiche.classe === 'SANS_LIGNE');
@@ -134,9 +159,11 @@ function auditer(lecture, regles) {
                 if (!prods.length) cause = 'expansion-sans-produit-cardmarket';
                 else if (e.numero !== null && sansLigne.some(p => numProd.get(p.idProduct) === e.numero)) cause = 'produit-sans-ligne-meme-numero';
                 else if (e.numero !== null && suffixeLettre(e.numero) && baseOk) cause = 'jumelle-suffixe-sans-produit';
+                else if (numerosDeLExpansion && !produitSansNumero && e.numero !== null && !numerosDeLExpansion.has(cleNumero(e.numero))) cause = 'impression-hors-additionals';
                 else if (sansLigne.length) cause = 'produits-sans-ligne-dans-l-expansion';
                 else cause = 'tous-les-produits-deja-rattaches';
-                sansProduit.push({ carteId: c._id, nom: c.nomEn, numero: e.numero, cause: verifierCause('sansProduit', cause) });
+                if (cause === 'impression-hors-additionals') exclure1('sansProduit', cause, c, e.numero);
+                else sansProduit.push({ carteId: c._id, nom: c.nomEn, numero: e.numero, cause: verifierCause('sansProduit', cause) });
             }
         }
         // ── doublons de faits : même nom + PV + attaques + numéro de base, dans le set
@@ -206,17 +233,20 @@ function auditer(lecture, regles) {
             return { carteId: x.carteId, nom: x.nom, plusProche: p ? { tirage: p.tirage ?? null, expansion: p.expansion ?? null, numero: p.numero ?? null } : null };
         }) } : null;
         resultats.push({ set: s._id, code: s.code ?? null, nom: s.nomAffichage, tirage: cible.tirage, type: s.type ?? null, attendu, attenduDetail, totalImprime: total, affichees: entrees.length, cartesDocuments: docs.length, produitsCardmarket: prods.length, offres,
-            ...entree, exclusPasUnTrou, diagnosticExpansion, trous, causes });
+            ...entree, exclusPasUnTrou, exclusParCause, diagnosticExpansion, trous, causes });
     }
     const sorted = trier(resultats);
-    const parCause = {}; const totaux = { trous: 0, setsTroues: 0, sets100: 0 };
+    const parCause = {}; const totaux = { trous: 0, setsTroues: 0, sets100: 0, exclus: 0 };
+    const exclus = { total: 0, parCause: {}, parSet: {} };
     for (const t of TYPES) { parCause[t] = {}; totaux[t] = 0; }
     for (const r of sorted) {
+        for (const [k, liste] of Object.entries(r.exclusParCause)) { exclus.total += liste.length; exclus.parCause[k] = (exclus.parCause[k] || 0) + liste.length; (exclus.parSet[r.set] = exclus.parSet[r.set] || {})[k] = liste.length; }
         totaux.trous += r.trous; if (r.trous > 0) totaux.setsTroues++; else totaux.sets100++;
         for (const t of TYPES) totaux[t] += r[t].n;
         for (const [k, n] of Object.entries(r.causes)) { const [t, ...c] = k.split('/'); const cause = c.join('/'); parCause[t][cause] = (parCause[t][cause] || 0) + n; }
     }
-    return { denominateurs: { sets: sets.length, setsPublies: publies.length, setsNonPublies: sets.length - publies.length, cartes: cartes.length, cartesAffichables: affichables.length, lignes: lignes.length, produits: produits.length, produitsSansSetPublie, entreesAffichees: sorted.reduce((a, r) => a + r.affichees, 0) },
+    totaux.exclus = exclus.total;
+    return { exclus, denominateurs: { sets: sets.length, setsPublies: publies.length, setsNonPublies: sets.length - publies.length, cartes: cartes.length, cartesAffichables: affichables.length, lignes: lignes.length, produits: produits.length, produitsSansSetPublie, entreesAffichees: sorted.reduce((a, r) => a + r.affichees, 0) },
         sets: sorted, parCause, totaux };
 }
 
@@ -232,7 +262,11 @@ function ecart(avant, apres) {
     const d1 = avant.denominateurs || {}, d2 = apres.denominateurs || {};
     const totaux = {};
     for (const k of new Set([...Object.keys(avant.totaux || {}), ...Object.keys(apres.totaux || {})])) totaux[k] = ((apres.totaux || {})[k] || 0) - ((avant.totaux || {})[k] || 0);
-    return { avantLe: avant.le ?? null, memeDenominateur: d1.sets === d2.sets && d1.setsPublies === d2.setsPublies, totaux, parCause, setsPassesA100, setsNouvellementTroues };
+    // les EXCLUS ont leur écart : un compte de trous qui baisse parce que le périmètre rétrécit doit le dire
+    const xa = (avant.exclus || {}).parCause || {}, xb = (apres.exclus || {}).parCause || {}, exParCause = {};
+    for (const k of new Set([...Object.keys(xa), ...Object.keys(xb)])) { const d = (xb[k] || 0) - (xa[k] || 0); if (d !== 0) exParCause[k] = d; }
+    const exclus = { total: ((apres.exclus || {}).total || 0) - ((avant.exclus || {}).total || 0), parCause: exParCause };
+    return { avantLe: avant.le ?? null, memeDenominateur: d1.sets === d2.sets && d1.setsPublies === d2.setsPublies, totaux, parCause, exclus, setsPassesA100, setsNouvellementTroues };
 }
 
 // ── LE MARKDOWN
@@ -248,16 +282,29 @@ function formaterMd(audit, ec, { lignes = 150, detail = 40, parSet = 8 } = {}) {
     out.push(`- entrées affichées dans les sets audités : ${D.entreesAffichees}`, '');
     out.push('## Totaux', '');
     out.push(`- sets à 100 % : **${T.sets100}** · sets troués : **${T.setsTroues}** · trous : **${T.trous}**`);
-    out.push('- ' + TYPES.map(t => `${TITRES[t]} ${T[t]}`).join(' · '), '');
+    out.push('- ' + TYPES.map(t => `${TITRES[t]} ${T[t]}`).join(' · '));
+    out.push(`- 🔎 **exclus du compte, imprimés à part : ${T.exclus ?? 0}** (section « Exclus du compte des trous » ci-dessous — ces fiches n'ont pas disparu : elles sont comptées par cause et par set)`, '');
     out.push('### Totaux par cause', '');
     for (const t of TYPES) {
         const m = audit.parCause[t] || {};
         out.push(`- **${TITRES[t]}** (${T[t]}) : ` + (Object.entries(m).sort((a, b) => b[1] - a[1]).map(([c, n]) => `${c} ${n}`).join(' · ') || '—'));
     }
     out.push('');
+    {   // 🔑 les exclusions s'IMPRIMENT : par cause, puis par set, puis la preuve de chaque set de la table
+        const X = audit.exclus || { total: 0, parCause: {}, parSet: {} };
+        out.push(`## Exclus du compte des trous (${X.total}) — comptés ici, jamais disparus`, '');
+        out.push('Décision du testeur (2026-11-08) : le compte des trous dit la vérité. Une fiche n\'est exclue que si une règle FERMÉE le dit (table `SANS_NUMERO_IMPRIME`, vérifiée sur scans ; règle `estAdditionals` du site) ; tout le reste reste un trou.', '');
+        out.push('- par cause : ' + (Object.entries(X.parCause).sort((a, b) => b[1] - a[1]).map(([c, n]) => `${c} ${n}`).join(' · ') || '—'));
+        const ps = Object.entries(X.parSet).sort((a, b) => Object.values(b[1]).reduce((x, y) => x + y, 0) - Object.values(a[1]).reduce((x, y) => x + y, 0));
+        out.push(`- par set (${ps.length}) : ` + (ps.map(([s, m]) => `${s} ${Object.entries(m).map(([c, n]) => `${n} ${c}`).join(', ')}`).join(' · ') || '—'));
+        const sources = Object.keys(SANS_NUMERO_IMPRIME).filter(id => X.parSet[id]);
+        if (sources.length) { out.push('', '| set exclu (sans numéro imprimé) | famille | ce que la carte imprime | cartes regardées | date |', '|---|---|---|---|---|'); for (const id of sources) { const p = SANS_NUMERO_IMPRIME[id]; out.push(`| ${id} | ${p.famille} | ${p.imprime}${p.note ? ' — ' + p.note : ''} | ${p.cartes.join(' ; ')} | ${p.date} |`); } }
+        out.push('');
+    }
     if (ec) {
         out.push(`## Écart avec l'audit précédent (${ec.avantLe ?? '?'})${ec.memeDenominateur ? '' : ' — ⚠️ DÉNOMINATEUR DIFFÉRENT, un écart n\'est pas un progrès'}`, '');
         out.push('- trous ' + signe(ec.totaux.trous || 0) + ' · ' + TYPES.map(t => `${TITRES[t]} ${signe(ec.totaux[t] || 0)}`).join(' · '));
+        out.push(`- exclus du compte ${signe(ec.exclus ? ec.exclus.total : 0)} (${Object.entries((ec.exclus || {}).parCause || {}).map(([c, n]) => `${c} ${signe(n)}`).join(' · ') || 'aucun changement'}) — une baisse des trous qui n'est qu'une hausse des exclus n'est PAS un progrès`);
         out.push(`- sets passés à 100 % (${ec.setsPassesA100.length}) : ${ec.setsPassesA100.slice(0, 60).join(', ') || '—'}`);
         out.push(`- sets nouvellement troués (${ec.setsNouvellementTroues.length}) : ${ec.setsNouvellementTroues.slice(0, 60).join(', ') || '—'}`);
         out.push('- écart par cause : ' + (Object.entries(ec.parCause).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).map(([c, n]) => `${c} ${signe(n)}`).join(' · ') || 'aucun'), '');
@@ -295,4 +342,4 @@ function suspectsExpansion(audit, n = 10) {
         .map(s => ({ set: s.set, n: s.diagnosticExpansion.n, expansionsDeclarees: s.diagnosticExpansion.expansionsDeclarees, exemples: s.diagnosticExpansion.exemples }));
 }
 
-module.exports = { suspectsExpansion, auditer, ecart, trier, score, formaterMd, verifierCause, CAUSES, TYPES, TITRES, baseNumero, suffixeLettre };
+module.exports = { suspectsExpansion, auditer, ecart, trier, score, formaterMd, verifierCause, verifierExclusion, EXCLUSIONS, CAUSES, TYPES, TITRES, baseNumero, suffixeLettre };
