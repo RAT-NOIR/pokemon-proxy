@@ -185,6 +185,8 @@ async function controler({ manifeste, attendu, base, fetch: fetchx, sommeil, log
             res.http = g.status;
             res.entetes = { contentType: h('content-type'), cacheControl: h('cache-control'), acceptRanges: h('accept-ranges'), cors: h('access-control-allow-origin') };
             if (g.status !== 200) ko(`GET ${g.status}`);
+            else if (res.entetes.contentType !== f.contentType) ko(`Content-Type « ${res.entetes.contentType} » ≠ manifeste « ${f.contentType} »`);
+            else if (res.entetes.cacheControl !== CACHE_CONTROL) ko(`Cache-Control « ${res.entetes.cacheControl} » ≠ « ${CACHE_CONTROL} »`);
             else {
                 const corps = Buffer.from(await g.arrayBuffer());
                 res.taille = corps.length; res.sha256 = sha256(corps);
