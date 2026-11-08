@@ -1442,7 +1442,7 @@
           "comptes"
         ],
         "summary": "Envoie le lien de l'extension (fiche du Chrome Web Store) à une adresse, par UN courriel au message fixe (202 TOUJOURS une fois le défi passé)",
-        "description": "LIEN-ORDINATEUR (D1 du site, accordée par l'éditeur le 2026-11-08). Un visiteur SANS compte, sur téléphone, donne une adresse : il reçoit un courriel dont le seul contenu est le lien de la fiche de l'extension sur le Chrome Web Store (sujet, texte et HTML constants : aucun champ du corps n'y entre, l'adresse ne sert que de destinataire). Gardes, dans l'ordre : Origin exacte + `X-Rat-Market: 1` (403), limite par IP (3 par jour UTC, 429), corps lisible (400), Turnstile avec l'action `lien-ordinateur` (422 `defi-anti-robot`, 503 si Cloudflare est injoignable), plafond global du jour de Paris LU avant l'adresse (100 envois par défaut ; plein : 429 pour tout le monde), puis l'adresse : un seul envoi par BOÎTE et par 24 h (minuscules, points de Gmail et `+étiquette` retirés). Le travail lié à l'adresse (marque, envoi) est DÉTACHÉ de la réponse : `202 { success: true }` part sans attendre le service de courriel, identique pour une adresse valide ou non, neuve ou déjà servie, que le service de courriel réponde ou non (une marque est rendue si le service refuse franchement, gardée sur un échec ambigu : un doublon est pire qu'un manque). Ni le corps, ni le statut, ni la durée ne disent quoi que ce soit de l'adresse. L'adresse n'est jamais écrite ; seule une empreinte HMAC-SHA256 à clé est gardée 24 heures. Profil CORS du site (l'apex et `www`), méthode POST seulement, SANS credentials (envoyer la requête sans cookie : `credentials: 'omit'`).",
+        "description": "LIEN-ORDINATEUR (D1 du site, accordée par l'éditeur le 2026-11-08). Un visiteur SANS compte, sur téléphone, donne une adresse : il reçoit un courriel dont le seul contenu est le lien de la fiche de l'extension sur le Chrome Web Store (sujet, texte et HTML constants : aucun champ du corps n'y entre, l'adresse ne sert que de destinataire). Gardes, dans l'ordre : Origin exacte + `X-Rat-Market: 1` (403), limite par IP (3 par jour UTC, 429), corps lisible (400), Turnstile avec l'action `lien-ordinateur` (422 `defi-anti-robot`, 503 si Cloudflare est injoignable), plafond global du jour de Paris LU avant l'adresse (100 envois par défaut ; plein : 429 pour tout le monde), puis l'adresse : un seul envoi par BOÎTE et par 24 h (minuscules, points de Gmail et `+étiquette` retirés). Le travail lié à l'adresse (marque, envoi) est DÉTACHÉ de la réponse : `202 { success: true }` part sans attendre le service de courriel, identique pour une adresse valide ou non, neuve ou déjà servie, que le service de courriel réponde ou non (une marque est rendue si le service refuse franchement en 4xx, gardée sur un 5xx ou un échec ambigu : un doublon est pire qu'un manque). Ni le corps, ni le statut, ni la durée ne disent quoi que ce soit de l'adresse. L'adresse n'est jamais écrite ; seule une empreinte HMAC-SHA256 à clé est gardée 24 heures. Profil CORS du site (l'apex et `www`), méthode POST seulement, SANS credentials (envoyer la requête sans cookie : `credentials: 'omit'`).",
         "x-conditionnel": "V2_LIEN_ORDINATEUR=1 : éteint (défaut), la route n'existe pas (404 natif)",
         "security": [],
         "parameters": [
@@ -1462,7 +1462,7 @@
         },
         "responses": {
           "202": {
-            "description": "Demande prise en compte. Rendu quand le défi passe, que l'adresse soit valide ou non, déjà servie ou non (jamais un indice sur l'adresse).",
+            "description": "Demande prise en compte. Rendu quand le défi passe ET que le plafond du jour n'est pas plein (plein : 429 pour tous), que l'adresse soit valide ou non, déjà servie ou non (jamais un indice sur l'adresse).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1472,7 +1472,7 @@
             }
           },
           "400": {
-            "description": "ENTREE : le corps n'est pas un objet JSON, ou `email` n'est pas un texte (après le défi).",
+            "description": "ENTREE : le corps n'est pas un objet JSON, ou `email` n'est pas un texte (ce second cas vient après le défi ET après la lecture du plafond : plafond plein + `email` non texte = 429).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1502,7 +1502,7 @@
             }
           },
           "429": {
-            "description": "LIMITE_DEBIT (avec `reessayerDans` et `Retry-After`) : plus de 3 demandes par IP et par jour, ou plafond global d'envois du jour de Paris atteint (alors pour TOUTE adresse, valide ou non : la réponse ne dit rien de l'adresse).",
+            "description": "LIMITE_DEBIT (avec `reessayerDans` et `Retry-After`) : plus de 3 demandes par IP et par jour (toute requête qui passe l'origine compte, jeton absent ou refusé compris : la limite précède le défi), ou plafond global d'envois du jour de Paris atteint (alors pour TOUTE adresse, valide ou non : la réponse ne dit rien de l'adresse).",
             "content": {
               "application/json": {
                 "schema": {
