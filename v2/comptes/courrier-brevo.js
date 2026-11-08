@@ -61,7 +61,9 @@ function creerCourrierBrevo({ cle, env = process.env, url = URL_BREVO, delaiMs =
         catch (e) {
             if (!retentable(e)) throw e;
             if (reessaiMs > 0) await new Promise(r => setTimeout(r, reessaiMs));
-            await tenter(corps);                       // le SEUL réessai ; son échec remonte tel quel
+            // le SEUL réessai ; son échec remonte avec le NOM d'origine, marqué `apresTentativeAmbigue` : la première tentative (5xx, réseau, délai) a pu être acceptée, un appelant qui décide « rien n'est parti » sur un 4xx du
+            // réessai se tromperait. Aucun appelant existant ne lit ce marqueur (ils ne lisent que le nom) : leur comportement ne change pas.
+            try { await tenter(corps); } catch (e2) { e2.apresTentativeAmbigue = true; throw e2; }
         }
     }
     return {

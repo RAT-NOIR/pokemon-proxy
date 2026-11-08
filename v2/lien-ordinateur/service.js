@@ -66,8 +66,9 @@ function creerService({ cfg, courrier, maintenant = () => new Date(), plafond = 
             catch (e) {
                 const nom = nomErreur(e);
                 if (nom === 'BrevoPlafond') { await rendre(); return { issue: 'plafond' }; }                              // le plafond propre du pilote : rien n'est parti
-                if (nom === 'BrevoAdresse' || nom === 'BrevoStatut400') { await rendre(); return { issue: 'ignoree' }; }   // Brevo refuse cette adresse : comme une adresse invalide
-                if (/^BrevoStatut4\d\d$/.test(nom)) { await rendre(); throw e; }                                            // refus FRANC 4xx (clé, droits, limite de débit) : rien n'est parti
+                const ambigu = Boolean(e && e.apresTentativeAmbigue);   // ce refus est celui du RÉESSAI : la première tentative (5xx, réseau, délai) a pu partir — la marque reste, quel que soit le statut
+                if (nom === 'BrevoAdresse' || (nom === 'BrevoStatut400' && !ambigu)) { await rendre(); return { issue: 'ignoree' }; }   // Brevo refuse cette adresse : comme une adresse invalide
+                if (/^BrevoStatut4\d\d$/.test(nom) && nom !== 'BrevoStatut408' && !ambigu) { await rendre(); throw e; }     // refus FRANC 4xx (clé, droits, limite de débit) : rien n'est parti ; un 408 est un DÉLAI, il garde la marque
                 throw e;                                                                                                    // 5xx (le message a pu être accepté), réseau, délai, inconnue : la marque reste — un envoi par adresse et par 24 h
             }
             return { issue: 'envoye' };
