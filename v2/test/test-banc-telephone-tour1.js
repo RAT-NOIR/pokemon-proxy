@@ -30,6 +30,13 @@ const sha256 = p => crypto.createHash('sha256').update(fs.readFileSync(p)).diges
     const defaire = H.fixerHorlogeMilieu();
     const V = await import(pathToFileURL(path.join(PUB, 'verdict.mjs')).href);
 
+    // ═══ le service de l'essai : UNE définition (v2/config.js, L1), importée par la garde ═══
+    {
+        const cfgMod = require('../config'), G = require('../banc-telephone/garde');
+        H.v('L1. SERVICE_ESSAI de la garde du banc téléphone = celui de v2/config.js (importé, et égal à la valeur de l\'essai)', [G.SERVICE_ESSAI === cfgMod.SERVICE_ESSAI, G.SERVICE_ESSAI], [true, 'srv-db7ticgm7kps73crjibg']);
+        H.v('L1. la garde accepte exactement ce service-là', [G.lire({ ...ENV, RENDER_SERVICE_ID: cfgMod.SERVICE_ESSAI }).actif, G.lire({ ...ENV, RENDER_SERVICE_ID: cfgMod.SERVICE_ESSAI + 'x' }).actif], [true, false]);
+    }
+
     // ═══ G1 / M4 : le lot ═══
     {
         const lot = JSON.parse(fs.readFileSync(path.join(PUB, 'lot.json'), 'utf8'));

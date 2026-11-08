@@ -347,4 +347,4 @@ function lireConfig(env = process.env) {
         cookieSecure
     });
 }
-module.exports = { lireConfig, POCHES, POCHES_ANCIENNES };
+module.exports = { lireConfig, POCHES, POCHES_ANCIENNES, SERVICE_ESSAI };

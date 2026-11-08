@@ -3,9 +3,9 @@
 // Écrite par ce qu'elle AUTORISE : TROIS conditions positives, toutes requises, sinon les routes N'EXISTENT PAS (404 natif, octet pour octet comme avant) —
 //   V2_BANC_TELEPHONE exactement « 1 » ; V2_CIBLE exactement « essai » ; ET RENDER_SERVICE_ID exactement le service Render de l'essai (variable posée par Render lui-même :
 //   un copier-coller des variables de l'essai vers un autre service ne l'emporte pas). Même motif que `cfg.mesure` (v2/config.js, lot L1 : SERVICE_ESSAI) ;
-//   la constante est RECOPIÉE ici parce que cette branche ne contient pas encore L1 — test-banc-telephone.js la compare à celle de config.js dès qu'elle y existe.
+//   la constante est IMPORTÉE de v2/config.js (une seule définition ; test-banc-telephone.js le prouve).
 // Lue dans l'environnement AU MONTAGE (jamais dans config.js : aucune variable de plus à déclarer côté configuration), et injectable pour les bancs.
-const SERVICE_ESSAI = 'srv-db7ticgm7kps73crjibg';
+const { SERVICE_ESSAI } = require('../config');
 // Tour 1 (M2) : la base où les résultats s'écrivent est celle de l'essai, par son NOM (mongo-connexion.js : rm_essai), vérifiée au montage (MONGODB_BASE) ET à chaque écriture (databaseName de la connexion).
 const BASE_ESSAI = 'rm_essai';
 
