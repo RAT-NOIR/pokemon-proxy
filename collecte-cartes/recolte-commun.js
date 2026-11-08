@@ -18,7 +18,7 @@ const RH = require('./reponse-hote');
 const HOTE = require('./recolte-hote');
 const CT = require('./cardtrader');                         // decisionEcriture (la règle commune de remplacement), prng
 const { largeurMinDe, largeurAdmiseDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./seuils-images');
-const { marqueDe, remplacerBasseDefinition, documentsDesEntrees, autorisationDeFamille, MARQUEUR_REMPLACEMENT_LANGUE } = require('./basse-definition');
+const { marqueDe, remplacerBasseDefinition, documentsDesEntrees, autorisationDeFamille, MARQUEUR_REMPLACEMENT_LANGUE, MARQUEUR_REMPLACEMENT_DECIDE, unitePermiseDecidee } = require('./basse-definition');
 const { champsTracabilite } = require('./tracabilite');
 
 const RATIO_MIN = 1.30, RATIO_MAX = 1.50;                   // une carte n'est jamais carrée (350 x 482 = 1,377)
@@ -189,7 +189,9 @@ const lecteurModeles = M => ({
 // ➕ 2026-11-08 : le remplacement d'une entrée de langue non prouvée (basse-definition.js, table fermée) n'est ouvert que par la chaîne prv (source `parUnite`) et par la FAMILLE de l'unité (`u.groupe`,
 // le nom du dossier, posé par `grouperUnites`) — jamais par un champ du manifeste ni par l'entrée : le marqueur n'est lu nulle part ailleurs que sur la candidate construite ici.
 const remplacementLangueDe = (SRC, u) => (SRC.parUnite && autorisationDeFamille(u.groupe) ? { [MARQUEUR_REMPLACEMENT_LANGUE]: u.groupe } : {});
-const candidatDe = (SRC, u, entree) => ({ set: u.slugSet, numero: u.numero, langue: langueDe(SRC, u), source: SRC.SOURCE, cleR2: entree.cleR2, wOriginal: entree.wOriginal, ...(entree.basseDefinition ? { basseDefinition: true } : {}), ...(tamponDe(SRC, u) ? { tampon: tamponDe(SRC, u) } : {}), ...remplacementLangueDe(SRC, u) });
+// ➕ 2026-11-08 : le remplacement DÉCIDÉ (table fermée famille → produits, basse-definition.js) : même règle — chaîne prv seulement, famille de l'unité ET tous ses produits listés ; jamais un champ du manifeste.
+const remplacementDecideDe = (SRC, u) => (SRC.parUnite && unitePermiseDecidee(u.groupe, u.produits) ? { [MARQUEUR_REMPLACEMENT_DECIDE]: u.groupe } : {});
+const candidatDe = (SRC, u, entree) => ({ set: u.slugSet, numero: u.numero, langue: langueDe(SRC, u), source: SRC.SOURCE, cleR2: entree.cleR2, wOriginal: entree.wOriginal, ...(entree.basseDefinition ? { basseDefinition: true } : {}), ...(tamponDe(SRC, u) ? { tampon: tamponDe(SRC, u) } : {}), ...remplacementLangueDe(SRC, u), ...remplacementDecideDe(SRC, u) });
 
 /** La décision de chaque unité sur l'état de la base (lecture seule) : ajouter | deja-posee | cede (la règle commune : jamais une image correcte remplacée). */
 async function decider(SRC, unites, lecteur, { largeurDe = null } = {}) {
@@ -212,7 +214,7 @@ async function decider(SRC, unites, lecteur, { largeurDe = null } = {}) {
 function entreeDeCarte(SRC, u, meta, le = new Date(), collecteLe = le) {
     const tampon = tamponDe(SRC, u);
     // (source `parUnite` : les champs de preuve de l'unité passent EN PREMIER — aucun ne peut écraser un champ de l'écriture)
-    const { [MARQUEUR_REMPLACEMENT_LANGUE]: _jamaisSurUneEntree, ...champsPropres } = champsDe(SRC, u, 'champsEntree');   // le marqueur de remplacement ne vit que sur la candidate (`candidatDe`), jamais sur une entrée écrite
+    const { [MARQUEUR_REMPLACEMENT_LANGUE]: _jamaisSurUneEntree, [MARQUEUR_REMPLACEMENT_DECIDE]: _jamaisNonPlus, ...champsPropres } = champsDe(SRC, u, 'champsEntree');   // le marqueur de remplacement ne vit que sur la candidate (`candidatDe`), jamais sur une entrée écrite
     return { ...champsPropres, set: u.slugSet, source: SRC.SOURCE, lot: SRC.LOT, cleR2: meta.cleR2, sha256: meta.sha256, w: meta.w, h: meta.h, fmt: meta.fmt, numero: u.numero ?? null, wOriginal: meta.wOriginal, ...marqueDe({ wOriginal: meta.wOriginal }),
         attribution: SRC.MENTION, mention: SRC.MENTION, langue: langueDe(SRC, u), languePreuve: languePreuveDe(SRC, u), ...(tampon ? { tampon } : {}), jointeLe: new Date(le), ...champsTracabilite({ urlOriginal: u.url, collecteLe }) };
 }

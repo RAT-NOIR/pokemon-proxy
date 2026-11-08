@@ -112,7 +112,17 @@ const REMPLACEMENTS_LANGUE_NON_PROUVEE = Object.freeze({ N8O1: Object.freeze({ l
 const MARQUEUR_REMPLACEMENT_LANGUE = 'remplacementLangueNonProuvee';
 /** L'autorisation d'une famille (propriété propre de la table seulement), ou null. */
 const autorisationDeFamille = f => (typeof f === 'string' && Object.hasOwn(REMPLACEMENTS_LANGUE_NON_PROUVEE, f) ? REMPLACEMENTS_LANGUE_NON_PROUVEE[f] : null);
-const langueNonProuvee = e => !(typeof e?.langue === 'string' && e.langue !== '');
+
+// ➕ 2026-11-08, DÉCISION DU TESTEUR : « pose-le aussi en base, meilleur que le 600 × 825 actuel » (Pikachu ex 30th Celebration n° 150, produit 907757, famille N8P3 : scan anglais prouvé 733×1024 contre 600×825,
+// ratio 1,22 < 1,5). Table FERMÉE famille PHASE4 → LISTE des idProduct autorisés (pas la famille entière). Le marqueur vit sur la CANDIDATE, posé par `candidatDe` (recolte-commun.js) seulement si la
+// famille est dans la table ET que TOUS les produits de l'unité sont listés. La branche (entreesARemplacer) exige en plus : même impression (set, numéro, marqueurs), langues connues et égales, largeur de l'ORIGINAL
+// de la candidate connue et STRICTEMENT supérieure à celle de l'entrée. Tout le reste : la règle ordinaire.
+const REMPLACEMENTS_DECIDES = Object.freeze({ N8P3: Object.freeze({ produits: Object.freeze([907757]), decision: 'testeur 2026-11-08', motif: 'définition supérieure' }) });
+const MARQUEUR_REMPLACEMENT_DECIDE = 'remplacementDecide';
+const autorisationDecidee = f => (typeof f === 'string' && Object.hasOwn(REMPLACEMENTS_DECIDES, f) ? REMPLACEMENTS_DECIDES[f] : null);
+/** La famille et les produits d'une unité sont-ils dans la table fermée ? (tous les produits de l'unité doivent être listés, et il en faut au moins un) */
+const unitePermiseDecidee = (famille, produits) => { const a = autorisationDecidee(famille); return !!a && Array.isArray(produits) && produits.length > 0 && produits.every(p => a.produits.includes(p)); };
+const langueNonProuvee = e =>!(typeof e?.langue === 'string' && e.langue !== '');
 
 /**
  * Les entrées de `images` (celles d'une carte) qu'une candidate non marquée remplace. Pure. Une entrée de MÊME impression (set, numéro, langue connue et égale) sort si elle est : de basse
@@ -128,6 +138,8 @@ function entreesARemplacer(images, candidat, { fausses = FAUSSES, champsTampon =
     // la branche « langue non prouvée » : la famille nommée par la candidate est dans la table ET la langue de la candidate est celle de la table (sinon la branche est fermée)
     const autorisation = autorisationDeFamille(candidat[MARQUEUR_REMPLACEMENT_LANGUE]);
     const brancheLangue = autorisation && candidat.langue === autorisation.langue ? autorisation : null;
+    const decidee = !!autorisationDecidee(candidat[MARQUEUR_REMPLACEMENT_DECIDE]);
+    const wOrigC = typeof candidat.wOriginal === 'number' && Number.isFinite(candidat.wOriginal) && candidat.wOriginal > 0 ? candidat.wOriginal : null;
     return images.filter(e => {
         if (!e || e.set !== candidat.set || cleNumero(e.numero) !== numero) return false;
         if (brancheLangue && langueNonProuvee(e)) {
@@ -147,6 +159,8 @@ function entreesARemplacer(images, candidat, { fausses = FAUSSES, champsTampon =
         // empruntée : seulement par le VRAI scan tamponné (marqueur positif égal), les autres marqueurs identiques
         if (e.imageEmprunteeTirage === true || eff.imageEmprunteeTirage) return tamponPositifEgal(eff, candidat, champsTampon) && memeVarianteHors(eff, candidat, ['imageEmprunteeTirage', 'tamponNonRepresente', ...champsTampon]);
         const wE = largeurOriginaleDe(e);
+        // la branche DÉCIDÉE (table fermée) : largeur de l'ORIGINAL de la candidate connue et STRICTEMENT supérieure ; langues déjà connues et égales (test plus haut) ; mêmes marqueurs de variante
+        if (decidee && wE != null && wOrigC != null && wOrigC > wE && memeVariante(eff, candidat)) return true;
         return wE != null && wC != null && wC >= RATIO_NETTEMENT_PLUS_GRANDE * wE && memeVariante(eff, candidat);
     });
 }
@@ -220,4 +234,20 @@ function remplacementsLangueNonProuvee(unites) {
     return sortie;
 }
 
-module.exports = { REMPLACEMENTS_LANGUE_NON_PROUVEE, MARQUEUR_REMPLACEMENT_LANGUE, autorisationDeFamille, remplacementsLangueNonProuvee, marqueDe, entreesARemplacer, remplacerBasseDefinition, empreinteEntree, sansRemplacables, arbitrer, RATIO_NETTEMENT_PLUS_GRANDE, MARQUEURS_DE_VARIANTE, CHAMPS_TAMPON_POSITIFS, normaliserTampon, documentsDesEntrees, documentsDeLaListe };
+/**
+ * Pour le plan prv : parmi les unités à ajouter dont famille ET produits sont dans la table DÉCIDÉE, les entrées sortantes qu'aucune autre règle (basse définition, fausse, empruntée) ne retirait : celles
+ * que seule la décision du testeur fait sortir (ou que la règle ordinaire aurait aussi retirées par le ratio — le plan ne connaît pas la largeur de la candidate ; la liste est donc un majorant honnête).
+ */
+function remplacementsDecides(unites) {
+    const sortie = [];
+    for (const u of Array.isArray(unites) ? unites : []) {
+        if (u?.decision?.action !== 'ajouter' || !unitePermiseDecidee(u.groupe, u.produits)) continue;
+        for (const e of u.decision.remplace ?? []) {
+            if (e.basseDefinition === true || e.imageEmprunteeTirage === true || FAUSSES.has(`${e.source}|${e.cleR2}`) || langueNonProuvee(e)) continue;
+            sortie.push({ carteId: u.carteId, set: e.set, numero: e.numero ?? null, source: e.source, cleR2: e.cleR2, remplacePar: u.cleR2 ?? null, famille: u.groupe ?? null, produits: [...u.produits] });
+        }
+    }
+    return sortie;
+}
+
+module.exports = { REMPLACEMENTS_DECIDES, MARQUEUR_REMPLACEMENT_DECIDE, autorisationDecidee, unitePermiseDecidee, remplacementsDecides, REMPLACEMENTS_LANGUE_NON_PROUVEE, MARQUEUR_REMPLACEMENT_LANGUE, autorisationDeFamille, remplacementsLangueNonProuvee, marqueDe, entreesARemplacer, remplacerBasseDefinition, empreinteEntree, sansRemplacables, arbitrer, RATIO_NETTEMENT_PLUS_GRANDE, MARQUEURS_DE_VARIANTE, CHAMPS_TAMPON_POSITIFS, normaliserTampon, documentsDesEntrees, documentsDeLaListe };
