@@ -115,6 +115,38 @@ function demiListe(lu, produit, np) {
     if (!slug || !new RegExp(`(^|-)${echapper(mc[1])}${lettre}?-?0*${echapper(chiffres)}$`).test(slug)) return null;
     return { lettre, code: mc[1] };
 }
+/**
+ * ➕ 2026-11-09 — PRIZE PACKS SANS NUMÉRO : le slug dit « …-PPS1SWSH-111 » (pack + code d'origine collé au tiret + numéro), la carte imprime « SWSH111 ». Admis SEULEMENT si le numéro lu est un préfixe alphabétique
+ * suivi de chiffres, que les chiffres lus (cleNumero) égalent le numéro de fin de slug `sn`, et que le slug FINIT par ce MÊME préfixe (insensible à la casse), tiret facultatif, précédé d'un chiffre ou d'un tiret
+ * (jamais d'une lettre : « SH » n'est pas la fin de « SWSH »). Un autre préfixe (SM111 sous …SWSH-111), un slug sans le code lu ou un numéro purement numérique ne passent pas par ici.
+ */
+function prefixeDuSlugAdmis(n, sn, slug) {
+    const m = /^([A-Za-z]+)(\d+[A-Za-z]*)$/.exec(String(n ?? '').trim());
+    if (!m || sn == null || !texte(slug) || J.cleNumero(m[2]) !== J.cleNumero(sn)) return false;
+    return new RegExp(`(^|[-0-9])${echapper(m[1].toLowerCase())}-?${echapper(String(sn).toLowerCase())}$`).test(slug.trim().toLowerCase());
+}
+/**
+ * ➕ 2026-11-09 — MASTER STRATEGY CHINOIS (CSVM1C, CSVM2). Cardmarket numérote « A11 », « B14 », « C7 » (lettre du deck + rang) ; la carte imprime « 011/033 », sans lettre, avec le TOTAL propre au deck. Table FERMÉE
+ * codeSet -> { slugSet, totaux par lettre } (mesurée sur le manifeste N9Z2 et la base, 09/11). Admis SEULEMENT si : tirage zh-hans, codeSet et slugSet du produit exacts, lettre du produit dans la table du set,
+ * TOTAL lu = le total du deck de cette lettre (3 chiffres tels qu'imprimés), chiffres lus = chiffres du produit (cleNumero), slug finissant par <code><lettre><chiffres> (témoin indépendant).
+ * 🔴 CSVM1C : les decks A et B portent le MÊME total (033) et les mêmes numéros (33 collisions mesurées en base) — le total ne les sépare pas, donc seule la lettre C (028) figure : A et B restent refusés.
+ */
+const MASTER_STRATEGY = Object.freeze({
+    csvm1c: Object.freeze({ slugSet: 'Master-Strategy-Deck-Building-Sets', totaux: Object.freeze({ c: '028' }) }),
+    csvm2: Object.freeze({ slugSet: 'Master-Strategy-Deck-Building-Sets-Vol-2', totaux: Object.freeze({ a: '031', b: '034', c: '032' }) })
+});
+function masterStrategy(lu, produit, np) {
+    const m = /^([abc])(\d+)$/i.exec(String(np ?? '').trim());
+    const code = norm(produit?.codeSet);
+    if (!m || !code || !Object.hasOwn(MASTER_STRATEGY, code) || produit?.tirage !== 'zh-hans') return null;
+    const set = MASTER_STRATEGY[code], lettre = m[1].toLowerCase(), chiffres = m[2];
+    if (produit.slugSet !== set.slugSet || !Object.hasOwn(set.totaux, lettre)) return null;
+    if (lu?.total == null || String(lu.total).trim() !== set.totaux[lettre]) return null;
+    if (!texte(lu?.numero) || !/^\d+$/.test(String(lu.numero).trim()) || J.cleNumero(String(lu.numero).trim()) !== J.cleNumero(chiffres)) return null;
+    const slug = texte(produit?.slug) ? produit.slug.trim().toLowerCase() : null;
+    if (!slug || !new RegExp(`(^|-)${echapper(code)}${lettre}0*${echapper(chiffres.replace(/^0+(?=\d)/, ''))}$`).test(slug)) return null;
+    return { lettre, code };
+}
 /** Tour 4 (3) : le numéro en FIN de slug Cardmarket (« …-PPS8MEG-114 » -> « 114 »), frontière non alphanumérique avant ; null si le slug n'en porte pas (« …-CIN71 » : collé à des lettres, ce n'est pas un numéro). */
 const numeroFinDeSlug = slug => { const m = /(?:^|[^A-Za-z0-9])(\d+[A-Za-z]*)$/.exec(String(slug ?? '').trim()); return m ? m[1] : null; };
 // Tour 4 (5) : la variante nommée d'un produit sans numéro (« Blue Border » / « standard ») se compare à la finition LUE, par table fermée ; une autre valeur de `attendu.variante` (V1, V2…) n'entre pas ici.
@@ -438,7 +470,7 @@ function motifSansPokedex(lu, produit, np, nom, nomCarte, drapeaux) {
 // (08/11, décision du propriétaire) chinois simplifié : SIX lignes mesurées sur le manifeste N8S5 (couverture\S8\PHASE4\N8S5\preuves.json, 84 Dresseurs/Énergies zh-hans hors Gem Packs), `codes_set.codeSet` réel des produits joints par cartes_produits :
 // SV-P/CS (6 Dresseurs ; code imprimé « SV-P », alias SV-P/CS→SV-P déjà en place), CSVE2C (10), CSVH1C (26), CSVH2C (12), CSVH3C (29), CSVH5C (1) ; le code imprimé (csvE2C…) est le code de la ligne à la casse près (norm), aucun alias à ajouter.
 // Aucune autre ligne zh (CSVH4C, S-P/CS, SM-P/CS, M-P/CS…) : non mesurée, la voie y reste fermée. Nom lu en han seulement (ECRITURES_PAR_LANGUE['zh-hans'] : le kana et le thaï n'y passent pas).
-const REGLES_NOM_TRADUIT_DRESSEUR = Object.freeze(['M-P/ID', 'SV-P/ID', 'S-P/ID', 'SM-P/ID', 'M-P/TH', 'SV-P/TH', 'S-P/TH', 'SV-P/CS', 'CSVE2C', 'CSVH1C', 'CSVH2C', 'CSVH3C', 'CSVH5C']);
+const REGLES_NOM_TRADUIT_DRESSEUR = Object.freeze(['M-P/ID', 'SV-P/ID', 'S-P/ID', 'SM-P/ID', 'M-P/TH', 'SV-P/TH', 'S-P/TH', 'SV-P/CS', 'CSVE2C', 'CSVH1C', 'CSVH2C', 'CSVH3C', 'CSVH5C', 'CSVM1C', 'CSVM2', 'CSVH6C']);   // (09/11) + Master Strategy (CSVM1C, CSVM2) et Happy Set 6 (CSVH6C) : `codes_set.codeSet` lus en base sur numeros_cartes, mêmes règles que les six lignes zh d'avant
 function motifIllustrationRelue(lu, produit, drapeaux) {
     const ligne = REGLES_NOM_TRADUIT_DRESSEUR.find(l => texte(produit?.codeSet) && norm(l) === norm(produit.codeSet));
     // (tour de correction 1) la relecture vit HORS du manifeste (VALIDATIONS\illustrations-<FAMILLE>.json, donnée passée par `produit.illustrationsRelues`) : un `lu.illustrationRelue` du manifeste est IGNORÉ
@@ -676,8 +708,9 @@ function evaluerPreuveLue({ entree, produit, langueProduit, sansTotalAutorise = 
         // tour 2 (1) : une promo (« XY150a », « SM30a ») n'imprime aucun total — il n'est exigé que pour un numéro purement numérique (+ suffixe) ; un préfixe alphabétique se juge sans total
         const sansTotalTolere = sansTotalAutorise === true && t === '' && sansTotalAdmis(lu, produit, np);   // décision 5 : deux sources + liste fermée
         if (n === '' || (t === '' && !PREFIXE_ALPHABETIQUE.test(n) && !sansTotalTolere)) motifs.push('numero-ou-total-absent');
-        else if (J.cleNumero(n) !== J.cleNumero(np) && !numeroSansPrefixeAdmis(n, np, produit?.slug) && !demiListe(lu, produit, np)) motifs.push('numero-different');
+        else if (J.cleNumero(n) !== J.cleNumero(np) && !numeroSansPrefixeAdmis(n, np, produit?.slug) && !demiListe(lu, produit, np) && !masterStrategy(lu, produit, np)) motifs.push('numero-different');
         else if (J.cleNumero(n) !== J.cleNumero(np) && demiListe(lu, produit, np)) drapeaux.push(`demi-liste:${demiListe(lu, produit, np).lettre}`);   // (03/11) les trois témoins concordent : dit au coordinateur
+        else if (J.cleNumero(n) !== J.cleNumero(np) && masterStrategy(lu, produit, np)) drapeaux.push(`master-strategy:${masterStrategy(lu, produit, np).lettre}`);   // (09/11) total du deck + slug concordent : dit au coordinateur
         const mn = motifDeNom(lu, produit, langueProduit, drapeaux); if (mn) motifs.push(mn);       // tour 4 (1) : le nom aussi, avec numéro
     } else {
         if (entree.attendu?.numero != null && String(entree.attendu.numero).trim() !== '') motifs.push('numero-attendu-non-null');
@@ -685,7 +718,8 @@ function evaluerPreuveLue({ entree, produit, langueProduit, sansTotalAutorise = 
         const mn = motifDeNom(lu, produit, langueProduit, drapeaux); if (mn) motifs.push(mn);       // tour 4 (1) : le nom, branche sans numéro
         // tour 4 (3) : et quand le slug du produit porte un numéro en fin (« …-PPS8MEG-114 »), le numéro lu doit être celui-là
         const sn = numeroFinDeSlug(produit?.slug);
-        if (sn != null && (lu.numero == null || String(lu.numero).trim() === '' || J.cleNumero(String(lu.numero).trim()) !== J.cleNumero(sn))) motifs.push('numero-different');
+        // (09/11) Prize Packs : « SWSH111 » lu sous « …PPS1SWSH-111 » — le préfixe imprimé est celui du slug (prefixeDuSlugAdmis) ; le numérique pur et tout autre préfixe restent comparés comme avant
+        if (sn != null && (lu.numero == null || String(lu.numero).trim() === '' || (J.cleNumero(String(lu.numero).trim()) !== J.cleNumero(sn) && !prefixeDuSlugAdmis(String(lu.numero), sn, produit?.slug)))) motifs.push('numero-different');
     }
     // tour 4 (5) : variante nommée (Blue Border / standard) <-> finition lue
     const vk = typeof entree.attendu?.variante === 'string' ? entree.attendu.variante.trim().toLowerCase() : null;
