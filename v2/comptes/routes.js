@@ -18,11 +18,14 @@ async function defi(cfg, corps, ip, action) {
     try { return (await t.verifier(corps.turnstile, ip, action)) === true ? 'ok' : 'refuse'; } catch (e) { console.error(`❌ [v2 turnstile] pilote en échec (${nomErreur(e)})`); return 'indispo'; }
 }
 const courrierDe = () => { try { return registre.obtenir('courrier'); } catch { return null; } };
+// Une requête dispensée du défi (essai seul) ne fait partir de courriel que vers une adresse EXACTEMENT de la liste fermée : le compte est retrouvé par `emailCle`, son adresse stockée peut être celle d'une autre boîte de même clé.
+// Sans exemption (toute production, toute requête ordinaire) : le pilote tel quel.
+const courrierPour = (cfg, req, courrier) => (mesureAutorisee(cfg, req) && typeof cfg.mesure.restreindreCourrier === 'function' ? cfg.mesure.restreindreCourrier(courrier) : courrier);
 /** L1 : le défi Turnstile en garde de route (connexion, mot-de-passe-oublie, renvoyer-verification), avec la MÊME fonction `defi` et le MÊME refus que l'inscription
  *  (422 ENTREE `defi-anti-robot`, 503 si le pilote manque ou tombe). Il se place APRÈS l'origine et la limite par IP, AVANT tout budget par adresse et toute lecture de compte :
  *  un robot sans jeton ne consomme ni le budget d'un titulaire ni un hachage. `avecCourrier` : l'oubli et le renvoi n'ont pas de sens sans courrier (503 d'abord, comme l'inscription). */
 /** Exemption des outils de mesure : `cfg.mesure` ACTIVE (essai + secret >= 32 + service Render de l'essai, voir config.js) ET l'en-tête X-Rat-Market-Mesure dont le SHA-256 égale le condensé gardé, à temps constant (deux condensés de même longueur). */
-// PARCOURS DU SITE : la décision vit dans v2/essai-parcours/ (secret en temps constant ET adresse EXACTE du compte de test) ; `cfg.mesure.autorise` n'existe que sur l'essai (v2/config.js, garde-essai.js).
+// PARCOURS DU SITE : la décision vit dans le module des parcours du site (dossier dédié sous v2) (secret en temps constant ET adresse EXACTE du compte de test) ; `cfg.mesure.autorise` n'existe que sur l'essai (v2/config.js, garde-essai.js).
 // Ici rien ne la décide : sans fonction, c'est NON (production comprise).
 function mesureAutorisee(cfg, req) {
     const m = cfg.mesure;
@@ -59,7 +62,7 @@ function routesComptes(router, cfg) {
             const d = mesureAutorisee(cfg, req) ? 'ok' : await defi(cfg, b, req.ip, 'inscription');   // dispense du DÉFI seulement (secret + adresse exacte du compte de test) ; le reste de la route est inchangé
             if (d === 'indispo') return indispo(res);
             if (d === 'refuse') return repondreErreur(res, 'ENTREE', 'Vérification anti-robot échouée', { detail: 'defi-anti-robot' }, 422);
-            svc.inscrire({ email: b.email.normalize('NFKC').trim(), emailCle: cle, cfg, courrier });   // détaché : la réponse ne dépend pas de l'adresse
+            svc.inscrire({ email: b.email.normalize('NFKC').trim(), emailCle: cle, cfg, courrier: courrierPour(cfg, req, courrier) });   // détaché : la réponse ne dépend pas de l'adresse
             return res.status(202).json({ success: true });
         } catch (e) { console.error(`❌ [v2 inscription] ${nomErreur(e)}`); return indispo(res); }
     });
@@ -92,14 +95,14 @@ function routesComptes(router, cfg) {
     router.post('/api/compte/mot-de-passe-oublie', ...site, parIp('oubli-ip', cfg.limites.oubliIpHeure), exigerDefi(cfg, { avecCourrier: true, action: 'oubli' }), async (req, res) => {
         try {
             const courrier = courrierDe(); if (!courrier) return indispo(res);
-            svc.demanderReinit({ email: objet(req.body) ? req.body.email : undefined, cfg, courrier });   // détaché
+            svc.demanderReinit({ email: objet(req.body) ? req.body.email : undefined, cfg, courrier: courrierPour(cfg, req, courrier) });   // détaché
             return res.status(202).json({ success: true });
         } catch (e) { console.error(`❌ [v2 mot-de-passe-oublie] ${nomErreur(e)}`); return indispo(res); }
     });
     router.post('/api/compte/renvoyer-verification', ...site, parIp('renvoi-ip', cfg.limites.verificationIpHeure), exigerDefi(cfg, { avecCourrier: true, action: 'renvoi' }), async (req, res) => {
         try {
             const courrier = courrierDe(); if (!courrier) return indispo(res);
-            svc.renvoyerVerification({ email: objet(req.body) ? req.body.email : undefined, cfg, courrier });   // détaché, réponse identique dans tous les cas
+            svc.renvoyerVerification({ email: objet(req.body) ? req.body.email : undefined, cfg, courrier: courrierPour(cfg, req, courrier) });   // détaché, réponse identique dans tous les cas
             return res.status(202).json({ success: true });
         } catch (e) { console.error(`❌ [v2 renvoyer-verification] ${nomErreur(e)}`); return indispo(res); }
     });

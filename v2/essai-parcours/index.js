@@ -26,6 +26,22 @@ const estAdresseTest = s => forme(s) === ADRESSE_TEST;
 const ADRESSE_MESURE = 'banc-mesure@rat-market.invalid', ADRESSE_MESURE_ORDINAIRE = 'banc-ordinaire@rat-market.invalid';
 const ADRESSES_EXEMPTEES = Object.freeze([ADRESSE_TEST, ADRESSE_MESURE, ADRESSE_MESURE_ORDINAIRE]);
 const estAdresseExemptee = s => { const f = forme(s); return f !== null && ADRESSES_EXEMPTEES.includes(f); };
+
+// ADRESSES DÉCLARÉES (arbitrage du coordinateur, tour 1) : les comptes de `parcours-test` (v2/admin/abonnements/parcours-test.js) sont déclarés dans `V2_PARCOURS_COMPTES` (un JSON : liste d'objets `{ email, … }` ou d'adresses).
+// Cette variable n'est lue QU'ICI, donc seulement après la garde de service ; seules les ADRESSES en sont extraites (jamais un mot de passe, jamais une valeur imprimée), comparées EXACTEMENT, jamais par domaine ni motif.
+// Une entrée vide, qui n'est pas du texte ou qui n'a pas la forme d'une adresse est ignorée ; une variable absente ou illisible ne déclare rien (les trois adresses de la liste fermée seulement) ; 50 adresses au plus.
+const FORME_ADRESSE = /^[^\s@<>"',;\\()[\]]{1,64}@[^\s@<>"',;\\()[\]]+\.[a-z0-9-]{2,}$/;
+function adressesDeclarees(brut) {
+    let liste; try { liste = JSON.parse(brut); } catch { return []; }
+    if (!Array.isArray(liste)) return [];
+    const sortie = [];
+    for (const e of liste.slice(0, 200)) {
+        const f = forme(typeof e === 'string' ? e : (e && typeof e === 'object' && !Array.isArray(e) ? e.email : null));
+        if (f !== null && FORME_ADRESSE.test(f) && !sortie.includes(f)) sortie.push(f);
+        if (sortie.length >= 50) break;
+    }
+    return sortie;
+}
 const adresseDuCorps = req => (req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body.email : undefined);
 
 /** Temps constant : deux condensés SHA-256 de même longueur. */
@@ -47,7 +63,17 @@ function depuis(env, { maintenant = () => Date.now() } = {}) {
     const sha = mesure.actif ? crypto.createHash('sha256').update(secret).digest('hex') : null;
     let garde = null;   // { lien, expireA } : le dernier lien de confirmation du compte de test, un seul
 
-    const autorise = req => mesure.actif === true && secretEgal(sha, req.get(ENTETE)) && estAdresseExemptee(adresseDuCorps(req));
+    const liste = Object.freeze([...ADRESSES_EXEMPTEES, ...adressesDeclarees(env.V2_PARCOURS_COMPTES).filter(a => !ADRESSES_EXEMPTEES.includes(a))]);
+    const exemptee = s => { const f = forme(s); return f !== null && liste.includes(f); };
+    const autorise = req => mesure.actif === true && secretEgal(sha, req.get(ENTETE)) && exemptee(adresseDuCorps(req));
+    // Une requête dispensée du défi ne doit JAMAIS faire partir un courriel vers une adresse hors de la liste : le compte est retrouvé par `emailCle` (qui efface points et « +… » de Gmail), donc l'adresse
+    // STOCKÉE du compte trouvé peut être celle d'une autre boîte réelle de même clé. Le pilote restreint n'envoie que si le destinataire (l'adresse stockée) est EXACTEMENT dans la liste.
+    const restreindreCourrier = c => {
+        const w = Object.create(c);
+        w.envoyerVerification = (email, ...r) => (exemptee(email) ? c.envoyerVerification(email, ...r) : Promise.resolve());
+        w.envoyerReinitialisation = (email, ...r) => (exemptee(email) ? c.envoyerReinitialisation(email, ...r) : Promise.resolve());
+        return w;
+    };
     const autoriseLien = req => mesure.actif === true && secretEgal(sha, req.get(ENTETE)) && estAdresseTest(adresseDuCorps(req));   // la route du lien : l'adresse de test SEULE
     const retenir = lien => { if (typeof lien === 'string' && lien) garde = { lien, expireA: maintenant() + DUREE_LIEN_MS }; };
     const prendre = () => {   // usage unique : lu, il disparaît ; expiré, il disparaît aussi
@@ -62,7 +88,8 @@ function depuis(env, { maintenant = () => Date.now() } = {}) {
             if (!c.dejaSurveille) {
                 const w = Object.create(c);
                 w.dejaSurveille = true;
-                w.envoyerVerification = (email, lien, options) => { if (estAdresseTest(email)) retenir(lien); return c.envoyerVerification(email, lien, options); };
+                // le lien n'est retenu qu'APRÈS un envoi réussi, et seulement pour l'adresse STOCKÉE exactement égale à celle de test (un échec d'envoi, ou un compte de même clé écrit autrement, ne retient rien)
+                w.envoyerVerification = async (email, lien, options) => { const r = await c.envoyerVerification(email, lien, options); if (estAdresseTest(email)) retenir(lien); return r; };
                 registre.fournir('courrier', w);
             }
         } catch { /* pas de courrier : aucun lien ne sera retenu, la route répondra « introuvable » */ }
@@ -77,6 +104,7 @@ function depuis(env, { maintenant = () => Date.now() } = {}) {
 
     Object.defineProperty(mesure, 'sha', { value: sha, enumerable: false, writable: false, configurable: false });
     Object.defineProperty(mesure, 'autorise', { value: autorise, enumerable: false, writable: false, configurable: false });
+    Object.defineProperty(mesure, 'restreindreCourrier', { value: restreindreCourrier, enumerable: false, writable: false, configurable: false });
     Object.defineProperty(mesure, 'monter', { value: monter, enumerable: false, writable: false, configurable: false });
     return mesure;
 }

@@ -25,7 +25,7 @@ module.exports = {
                 } catch (e) { console.error(`❌ [v2 courrier] pilote Brevo non monté (${(e && e.name) || 'Error'}) — le courrier reste indisponible (503)`); }
             }
         }
-        // PARCOURS DU SITE : sur l'essai SEUL (cfg.mesure.actif, jamais vrai hors de la garde de service), le module essai-parcours enveloppe le courrier et monte sa route d'administration. Ailleurs : rien.
+        // PARCOURS DU SITE : sur l'essai SEUL (cfg.mesure.actif, jamais vrai hors de la garde de service), le module des parcours du site enveloppe le courrier et monte sa route d'administration. Ailleurs : rien.
         if (cfg.mesure && cfg.mesure.actif === true && typeof cfg.mesure.monter === 'function') cfg.mesure.monter({ router, registre });
         routesComptes(router, cfg, deps);
         require('./purge').demarrerPurge({ cfg, ...(deps && deps.minuteurs ? { minuteurs: deps.minuteurs } : {}) });   // O3 : purge des comptes non confirmés (passe différée puis horaire), un seul minuteur par processus

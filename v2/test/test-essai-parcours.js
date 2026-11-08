@@ -42,6 +42,10 @@ const EN = { 'x-rat-market-mesure': SEC };
         'service en majuscules': { ...ESSAI, RENDER_SERVICE_ID: SERVICE.toUpperCase() },
         'cible absente': (({ V2_CIBLE, ...r }) => r)(ESSAI),
         'cible prod': { ...ESSAI, V2_CIBLE: 'prod' },
+        'cible « Essai » (casse)': { ...ESSAI, V2_CIBLE: 'Essai' },
+        'cible « ESSAI » (casse)': { ...ESSAI, V2_CIBLE: 'ESSAI' },
+        'cible « essai » avec espace': { ...ESSAI, V2_CIBLE: 'essai ' },
+        'cible « essai » précédée d\'un espace': { ...ESSAI, V2_CIBLE: ' essai' },
         'variable seule (secret posé, rien d\'autre)': { V2_SECRET_MESURE: SEC },
         'tout absent': {}
     };
@@ -49,8 +53,11 @@ const EN = { 'x-rat-market-mesure': SEC };
         const m = lireConfig(env).mesure;
         H.v(`hors essai « ${nom} » : exemption inactive, aucune fonction`, [m.actif, typeof m.autorise, typeof m.monter, typeof m.raison === 'string' && m.raison.length > 5 && !m.raison.includes(SEC)], [false, 'undefined', 'undefined', true]);
     }
-    H.vrai('hors essai : le module essai-parcours n\'est TOUJOURS pas chargé après 13 lectures de configuration (require.cache)', !chargeEssai());
+    H.vrai(`hors essai : le module essai-parcours n'est TOUJOURS pas chargé après ${Object.keys(NON_ESSAI).length} lectures de configuration (require.cache)`, !chargeEssai());
     H.v('la garde de service : une liste permise de trois conditions', [garde.essaiProuve(ESSAI), garde.essaiProuve({}), garde.essaiProuve(null), garde.essaiProuve(undefined)], [true, false, false, false]);
+    // seconde assertion (M17/M18) : la CAUSE du refus est toujours une chaîne non vide pour tout ce qui n'est pas l'essai (environnement illisible compris), jamais null ; et l'essai seul rend null
+    H.v('la garde : raisonRefus rend null pour l\'essai SEUL et une cause (texte) pour tout le reste, entrées illisibles comprises',
+        [garde.raisonRefus(ESSAI), ...[null, undefined, 'texte', 42, {}, { MONGODB_BASE: 'rm_essai' }, { ...ESSAI, V2_CIBLE: 'Essai' }].map(e => typeof garde.raisonRefus(e) === 'string' && garde.raisonRefus(e).length > 5), garde.essaiProuve('texte')], [null, true, true, true, true, true, true, true, false]);
     // montage RÉEL sous un environnement de production : la route d'administration n'existe pas, l'exemption ne dispense rien
     const PROD = NON_ESSAI['production (base test, autre service)'];
     const natif = await cas(PROD, async appel => {
@@ -65,9 +72,12 @@ const EN = { 'x-rat-market-mesure': SEC };
     H.v('production : connexion, inscription, oubli, renvoi avec le bon en-tête et l\'adresse de test => 422 defi-anti-robot', [natif.connexion, natif.inscription, natif.oubli, natif.renvoi].map(st), Array(4).fill(DEFI));
     // LISTE FERMÉE : chacune des trois adresses (test + deux comptes de mesure), avec le bon secret, sous un environnement où UNE des trois conditions de la garde manque => 422 sur connexion, oubli et renvoi
     const LISTE = ['ratmarket.contact+essai@gmail.com', 'banc-mesure@rat-market.invalid', 'banc-ordinaire@rat-market.invalid'];
+    // + les adresses déclarées dans V2_PARCOURS_COMPTES (lues seulement APRÈS la garde : sous une garde qui échoue, elles ne dispensent rien)
+    const MDP_PARCOURS = 'mdp-parcours-' + 'q'.repeat(12), ADR_P1 = 'parcours-route@rat-market.invalid', ADR_P2 = 'parcours-essai@rat-market.invalid';
+    const PARCOURS = JSON.stringify([{ role: 'route', id: 'a'.repeat(24), email: ADR_P1, motDePasse: MDP_PARCOURS }, { role: 'essai', id: 'b'.repeat(24), email: ADR_P2.toUpperCase(), motDePasse: MDP_PARCOURS }]);
     for (const [nom, env] of [['base de production (test)', { ...ESSAI, MONGODB_BASE: 'test' }], ['autre service Render', { ...ESSAI, RENDER_SERVICE_ID: 'srv-autre' }], ['V2_CIBLE absente', (({ V2_CIBLE, ...r }) => r)(ESSAI)]]) {
-        const r = await cas(env, async appel => { const o = []; for (const a of LISTE) for (const [ch, c] of [['/api/compte/connexion', { email: a, motDePasse: MDP }], ['/api/compte/mot-de-passe-oublie', { email: a }], ['/api/compte/renvoyer-verification', { email: a }]]) o.push(st(await appel(ch, c, EN))); return o; });
-        H.v(`liste fermée, ${nom} : les 3 adresses x 3 routes avec le bon secret => 422 defi-anti-robot (aucune exemption)`, r, Array(9).fill(DEFI));
+        const r = await cas({ ...env, V2_PARCOURS_COMPTES: PARCOURS }, async appel => { const o = []; for (const a of [...LISTE, ADR_P1, ADR_P2]) for (const [ch, c] of [['/api/compte/connexion', { email: a, motDePasse: MDP }], ['/api/compte/mot-de-passe-oublie', { email: a }], ['/api/compte/renvoyer-verification', { email: a }]]) o.push(st(await appel(ch, c, EN))); return o; });
+        H.v(`liste fermée, ${nom} : les 3 adresses + 2 déclarées x 3 routes avec le bon secret => 422 defi-anti-robot (aucune exemption)`, r, Array(15).fill(DEFI));
     }
     H.vrai('production : après un montage réel et des requêtes portant le secret, le module n\'est TOUJOURS pas chargé (require.cache)', !chargeEssai());
 
@@ -167,6 +177,61 @@ const EN = { 'x-rat-market-mesure': SEC };
         H.vrai('essai : la route du lien de confirmation ne répond pas pour un compte de mesure (404 natif)', r.lien);
     }
 
+    // ---- 2 ter. B1 : les comptes déclarés dans V2_PARCOURS_COMPTES (parcours-test), liste fermée, adresses EXACTES ----
+    {
+        const sansVar = n => cas(ESSAI, async appel => [st(await appel('/api/compte/connexion', { email: n, motDePasse: MDP }, EN))[0]]);
+        const avec = (v, adresses) => cas({ ...ESSAI, V2_PARCOURS_COMPTES: v }, async appel => { const o = []; for (const a of adresses) o.push((await appel('/api/compte/connexion', { email: a, motDePasse: MDP }, EN)).statut); return o; });
+        const BRUIT = JSON.stringify([{ email: ADR_P1, motDePasse: MDP_PARCOURS }, { email: '' }, { email: 42 }, { email: null }, 'sans-arobase', '', null, 7, [ADR_P2], { role: 'x' }, '*', '@rat-market.invalid', 'a b@rat-market.invalid', ADR_P2]);
+        H.v('B1 : un compte déclaré passe le défi (connexion 401 faute de compte), casse tolérée ; adresses voisines, domaine seul, motifs, entrées vides ou non adresses => 422', await avec(PARCOURS, [ADR_P1, ADR_P2, 'PARCOURS-ROUTE@RAT-MARKET.INVALID', 'parcours-route@rat-market.invalid.evil.fr', 'xparcours-route@rat-market.invalid', 'parcours-route@rat-market.fr', 'autre@rat-market.invalid', 'sans-arobase', '*@rat-market.invalid', '']), [401, 401, 401, 422, 422, 422, 422, 422, 422, 422]);
+        H.v('B1 : variable absente = les trois adresses seules (une adresse déclarée ailleurs reçoit 422 ; le compte de mesure passe)', [await sansVar(ADR_P1), await sansVar('banc-mesure@rat-market.invalid')], [[422], [401]]);
+        H.v('B1 : variable illisible (pas du JSON, ou pas une liste) = les trois adresses seules', [await avec('pas du json', [ADR_P1, 'banc-mesure@rat-market.invalid']), await avec('{"email":"parcours-route@rat-market.invalid"}', [ADR_P1, 'banc-mesure@rat-market.invalid'])], [[422, 401], [422, 401]]);
+        H.v('B1 : entrées mêlées (vides, nombres, tableaux, motifs, non-adresses) : seules les deux vraies adresses passent', await avec(BRUIT, [ADR_P1, ADR_P2, 'sans-arobase', '@rat-market.invalid', 'a b@rat-market.invalid', '*@rat-market.invalid']), [401, 401, 422, 422, 422, 422]);
+        // les mots de passe de la variable ne sortent nulle part : ni configuration, ni réponse
+        const cfgP = lireConfig({ ...ESSAI, V2_PARCOURS_COMPTES: PARCOURS });
+        const sortie = JSON.stringify(cfgP) + require('util').inspect(cfgP, { depth: 8 }) + JSON.stringify(cfgP.mesure);
+        H.vrai('B1 : ni les mots de passe ni les adresses déclarées ne sont dans la configuration sérialisée ou inspectée', !sortie.includes(MDP_PARCOURS) && !sortie.includes(ADR_P1) && !sortie.includes(ADR_P2));
+        // la route du lien ne vaut JAMAIS pour une adresse déclarée
+        const lienP = await cas({ ...ESSAI, V2_PARCOURS_COMPTES: PARCOURS }, async appel => (await appel('/api/essai/lien-confirmation', { email: ADR_P1 }, EN)).texte.startsWith('<'));
+        H.vrai('B1 : la route du lien de confirmation reste muette (404 natif) pour une adresse déclarée', lienP);
+    }
+
+    // ---- 2 quater. F1/F5 : un compte de MÊME CLÉ (emailCle) inscrit AVANT le compte de test : aucun courriel ne part vers lui, aucun lien n'est retenu ----
+    {
+        const db = require('../db'), AUTRE_BOITE = 'ratmarket.contact@gmail.com';
+        await db.col('comptes').deleteMany({ emailCle: 'ratmarketcontact@gmail.com' }); await db.col('limites').deleteMany({});
+        const r = await cas(ESSAI, async appel => {
+            const o = {}, mails = () => courrier.envoyes.length, vers = a => courrier.envoyes.filter(e => e.email === a).length;
+            await appel('/api/compte/inscription', { email: AUTRE_BOITE, turnstile: 'ok' }); await A.attendre();        // la VRAIE boîte s'inscrit d'abord (défi valide) : son courriel part
+            o.avant = vers(AUTRE_BOITE);
+            await db.col('limites').deleteMany({}); const m0 = mails();
+            o.inscr = (await appel('/api/compte/inscription', { email: ADRESSE }, EN)).statut; await A.attendre();      // dispensée : trouve le compte de même clé
+            await db.col('limites').deleteMany({});
+            o.renvoi = (await appel('/api/compte/renvoyer-verification', { email: ADRESSE }, EN)).statut; await A.attendre();
+            await db.col('limites').deleteMany({});
+            o.oubli = (await appel('/api/compte/mot-de-passe-oublie', { email: ADRESSE }, EN)).statut; await A.attendre();
+            o.partis = mails() - m0;
+            o.lien = await appel('/api/essai/lien-confirmation', { email: ADRESSE }, EN);
+            await db.col('limites').deleteMany({}); const m1 = mails();
+            await appel('/api/compte/renvoyer-verification', { email: AUTRE_BOITE, turnstile: 'ok' }); await A.attendre();   // témoin : sans l'exemption, le MÊME renvoi fait partir le courriel
+            o.temoin = mails() - m1;
+            return o;
+        });
+        H.v('F1/F5 : la vraie boîte inscrite avant reçoit son courriel ; la demande dispensée (inscription, renvoi, oubli) pour l\'adresse de test, de même clé, répond 202 mais NE FAIT PARTIR AUCUN courriel', [r.avant, r.inscr, r.renvoi, r.oubli, r.partis], [1, 202, 202, 202, 0]);
+        H.v('F1/F5 : aucun lien n\'est retenu pour ce compte de même clé (404 INTROUVABLE), et le témoin (renvoi ordinaire avec défi) fait bien partir un courriel', [r.lien.statut, r.lien.json && r.lien.json.erreur && r.lien.json.erreur.code, r.temoin], [404, 'INTROUVABLE', 1]);
+        await db.col('comptes').deleteMany({ emailCle: 'ratmarketcontact@gmail.com' }); await db.col('limites').deleteMany({});
+    }
+
+    // ---- 2 quinquies. Démarrage RÉEL par process.env (v2/index.js:20,23,29) dans un processus enfant, dossier absent comprise ----
+    {
+        const { execFileSync } = require('child_process'), base = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, TEMP: process.env.TEMP, TMP: process.env.TMP };
+        const enfant = env => { try { const sortie = execFileSync(process.execPath, [path.join(__dirname, '_enfant-parcours.js')], { env: { ...base, ...env }, encoding: 'utf8', timeout: 120000 }); return JSON.parse(sortie.split(/\r?\n/).filter(l => l.startsWith('{"charge"')).pop()); } catch (e) { return { erreur: String(e.status || e.name) }; } };
+        const PROD_E = { MONGODB_BASE: 'test', RENDER_SERVICE_ID: SERVICE, V2_CIBLE: 'essai', V2_SECRET_MESURE: SEC, V2_SECRET_EMPREINTE: 'valeur-de-banc-seize' }, ESSAI_E = { ...ESSAI };
+        H.v('démarrage réel (process.env) en PRODUCTION : configuration valide, module non chargé', (({ charge, valide }) => [charge, valide])(enfant(PROD_E)), [false, true]);
+        H.v('démarrage réel (process.env) sur l\'ESSAI : configuration valide, module chargé', (({ charge, valide }) => [charge, valide])(enfant(ESSAI_E)), [true, true]);
+        H.v('démarrage réel en PRODUCTION, dossier essai-parcours ABSENT (simulé au chargement) : la configuration se charge, module non chargé', (({ charge, valide }) => [charge, valide])(enfant({ ...PROD_E, ENFANT_SANS_MODULE: '1' })), [false, true]);
+        H.v('démarrage réel sur l\'ESSAI, dossier ABSENT : échec fermé (configuration invalide, routes en 503), jamais une exemption sans module', (({ valide }) => [valide])(enfant({ ...ESSAI_E, ENFANT_SANS_MODULE: '1' })), [false]);
+    }
+
     // ---- 3. L'expiration et l'usage unique du lien, sur une horloge fausse ----
     {
         let t = 1_000_000;
@@ -183,6 +248,16 @@ const EN = { 'x-rat-market-mesure': SEC };
             [dans[0], dans[1].lien, apres[0], dernier[1].lien, autre[0]], [200, 'https://exemple/verif?jeton=A', 404, 'https://exemple/verif?jeton=D', 404]);
         H.v('lien : la durée de vie est de 15 minutes au plus', require('../essai-parcours').DUREE_LIEN_MS <= 15 * 60e3, true);
         H.v('lien : le pilote enveloppé garde ses envois (courrier mémoire) et ne s\'enveloppe qu\'une fois', [registre.c.envoyes.length, (() => { const avant = registre.c; mesure.monter({ router: { post() { } }, registre }); return registre.c === avant; })()], [5, true]);
+    }
+
+    // F4 : le lien n'est retenu qu'APRÈS un envoi réussi ; un envoi en échec (plafond, panne) ne laisse rien
+    {
+        const echec = { envoyerVerification: async () => { throw Object.assign(new Error('x'), { name: 'BrevoPlafond' }); } };
+        const reg = { c: echec, obtenir() { return this.c; }, fournir(_, o) { this.c = o; } }, routes = [];
+        require('../essai-parcours').depuis(ESSAI).monter({ router: { post: (ch, h) => routes.push(h) }, registre: reg });
+        let leve = null; try { await reg.c.envoyerVerification(ADRESSE, 'https://exemple/verif?jeton=Z'); } catch (e) { leve = e.name; }
+        let r = null; await routes[0]({ get: () => SEC, body: { email: ADRESSE } }, { setHeader() { }, status(s) { this.s = s; return this; }, json(j) { r = [this.s, j.erreur && j.erreur.code]; return this; } }, () => { });
+        H.v('F4 : un envoi en échec relève toujours son erreur et ne retient AUCUN lien (404 INTROUVABLE)', [leve, r], ['BrevoPlafond', [404, 'INTROUVABLE']]);
     }
 
     // ---- 4. PÉRIMÈTRE DU CODE : un seul point de chargement, aucun journal dans le module ----

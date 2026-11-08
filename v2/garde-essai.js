@@ -1,6 +1,6 @@
 'use strict';
 // GARDE DE SERVICE DE L'ESSAI — écrite par ce qu'elle AUTORISE : une liste permise de TROIS conditions positives, toutes requises, sinon « ce n'est pas l'essai » et RIEN de ce qui n'existe
-// que sur l'essai (l'exemption de mesure, le module v2/essai-parcours/, sa route d'administration) n'est même chargé :
+// que sur l'essai (l'exemption de mesure, le module des parcours du site (dossier dédié sous v2), sa route d'administration) n'est même chargé :
 //   · MONGODB_BASE exactement « rm_essai » (la base de l'essai, mongo-connexion.js) ;
 //   · RENDER_SERVICE_ID exactement le service Render de l'essai (variable posée par Render lui-même : un copier-coller des variables de l'essai vers un autre service ne l'emporte pas) ;
 //   · V2_CIBLE exactement « essai ».
