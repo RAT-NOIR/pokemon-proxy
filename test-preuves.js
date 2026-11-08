@@ -1230,9 +1230,9 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         const paires = [['M-P/ID', 'M-P'], ['SV-P/ID', 'SV-P'], ['S-P/ID', 'S-P'], ['SM-P/ID', 'SM-P'], ['SV-P/TH', 'SV-P'], ['S-P/TH', 'S-P'], ['SV-P/CS', 'SV-P'], ['S-P/CS', 'S-P'], ['M-P/TH', 'M-P']];
         const lignes = ['M-P/ID', 'SV-P/ID', 'S-P/ID', 'SM-P/ID', 'SV-P/TH', 'S-P/TH', 'SV-P/CS', 'S-P/CS', 'M-P/TH', 'SV-P/KR', 'S-P/KR', 'SM-P/CS', 'M-P/CS', 'M-P/CT'];
         for (const [cm, imp] of paires) {
-            const t = trad({ langue: 'th', codeSet: imp, numero: '069' });
+            const t = trad({ codeSet: imp, numero: '069' });
             const e = { ...t, attendu: { ...t.attendu, numero: '069' } };
-            const pl = ligne => ptrad({ tirage: 'th', numero: '069', slug: 'Mareep-X069', codeSet: ligne });
+            const pl = ligne => ptrad({ numero: '069', slug: 'Mareep-X069', codeSet: ligne });
             assert.deepStrictEqual(lue(e, pl(cm)), { ok: true, motifs: [] }, `${imp} imprimé contre la ligne ${cm}`);
             assert.ok(drap(e, pl(cm)).includes(`codeAlias:${cm}→${imp}`), `drapeau codeAlias pour ${cm}`);
             for (const autre of lignes.filter(l => !paires.some(([c2, i2]) => c2 === l && i2 === imp))) assert.match(mt(e, pl(autre)), /code-set-different/, `${imp} lu sur la ligne ${autre} refuse`);
