@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="modele-sha256" content="__MODELE_SHA__">
+<meta name="modele-octets" content="__MODELE_OCTETS__">
+<meta name="isolement-demande" content="__ISOLEMENT__">
+<title>Banc téléphone</title>
+<link rel="stylesheet" href="/api/banc/telephone/app.css">
+</head>
+<body>
+<main>
+  <h1>Banc téléphone</h1>
+  <p class="sous">Le même modèle servi, le même moteur et le même prétraitement que l'extension v2, sur cet appareil. Page d'essai : rien de personnel n'est envoyé, hors l'agent utilisateur et les mesures.</p>
+
+  <section id="verdict" class="verdict attente" aria-live="polite">
+    <div id="verdictMot">PRÊT</div>
+    <div id="verdictDetail">Touchez « Mesurer en WASM ».</div>
+  </section>
+
+  <section class="trois" aria-label="À lire">
+    <p id="ligne1">1 · verdict : —</p>
+    <p id="ligne2">2 · moteur : —</p>
+    <p id="ligne3">3 · temps et mémoire : —</p>
+  </section>
+
+  <div class="boutons">
+    <button id="btnWasm" type="button">Mesurer en WASM</button>
+    <button id="btnGpu" type="button" disabled>Mesurer en WebGPU</button>
+  </div>
+  <p id="envoi" class="envoi">Rien n'est envoyé avant la fin d'une mesure.</p>
+
+  <section>
+    <h2>Appareil</h2>
+    <table id="appareil"></table>
+  </section>
+  <section>
+    <h2>Chiffres</h2>
+    <table id="chiffres"></table>
+  </section>
+  <section>
+    <h2>Journal</h2>
+    <pre id="journal"></pre>
+  </section>
+  <section>
+    <h2>Résultat à copier (si l'envoi échoue)</h2>
+    <pre id="brut"></pre>
+  </section>
+</main>
+<script type="module" src="/api/banc/telephone/app.js"></script>
+</body>
+</html>

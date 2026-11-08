@@ -89,6 +89,8 @@ module.exports = {
         }
         // BANC-200 : les seaux (juge scellé, entraînement), derrière V2_BANC_SEAU=1 ; éteint, les routes n'existent pas. Toute la logique : seau.js ; ici, seulement le montage.
         if (cfg.bancSeau === true) require('./seau-routes').monter(router, cfg, deps.seaux || require('./seau').creerSeaux({ cfg }));
+        // BANC-TELEPHONE : la page de mesure sur téléphone (GET /api/banc/telephone) et son dépôt de résultats ; ne se monte QUE sur le service d'essai ET derrière V2_BANC_TELEPHONE=1 (banc-telephone/garde.js), sinon aucune route : 404 natif.
+        require('../banc-telephone/routes').monter(router, cfg, deps);
         router.delete('/api/banc/contributions', resoudrePorteur(cfg), exigerInstallation, traiterEffacement(purge));
         demarrerPurge(purge, undefined, undefined, { banc });
     },

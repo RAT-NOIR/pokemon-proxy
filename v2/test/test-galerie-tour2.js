@@ -30,11 +30,12 @@ const H = A.H;
         const scene = async m => {
             const a = await privee(p), cl = await creer(p, 'M1', [pg([bart(0, 0, a), carte(1, 0)])]);
             const r = await avec('arts', 'updateMany', () => brut('classeurs').deleteOne({ _id: cl.id }), () => publier(p, cl.id, m));
-            return [r.introuvable === true, await etat(a), (await brut('arts').findOne({ _id: a })).viaClasseurs || [], await nb('publications', { _id: cl.id })];
+            return [r.introuvable === true, await etat(a), (await brut('arts').findOne({ _id: a })).viaClasseurs || [], await nb('publications', { _id: cl.id }), cl.id];
         };
         const mut = A.charger('classeurs.js', [["if (!(await G.col('classeurs').findOne({ _id: id, auteurId: mien }, { projection: { _id: 1 } }))) { await retirerPublication", "if (false) { await retirerPublication"]]);
-        H.v('M1 — le classeur est supprimé ENTRE le contrôle et les marquages : introuvable, l\'illustration redevient privée, aucune marque ni publication orpheline', await scene(C), [true, 'prive', [], 0]);
-        H.v('   MUTANT « pas de contrôle après les marquages » : l\'illustration reste « en-attente » marquée d\'un classeur supprimé', (await scene(mut)).slice(1, 3), ['en-attente', [(await brut('arts').find({ viaClasseurs: { $exists: true, $ne: [] } }).sort({ _id: -1 }).limit(1).toArray())[0].viaClasseurs[0]]]);
+        H.v('M1 — le classeur est supprimé ENTRE le contrôle et les marquages : introuvable, l\'illustration redevient privée, aucune marque ni publication orpheline', (await scene(C)).slice(0, 4),[true, 'prive', [], 0]);
+        const rm = await scene(mut);
+        H.v('   MUTANT « pas de contrôle après les marquages » : l\'illustration reste « en-attente » marquée de L\'IDENTIFIANT du classeur supprimé de la scène', rm.slice(1, 3), ['en-attente', [rm[4]]]);
     }
 
     // ═══ M2. LA LIBÉRATION RETROUVE LES ARTS PAR LEUR MARQUE, MÊME SANS PUBLICATION ═══
@@ -148,9 +149,8 @@ const H = A.H;
         const mutB = A.charger('classeurs.js', [["> max) { await G.col('classeurs').deleteOne", "> 1e9) { await G.col('classeurs').deleteOne"]]);
         H.v('borne — 8 créations décalées de 25 ms sous une borne de 3 : EXACTEMENT 3 classeurs (la borne est atteinte, pas dépassée) ; MUTANT « sans contrôle a posteriori » : 8', [await classeurs(C, 8, 3), await classeurs(mutB, 8, 3)], [3, 8]);
         const depots = async (m, n, max) => { const p = await compte({}, 't2-d' + Math.random().toString(36).slice(2, 6)); await Promise.all(Array.from({ length: n }, (_, i) => tard(i, () => m.ouvrirDepot({ compteId: p.id, ref: 'refcompte0002', type: 'image/png', octets: 1000, bornes: { octetsMax: 8e6, pixelsMax: 12e6, illustrationsMax: max }, stockage })))); return nb('depots', { compteId: p.id }); };
-        const mutD = A.charger('depot.js', [["> bornes.illustrationsMax) { await G.col('depots').deleteOne", "> 1e9) { await G.col('depots').deleteOne"]]);
-        H.v('   6 dépôts décalés sous une borne de 2 : EXACTEMENT 2 dépôts ouverts', await depots(D, 6, 2), 2);
-        void mutD;
+        const mutD = A.charger('depot.js', [["> bornes.illustrationsMax) { await G.col('depots').deleteOne", "> 1e9) { await G.col('depots').deleteOne"], ["(await enStock(mien)) >= bornes.illustrationsMax", "(await enStock(mien)) >= 1e9"]]);   // le contrôle préalable ET le contrôle a posteriori : seule la réservation suivie du contrôle tient la borne sous concurrence
+        H.v('   6 dépôts décalés sous une borne de 2 : EXACTEMENT 2 dépôts ouverts ; MUTANT « sans contrôle a posteriori » : 6', [await depots(D, 6, 2), await depots(mutD, 6, 2)], [2, 6]);
     }
 
     await B.fermer();

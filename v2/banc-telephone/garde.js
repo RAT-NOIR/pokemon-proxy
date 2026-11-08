@@ -1,0 +1,36 @@
+'use strict';
+// BANC-TELEPHONE — la page de mesure sur téléphone (GET /api/banc/telephone) et son dépôt de résultats (POST /api/banc/telephone/resultat).
+// Écrite par ce qu'elle AUTORISE : TROIS conditions positives, toutes requises, sinon les routes N'EXISTENT PAS (404 natif, octet pour octet comme avant) —
+//   V2_BANC_TELEPHONE exactement « 1 » ; V2_CIBLE exactement « essai » ; ET RENDER_SERVICE_ID exactement le service Render de l'essai (variable posée par Render lui-même :
+//   un copier-coller des variables de l'essai vers un autre service ne l'emporte pas). Même motif que `cfg.mesure` (v2/config.js, lot L1 : SERVICE_ESSAI) ;
+//   la constante est IMPORTÉE de v2/config.js (une seule définition ; test-banc-telephone.js le prouve).
+// Lue dans l'environnement AU MONTAGE (jamais dans config.js : aucune variable de plus à déclarer côté configuration), et injectable pour les bancs.
+const { SERVICE_ESSAI } = require('../config');
+// Tour 1 (M2) : la base où les résultats s'écrivent est celle de l'essai, par son NOM (mongo-connexion.js : rm_essai), vérifiée au montage (MONGODB_BASE) ET à chaque écriture (databaseName de la connexion).
+const BASE_ESSAI = 'rm_essai';
+
+/** @returns {{actif: boolean, raison: string}} */
+function lire(env = process.env) {
+    if (!env || env.V2_BANC_TELEPHONE !== '1') return { actif: false, raison: 'V2_BANC_TELEPHONE absent ou différent de « 1 »' };
+    if (env.V2_CIBLE !== 'essai') return { actif: false, raison: 'V2_CIBLE n\'est pas « essai »' };
+    if (env.RENDER_SERVICE_ID !== SERVICE_ESSAI) return { actif: false, raison: 'ce service n\'est pas celui de l\'essai (RENDER_SERVICE_ID)' };
+    return { actif: true, raison: 'essai' };
+}
+
+/** L'hôte EXACT du bucket R2 (celui vers lequel /api/modele-empreinte/<sha256> redirige), pour la seule directive connect-src de la page ; null si la configuration ne le permet pas. Aucun joker. */
+function hoteR2(env = process.env) {
+    const brut = (typeof env.V2_VISUELS_R2_ENDPOINT === 'string' && env.V2_VISUELS_R2_ENDPOINT.trim())
+        || (typeof env.V2_VISUELS_R2_COMPTE === 'string' && /^[0-9a-zA-Z-]{1,64}$/.test(env.V2_VISUELS_R2_COMPTE.trim()) ? `https://${env.V2_VISUELS_R2_COMPTE.trim()}.r2.cloudflarestorage.com` : '');
+    try { const u = new URL(brut); return u.protocol === 'https:' && /^[a-z0-9.-]+$/i.test(u.hostname) ? u.host : null; } catch { return null; }
+}
+
+// Tour 2 : l'ORIGINE de la page elle-même. Un navigateur envoie « Origin » même pour un script de type module ou un fetch de la MÊME origine ; la garde CORS héritée (index.js) refuse toute origine hors liste en 403.
+// Écrite par ce qu'elle AUTORISE : cette chaîne, comparée à l'octet (jamais de joker), sur les seuls chemins de la page, et seulement quand la page existe (actifComplet).
+const ORIGINE_ESSAI = 'https://rat-market-api-essai.onrender.com';
+
+/** La page existe-t-elle vraiment sur ce processus ? Les trois conditions de la garde ET la base `rm_essai` (la même que routes.monter exige) : une seule définition pour les routes, l'analyseur de 8 Ko et le profil CORS. */
+function actifComplet(env = process.env) {
+    return lire(env).actif === true && String(env.MONGODB_BASE || '').trim() === BASE_ESSAI;
+}
+
+module.exports = { lire, hoteR2, actifComplet, SERVICE_ESSAI, BASE_ESSAI, ORIGINE_ESSAI };
