@@ -31,8 +31,8 @@ function profils(cfg, env = process.env) {
     ];
     // GALERIE : les chemins de la Communauté s'ajoutent au profil du site SEULEMENT lot allumé (éteint, le profil est celui d'avant, octet pour octet)
     if (cfg.galerie && cfg.galerie.actif === true) liste.find(x => x.nom === 'site').chemins.push(GALERIE_CHEMINS);
-    // LIEN-ORDINATEUR : ce chemin EXACT s'ajoute au profil du site SEULEMENT drapeau allumé (éteint, le profil est celui d'avant, octet pour octet) ; son préflight n'annonce que POST (voir plus bas)
-    if (cfg.lienOrdinateur && cfg.lienOrdinateur.actif === true) liste.find(x => x.nom === 'site').chemins.push(LIEN_ORDINATEUR_CHEMIN);
+    // LIEN-ORDINATEUR : un profil À PART, SEULEMENT drapeau allumé (éteint, la liste est celle d'avant, octet pour octet) : l'apex et www, ce chemin EXACT, POST seulement, SANS credentials (la route n'utilise aucun cookie).
+    if (cfg.lienOrdinateur && cfg.lienOrdinateur.actif === true) liste.push({ nom: 'site-lien', origines: new Set(originesSite(cfg)), credentials: false, chemins: [LIEN_ORDINATEUR_CHEMIN], methodes: 'POST', entetes: 'Content-Type, X-Rat-Market' });
     return liste;
 }
 
@@ -56,8 +56,7 @@ function middlewareV2(cfg, env = process.env) {
             // « Ma collection » (site) : GET et PUT seulement, jamais POST ni DELETE — le profil du site ailleurs est inchangé.
             const collection = p.nom === 'site' && /^\/api\/collection(\/.*)?$/.test(chemin);
             const galerie = p.nom === 'site' && cfg.galerie && cfg.galerie.actif === true && GALERIE_CHEMINS.test(chemin);
-            const lien = p.nom === 'site' && LIEN_ORDINATEUR_CHEMIN.test(chemin);   // LIEN-ORDINATEUR : POST seulement
-            res.setHeader('Access-Control-Allow-Methods', lien ? 'POST' : galerie ? 'GET, POST, PUT, DELETE' : collection ? 'GET, PUT' : delPermis ? `${p.methodes}, DELETE` : p.methodes);
+            res.setHeader('Access-Control-Allow-Methods', galerie ? 'GET, POST, PUT, DELETE' : collection ? 'GET, PUT' : delPermis ? `${p.methodes}, DELETE` : p.methodes);
             res.setHeader('Access-Control-Allow-Headers', p.entetes);
             res.setHeader('Access-Control-Max-Age', '600');
             return res.status(204).end();
