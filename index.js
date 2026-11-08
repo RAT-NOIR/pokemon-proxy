@@ -233,18 +233,6 @@ if (V2) app.use('/api/identifier', V2.limiteurHerite.plafondIp);
 app.use(['/api/identifier', '/api/analyser'], limiteurIA);
 if (V2) V2.monter(app, { mongoose, gererIdentifier, gererRetourLive });
 
-// Limiteur dédié à la création de Checkout Sessions. Le jeton partagé est
-// extractible de l'extension distribuée : sans ce garde-fou, n'importe qui pourrait
-// faire créer des milliers de sessions Stripe. 20/h/IP laisse largement la place à
-// un achat normal (et à quelques hésitations/retours en arrière).
-const limiteurPaiement = rateLimit({
-    windowMs: 60 * 60 * 1000,
-    max: 20,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { success: false, error: 'Trop de tentatives de paiement, réessaie plus tard.' }
-});
-
 // Limiteur dédié aux routes d'APPRENTISSAGE (/api/apprendre, /api/apprendre-lot), qui
 // ÉCRIVENT les deux seules tables non régénérables du projet (numeros_cartes, codes_set).
 // Elles n'avaient AUCUN limiteur, et le jeton partagé est extractible de l'extension.
@@ -1200,9 +1188,6 @@ async function chercherPrixCatalogueLocal(name) {
 // décident réellement.
 // Le retirer supprime au passage la dépendance à `sharp` (module natif, lourd en
 // RAM), ce qui allège le déploiement et rend l'architecture portable en extension.
-
-// Langues supportées par TCGdex pour la recherche (codes ISO)
-const LANGUES_TCGDEX = ['en', 'fr', 'de', 'es', 'it', 'pt', 'ja', 'ko', 'zh-cn', 'zh-tw', 'nl', 'pl', 'ru', 'id', 'th'];
 
 // Convertit notre code langue (EN, FR, JP...) vers le code TCGdex (en, fr, ja...)
 function langueVersTCGdex(langue) {
@@ -3036,18 +3021,6 @@ function calculerVerdict(prixVinted, prixCardmarket, language, carteIncertaine) 
 
 // Ordre officiel Cardmarket, du meilleur au pire
 const ORDRE_ETATS = ['MT', 'NM', 'EX', 'GD', 'LP', 'PL', 'PO'];
-
-// Prix le moins cher pour un état donné OU MIEUX (= ce que ferait minCondition).
-// Ex: grille {NM:22.82, EX:18, LP:3} + état EX -> min(22.82, 18) = 18 €
-function prixPourEtat(grille, etat) {
-    if (!grille || !etat) return null;
-    const seuil = ORDRE_ETATS.indexOf(String(etat).toUpperCase());
-    if (seuil === -1) return null;
-    const prix = ORDRE_ETATS.slice(0, seuil + 1)
-        .map(e => grille[e])
-        .filter(p => typeof p === 'number');
-    return prix.length ? Math.min(...prix) : null;
-}
 
 // ÉTAT RETENU = L'AVIS DU MODÈLE SUR LA PHOTO, ET RIEN D'AUTRE (décision de l'utilisateur, 2026-10-18 :
 // « l'état d'une carte ne vient JAMAIS du vendeur »). Avant cette date, la fonction `pireEtat` croisait cet avis

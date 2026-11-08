@@ -25,11 +25,6 @@ const deux = n => String(n).padStart(2, '0');
 function valide(d) { if (!(d instanceof Date) || Number.isNaN(d.getTime())) throw new Error('offre : date invalide'); return d; }
 /** Le jour civil de Paris de l'instant `d`, « AAAA-MM-JJ ». */
 function jourDeParis(d) { const p = parties(valide(d)); return `${p.year}-${deux(p.month)}-${deux(p.day)}`; }
-/** Le décalage de Paris à l'instant `d`, en minutes (60 ou 120). */
-function decalageParis(d) {
-    const p = parties(valide(d));
-    return Math.round((Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - Math.floor(d.getTime() / 1000) * 1000) / 60000);
-}
 const iso = (y, m, j, dec) => `${y}-${deux(m)}-${deux(j)}T00:00:00${dec < 0 ? '-' : '+'}${deux(Math.floor(Math.abs(dec) / 60))}:${deux(Math.abs(dec) % 60)}`;
 /** Le prochain minuit de Paris STRICTEMENT après `d` : { instant: Date, iso: « AAAA-MM-JJT00:00:00+01:00|+02:00 » }. Le minuit de Paris n'est jamais ambigu (les bascules ont lieu à 2 h / 3 h). */
 function prochainMinuitParis(d) {
@@ -82,4 +77,4 @@ async function offre(porteur, cfg, maintenant = new Date()) {
     if (e.nonVerifie) return { nom: e.nom, restant: 0, remiseAZero };
     return { nom: e.nom, restant: Math.max(0, e.limite - await prisAuJour(porteur, jourDeParis(maintenant))), remiseAZero };
 }
-module.exports = { offre, etatDe, estAdministrateur, prisAuJour, jourDeParis, decalageParis, prochainMinuitParis, cleDe, FUSEAU };
+module.exports = { offre, etatDe, estAdministrateur, prisAuJour, jourDeParis, prochainMinuitParis, cleDe, FUSEAU };
