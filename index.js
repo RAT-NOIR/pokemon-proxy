@@ -183,7 +183,7 @@ if (process.env.V2_EMPREINTE_EXTENSION === '1' && V2) {
     });
 }
 // BANC-TELEPHONE (tour 1, M1) : le dépôt de résultats de la page de banc téléphone a SON analyseur de 8 Ko, avant le global (100 Ko) ; il n'existe que si la page est allumée (essai + drapeau), sinon rien ne change.
-if (V2 && require('./v2/banc-telephone/garde').lire(process.env).actif) app.use(require('./v2/banc-telephone/corps').analyseur());
+if (V2 && require('./v2/banc-telephone/garde').actifComplet(process.env)) app.use(require('./v2/banc-telephone/corps').analyseur());
 app.use(express.json());
 
 // Limite anti-abus par IP : backstop indépendant du quota par utilisateur (qui, lui,

@@ -24,4 +24,13 @@ function hoteR2(env = process.env) {
     try { const u = new URL(brut); return u.protocol === 'https:' && /^[a-z0-9.-]+$/i.test(u.hostname) ? u.host : null; } catch { return null; }
 }
 
-module.exports = { lire, hoteR2, SERVICE_ESSAI, BASE_ESSAI };
+// Tour 2 : l'ORIGINE de la page elle-même. Un navigateur envoie « Origin » même pour un script de type module ou un fetch de la MÊME origine ; la garde CORS héritée (index.js) refuse toute origine hors liste en 403.
+// Écrite par ce qu'elle AUTORISE : cette chaîne, comparée à l'octet (jamais de joker), sur les seuls chemins de la page, et seulement quand la page existe (actifComplet).
+const ORIGINE_ESSAI = 'https://rat-market-api-essai.onrender.com';
+
+/** La page existe-t-elle vraiment sur ce processus ? Les trois conditions de la garde ET la base `rm_essai` (la même que routes.monter exige) : une seule définition pour les routes, l'analyseur de 8 Ko et le profil CORS. */
+function actifComplet(env = process.env) {
+    return lire(env).actif === true && String(env.MONGODB_BASE || '').trim() === BASE_ESSAI;
+}
+
+module.exports = { lire, hoteR2, actifComplet, SERVICE_ESSAI, BASE_ESSAI, ORIGINE_ESSAI };

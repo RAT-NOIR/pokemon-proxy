@@ -8,10 +8,14 @@ const EXPOSE ='Retry-After, Idempotency-Replayed';
 // Les profils existants ne changent pas d'un octet.
 
 
-function profils(cfg) {
+function profils(cfg, env = process.env) {
     const o = cfg.origines;
     const ext = [o.extension, o.extensionDev].filter(x => typeof x === 'string' && x);
+    // BANC-TELEPHONE (tour 2) : la page de mesure (essai, V2_BANC_TELEPHONE=1, base rm_essai) s'appelle elle-même — un navigateur envoie « Origin » à un script de type module et à un fetch POST. Écrit par ce qu'il AUTORISE :
+    // l'origine EXACTE de l'essai (octet pour octet, jamais '*', pas de credentials), les chemins de la page seuls, GET/HEAD/POST. Garde éteinte : le profil n'existe pas, la réponse est celle d'avant.
+    const bancTelephone = require('../banc-telephone/garde');
     return [
+        ...(bancTelephone.actifComplet(env) ? [{ nom: 'banc-telephone', origines: new Set([bancTelephone.ORIGINE_ESSAI]), credentials: false, chemins: [/^\/api\/banc\/telephone(\/.*)?$/], methodes: 'GET, HEAD, POST', entetes: 'Content-Type' }] : []),
         ...(cfg.empreinteExtension === true ? [{ nom: 'extension-modele', origines: new Set(ext), credentials: false, chemins: [/^\/api\/modele-empreinte\/[0-9a-f]{64}$/], methodes: 'GET, HEAD', entetes: 'Range, If-None-Match', expose: 'Retry-After' }] : []),
         { nom: 'extension', origines: new Set(ext), credentials: false,
           // PHOTOS-MULTIPLES (7d) : /api/photo n'a de profil CORS que si la route existe (drapeau allumé) ; éteint, aucun en-tête propre à v2 pour ce chemin
@@ -24,8 +28,8 @@ function profils(cfg) {
     ];
 }
 
-function middlewareV2(cfg) {
-    const P = profils(cfg);
+function middlewareV2(cfg, env = process.env) {
+    const P = profils(cfg, env);
     return function corsV2(req, res, next) {
         const origine = req.headers.origin;
         const chemin = req.path;

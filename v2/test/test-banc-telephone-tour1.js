@@ -86,6 +86,17 @@ const sha256 = p => crypto.createHash('sha256').update(fs.readFileSync(p)).diges
         await srv.fermer();
     }
 
+    // ═══ tour 2, mineur : l'analyseur de 8 Ko compare le chemin SANS CASSE et SANS barre finale (Express route ainsi) ═══
+    {
+        const mw = corps.analyseur();
+        const essai = (chemin, methode = 'POST') => { const r = { statut: null, suite: false }; const res = { headersSent: false, setHeader() { }, once() { }, status(s) { r.statut = s; return this; }, json() { this.headersSent = true; return this; } };
+            mw({ method: methode, path: chemin, headers: { 'content-type': 'text/plain' }, socket: {}, on() { }, removeListener() { } }, res, () => { r.suite = true; }); return r; };
+        for (const c of ['/api/banc/telephone/resultat', '/api/banc/telephone/Resultat', '/api/banc/telephone/RESULTAT', '/api/banc/telephone/resultat/', '/API/Banc/Telephone/Resultat//'])
+            H.v(`tour 2. analyseur : ${c} est pris (type non JSON ⇒ 415, la route n'est pas atteinte)`, [essai(c).statut, essai(c).suite], [415, false]);
+        for (const c of ['/api/banc/telephone/resultats', '/api/banc/telephone', '/api/banc/telephone/resultat/x', '/ping']) H.v(`tour 2. analyseur : ${c} n'est PAS pris (passe au suivant)`, essai(c).suite, true);
+        H.v('tour 2. analyseur : un GET sur le chemin passe au suivant', essai('/api/banc/telephone/resultat', 'GET').suite, true);
+    }
+
     // ═══ M2 : la base de l'essai, par son nom ═══
     {
         const sonde = []; const ecrire = console.error; console.error = (...a) => { sonde.push(a.join(' ')); };

@@ -11,7 +11,8 @@ const OCTETS = 8192, CHEMIN = '/api/banc/telephone/resultat', DELAI_MS = 15000;
 
 function analyseur({ delaiMs = DELAI_MS } = {}) {
     return function corpsBancTelephone(req, res, next) {
-        if (req.method !== 'POST' || req.path !== CHEMIN) return next();
+        // Express route sans casse et sans barre finale : le chemin se compare de même (sinon /Resultat ou /resultat/ atteindrait la route sans passer par la limite de 8 Ko)
+        if (req.method !== 'POST' || String(req.path).toLowerCase().replace(/\/+$/, '') !== CHEMIN) return next();
         let fini = false;
         const refuser = (statut, detail) => {
             if (fini) return; fini = true;
