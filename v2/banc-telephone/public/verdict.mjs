@@ -162,16 +162,32 @@ export function hoteFinal(url) {
 // ── L'ENTRÉE DU MODÈLE : quel chemin a décodé les cartes ? Le décodeur Rat-Market (decodeur.mjs : entiers, identique au bit d'un appareil à l'autre) est le chemin de la mesure ; le navigateur reste TÉMOIN et REPLI.
 // Aucun seuil ici : le verdict de la mesure est toujours celui de jugerMesure, inchangé. Ces fonctions disent seulement, honnêtement, de QUOI le verdict est le verdict.
 export const CODES_REFUS = Object.freeze(['FORMAT', 'TROP_GRAND', 'DECODAGE', 'NON_SUPPORTE', 'entree-invalide', 'memoire', 'autre']);
-/** `cartes` : [{ via: 'rm' | 'repli', code? }] une entrée par carte. -> { chemin: 'rm' | 'mixte' | 'navigateur', cartesRm, cartesRepli, refus: { code: n }, identiqueAuBit: true | false | null }.
- *  « identique au bit » n'est dit que si TOUTES les cartes attendues sont passées par Rat-Market ; une liste vide ou incomplète n'est jamais « identique ». */
-export function resumerEntree(cartes, attendu = N_CARTES) {
+/** Identité aux octets de PIL, MESURÉE : `paires` = [{ attendu, calcule }] une par carte (`attendu` : l'empreinte `rgbSha256` du lot, absente d'un lot ancien ; `calcule` : celle des octets décodés par Rat-Market, null si
+ *  `crypto.subtle` est absent). -> { mesurees (cartes ayant les DEUX empreintes), identiques, pil }. `pil` (le compte à passer à resumerEntree) n'existe QUE si la mesure est complète
+ *  (toutes les cartes attendues ont les deux empreintes) ; sinon null = « non mesuré », jamais un compte partiel pris pour une identité. */
+export function comptePil(paires, attendu = N_CARTES) {
+    const l = Array.isArray(paires) ? paires : [];
+    const hex = s => typeof s === 'string' && /^[0-9a-f]{64}$/.test(s);
+    const mesurees = l.filter(p => p && hex(p.attendu) && hex(p.calcule)), identiques = mesurees.filter(p => p.attendu === p.calcule).length;
+    return { mesurees: mesurees.length, identiques, pil: l.length >= attendu && mesurees.length === l.length ? identiques : null };
+}
+/** `cartes` : [{ via: 'rm' | 'repli', code? }] une entrée par carte ; `pil` : le compte d'octets identiques à PIL de comptePil (null = non mesuré).
+ *  -> { chemin: 'rm' | 'mixte' | 'navigateur', cartesRm, cartesRepli, refus: { code: n }, identiqueAuBit: true | false | null }.
+ *  GARDE ÉCRITE PAR CE QU'ELLE AUTORISE : `true` seulement si TOUTES les cartes attendues sont passées par Rat-Market ET si leur identité aux octets de PIL est mesurée et vaut exactement le nombre attendu ;
+ *  `null` (« non mesuré ») si tout est passé par Rat-Market mais que la mesure manque ; `false` dans tout le reste (repli, liste incomplète, identité inférieure). Une liste vide : null. */
+export function resumerEntree(cartes, pil = null, attendu = N_CARTES) {
     const l = Array.isArray(cartes) ? cartes : [];
     const refus = {}; let rm = 0, repli = 0;
     for (const c of l) {
         if (c && c.via === 'rm') rm++;
         else { repli++; const k = CODES_REFUS.includes(c && c.code) ? c.code : 'autre'; refus[k] = (refus[k] || 0) + 1; }
     }
-    return { chemin: repli === 0 && rm > 0 ? 'rm' : rm === 0 ? 'navigateur' : 'mixte', cartesRm: rm, cartesRepli: repli, refus, identiqueAuBit: l.length === 0 ? null : repli === 0 && rm >= attendu };
+    let identiqueAuBit;
+    if (l.length === 0) identiqueAuBit = null;
+    else if (repli > 0 || rm !== attendu) identiqueAuBit = false;
+    else if (!Number.isInteger(pil)) identiqueAuBit = null;
+    else identiqueAuBit = pil === attendu;
+    return { chemin: repli === 0 && rm > 0 ? 'rm' : rm === 0 ? 'navigateur' : 'mixte', cartesRm: rm, cartesRepli: repli, refus, identiqueAuBit };
 }
 /** Le témoin du navigateur : `liste` = [{ octetsDiff, ecartMax, tenseurIdentique, cosNavigateur }] par carte comparée -> comptes ; null si aucune comparaison. */
 export function resumerTemoin(liste) {
@@ -181,18 +197,22 @@ export function resumerTemoin(liste) {
         ecartMaxNavigateur: Math.max(...liste.map(x => x.ecartMax || 0)), cosMinNavigateur: cos.length === liste.length ? Math.min(...cos) : null };
 }
 const listeRefus = r => Object.entries(r || {}).map(([k, n]) => `${k}×${n}`).join(', ');
-/** La ligne 5 de l'écran. */
+/** La ligne 5 de l'écran : elle suit les trois états de `identiqueAuBit` (vrai / non mesuré / faux). */
 export function texteEntree(e, t) {
     if (!e) return 'entrée : non mesurée';
     const nav = t ? ` · navigateur : octets identiques aux nôtres sur ${t.rgbIdentiquesNavigateur}/${t.cartes} cartes, tenseurs ${t.tenseursIdentiquesNavigateur}/${t.cartes}, écart max ${t.ecartMaxNavigateur}` : '';
-    if (e.identiqueAuBit) return `entrée : décodage Rat-Market ${e.cartesRm}/${e.cartesRm} cartes, identique au bit (mêmes octets sur tout appareil)${nav}`;
-    return `entrée NON IDENTIQUE AU BIT : ${e.cartesRepli} carte(s) décodée(s) par le navigateur (refus ${listeRefus(e.refus) || 'aucun code'}), ${e.cartesRm} par Rat-Market${nav}`;
+    const mes = Number.isInteger(e.rgbMesureesPil) ? e.rgbMesureesPil : e.cartesRm;
+    if (e.identiqueAuBit === true) return `entrée : décodage Rat-Market ${e.cartesRm}/${e.cartesRm} cartes, identique au bit (octets identiques à PIL sur ${e.rgbIdentiquesPil}/${mes} ; mêmes octets sur tout appareil)${nav}`;
+    if (e.identiqueAuBit === null) return `entrée : décodage Rat-Market ${e.cartesRm} carte(s) ; identité aux octets de PIL non établie (empreintes de référence absentes ou SubtleCrypto indisponible)${nav}`;
+    if (e.cartesRepli > 0) return `entrée NON IDENTIQUE AU BIT : ${e.cartesRepli} carte(s) décodée(s) par le navigateur (refus ${listeRefus(e.refus) || 'aucun code'}), ${e.cartesRm} par Rat-Market${nav}`;
+    return `entrée NON IDENTIQUE AU BIT : octets de Rat-Market identiques à PIL sur ${e.rgbIdentiquesPil}/${mes} cartes seulement${nav}`;
 }
 /** Une phrase à côté du verdict (jamais à sa place) : ce que le verdict établit sur l'ENTRÉE. '' pour une erreur ou sans résumé. */
 export function avisEntree(verdict, e) {
     if (!e || (verdict !== 'IDENTIQUE' && verdict !== 'ECART')) return '';
-    if (verdict === 'IDENTIQUE') return e.identiqueAuBit ? 'identique à la référence, entrée identique au bit' : 'identique à la référence, mais l\'entrée n\'est pas identique au bit (repli sur le navigateur)';
-    return e.identiqueAuBit ? 'écart alors que l\'entrée est identique au bit : la cause n\'est pas le décodage (moteur ou modèle)' : 'écart, et l\'entrée n\'est pas identique au bit (repli sur le navigateur) : le décodage peut y contribuer';
+    const etat = e.identiqueAuBit;
+    if (verdict === 'IDENTIQUE') return etat === true ? 'identique à la référence, entrée identique au bit' : etat === null ? 'identique à la référence ; identité de l\'entrée aux octets de PIL non établie' : 'identique à la référence, mais l\'entrée n\'est pas identique au bit (repli sur le navigateur ou octets différents de PIL)';
+    return etat === true ? 'écart alors que l\'entrée est identique au bit : la cause n\'est pas le décodage (moteur ou modèle)' : etat === null ? 'écart ; identité de l\'entrée aux octets de PIL non établie : le décodage ne peut pas être exclu' : 'écart, et l\'entrée n\'est pas identique au bit : le décodage peut y contribuer';
 }
 /** L'orientation EXIF d'une image embarquée, vue par ce navigateur : (largeur, hauteur) obtenues contre (l0, h0) de l'image brute. 'tourne' | 'non-tourne' | 'indetermine' (carré, mesure absente ou absurde). */
 export function etatOrientation(largeur, hauteur, l0, h0) {

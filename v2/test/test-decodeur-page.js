@@ -21,14 +21,18 @@ const vrai = (nom, c) => eq(nom, Boolean(c), true);
 
     // ═══ 1. resumerEntree : quel chemin a servi, et l'honnêteté sur l'identité au bit ═══
     {
-        const r = V.resumerEntree(n30('rm'));
-        eq('1. 30 cartes par Rat-Market : chemin « rm », identique au bit', [r.chemin, r.cartesRm, r.cartesRepli, r.identiqueAuBit, r.refus], ['rm', 30, 0, true, {}]);
+        const r = V.resumerEntree(n30('rm'), 30);
+        eq('1. 30 cartes par Rat-Market, 30/30 octets identiques à PIL MESURÉS : chemin « rm », identique au bit', [r.chemin, r.cartesRm, r.cartesRepli, r.identiqueAuBit, r.refus], ['rm', 30, 0, true, {}]);
+        eq('1. 30 cartes par Rat-Market SANS mesure de PIL : « non mesuré » (null), jamais vrai', V.resumerEntree(n30('rm')).identiqueAuBit, null);
+        eq('1. identité à PIL 28/30 : faux', V.resumerEntree(n30('rm'), 28).identiqueAuBit, false);
+        eq('1. identité à PIL 31 (absurde) : faux, la garde n\'autorise que le compte attendu', V.resumerEntree(n30('rm'), 31).identiqueAuBit, false);
         const m = V.resumerEntree([...n30('rm').slice(0, 27), { via: 'repli', code: 'NON_SUPPORTE' }, { via: 'repli', code: 'NON_SUPPORTE' }, { via: 'repli', code: 'memoire' }]);
         eq('1. 3 refus : chemin « mixte », PAS identique au bit, refus comptés par code', [m.chemin, m.cartesRm, m.cartesRepli, m.identiqueAuBit, m.refus], ['mixte', 27, 3, false, { NON_SUPPORTE: 2, memoire: 1 }]);
         const n = V.resumerEntree(n30('repli', { code: 'DECODAGE' }));
         eq('1. 30 refus : chemin « navigateur », pas identique au bit', [n.chemin, n.identiqueAuBit, n.refus], ['navigateur', false, { DECODAGE: 30 }]);
         eq('1. un code inconnu est rangé sous « autre » (liste fermée)', V.resumerEntree([{ via: 'repli', code: 'n\'importe quoi' }]).refus, { autre: 1 });
-        eq('1. une liste incomplète (29 sur 30) n\'est jamais « identique au bit »', V.resumerEntree(n30('rm').slice(0, 29)).identiqueAuBit, false);
+        eq('1. une liste incomplète (29 sur 30) n\'est jamais « identique au bit », même avec 29/29 à PIL', V.resumerEntree(n30('rm').slice(0, 29), 29).identiqueAuBit, false);
+        eq('1. des refus l\'emportent sur un compte PIL de 30', V.resumerEntree([...n30('rm').slice(0, 29), { via: 'repli', code: 'memoire' }], 30).identiqueAuBit, false);
         eq('1. une liste vide : null, jamais « identique »', V.resumerEntree([]).identiqueAuBit, null);
     }
 
@@ -41,7 +45,7 @@ const vrai = (nom, c) => eq(nom, Boolean(c), true);
 
     // ═══ 3. les textes : honnêtes dans les trois cas ═══
     {
-        const bon = V.resumerEntree(n30('rm')), mixte = V.resumerEntree([...n30('rm').slice(0, 28), { via: 'repli', code: 'NON_SUPPORTE' }, { via: 'repli', code: 'NON_SUPPORTE' }]);
+        const bon = V.resumerEntree(n30('rm'), 30), mixte = V.resumerEntree([...n30('rm').slice(0, 28), { via: 'repli', code: 'NON_SUPPORTE' }, { via: 'repli', code: 'NON_SUPPORTE' }]);
         vrai('3. entrée identique au bit : la ligne le dit, avec le nombre de cartes', /Rat-Market.*30\/30/.test(V.texteEntree(bon)) && /identique au bit/.test(V.texteEntree(bon)));
         vrai('3. repli : la ligne dit « NON IDENTIQUE AU BIT », le nombre de cartes et le code', /NON IDENTIQUE AU BIT/.test(V.texteEntree(mixte)) && /2 carte/.test(V.texteEntree(mixte)) && /NON_SUPPORTE/.test(V.texteEntree(mixte)));
         vrai('3. IDENTIQUE avec entrée identique au bit : constat', /identique à la référence/.test(V.avisEntree('IDENTIQUE', bon)) && /identique au bit/.test(V.avisEntree('IDENTIQUE', bon)));
@@ -49,6 +53,49 @@ const vrai = (nom, c) => eq(nom, Boolean(c), true);
         vrai('3. ÉCART avec entrée identique au bit : la cause n\'est PAS le décodage (honnête)', /pas le décodage/.test(V.avisEntree('ECART', bon)));
         vrai('3. ERREUR : aucun avis de constat', V.avisEntree('ERREUR', bon) === '');
         vrai('3. sans résumé : « non mesurée », jamais un constat', /non mesurée/.test(V.texteEntree(null)) && V.avisEntree('IDENTIQUE', null) === '');
+    }
+
+    // ═══ 3b. T3-1 : « identique au bit » n'est dit que si l'identité aux octets de PIL est MESURÉE et COMPLÈTE ; les trois cas qui ne le permettent pas ═══
+    {
+        const hex = c => c.repeat(64);
+        const paires = (attendues, calculees) => Array.from({ length: 30 }, (_, i) => ({ attendu: attendues(i), calcule: calculees(i) }));
+        const dit = (nom, pil, attendu) => {
+            const e = V.resumerEntree(n30('rm'), pil.pil);
+            eq(`3b. ${nom} : identiqueAuBit`, e.identiqueAuBit, attendu);
+            return e;
+        };
+        // (1) lot sans rgbSha256 : aucune empreinte attendue
+        const sans = dit('lot sans rgbSha256', V.comptePil(paires(() => undefined, () => hex('a'))), null);
+        eq('3b. lot sans rgbSha256 : rien de mesuré', [V.comptePil(paires(() => undefined, () => hex('a'))).mesurees, V.comptePil(paires(() => undefined, () => hex('a'))).pil], [0, null]);
+        // (2) crypto.subtle absent : aucune empreinte calculée
+        const sub = dit('crypto.subtle absent', V.comptePil(paires(() => hex('a'), () => null)), null);
+        // (3) identité 28/30
+        const p28 = V.comptePil(paires(() => hex('a'), i => (i < 28 ? hex('a') : hex('b'))));
+        eq('3b. 28 octets-identiques sur 30 : compte exact et complet', [p28.mesurees, p28.identiques, p28.pil], [30, 28, 28]);
+        const e28 = dit('identité 28/30', p28, false);
+        // (4) 30/30 mesuré : le seul cas où c'est vrai
+        const p30 = V.comptePil(paires(() => hex('a'), () => hex('a')));
+        const e30 = dit('identité 30/30 mesurée', p30, true);
+        eq('3b. une mesure partielle (29 empreintes sur 30) n\'est pas complète : null', V.comptePil(paires(i => (i === 3 ? undefined : hex('a')), () => hex('a'))).pil, null);
+        // la phrase suit les trois états
+        for (const [e, pil] of [[sans, { mesurees: 0, identiques: 0 }], [sub, { mesurees: 0, identiques: 0 }]]) {
+            const complet = { ...e, rgbIdentiquesPil: null, rgbMesureesPil: pil.mesurees };
+            vrai('3b. non mesuré : la ligne dit « non établie » et PAS « identique au bit »', /non établie/.test(V.texteEntree(complet)) && !/identique au bit/.test(V.texteEntree(complet)));
+            vrai('3b. non mesuré : IDENTIQUE reste IDENTIQUE mais l\'avis dit « non établie », sans « identique au bit »', /non établie/.test(V.avisEntree('IDENTIQUE', complet)) && !/identique au bit/.test(V.avisEntree('IDENTIQUE', complet)));
+            vrai('3b. non mesuré : ÉCART ne disculpe PAS le décodage', !/pas le décodage/.test(V.avisEntree('ECART', complet)) && /non établie/.test(V.avisEntree('ECART', complet)));
+        }
+        const c28 = { ...e28, rgbIdentiquesPil: 28, rgbMesureesPil: 30 };
+        vrai('3b. 28/30 : la ligne dit « NON IDENTIQUE AU BIT » et le compte 28/30', /NON IDENTIQUE AU BIT/.test(V.texteEntree(c28)) && /28\/30/.test(V.texteEntree(c28)));
+        vrai('3b. 28/30 : l\'avis IDENTIQUE dit que l\'entrée n\'est pas identique au bit', /n'est pas identique au bit/.test(V.avisEntree('IDENTIQUE', c28)));
+        vrai('3b. 28/30 : ÉCART ne disculpe pas le décodage', !/pas le décodage/.test(V.avisEntree('ECART', c28)));
+        const c30 = { ...e30, rgbIdentiquesPil: 30, rgbMesureesPil: 30 };
+        vrai('3b. 30/30 : la ligne dit « identique au bit » et « 30/30 »', /identique au bit/.test(V.texteEntree(c30)) && /30\/30/.test(V.texteEntree(c30)));
+        // app.js passe bien le compte PIL à resumerEntree, par comptePil, sans jamais le supposer
+        vrai('3b. app.js : resumerEntree(chemins, p.pil) avec p = comptePil(paires)', /comptePil\(/.test(app) && /resumerEntree\(chemins,\s*\w+\.pil\)/.test(app));
+        vrai('3b. app.js : une empreinte non calculable reste null (hexSha rend null sans crypto.subtle)', /if \(!\(self\.crypto && crypto\.subtle\)\) return null/.test(app));
+        // T3-2 mineur : l'erreur « decodage-impossible » est reconnue par texteErreur (étape et cause nommées)
+        eq('3b. texteErreur nomme l\'étape et la cause « decodage-impossible »', V.texteErreur('wasm-carte-3', { detail: 'decodage-impossible' }), 'wasm-carte-3:decodage-impossible');
+        vrai('3b. app.js lève ErreurBanc(\'decodage-impossible\') quand ni Rat-Market ni le navigateur ne décodent', /throw new ErreurBanc\('decodage-impossible'\)/.test(app));
     }
 
     // ═══ 4. l'orientation EXIF des WebP dans ce navigateur ═══

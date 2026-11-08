@@ -7,7 +7,7 @@
 import { versTenseur, normaliserL2, vecteurDepuisSortie, nombreDeFils, COTE_MODELE, rgbVersRgba, redimPIL } from './empreinte.js';
 import { cosinus, course, sonderAdaptateur, creerSessionGpu } from './moteur-ort.js';
 import { jugerLot, jugerMesure, gardeExtension, texteGarde, ecartChaine, moteurRealise, texteErreur, classerBlocage, hoteFinal, detecterIOS, choisirMoteur, webgpuForce, optionsSession, statsPixels, assemblerDiagnostic, texteDiagnostic, TEXTE_WEBGPU_IOS, libererOctets,
-    resumerEntree, resumerTemoin, texteEntree, avisEntree, etatOrientation, texteOrientation } from './verdict.mjs';
+    resumerEntree, comptePil, resumerTemoin, texteEntree, avisEntree, etatOrientation, texteOrientation } from './verdict.mjs';
 import { decoder, reduire640, VERSION_DECODEUR } from './decodeur.mjs';
 // LOT DÉCODEUR : l'ENTRÉE du modèle est décodée par NOTRE code (decodeur.mjs : JavaScript entier, identique au bit sur tout appareil), pas par le navigateur ; le navigateur reste TÉMOIN (mêmes cartes, comparées octet à octet)
 // et REPLI (un refus du décodeur, avec son code, retombe sur le navigateur : la carte est comptée « NON IDENTIQUE AU BIT », jamais un écran vide). Le verdict (jugerMesure), ses seuils et mesurer() sont ceux d'avant.
@@ -221,7 +221,7 @@ async function mesurer(moteur, ort, session, filsDemandes, creationMs) {
         return { emb, ms };
     };
     const runs = [], pre = [], cos = [], vecs = []; let refuses = 0;
-    const chemins = [], temoins = [], msRm = [], msNav = [], digests640 = []; let ms640 = 0, shaOk = 0, shaTotal = 0;
+    const chemins = [], temoins = [], msRm = [], msNav = [], digests640 = []; let ms640 = 0; const paires = [];
     for (let i = 0; i < lot.cartes.length; i++) {
         etat('MESURE', `${moteur.toUpperCase()} · carte ${i + 1}/${lot.cartes.length}`, 'attente'); etape(`${moteur}-carte-${i}`);
         const carte = lot.cartes[i];
@@ -240,7 +240,7 @@ async function mesurer(moteur, ort, session, filsDemandes, creationMs) {
         if (p.nav) msNav.push(p.msNav);
         if (p.rm) {
             msRm.push(p.msRm);
-            if (carte.rgbSha256) { const h = await hexSha(p.rm.rgb); if (h) { shaTotal++; if (h === carte.rgbSha256) shaOk++; } }
+            paires.push({ attendu: carte.rgbSha256 || null, calcule: await hexSha(p.rm.rgb) });   // l'identité à PIL se MESURE ; absente ou incomplète, elle reste « non mesurée »
             if (i < 3) { const t6 = performance.now(); const red = reduire640(p.rm.rgb, p.rm.w, p.rm.h); ms640 += performance.now() - t6; const h6 = await hexSha(red.rgb); if (h6) digests640.push(h6); }
         }
         if (p.rm && p.nav) {                                         // le témoin : mêmes octets ? même tenseur ? sinon, ce que le navigateur aurait donné au modèle
@@ -272,8 +272,8 @@ async function mesurer(moteur, ort, session, filsDemandes, creationMs) {
     const j = jugerMesure({ nEmpreintes: m.nEmpreintes, nVecteursRefuses: refuses, cos, cosModeleSeul: cosPx, shaVerifie: E.shaVerifie });
     m.verdict = j.verdict; if (j.erreur) m.erreur = texteErreur(ETAPE, new ErreurBanc(j.erreur));
     // l'entrée : quel chemin a servi, ses refus, le témoin du navigateur, l'identité à PIL ; n'entre dans AUCUN seuil du verdict
-    const resume = resumerEntree(chemins), temoin = resumerTemoin(temoins);
-    m.entree = { ...resume, source: VERSION_DECODEUR, rgbIdentiquesPil: shaTotal ? shaOk : null, cartesComparees: temoin ? temoin.cartes : null, rgbIdentiquesNavigateur: temoin ? temoin.rgbIdentiquesNavigateur : null,
+    const p = comptePil(paires), resume = resumerEntree(chemins, p.pil), temoin = resumerTemoin(temoins);
+    m.entree = { ...resume, source: VERSION_DECODEUR, rgbIdentiquesPil: p.mesurees ? p.identiques : null, rgbMesureesPil: p.mesurees || null, cartesComparees: temoin ? temoin.cartes : null, rgbIdentiquesNavigateur: temoin ? temoin.rgbIdentiquesNavigateur : null,
         tenseursIdentiquesNavigateur: temoin ? temoin.tenseursIdentiquesNavigateur : null, ecartMaxNavigateur: temoin ? temoin.ecartMaxNavigateur : null, cosMinNavigateur: temoin && temoin.cosMinNavigateur != null ? arrondi(temoin.cosMinNavigateur, 7) : null,
         msRmMediane: msRm.length ? arrondi(mediane(msRm), 1) : null, msNavigateurMediane: msNav.length ? arrondi(mediane(msNav), 1) : null, cartes640: digests640.length, ms640: digests640.length ? arrondi(ms640, 1) : null };
     if (digests640.length && self.crypto && crypto.subtle) { const h = await hexSha(new TextEncoder().encode(digests640.join(''))); m.entree.empreinte640 = h ? h.slice(0, 12) : null; }
@@ -359,7 +359,7 @@ function afficher(m) {
     const moteur = String(m.moteur || '?').toUpperCase();
     $('ligne4').textContent = `4 · ${texteDiagnostic(m.diagnosticPixels)}`;
     const ent = m.entree || null, tem = ent && ent.cartesComparees ? { cartes: ent.cartesComparees, rgbIdentiquesNavigateur: ent.rgbIdentiquesNavigateur, tenseursIdentiquesNavigateur: ent.tenseursIdentiquesNavigateur, ecartMaxNavigateur: ent.ecartMaxNavigateur } : null;
-    $('ligne5').textContent = `5 · ${texteEntree(ent, tem)}${ent && ent.rgbIdentiquesPil != null ? ` · octets identiques à PIL sur ${ent.rgbIdentiquesPil}/${ent.cartesRm}` : ''} · ${texteOrientation(m.orientationNavigateur)}`;
+    $('ligne5').textContent = `5 · ${texteEntree(ent, tem)} · ${texteOrientation(m.orientationNavigateur)}`;
     const avis = avisEntree(m.verdict, ent), suite = avis ? ` · ${avis}` : '';
     if (m.webgpuDesactive) $('avisMoteur').textContent = TEXTE_WEBGPU_IOS;
     if (m.verdict === 'ERREUR') { etat('ERREUR', m.erreur || '', 'ko'); $('ligne1').textContent = `1 · verdict : ERREUR (${moteur}) — ${m.erreur || ''}`; $('ligne2').textContent = `2 · moteur : ${moteur}${m.webgpuUtilise === false ? ' · WebGPU non utilisé (repli WASM)' : ''}`; $('ligne3').textContent = `3 · garde extension 0,998 : ${texteGarde(m.gardeExtension)}`; }

@@ -44,7 +44,7 @@ const DIAGNOSTIC = {
 };
 const ENTREE = {
     chemin: parmi('rm', 'mixte', 'navigateur'), source: chaine(20), cartesRm: entier(0, 100), cartesRepli: entier(0, 100), refus: ouNul(objetSimple), identiqueAuBit: ouNul(booleen),
-    rgbIdentiquesPil: ouNul(entier(0, 100)), cartesComparees: ouNul(entier(0, 100)), rgbIdentiquesNavigateur: ouNul(entier(0, 100)), tenseursIdentiquesNavigateur: ouNul(entier(0, 100)), ecartMaxNavigateur: ouNul(entier(0, 255)), cosMinNavigateur: ouNul(nombre(-1, 1.0001)),
+    rgbIdentiquesPil: ouNul(entier(0, 100)), rgbMesureesPil: ouNul(entier(0, 100)), cartesComparees: ouNul(entier(0, 100)), rgbIdentiquesNavigateur: ouNul(entier(0, 100)), tenseursIdentiquesNavigateur: ouNul(entier(0, 100)), ecartMaxNavigateur: ouNul(entier(0, 255)), cosMinNavigateur: ouNul(nombre(-1, 1.0001)),
     msRmMediane: ouNul(nombre(0, 1e6)), msNavigateurMediane: ouNul(nombre(0, 1e6)), cartes640: ouNul(entier(0, 100)), ms640: ouNul(nombre(0, 1e7)), empreinte640: ouNul(hexN(12))
 };
 const REFUS = { FORMAT: entier(0, 100), TROP_GRAND: entier(0, 100), DECODAGE: entier(0, 100), NON_SUPPORTE: entier(0, 100), 'entree-invalide': entier(0, 100), memoire: entier(0, 100), autre: entier(0, 100) };
