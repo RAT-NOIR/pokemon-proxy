@@ -11,10 +11,11 @@
 //     Les exceptions non capturées se lisent APRÈS la fermeture réelle du socket + 300 ms, jamais à la réponse (D4).
 //     🔑 LE ROUGE ne vient PAS d'un plantage (le scénario de l'avis GHSA-27r3-jxmh-p828 ne tue pas 1.20.6, ni sous Node 22.23.3 ni sous 24 : mesuré) mais de l'ÉTAT que le correctif change :
 //     une fois la réponse partie, le décodeur gzip/deflate est DÉTRUIT et la requête n'y est plus reliée (body-parser 1.20.9, read.js). En 1.20.6 il reste relié (octets finaux, zéros)
-//     ou vivant (corps seul) : c'est la précondition de l'avis, avec un seul écouteur d'erreur (celui de pipe).
+//     ou vivant (corps seul) : c'est la précondition SUPPOSÉE de l'avis (le texte de l'avis n'a pas été lu), avec un seul écouteur d'erreur (celui de pipe). Ces assertions d'état DÉCRIVENT 1.20.9 :
+//     elles ne prouvent pas que la faille est fermée. De même (D3), les options des quatre limiteurs sont des copies : elles ne sont pas verrouillées sur index.js.
 //  C. req.ip DERRIÈRE `trust proxy` = 1 (index.js:114) et les QUATRE limiteurs d'index.js (limiteurIA l.224, limiteurApprentissage l.243, limiteurLot l.254, limiteurRetourLive l.265, mêmes options
 //     que le fichier, max réduit à 3) : clé = dernier saut de X-Forwarded-For (celui qu'ajoute le proxy de Render), les valeurs forgées à gauche sont ignorées, une IPv6 se regroupe par /56 (ip-address).
-//  D. REQUÊTES (D6) : ce que l'analyseur de requête d'Express (qs, allowPrototypes) rend pour 50 formes, et le verdict de `requeteRefusee` (v2/index.js:68), par la vraie chaîne HTTP.
+//  D. REQUÊTES (D6) : ce que l'analyseur de requête d'Express (qs, allowPrototypes) rend pour 53 formes, et le verdict de `requeteRefusee` (v2/index.js:68), par la vraie chaîne HTTP.
 const path = require('path');
 const fs = require('fs');
 const net = require('net');
@@ -92,11 +93,13 @@ const fermer = async res => { if (!res.c.destroyed) res.c.destroy(); await atten
     app.post('/json', express.json(), (q, s) => s.json({ ok: 1 }));                                         // index.js:187
     app.post('/json-grand', express.json({ limit: '2400kb' }), (q, s) => s.json({ ok: 1 }));                // index.js:172
     app.post('/raw', express.raw({ type: 'application/json' }), (q, s) => s.json({ ok: 1 }));               // index.js:164
-    let webhookReel = true;
-    try {                                                                                                   // webhook.js:173, la route RÉELLE (503 : configuration inactive, APRÈS l'analyseur de corps)
-        if (RACINE !== path.join(__dirname, '..', '..')) throw new Error('arbre de rejeu : webhook.js charge l\'express du dépôt, pas celui de l\'arbre rejoué');
-        require('../abonnements/webhook').monterWebhook(app, () => ({ actif: false }), '/webhook');
-    } catch (e) { webhookReel = false; app.post('/webhook', express.raw({ type: () => true, limit: '256kb' }), (q, s) => s.status(503).json({ recu: false })); console.log(`(webhook réel non chargeable : ${e.message} ; copie de la ligne 173)`); }
+    // webhook.js:173, la route RÉELLE (503 : configuration inactive, APRÈS l'analyseur de corps). Sur l'arbre du dépôt, un chargement qui échoue LÈVE (le banc s'arrête) : aucun repli silencieux.
+    // La copie de la ligne 173 est réservée au rejeu sur un ancien arbre (RM_DEPS_RACINE), parce que webhook.js charge l'express du dépôt, pas celui de l'arbre rejoué.
+    const arbreDuDepot = RACINE === path.join(__dirname, '..', '..');
+    let webhookReel = false;
+    if (arbreDuDepot) { require('../abonnements/webhook').monterWebhook(app, () => ({ actif: false }), '/webhook'); webhookReel = true; }
+    else { app.post('/webhook', express.raw({ type: () => true, limit: '256kb' }), (q, s) => s.status(503).json({ recu: false })); console.log('(arbre de rejeu : la route webhook est la copie de la ligne 173)'); }
+    v('route webhook : la route RÉELLE (monterWebhook) sur l\'arbre du dépôt, la copie seulement sur un arbre de rejeu', webhookReel, arbreDuDepot);
     app.get('/ip', (q, s) => s.json({ ip: q.ip, ips: q.ips }));
     const { requeteRefusee } = require('../index');                                                         // v2/index.js:68, la vraie fonction
     app.get('/q', (q, s) => { let refus; try { refus = requeteRefusee(q.query); } catch (e) { refus = `THROW ${e.message}`; } s.json({ query: q.query, refus }); });
