@@ -74,7 +74,8 @@ setTimeout(() => { console.error('❌ le banc a dépassé 170 s'); process.exit(
     H.v('0. config : drapeau absent ⇒ éteint', cfgOff.photosMultiples, false);
     H.v('0. config : V2_PHOTOS_MULTIPLES=1 ⇒ allumé', cfgOn.photosMultiples, true);
     for (const autre of ['0', 'true', 'oui', ' 1', '2', '1 ', '']) H.v(`0. config : V2_PHOTOS_MULTIPLES="${autre}" ⇒ éteint (et la configuration reste valide)`, lireConfig({ ...BASE, V2_PHOTOS_MULTIPLES: autre }).photosMultiples, false);
-    H.v('0. config : le second état (tous les porteurs) est ÉTEINT par défaut, allumé par « 1 » exactement, et jamais sans le premier', [cfgOn.photosMultiplesTous, lireConfig({ ...BASE, V2_PHOTOS_MULTIPLES: '1', V2_PHOTOS_MULTIPLES_TOUS: '1' }).photosMultiplesTous, lireConfig({ ...BASE, V2_PHOTOS_MULTIPLES_TOUS: '1' }).photosMultiplesTous, lireConfig({ ...BASE, V2_PHOTOS_MULTIPLES: '1', V2_PHOTOS_MULTIPLES_TOUS: 'oui' }).photosMultiplesTous], [false, true, false, false]);
+    // MÉNAGE (08/11) : le « second état » (phase 2, tous les porteurs) n'a jamais été câblé ; son drapeau est retiré de la configuration. Une variable V2_PHOTOS_MULTIPLES_TOUS encore posée sur Render est ignorée.
+    H.v('0. config : le drapeau mort photosMultiplesTous n\'existe plus (ni éteint, ni allumé), même avec la variable posée', [Object.hasOwn(cfgOn, 'photosMultiplesTous'), Object.hasOwn(lireConfig({ ...BASE, V2_PHOTOS_MULTIPLES: '1', V2_PHOTOS_MULTIPLES_TOUS: '1' }), 'photosMultiplesTous')], [false, false]);
 
     await H.ouvrirBac('test-photos-multiples.js'); await M.creerIndex();
     const mem = S.creerStockageMemoire();
@@ -164,9 +165,9 @@ setTimeout(() => { console.error('❌ le banc a dépassé 170 s'); process.exit(
         H.v('2. un administrateur passe', (await poster(D, 0)).statut, 200);
         await db.col('comptes').updateOne({ _id: D.c._id }, { $unset: { role: '' } });
         await refus('2. rôle retiré en base depuis : 404 (relu à chaque requête)', { query: 'index=0', jeton: D.jeton }, 404);
-        // le second état du drapeau ne branche rien : même allumé, la phase 2 n'ouvre pas la route aux autres porteurs
+        // l'ancien second état (retiré) : une variable V2_PHOTOS_MULTIPLES_TOUS encore posée n'ouvre pas la route aux autres porteurs
         const svTous = await monter(lireConfig({ ...BASE, V2_PHOTOS_MULTIPLES: '1', V2_PHOTOS_MULTIPLES_TOUS: '1' }));
-        H.v('2. V2_PHOTOS_MULTIPLES_TOUS=1 est LU et ne change rien : un non-administrateur reçoit toujours le 404 natif', (await envoyer(svTous.url, { query: 'index=0', jeton: USR.jeton, corps: jpg }).fini).statut, 404);
+        H.v('2. V2_PHOTOS_MULTIPLES_TOUS=1 est IGNORÉ et ne change rien : un non-administrateur reçoit toujours le 404 natif', (await envoyer(svTous.url, { query: 'index=0', jeton: USR.jeton, corps: jpg }).fini).statut, 404);
         await svTous.fermer();
     });
 
