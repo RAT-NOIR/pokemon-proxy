@@ -202,10 +202,10 @@ const non = async (e, p, motif, largeur) => { const r = await evaluer(e, p, larg
         await non(entree({ lu: lu({ marques: [] }) }), produit(), 'marques-vides');
         await non(entree({ lu: lu({ marques: ['pikaqian'] }) }), produit(), 'marque-nomme-une-source');
     });
-    await test('les règles existantes ne bougent pas : preuve-lue sur un tirage zh-hans reste refusée pour son nom (nom-langue-non-anglaise)', async () => {
+    await test('les règles existantes ne bougent pas : preuve-lue sur un tirage zh-hans reste refusée pour son nom (nom-lu-hors-langue depuis le contrôle A du 08/11, nom-langue-non-anglaise avant)', async () => {
         const e = entree({ regle: 'preuve-lue' }); delete e.memeDessin;
         const r = await PV.evaluerEntree({ entree: e, produit: produit(), octets: {} });
-        assert.strictEqual(r.ok, false); assert.match(r.motifs.join(','), /nom-langue-non-anglaise/);
+        assert.strictEqual(r.ok, false); assert.match(r.motifs.join(','), /nom-lu-hors-langue|nom-langue-non-anglaise/);
     });
     await test('le nom n\'est jamais lu : un lu.nom quelconque ne change rien à la décision', async () => {
         assert.strictEqual((await evaluer(entree({ lu: lu({ nom: 'n\'importe quoi' }) }))).ok, true);

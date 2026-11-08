@@ -44,6 +44,9 @@ function listerFamilles(racine, filtre = null) {
 /** Le manifeste (forme vérifiée), les validations (forme vérifiée) et l'empreinte des DEUX fichiers tels qu'ils sont sur le disque. LÈVE, famille nommée, sur un fichier illisible. */
 function lireFamille(racine, famille) {
     const fm = path.join(racine, famille, 'preuves.json'), fv = path.join(racine, 'VALIDATIONS', `valide-${famille}.json`);
+    // (tour de correction 1) les relectures d'illustration du coordinateur, HORS du manifeste : VALIDATIONS\illustrations-<FAMILLE>.json (facultatif)
+    const fi = path.join(racine, 'VALIDATIONS', `illustrations-${famille}.json`);
+    let illustrations = [], brutI = null;
     let brutM, manifeste, validations = [], brutV = null;
     try { brutM = fs.readFileSync(fm); manifeste = PV.lireManifeste(JSON.parse(brutM.toString('utf8')), famille); }
     catch (e) { throw new Error(`famille ${famille} : manifeste illisible (${fm}) — ${e.message}`); }
@@ -51,7 +54,11 @@ function lireFamille(racine, famille) {
         try { brutV = fs.readFileSync(fv); validations = PV.lireValidations(JSON.parse(brutV.toString('utf8'))); }
         catch (e) { throw new Error(`famille ${famille} : validations illisibles (${fv}) — ${e.message}`); }
     }
-    return { manifeste, validations, empreinte: { manifeste: sha256Texte(brutM), validations: brutV ? sha256Texte(brutV) : 'absent' } };
+    if (fs.existsSync(fi)) {
+        try { brutI = fs.readFileSync(fi); illustrations = PV.lireIllustrations(JSON.parse(brutI.toString('utf8'))); }
+        catch (e) { throw new Error(`famille ${famille} : relectures d'illustration illisibles (${fi}) — ${e.message}`); }
+    }
+    return { manifeste, validations, illustrations, empreinte: { manifeste: sha256Texte(brutM), validations: brutV ? sha256Texte(brutV) : 'absent', illustrations: brutI ? sha256Texte(brutI) : 'absent' } };
 }
 
 // ── 1. Le PLAN ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -86,7 +93,7 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
     const refus = [], unitesBrutes = [], jugements = {}, empreintes = {}, parRegle = {}, entreesParFamille = {}, avertissements = [], trousAuto = [], jumeauxDansLeSet = [];
     const MOTIFS_ANNEE = ['position-ambigue', 'numero-imprime-hors-carte'];
     for (const famille of noms) {
-        const { manifeste, validations, empreinte } = lireFamille(dossier, famille);
+        const { manifeste, validations, illustrations, empreinte } = lireFamille(dossier, famille);
         empreintes[famille] = empreinte;
         // tour 1 (6) : le DOSSIER fait foi ; l'écart de nom ne fait pas lever, il est dit (résumé imprimé par la ligne de commande)
         if (manifeste.ecartDeFamille) avertissements.push(`famille « ${famille} » : le manifeste ${manifeste.familleDeclaree == null ? 'ne se déclare pas' : `se déclare « ${manifeste.familleDeclaree} »`} (le dossier fait foi)`);
@@ -103,8 +110,9 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
         // a-reste (japonais) : le nom JAPONAIS de la carte désignée par la ligne, lu seulement pour les entrées qui LISENT du japonais (lu.langue 'ja') — témoin de lecture, jamais écrit en public
         const nomsJa = new Map(), cartesLues = new Map();
         // (nom TRADUIT : les entrées qui portent Pokédex / PV / règle / code lisent aussi la carte désignée — son nomEn, son ndex, ses PV, sa catégorie —, toujours en lecture seule)
-        const luitLaCarte = lu => lu?.langue === 'ja' || PV.porteUnTemoinTraduit(lu);
-        const carteIdsJa = [...new Set(r.appariees.filter(a => luitLaCarte(a.entree.lu)).flatMap(a => (lignesDe.get(a.entree.idProduct) ?? []).map(l => l.carteId)).filter(c => c != null))];
+        // (08/11) le contrôle « nom lu contre langue » (exception ENERGY : catégorie), l'id latin (catégorie) et la règle de l'illustration relue (cleR2 des visuels de la carte) lisent aussi la carte
+        const luitLaCarte = lu => lu?.langue === 'ja' || PV.porteUnTemoinTraduit(lu) || lu?.langue === 'id' || ['th', 'zh-hans', 'zh-hant', 'ko'].includes(lu?.langue);
+        const carteIdsJa = [...new Set(r.appariees.filter(a => luitLaCarte(a.entree.lu) || illustrations.some(i => i.idProduct === a.entree.idProduct)).flatMap(a => (lignesDe.get(a.entree.idProduct) ?? []).map(l => l.carteId)).filter(c => c != null))];
         if (carteIdsJa.length && lire.nomsJa) for (const c of await lire.nomsJa(carteIdsJa)) { nomsJa.set(c._id, c.nomJa ?? null); cartesLues.set(c._id, c); }
         // le code du set (codes_set) de la ligne, et la TABLE de traduction officielle : le nomJa des autres cartes (vraies pages) de même nomEn — seulement pour les entrées à nom traduit
         const aTraduit = r.appariees.filter(a => PV.porteUnTemoinTraduit(a.entree.lu));
@@ -147,6 +155,8 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
             if ((set.tirage ?? set.region) !== E.langue) { non('tirage-du-set-different', `set ${set.tirage ?? set.region}, état ${E.langue}`); continue; }
             const produit = { idProduct: id, idExpansion: E.idExpansion ?? L.idExpansion ?? null, tirage: E.langue, tamponnee: E.tamponnee ?? null, numero: L.numeroFiche ?? numerosDe.get(id)?.numero ?? null, carteId: L.carteId, slugSet: L.slugSet, slug: L.slug ?? numerosDe.get(id)?.slug ?? null, nomEn: E.name ?? null, nomFr: numerosDe.get(id)?.nomFr ?? null, nomJa: nomsJa.get(L.carteId) ?? null };
             // nom TRADUIT : les témoins que la règle lit (rien d'écrit) — la carte quand elle existe (nomEn, ndex, PV, catégorie), le code du set de la ligne, la table de traduction officielle
+            produit.illustrationsRelues = illustrations;   // règle B : lues hors du manifeste (VALIDATIONS\illustrations-<FAMILLE>.json), jamais d'un lu.illustrationRelue
+            { const cl = cartesLues.get(L.carteId); if (cl) { produit.categorie = cl.categorie ?? null; produit.cleR2Carte = Array.isArray(cl.images) ? cl.images.map(i => i?.cleR2).filter(c => typeof c === 'string' && c !== '') : []; } }
             if (PV.porteUnTemoinTraduit(e.lu)) {
                 const cl = cartesLues.get(L.carteId);
                 if (cl) { produit.nomEnCarte = cl.nomEn ?? null; produit.ndex = cl.ndex ?? null; produit.pv = cl.pv ?? null; produit.categorie = cl.categorie ?? null; produit.attaquesCarte = Array.isArray(cl.attaques) ? cl.attaques.map(a => ({ nom: a?.nom ?? null, degats: a?.degats ?? null })) : null; }
@@ -233,6 +243,7 @@ function planPerime({ plan, dossier }) {
         try { maintenant = lireFamille(dossier, famille).empreinte; } catch (err) { return `famille ${famille} : ${err.message} — plan périmé`; }
         if (maintenant.manifeste !== e.manifeste) return `famille ${famille} : le manifeste a changé depuis le plan — refaire --plan`;
         if (maintenant.validations !== e.validations) return `famille ${famille} : les validations ont changé depuis le plan — refaire --plan`;
+        if (maintenant.illustrations !== (e.illustrations ?? 'absent')) return `famille ${famille} : les relectures d'illustration ont changé depuis le plan — refaire --plan`;   // un plan d'avant ce fichier n'en portait pas : « absent » reste valable
     }
     return null;
 }
@@ -259,7 +270,7 @@ function lireDepuisLaBase(db, prodDb) {
         fiches: (carteIds, slugs) => par(db.collection('cartes_produits'), { carteId: { $in: carteIds }, slugSet: { $in: slugs } }, { _id: 0, idProduct: 1, carteId: 1, slugSet: 1, numeroFiche: 1 }),
         numeros: ids => lots(ids, lot => par(prodDb.collection('numeros_cartes'), { idProduct: { $in: lot } }, { _id: 0, idProduct: 1, numero: 1, slug: 1, nomFr: 1 })),
         sets: slugs => par(db.collection('sets'), { _id: { $in: slugs } }, { tirage: 1, region: 1 }),
-        nomsJa: ids => lots(ids, lot => par(db.collection('cartes'), { _id: { $in: lot } }, { nomJa: 1, nomEn: 1, ndex: 1, pv: 1, categorie: 1, 'attaques.nom': 1, 'attaques.degats': 1 })),
+        nomsJa: ids => lots(ids, lot => par(db.collection('cartes'), { _id: { $in: lot } }, { nomJa: 1, nomEn: 1, ndex: 1, pv: 1, categorie: 1, 'attaques.nom': 1, 'attaques.degats': 1, 'images.cleR2': 1 })),
         // nom traduit (lecture seule) : le code du set d'une expansion (codes_set, base de production) et les cartes à page qui portent un nomJa pour un nomEn donné (la table officielle)
         codesSet: ids => lots(ids, lot => par(prodDb.collection('codes_set'), { idExpansion: { $in: lot } }, { _id: 0, idExpansion: 1, codeSet: 1 })),
         cartesDeNomEn: noms => lots(noms, lot => par(db.collection('cartes'), { nomEn: { $in: lot }, nomJa: { $nin: [null, ''] }, _id: { $gt: 0 } }, { nomEn: 1, nomJa: 1 })),
