@@ -29,7 +29,16 @@ const MESURE = {
     webgpuUtilise: ouNul(booleen),                                                 // M7 : ort.env.webgpu.device non nul après création de la session
     gardeExtension: ouNul(parmi('PASSE', 'ECHOUE', 'NON_EVALUEE')),                // M8 : cosinus >= 0,998 (la garde de l'extension)
     jsHeapApresCreationMo: ouNul(nombre(0, 1e5)), jsHeapFinMo: ouNul(nombre(0, 1e5)), uaApresCreationMo: ouNul(nombre(0, 1e5)), uaFinMo: ouNul(nombre(0, 1e5)),
-    erreur: ouNul(chaine(200))
+    erreur: ouNul(chaine(200)),
+    // lot iOS : WebGPU demandé puis désactivé sur iOS (le moteur déposé est celui qui a servi), forcé par ?webgpu=forcer, options de session demandées (diagnostic mémoire), et le diagnostic des pixels
+    moteurDemande: ouNul(parmi('wasm', 'webgpu')), webgpuDesactive: ouNul(booleen), webgpuForce: ouNul(booleen), optionsSession: ouNul(chaine(60)),
+    diagnosticPixels: ouNul(objetSimple)
+};
+const STAT = { n: entier(0, 1e8), max: entier(0, 255), somme: entier(0, 1e11), nDiff: entier(0, 1e8), moy: nombre(0, 255), pctDiff: nombre(0, 100) };
+const DIAGNOSTIC = {
+    cause: parmi('decodeur', 'autre-etape', 'aucune', 'indetermine'), cartesDecodage: entier(0, 100), cartesChaine: entier(0, 100),
+    decodage: ouNul(objetSimple), redimensionnement: ouNul(objetSimple), chaine: ouNul(objetSimple), bitmapSansConversion: ouNul(objetSimple), bitmapAvecConversion: ouNul(objetSimple),
+    couleurCanvas: ouNul(chaine(20))
 };
 const GPU = { vendor: chaine(40), architecture: chaine(40) };
 // M9 : le téléchargement du modèle — redirigé (302 vers R2) ou non, l'hôte final, et, en cas de blocage, la cause nommée par une sonde « no-cors »
@@ -62,6 +71,13 @@ function valider(corps) {
     if (corps.gpu !== null && corps.gpu !== undefined) { d = defaut(corps.gpu, GPU, 'gpu.'); if (d) return { ok: false, detail: d }; }
     if (corps.reseau !== null && corps.reseau !== undefined) { d = defaut(corps.reseau, RESEAU, 'reseau.'); if (d) return { ok: false, detail: d }; }
     d = defaut(corps.mesure, MESURE, 'mesure.'); if (d) return { ok: false, detail: d };
+    const diag = corps.mesure.diagnosticPixels;
+    if (diag !== null && diag !== undefined) {
+        d = defaut(diag, DIAGNOSTIC, 'mesure.diagnosticPixels.'); if (d) return { ok: false, detail: d };
+        for (const k of ['decodage', 'redimensionnement', 'chaine', 'bitmapSansConversion', 'bitmapAvecConversion']) {
+            if (diag[k] !== null && diag[k] !== undefined) { d = defaut(diag[k], STAT, `mesure.diagnosticPixels.${k}.`); if (d) return { ok: false, detail: d }; }
+        }
+    }
     for (const k of ['moteur', 'verdict']) if (!(k in corps.mesure)) return { ok: false, detail: `manque:mesure.${k}` };
     return { ok: true, doc: corps };
 }
