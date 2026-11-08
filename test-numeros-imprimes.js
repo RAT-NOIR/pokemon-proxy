@@ -314,6 +314,24 @@ const NOMW = FM.expansionDe(W);
         R = await run(base, LECTURES(), { ecrire: true, attendu: 0 });
         verifier('   le rejeu ACHEVE : la carte arretee recoit ses numeroFiche (0 impression de plus), le set est nomme, etat identique a une ecriture sans arret', [R.code, R.rapport.totalImpressions, S0(R).plans.map(p => [p.carteId, p.impressions.length]), etat(base) === etat(propre)], [0, 0, [[11, 0]], true]);
     }
+    {   // la base BOUGE entre la simulation et l'ecriture : arret net, rien d'ecrase, aucun doublon
+        const avantEcriture = (base, hook) => ({ collection: nom => { const c = base.collection(nom); return nom === 'cartes' ? { ...c, updateOne: async (f, u) => { if (!hook.fait) { hook.fait = true; await hook.agir(); } return c.updateOne(f, u); } } : c; }, brut: base.brut });
+        let base = monde();
+        let hook = { agir: () => base.collection('cartes_produits').updateOne({ _id: '10|1001' }, { $set: { numeroFiche: '999' } }) };
+        R = await run(avantEcriture(base, hook), [LECTURES()[0]], { ecrire: true, attendu: 1 });
+        verifier('numeroFiche pose entre la simulation et l\'ecriture : arret (exit 1), la valeur posee (999) est INTACTE, le set n\'est pas nomme', [R.code, /numeroFiche/.test(R.rapport.erreur || ''), ligne(base, '10|1001').numeroFiche, base.brut('sets')[0].bulba.expansion], [1, true, '999', null]);
+        base = monde();
+        hook = { agir: () => base.collection('cartes').updateOne({ _id: 10 }, { $push: { impressions: IMP(NOMW, '115', '100', { source: 'origine-lue' }) } }) };
+        R = await run(avantEcriture(base, hook), [LECTURES()[0]], { ecrire: true, attendu: 1 });
+        verifier('impression deja presente (double lancement) : modifiedCount 0, arret (exit 1), AUCUN doublon, set non nomme', [R.code, /impressions/.test(R.rapport.erreur || ''), carte(base, 10).impressions.filter(i => i.expansion === NOMW).length, base.brut('sets')[0].bulba.expansion], [1, true, 1, null]);
+    }
+    {   // bulba.expansion valant '' : le filtre `bulba.expansion: null` ne la voit pas -> refus nomme des la simulation
+        const d = monde({ setW: { bulba: { titre: null, expansion: '' } } }), a = etat(d);
+        const r = await run(d, LECTURES());
+        verifier('bulba.expansion \'\' : set refuse « refuse-expansion-vide » a la simulation, 0 a ecrire, base intacte', [S0(r).statut, S0(r).aEcrire, /''|vide/.test(S0(r).detail || ''), etat(d) === a], ['refuse-expansion-vide', 0, true, true]);
+        const e = await run(d, LECTURES(), { ecrire: true, attendu: 0 });
+        verifier('   et --ecrire n\'ecrit rien', [e.code, etat(d) === a], [1, true]);
+    }
     {   // « set seul » : toutes les cartes sont deja faites et bulba.expansion est vide (arret entre la derniere carte et le set)
         const base = monde(); await run(base, LECTURES(), { ecrire: true, attendu: 2 });
         const propre = etat(base);

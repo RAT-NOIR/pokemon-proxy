@@ -244,6 +244,8 @@ async function analyserSet({ db, deps, slug, lectures, interdits }) {
     // ── 3. rien à écrire, ou « set seul » (cartes déjà faites, expansion encore vide : un arrêt entre les deux ne bloque jamais le set) ──
     const posee = set.bulba?.expansion;
     const bloque = (statut, detail) => { S.statut = statut; S.detail = detail; S.aEcrireBrut = S.aEcrire; S.aEcrire = 0; S.nImpressionsBrut = S.nImpressions; S.nImpressions = 0; S.setSeul = false; return S; };
+    // une expansion valant '' (ou des blancs) : le filtre d'écriture `bulba.expansion: null` ne la verrait pas -> refus nommé ICI, avant toute écriture
+    if (typeof posee === 'string' && posee.trim() === '') return bloque('refuse-expansion-vide', `bulba.expansion vaut une chaîne vide (${JSON.stringify(posee)}) : le filtre d'écriture \`bulba.expansion: null\` ne la verrait pas — à corriger à la main, rien n'est écrit`);
     if (!S.plans.length) {
         if (S.dejaLues > 0 && vide(posee)) S.setSeul = true;
         else { S.statut = 'rien'; return S; }
