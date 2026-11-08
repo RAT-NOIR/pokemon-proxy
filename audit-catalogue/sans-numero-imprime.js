@@ -29,7 +29,7 @@ const SANS_NUMERO_IMPRIME = Object.freeze({
     'Rocket-Gang': e('avant-dp', ['Dark Golduck (No. 055)', 'Dark Vaporeon (No. 134)', 'Dark Raticate (No. 020)', 'Challenge! (rien)']),
     'Mystery-of-the-Fossils': e('avant-dp', ['Weezing (No. 110)', 'Lapras (No. 131)', 'Hypno (No. 097)', 'Mr. Fuji (rien)']),
     'Pokemon-Jungle': e('avant-dp', ['Paras (No. 046)', 'Flareon (No. 136)', 'Rhyhorn (No. 111)', 'Eevee (No. 133)']),
-    'Expansion-Sheet': e('avant-dp', ['Kakuna (No. 014)', 'Raichu (No. 026)', 'Nidorina (No. 030 ; images.numero 002)', 'Kangaskhan (No. 115 ; images.numero 033)'], undefined, 'images.numero de 31 cartes = rang de la liste artofpkm, non imprimé'),
+    'Expansion-Sheet': e('avant-dp', ['Kakuna (No. 014)', 'Raichu (No. 026)', 'Nidorina (No. 030 ; images.numero 002)', 'Kangaskhan (No. 115 ; images.numero 033)'], undefined, 'images.numero de 31 cartes = rang de la liste artofpkm, non imprimé ; « 3 vs 3 Dugtrio Team Battle » imprime « おすすめルール No.04 » : un n° de carte-règle, pas un n° de collection'),
     'Leaders-Stadium': e('avant-dp', ['Brock\'s Rhyhorn (No. 111)', 'Misty\'s Magikarp (No. 129)', 'Lt. Surge\'s Treaty (rien)', 'Brock\'s Golem (No. 076)']),
     'Nivi-City-Gym': e('avant-dp', ['Full Heal (rien)', 'Pokémon Center (rien)', 'Brock\'s Golem (No. 076)', 'Brock\'s Sandslash (No. 028)']),
     'Hanada-City-Gym': e('avant-dp', ['Poké Ball (rien)', 'Misty\'s Wrath (rien)', 'Misty\'s Cloyster (No. 091)', 'Misty\'s Seel (No. 086)']),

@@ -259,8 +259,16 @@ function ecart(avant, apres) {
     const a = aplatir(avant.parCause), b = aplatir(apres.parCause), parCause = {};
     for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) { const d = (b[k] || 0) - (a[k] || 0); if (d !== 0) parCause[k] = d; }
     const av = new Map((avant.sets || []).map(s => [s.set, s]));
-    const setsPassesA100 = [], setsNouvellementTroues = [];
-    for (const s of apres.sets || []) { const x = av.get(s.set); if (x && x.trous > 0 && s.trous === 0) setsPassesA100.push(s.set); if (x && x.trous === 0 && s.trous > 0) setsNouvellementTroues.push(s.set); }
+    const setsPassesA100 = [], setsNouvellementTroues = [], setsPassesA100ParCollecte = [], setsPassesA100ParExclusions = [];
+    const nEx = s => Object.values(s.exclusParCause || {}).reduce((a, l) => a + (Array.isArray(l) ? l.length : Number(l) || 0), 0);
+    for (const s of apres.sets || []) {
+        const x = av.get(s.set);
+        if (x && x.trous > 0 && s.trous === 0) {
+            setsPassesA100.push(s.set);
+            // 🔑 un set qui ne passe à 100 % que parce que des fiches sont sorties du compte n'a rien gagné : la baisse de trous moins la hausse des exclus, si elle est nulle, n'est pas une collecte
+            (x.trous - s.trous - (nEx(s) - nEx(x)) > 0 ? setsPassesA100ParCollecte : setsPassesA100ParExclusions).push(s.set);
+        }
+        if (x && x.trous === 0 && s.trous > 0) setsNouvellementTroues.push(s.set); }
     const d1 = avant.denominateurs || {}, d2 = apres.denominateurs || {};
     const totaux = {};
     for (const k of new Set([...Object.keys(avant.totaux || {}), ...Object.keys(apres.totaux || {})])) totaux[k] = ((apres.totaux || {})[k] || 0) - ((avant.totaux || {})[k] || 0);
@@ -268,7 +276,7 @@ function ecart(avant, apres) {
     const xa = (avant.exclus || {}).parCause || {}, xb = (apres.exclus || {}).parCause || {}, exParCause = {};
     for (const k of new Set([...Object.keys(xa), ...Object.keys(xb)])) { const d = (xb[k] || 0) - (xa[k] || 0); if (d !== 0) exParCause[k] = d; }
     const exclus = { total: ((apres.exclus || {}).total || 0) - ((avant.exclus || {}).total || 0), parCause: exParCause };
-    return { avantLe: avant.le ?? null, memeDenominateur: d1.sets === d2.sets && d1.setsPublies === d2.setsPublies, totaux, parCause, exclus, setsPassesA100, setsNouvellementTroues };
+    return { avantLe: avant.le ?? null, memeDenominateur: d1.sets === d2.sets && d1.setsPublies === d2.setsPublies, totaux, parCause, exclus, setsPassesA100, setsPassesA100ParCollecte, setsPassesA100ParExclusions, setsNouvellementTroues };
 }
 
 // ── LE MARKDOWN
@@ -307,7 +315,9 @@ function formaterMd(audit, ec, { lignes = 150, detail = 40, parSet = 8 } = {}) {
         out.push(`## Écart avec l'audit précédent (${ec.avantLe ?? '?'})${ec.memeDenominateur ? '' : ' — ⚠️ DÉNOMINATEUR DIFFÉRENT, un écart n\'est pas un progrès'}`, '');
         out.push('- trous ' + signe(ec.totaux.trous || 0) + ' · ' + TYPES.map(t => `${TITRES[t]} ${signe(ec.totaux[t] || 0)}`).join(' · '));
         out.push(`- exclus du compte ${signe(ec.exclus ? ec.exclus.total : 0)} (${Object.entries((ec.exclus || {}).parCause || {}).map(([c, n]) => `${c} ${signe(n)}`).join(' · ') || 'aucun changement'}) — une baisse des trous qui n'est qu'une hausse des exclus n'est PAS un progrès`);
-        out.push(`- sets passés à 100 % (${ec.setsPassesA100.length}) : ${ec.setsPassesA100.slice(0, 60).join(', ') || '—'}`);
+        out.push(`- sets passés à 100 % PAR UNE VRAIE COLLECTE (${(ec.setsPassesA100ParCollecte || []).length}) : ${(ec.setsPassesA100ParCollecte || []).slice(0, 60).join(', ') || '—'}`);
+        out.push(`- sets passés à 100 % UNIQUEMENT PAR LES EXCLUSIONS (${(ec.setsPassesA100ParExclusions || []).length}) — pas un progrès de collecte : ${(ec.setsPassesA100ParExclusions || []).slice(0, 60).join(', ') || '—'}`);
+        out.push(`- sets passés à 100 % au total (${ec.setsPassesA100.length}) : ${ec.setsPassesA100.slice(0, 60).join(', ') || '—'}`);
         out.push(`- sets nouvellement troués (${ec.setsNouvellementTroues.length}) : ${ec.setsNouvellementTroues.slice(0, 60).join(', ') || '—'}`);
         out.push('- écart par cause : ' + (Object.entries(ec.parCause).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).map(([c, n]) => `${c} ${signe(n)}`).join(' · ') || 'aucun'), '');
     } else out.push('## Écart avec l\'audit précédent', '', 'Aucune mesure précédente à comparer.', '');

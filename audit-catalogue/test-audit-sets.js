@@ -287,6 +287,17 @@ test('écart : par cause, sets passés à 100 %, sets nouvellement troués', () 
     assert.strictEqual(e.parCause['sansVisuel/aucune-image-en-base'], -3);
     assert.strictEqual(e.parCause['sansProduit/jumelle-suffixe-sans-produit'], 2);
 });
+test('écart : un set passé à 100 % UNIQUEMENT par les exclusions est séparé de celui qui y passe par une vraie collecte', () => {
+    const ex = n => ({ 'sansNumero/numero-non-imprime:dp': Array.from({ length: n }, (_, i) => ({ carteId: i })) });
+    const avant = { le: 'x', sets: [{ set: 'E', trous: 5 }, { set: 'C', trous: 4 }, { set: 'M', trous: 6 }], parCause: {}, totaux: {}, denominateurs: { sets: 3 } };
+    const apres = { le: 'y', sets: [{ set: 'E', trous: 0, exclusParCause: ex(5) }, { set: 'C', trous: 0 }, { set: 'M', trous: 0, exclusParCause: ex(2) }], parCause: {}, totaux: {}, denominateurs: { sets: 3 } };
+    const e = A.ecart(avant, apres);
+    assert.deepStrictEqual(e.setsPassesA100.sort(), ['C', 'E', 'M']);
+    assert.deepStrictEqual(e.setsPassesA100ParExclusions, ['E']);
+    assert.deepStrictEqual(e.setsPassesA100ParCollecte.sort(), ['C', 'M']);     // M : 4 collectés + 2 exclus
+    const md = A.formaterMd({ ...apres, denominateurs: { sets: 3, setsPublies: 3, setsNonPublies: 0, cartes: 0, cartesAffichables: 0, lignes: 0, produits: 0, produitsSansSetPublie: 0, entreesAffichees: 0 }, totaux: { trous: 0, exclus: 7, sets100: 3, setsTroues: 0, sansVisuel: 0, sansNumero: 0, sansProduit: 0, doublons: 0, produitsSansFiche: 0, manquants: 0 } }, e);
+    assert.ok(/UNIQUEMENT PAR LES EXCLUSIONS \(1\)/.test(md)); assert.ok(/VRAIE COLLECTE \(2\)/.test(md));
+});
 test('écart : un dénominateur différent est dit', () => {
     const e = A.ecart({ sets: [], parCause: {}, totaux: { trous: 0 }, denominateurs: { sets: 2 } }, { sets: [], parCause: {}, totaux: { trous: 0 }, denominateurs: { sets: 3 } });
     assert.strictEqual(e.memeDenominateur, false);
@@ -342,6 +353,11 @@ test('Additionals : un produit de l\'expansion porte ce numéro (par cleNumero :
     const a = auditer(lecAdd([carte('c1', 'A', '5')], [prodSL(900)], [{ idProduct: 900, numero: '005' }]), { ...regles, estAdditionals });
     assert.strictEqual(unAdd(a).sansProduit.n, 1); assert.strictEqual(a.exclus.total, 0);
 });
+test('Additionals : un produit d\'une classe de fiche AUTRE que SANS_LIGNE au même numéro bloque aussi l\'exclusion (condition non redondante)', () => {
+    const ok = prod(901, { fiche: { classe: 'FICHE_OK', motifs: [], carteId: 'cX', numero: '5', setId: 'S1-Additionals' } });
+    const a = auditer(lecAdd([carte('c1', 'A', '5')], [prodSL(900), ok], [{ idProduct: 900, numero: '7' }, { idProduct: 901, numero: '5' }]), { ...regles, estAdditionals });
+    assert.strictEqual(unAdd(a).sansProduit.n, 1); assert.strictEqual(a.exclus.total, 0);
+});
 test('Additionals : un produit SANS numéro au nom de la carte l\'empêche d\'être exclue ; un produit sans numéro d\'un autre nom non', () => {
     const memeNom = auditer(lecAdd([carte('c1', 'Tynamo', '5')], [prodSL(900, { name: 'Tynamo [Charge]' })], [{ idProduct: 900, numero: null }]), { ...regles, estAdditionals });
     assert.strictEqual(unAdd(memeNom).sansProduit.n, 1); assert.strictEqual(memeNom.exclus.total, 0);
@@ -382,6 +398,8 @@ test('table SANS_NUMERO_IMPRIME : chaque set porte ce qui est imprimé, ≥ 3 ca
         assert.ok(Array.isArray(e.cartes) && e.cartes.length >= 3, `${id} : ≥ 3 cartes regardées`);
         assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(e.date), `${id} : date`);
     }
+    // la liste EXACTE (mutation M1 : retirer ou ajouter un set sans preuve doit se voir) — 31 sets, chacun vérifié sur scans ou sur planche citée
+    assert.deepStrictEqual(ids.slice().sort(), ['10th-Movie-Commemoration-Set', 'Awakening-Legends', 'Challenge-from-the-Darkness', 'Crossing-the-Ruins', 'Cry-from-the-Mysterious', 'Darkness-and-to-Light', 'Dawn-Dash', 'Dialga-LVX-Constructed-Standard-Deck', 'Expansion-Pack', 'Expansion-Sheet', 'Gold-Silver-to-a-New-World', 'Guren-Town-Gym', 'Hanada-City-Gym', 'Heatran-vs-Regigigas-Deck-Kit', 'Kuchiba-City-Gym', 'Leaders-Stadium', 'Magmortar-vs-Electivire-Deck-Kit', 'Moonlit-Pursuit', 'Mystery-of-the-Fossils', 'Nivi-City-Gym', 'Palkia-LVX-Constructed-Standard-Deck', 'Pokemon-Jungle', 'Rampardos-the-Attacker', 'Rocket-Gang', 'Secret-of-the-Lakes', 'Shining-Darkness', 'Southern-Islands-JP', 'Space-Time-Creation', 'Tamamushi-City-Gym', 'Temple-of-Anger', 'Yamabuki-City-Gym'].sort());
     for (const refuse of ['Unnumbered-Promos', 'XY-Promos', 'Entry-Pack-08', 'Bastiodon-the-Defender']) assert.ok(!ids.includes(refuse), `${refuse} ne doit pas y entrer sans preuve`);
 });
 
