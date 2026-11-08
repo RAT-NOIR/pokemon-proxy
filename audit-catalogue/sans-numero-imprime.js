@@ -48,6 +48,9 @@ const SANS_NUMERO_IMPRIME = Object.freeze({
     'Shining-Darkness': e('dp', ['Cloyster (DPBP#099)', 'Voltorb (DPBP#109)', 'Unown N (DPBP#242)', 'Roseanne\'s Research (rien)']),
     'Moonlit-Pursuit': e('dp', ['Porygon2 (DPBP#166)', 'Wailmer (DPBP#373)', 'Drowzee (DPBP#105)', 'Houndoom (DPBP#287)']),
     'Dawn-Dash': e('dp', ['Unown L (DPBP#240)', 'Primeape (DPBP#062)', 'Espeon (DPBP#163)', 'Latias (DPBP#438)']),
+    // preuve : planche chasse\soir-0811\N8R2\sorties\planche-12.png (22 bandes basses, scans filigranés : la preuve porte sur ce qui est imprimé), relue par le coordinateur ET par l'implémenteur le 2026-11-08 — « DPBP#101 … DP1 »
+    'Space-Time-Creation': e('dp', ['Gastly (DPBP#101)', 'Gengar (DPBP#102)', 'Onix (DPBP#103)', 'Steelix (DPBP#104)', 'Rhyhorn (DPBP#123)', 'Elekid (DPBP#145)', 'Azurill (DPBP#210)', 'Misdreavus (DPBP#227)'],
+        undefined, 'preuve : planche-12.png (N8R2), bande basse « DPBP#NNN … DP1 » sur 22 cartes ; aucun visuel du set en base (0), preuve hors cache'),
     'Magmortar-vs-Electivire-Deck-Kit': e('dp', ['Energy Search (rien)', 'Latios (DPBP#439)', 'Floatzel (rien)', 'Ambipom (rien)']),
     'Dialga-LVX-Constructed-Standard-Deck': e('dp', ['Ampharos (DPBP#209)', 'Flaaffy (DPBP#208)', 'Stantler (DPBP#290)', 'Professor Oak\'s Visit (rien)']),
     'Palkia-LVX-Constructed-Standard-Deck': e('dp', ['Palkia LV.X (rien)', 'Ralts (DPBP#330)', 'Spinda (DPBP#380)', 'Roseanne\'s Research (rien)']),
@@ -60,7 +63,7 @@ const SANS_NUMERO_IMPRIME = Object.freeze({
 });
 
 /** Les sets candidats SANS preuve (aucun visuel en base au 2026-11-08) : comptés, jamais exclus. */
-const CANDIDATS_SANS_SCAN = Object.freeze(['Space-Time-Creation', 'Entry-Pack-08', 'Bastiodon-the-Defender']);
+const CANDIDATS_SANS_SCAN = Object.freeze(['Entry-Pack-08', 'Bastiodon-the-Defender']);
 
 /** La famille d'un set de la table, ou null (set hors table : AUCUNE exclusion). */
 const familleSansNumero = (setId, table = SANS_NUMERO_IMPRIME) => (Object.prototype.hasOwnProperty.call(table, setId) ? table[setId].famille : null);

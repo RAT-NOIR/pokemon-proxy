@@ -382,7 +382,7 @@ test('table SANS_NUMERO_IMPRIME : chaque set porte ce qui est imprimé, ≥ 3 ca
         assert.ok(Array.isArray(e.cartes) && e.cartes.length >= 3, `${id} : ≥ 3 cartes regardées`);
         assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(e.date), `${id} : date`);
     }
-    for (const refuse of ['Unnumbered-Promos', 'XY-Promos', 'Space-Time-Creation', 'Entry-Pack-08', 'Bastiodon-the-Defender']) assert.ok(!ids.includes(refuse), `${refuse} ne doit pas y entrer sans preuve`);
+    for (const refuse of ['Unnumbered-Promos', 'XY-Promos', 'Entry-Pack-08', 'Bastiodon-the-Defender']) assert.ok(!ids.includes(refuse), `${refuse} ne doit pas y entrer sans preuve`);
 });
 
 // ── Markdown
