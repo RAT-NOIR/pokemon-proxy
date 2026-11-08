@@ -119,7 +119,9 @@ export function reduire(rgb, w, h, { voie = 'auto' } = {}) {
 // ------------------------------------------------------------
 // La geometrie de la detection (recopie de pur.js ; ecart voulu : la distance)
 // ------------------------------------------------------------
-const dist = (a, b) => { const dx = a.x - b.x, dy = a.y - b.y; return Math.sqrt(dx * dx + dy * dy); };
+export const dist = (a, b) => { const dx = a.x - b.x, dy = a.y - b.y; return Math.sqrt(dx * dx + dy * dy); };
+/** La diagonale d'une image W x H : la meme racine que dist, jamais Math.hypot. */
+export const diagonale = (W, Ht) => Math.sqrt(W * W + Ht * Ht);
 export function ordonner(pts) { const s = [...pts].sort((a, b) => (a.x + a.y) - (b.x + b.y)); const d = [...pts].sort((a, b) => (a.x - a.y) - (b.x - b.y)); return [s[0], d[3], s[3], d[0]]; }
 export function aireQuad(q) { let a = 0; for (let i = 0; i < 4; i++) { const p = q[i], r = q[(i + 1) % 4]; a += p.x * r.y - r.x * p.y; } return Math.abs(a) / 2; }
 export function evaluerQuadrilatere(pts, W, Ht) {
@@ -130,7 +132,7 @@ export function evaluerQuadrilatere(pts, W, Ht) {
   return { quad: q, aire: aireQuad(q) / (W * Ht), paysage: largeur > hauteur };
 }
 export function retenirCandidats(cands, W, Ht) {
-  const diag = Math.sqrt(W * W + Ht * Ht), gardes = [];
+  const diag = diagonale(W, Ht), gardes = [];
   for (const c of [...cands].sort((a, b) => b.aire - a.aire)) {
     if (c.aire > 0.985) continue;
     if (gardes.some((g) => g.quad.every((p, j) => dist(p, c.quad[j]) < 0.03 * diag))) continue;

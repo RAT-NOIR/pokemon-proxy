@@ -125,6 +125,27 @@ const aleaGraine = (s) => () => { s = (s + 0x6d2b79f5) >>> 0; let t = s; t = Mat
             console.log(`   5. chaine complete == attendus : ${bons}/${lot.images.length} images ; voies ${JSON.stringify(voies)}`);
         }
     }
+    // ═══ 6. le seul ecart voulu (Math.sqrt au lieu de Math.hypot) et les deux seuils (15 % du rapport de carte, 3 % de la diagonale) ═══
+    {
+        // des couples ou Math.hypot de CE moteur differe de la racine de la somme des carres : le test n'a de sens que s'il en existe (sinon une mutation vers hypot passerait)
+        const couples = []; for (let dx = 1; dx < 60 && couples.length < 6; dx++) for (let dy = 1; dy < 60 && couples.length < 6; dy++) if (Math.hypot(dx, dy) !== Math.sqrt(dx * dx + dy * dy)) couples.push([dx, dy]);
+        vrai('6. dans ce moteur, Math.hypot differe de la racine pour des couples d\'entiers (le test est discriminant)', couples.length >= 3, `${couples.length} couples`);
+        vrai('6. dist == racine de dx*dx + dy*dy, et PAS Math.hypot, sur ces couples', couples.every(([dx, dy]) => D.dist({ x: 0, y: 0 }, { x: dx, y: dy }) === Math.sqrt(dx * dx + dy * dy) && D.dist({ x: 0, y: 0 }, { x: dx, y: dy }) !== Math.hypot(dx, dy)));
+        vrai('6. diagonale == racine de W*W + H*H, et PAS Math.hypot, sur ces couples', couples.every(([W, H]) => D.diagonale(W, H) === Math.sqrt(W * W + H * H) && D.diagonale(W, H) !== Math.hypot(W, H)));
+        // le rapport de carte : 63/88 a 15 % pres, des deux cotes (un rectangle de cote 1000 et de rapport donne)
+        const RATIO = 63 / 88, rect = (r) => [{ x: 0, y: 0 }, { x: 1000 * r, y: 0 }, { x: 1000 * r, y: 1000 }, { x: 0, y: 1000 }];
+        for (const [nom, k, accepte] of [['14,9 % sous', 1 - 0.149, true], ['15,1 % sous', 1 - 0.151, false], ['14,9 % au-dessus', 1 + 0.149, true], ['15,1 % au-dessus', 1 + 0.151, false], ['exact', 1, true]])
+            vrai(`6. rapport de carte ${nom} ⇒ ${accepte ? 'accepte' : 'refuse'}`, (D.evaluerQuadrilatere(rect(RATIO * k), 2000, 2000) !== null) === accepte);
+        vrai('6. un rectangle paysage (rapport inverse) est accepte et marque paysage', (() => { const c = D.evaluerQuadrilatere([{ x: 0, y: 0 }, { x: 1000, y: 0 }, { x: 1000, y: 1000 * RATIO }, { x: 0, y: 1000 * RATIO }], 2000, 2000); return c !== null && c.paysage === true; })());
+        // les quasi-doublons : 4 coins a moins de 3 % de la diagonale ; et l'aire maximale 0,985
+        const W = 300, H = 400, diag = D.diagonale(W, H);   // 500
+        const quad = (dx) => [{ x: 10 + dx, y: 10 }, { x: 200 + dx, y: 10 }, { x: 200 + dx, y: 290 }, { x: 10 + dx, y: 290 }];
+        const cand = (dx, aire) => ({ quad: quad(dx), aire, paysage: false });
+        vrai('6. quasi-doublon a 2,9 % de la diagonale : le second est ecarte', D.retenirCandidats([cand(0, 0.5), cand(0.029 * diag, 0.4)], W, H).length === 1);
+        vrai('6. a 3,1 % de la diagonale : les deux sont gardes', D.retenirCandidats([cand(0, 0.5), cand(0.031 * diag, 0.4)], W, H).length === 2);
+        vrai('6. la diagonale est celle de l\'image (3,1 % de 500 est ecarte sur une image dix fois plus grande : seuil 150)', D.retenirCandidats([cand(0, 0.5), cand(0.031 * diag, 0.4)], 3000, 4000).length === 1);
+        vrai('6. aire 0,986 ecartee, 0,984 gardee ; le plus grand d\'abord', (() => { const a = D.retenirCandidats([cand(0, 0.986)], W, H), b = D.retenirCandidats([cand(0, 0.4), cand(100, 0.984)], W, H); return a.length === 0 && b.length === 2 && b[0].aire === 0.984; })());
+    }
     console.log(`\n${ok} assertions passees, ${ko} en echec`);
     process.exit(ko ? 1 : 0);
 })();

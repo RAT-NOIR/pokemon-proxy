@@ -22,6 +22,12 @@ const MUT = [
   ['ratio de carte accepte a 2 % au lieu de 15 %', '/ RATIO > 0.15', '/ RATIO > 0.02'],
   ['redressement au plus proche voisin', 'cv.INTER_LINEAR, cv.BORDER_REPLICATE', 'cv.INTER_NEAREST, cv.BORDER_REPLICATE'],
   ['quasi-doublon a 30 % de la diagonale', '< 0.03 * diag', '< 0.3 * diag'],
+  ['quasi-doublon a 0,3 % de la diagonale', '< 0.03 * diag', '< 0.003 * diag'],
+  ['ratio de carte accepte a 30 % au lieu de 15 %', '/ RATIO > 0.15', '/ RATIO > 0.30'],
+  ['aire maximale 0,985 portee a 1', 'if (c.aire > 0.985) continue;', 'if (c.aire > 1.0) continue;'],
+  ['dist : Math.hypot au lieu de la racine (le seul ecart voulu)', 'return Math.sqrt(dx * dx + dy * dy); };', 'return Math.hypot(dx, dy); };'],
+  ['diagonale : Math.hypot au lieu de la racine', 'Math.sqrt(W * W + Ht * Ht);', 'Math.hypot(W, Ht);'],
+  ['bord bas du domaine retire (agrandissement admis)', 'return W <= w && H <= h && w <', 'return w < W * 100 && w <'],
 ];
 let vivantes = 0;
 for (const [nom, de, vers] of MUT) {

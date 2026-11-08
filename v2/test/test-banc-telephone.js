@@ -87,6 +87,11 @@ const doc = (o = {}) => ({ v: 1, runId: '0123456789abcdef', modeleSha: SHA, ua: 
             const r = await brut(srv, 'GET', chemin), taille = fs.statSync(path.join(PUB, f)).size;
             H.v(`5. ${chemin} : 200, bon type, bonne longueur, isolement`, [r.statut, r.h['content-type'], Number(r.tete.get('content-length')), r.h['cross-origin-embedder-policy']], [200, t, taille, 'require-corp']);
         }
+        // les cinq fichiers de la detection : type MIME EXACT et les trois en-tetes d'isolement, un par un (la boucle ci-dessus compare au type de la table : ici le type attendu est ecrit en dur)
+        for (const [chemin, type] of [['detection.mjs', 'text/javascript; charset=utf-8'], ['detection-page.mjs', 'text/javascript; charset=utf-8'], ['lot-detection.json', 'application/json; charset=utf-8'], ['opencv/opencv.js', 'text/javascript; charset=utf-8'], ['opencv/opencv_js.wasm', 'application/wasm']]) {
+            const r = await brut(srv, 'GET', `/api/banc/telephone/${chemin}`);
+            H.v(`5. ${chemin} : MIME ${type}, CORP same-origin, COOP same-origin, COEP require-corp, aucun CORS`, [r.statut, r.h['content-type'], r.h['cross-origin-resource-policy'], r.h['cross-origin-opener-policy'], r.h['cross-origin-embedder-policy'], r.h['access-control-allow-origin']], [200, type, 'same-origin', 'same-origin', 'require-corp', undefined]);
+        }
         for (const chemin of ['/api/banc/telephone/page.html', '/api/banc/telephone/ort/inconnu.wasm', '/api/banc/telephone/ort', '/api/banc/telephone/../../package.json', '/api/banc/telephone/%2e%2e/%2e%2e/package.json', '/api/banc/telephone/ort/..%2f..%2fpage.html', '/api/banc/telephone/lot.json/x', '/api/banc/telephone/APP.JS.map'])
             H.v(`5. hors liste : ${chemin} ⇒ 404`, (await brut(srv, 'GET', chemin)).statut, 404);
         H.v('5. pas de chemin lu dans la requête : aucune route à paramètre', Object.keys(routes.FICHIERS).some(c => c.includes(':')), false);
@@ -133,6 +138,16 @@ const doc = (o = {}) => ({ v: 1, runId: '0123456789abcdef', modeleSha: SHA, ua: 
         H.v('6. un corps de 9 Ko ⇒ 413 trop-gros', [x.statut, JSON.parse(x.texte).erreur.detail], [413, 'trop-gros']);
         H.v('6. la validation seule refuse aussi un objet > 8 Ko (sans en-tête de longueur)', S.valider({ ...doc(), ua: 'u'.repeat(9000) }).ok, false);
         H.v('6. rien d\'invalide n\'a été stocké : les seuls ajouts sont les deux dépôts valides', await db.col('banc_telephone').countDocuments({}), avant + 2);
+        // le test de detection (detection-page.mjs) : un depot HTTP REEL de mesure.detection est recu, stocke tel quel ; une cle inconnue dans `detection` est refusee
+        const det = { version: 'rm-detection-1', nImages: 12, nIdentiques: 12, nRgb640: 12, nQuads: 12, nCartes: 12, voieCanvas: 9, voiePillow: 3, ecarts: '', empreinteLot: 'b'.repeat(64), msOpencv: 61, msMediane: 160, msTotal: 2000, jsHeapMo: 4.3, jsHeapApresMo: 32.5, wasmHeapMo: 128, erreur: null };
+        const mDet = (d) => ({ moteur: 'wasm', verdict: 'IDENTIQUE', detection: d });
+        r = await post(doc({ mesure: mDet(det), runId: 'fedcba9876543210' }));
+        H.v('6. un depot de detection (HTTP reel) ⇒ 201', [r.statut, JSON.parse(r.texte).success], [201, true]);
+        const luDet = await db.col('banc_telephone').findOne({ runId: 'fedcba9876543210' });
+        H.v('6. la detection est stockee telle que recue (comptes, empreinte du lot, voies)', [luDet.mesure.detection.nIdentiques, luDet.mesure.detection.empreinteLot, luDet.mesure.detection.voiePillow], [12, 'b'.repeat(64), 3]);
+        await refus('une cle inconnue dans la detection', doc({ mesure: mDet({ ...det, photo: 'x' }), runId: 'fedcba9876543211' }), 400, 'champ-inconnu:mesure.detection.photo');
+        await refus('un compte hors bornes dans la detection', doc({ mesure: mDet({ ...det, nIdentiques: 101 }), runId: 'fedcba9876543212' }), 400, 'champ:mesure.detection.nIdentiques');
+        H.v('6. les depots de detection : un accepte, deux refuses non stockes', await db.col('banc_telephone').countDocuments({}), avant + 3);
         // les clés dangereuses : refusées par la liste fermée, jamais copiées
         x = await post('{"__proto__":{"admin":true},"v":1}');
         H.v('6. __proto__ à la racine ⇒ 400 (liste fermée)', x.statut, 400);

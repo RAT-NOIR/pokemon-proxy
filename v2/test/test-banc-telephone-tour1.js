@@ -108,7 +108,7 @@ const sha256 = p => crypto.createHash('sha256').update(fs.readFileSync(p)).diges
         console.error = ecrire;
         H.v('M2. base « test » (la production) : non monté, aucune route', [m1, r1.stack.length], [false, 0]);
         H.v('M2. base absente : non monté', [m2, r2.stack.length], [false, 0]);
-        H.v('M2. MONGODB_BASE=rm_essai (lu dans l\'environnement injecté) : monté', [m3, r3.stack.length], [true, 17]);
+        H.v('M2. MONGODB_BASE=rm_essai (lu dans l\'environnement injecté) : monté', [m3, r3.stack.length], [true, 22]);
         H.v('M2. « rm_essai » avec une espace de fin : tolérée par la lecture (comme index.js), montée', m4, true);
         H.vrai('M2. le refus est DIT au démarrage (nomme la base trouvée et celle attendue)', sonde.some(l => /NON MONTÉ/.test(l) && /« test »/.test(l) && /« rm_essai »/.test(l)) && sonde.some(l => /MONGODB_BASE absente/.test(l)));
         const coll = { insertOne: async () => { throw new Error('ne devait pas écrire'); }, countDocuments: async () => 0 };
@@ -226,7 +226,7 @@ const sha256 = p => crypto.createHash('sha256').update(fs.readFileSync(p)).diges
         };
         void attendu;
         const norm = p => crypto.createHash('sha256').update(Buffer.from(fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n'), 'utf8')).digest('hex');
-        const lu = { empreinte: norm(path.join(PUB, 'empreinte.js')), moteur: norm(path.join(PUB, 'moteur-ort.js')), wasmBundle: norm(path.join(PUB, 'ort', 'ort.wasm.bundle.min.mjs')), gpuBundle: norm(path.join(PUB, 'ort', 'ort.webgpu.bundle.min.mjs')), wasm: sha256(path.join(PUB, 'ort', 'ort-wasm-simd-threaded.wasm')), asyncify: sha256(path.join(PUB, 'ort', 'ort-wasm-simd-threaded.asyncify.wasm')) };
+        const lu = { empreinte: norm(path.join(PUB, 'empreinte.js')), moteur: norm(path.join(PUB, 'moteur-ort.js')), wasmBundle: norm(path.join(PUB, 'ort', 'ort.wasm.bundle.min.mjs')), gpuBundle: norm(path.join(PUB, 'ort', 'ort.webgpu.bundle.min.mjs')), wasm: sha256(path.join(PUB, 'ort', 'ort-wasm-simd-threaded.wasm')), asyncify: sha256(path.join(PUB, 'ort', 'ort-wasm-simd-threaded.asyncify.wasm')), opencvJs: norm(path.join(PUB, 'opencv', 'opencv.js')), opencvWasm: sha256(path.join(PUB, 'opencv', 'opencv_js.wasm')) };
         const EMP = JSON.parse(fs.readFileSync(path.join(PUB, '..', 'copies-extension.json'), 'utf8'));
         H.v('m5. empreintes sha256 COMPLÈTES des six copies de l\'extension v2 (copies-extension.json, comparées au dépôt de l\'extension par outils/banc-telephone/verifier-copies.js quand il est présent)', lu, EMP.sha256);
         H.vrai('m5. chaque empreinte est un sha256 complet (64 hexadécimaux)', Object.values(EMP.sha256).every(h => /^[0-9a-f]{64}$/.test(h)));

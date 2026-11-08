@@ -10,7 +10,9 @@ const EXT = 'C:\\Users\\Yung\\Desktop\\extension v2';
 const FICHIERS = {
     empreinte: ['empreinte.js', 'src\\calcul\\empreinte.js', true], moteur: ['moteur-ort.js', 'src\\calcul\\moteur-ort.js', true],
     wasmBundle: ['ort\\ort.wasm.bundle.min.mjs', 'dist\\calcul\\ort\\ort.wasm.bundle.min.mjs', true], gpuBundle: ['ort\\ort.webgpu.bundle.min.mjs', 'dist\\calcul\\ort\\ort.webgpu.bundle.min.mjs', true],
-    wasm: ['ort\\ort-wasm-simd-threaded.wasm', 'dist\\calcul\\ort\\ort-wasm-simd-threaded.wasm', false], asyncify: ['ort\\ort-wasm-simd-threaded.asyncify.wasm', 'dist\\calcul\\ort\\ort-wasm-simd-threaded.asyncify.wasm', false]
+    wasm: ['ort\\ort-wasm-simd-threaded.wasm', 'dist\\calcul\\ort\\ort-wasm-simd-threaded.wasm', false], asyncify: ['ort\\ort-wasm-simd-threaded.asyncify.wasm', 'dist\\calcul\\ort\\ort-wasm-simd-threaded.asyncify.wasm', false],
+    // la detection deterministe : OpenCV.js du build REDUIT de l'extension (sources dans src\calcul\opencv, jamais modifiees)
+    opencvJs: ['opencv\\opencv.js', 'src\\calcul\\opencv\\opencv.js', true], opencvWasm: ['opencv\\opencv_js.wasm', 'src\\calcul\\opencv\\opencv_js.wasm', false]
 };
 const hacher = (p, texte) => { const b = fs.readFileSync(p); return crypto.createHash('sha256').update(texte ? Buffer.from(b.toString('utf8').replace(/\r\n/g, '\n'), 'utf8') : b).digest('hex'); };
 const ecrire = process.argv.includes('--ecrire');
