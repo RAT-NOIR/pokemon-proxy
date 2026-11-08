@@ -20,7 +20,7 @@ const R = path.join(__dirname, '..', '..');
 const CHARGES = path.join(R, 'verrou', 'charges.json');
 const IMAGE = require(CHARGES).charges.find(c => c.cellule === 'occidentale').imageUrl;
 const IMAGE_INCONNUE = 'https://images1.vinted.net/t/00_rm-b7b1/f800/inconnue.webp';
-const ENV_BANC = { MONGODB_BASE: 'test_scratch', V2_INSCRIPTION_IP_HEURE: '3', V2_OUBLI_IP_HEURE: '3', V2_REINIT_IP_HEURE: '3', V2_VERIFICATION_IP_HEURE: '3', V2_LOT_CARTES_MAX: '100', V2_RESOLUTION_CARDMARKET: '1', V2_PHOTOS_MULTIPLES: '1' };
+const ENV_BANC = { MONGODB_BASE: 'test_scratch', V2_INSCRIPTION_IP_HEURE: '3', V2_OUBLI_IP_HEURE: '3', V2_REINIT_IP_HEURE: '3', V2_VERIFICATION_IP_HEURE: '3', V2_LOT_CARTES_MAX: '100', V2_RESOLUTION_CARDMARKET: '1', V2_PHOTOS_MULTIPLES: '1', V2_LIEN_ORDINATEUR: '1' };
 // CALCUL-CLIENT : `POST /api/identifier/mesures` n'existe que si V2_MESURES_CLIENT=1 ET V2_EMPREINTE_EXTENSION=1 (modèle d'empreinte valide) : un serveur À PART le monte (cfgM), les autres gardent le défaut (route absente).
 const cfgM = lireConfig({ ...ENV_BANC, V2_MESURES_CLIENT: '1', V2_EMPREINTE_EXTENSION: '1', V2_MODELE_EMPREINTE_ID: 'p-banc-1', V2_MODELE_EMPREINTE_SHA256: 'cd'.repeat(32) });
 const cfg = lireConfig(ENV_BANC);      // RESOUDRE-CARDMARKET et PHOTOS-MULTIPLES : les drapeaux sont allumés pour les serveurs de ce banc (éteints, ces routes n'existent pas)   // les lots de ce banc dépassent 20 cartes (le défaut les refuserait : test-plafonds.js)
@@ -324,7 +324,7 @@ const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empr
     await semer('triple');
     const express = require('express'); const pret = require('../pret'); const registre = require('../registre');
     const { dansUnScan } = require('../../sources'); const { assembler, LOTS } = require('../index');          // LOTS : la liste de v2/index.js, UNE seule définition (tour 1, I7)
-    H.vrai(`LOTS lu de v2/index.js : ${LOTS.length} lots`, Array.isArray(LOTS) && LOTS.length === 9);   // 8 → 9 : le lot GALERIE entre dans LOTS (derrière V2_GALERIE=1, éteint dans ce banc) ; 7 → 8 : le lot COLLECTION entre dans LOTS (ruling 1 du lot) ; le dénominateur suit la liste, aucune garde n'est desserrée
+    H.vrai(`LOTS lu de v2/index.js : ${LOTS.length} lots`, Array.isArray(LOTS) && LOTS.length === 10);   // 9 → 10 : le lot LIEN-ORDINATEUR entre dans LOTS (derrière V2_LIEN_ORDINATEUR=1, allumé dans ce banc) ; 8 → 9 : le lot GALERIE entre dans LOTS (derrière V2_GALERIE=1, éteint dans ce banc) ; 7 → 8 : le lot COLLECTION entre dans LOTS (ruling 1 du lot) ; le dénominateur suit la liste, aucune garde n'est desserrée
     const { creerCourrierMemoire } = require('../comptes/courrier');
     const courrier = creerCourrierMemoire();
     registre.fournir('courrier', courrier); registre.fournir('turnstile', { verifier: async () => true });
@@ -547,6 +547,24 @@ const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empr
         await postS('POST /api/compte/renvoyer-verification', 'sans Origin du site', 403, '/api/compte/renvoyer-verification', { email: 'plaf1@exemple.fr' }, ip());
         const memRv = ip(); for (let k = 0; k < 3; k++) await postS('POST /api/compte/renvoyer-verification', 'sous le plafond', 202, '/api/compte/renvoyer-verification', { email: 'inconnue@exemple.fr' }, { ...siteH(null), ...memRv });
         await postS('POST /api/compte/renvoyer-verification', 'plafond par IP atteint', 429, '/api/compte/renvoyer-verification', { email: 'inconnue@exemple.fr' }, { ...siteH(null), ...memRv });
+        // LIEN-ORDINATEUR : la route n'existe que drapeau allumé (allumé pour ce banc) et exige un pilote de courrier qui envoie pour de vrai (le pilote mémoire du banc le déclare le temps de la section)
+        {
+            courrier.reel = true;
+            try {
+                const RL = 'POST /api/lien-ordinateur', CH = '/api/lien-ordinateur';
+                const l1 = await postS(RL, 'adresse neuve (un courriel)', 202, CH, { email: 'lien1@exemple.fr', turnstile: 't' });
+                const l2 = await postS(RL, 'même adresse déjà servie (202 identique, aucun courriel)', 202, CH, { email: 'lien1@exemple.fr', turnstile: 't' });
+                const l3 = await postS(RL, 'adresse invalide (202 identique)', 202, CH, { email: 'pas-une-adresse', turnstile: 't' });
+                H.v('lien-ordinateur : adresse neuve / déjà servie / invalide — 202 identiques à l\'octet', [l2.texte === l1.texte, l3.texte === l1.texte], [true, true]);
+                await postS(RL, 'corps qui n\'est pas un objet (400 ENTREE)', 400, CH, [1]);
+                await postS(RL, 'jeton valide, adresse absente (400 ENTREE)', 400, CH, { turnstile: 't' });
+                await postS(RL, 'jeton Turnstile vide (defi-anti-robot)', 422, CH, { email: 'lien2@exemple.fr', turnstile: '' });
+                await postS(RL, 'sans Origin du site', 403, CH, { email: 'lien2@exemple.fr', turnstile: 't' }, ip());
+                const memL = ip(); for (let k = 0; k < 3; k++) await postS(RL, 'sous le plafond', 202, CH, { email: `lienip${k}@exemple.fr`, turnstile: 't' }, { ...siteH(null), ...memL });
+                await postS(RL, 'plafond par IP atteint', 429, CH, { email: 'lienip9@exemple.fr', turnstile: 't' }, { ...siteH(null), ...memL });
+                H.v('lien-ordinateur : 1 + 3 courriels partis (adresse neuve et trois sous le plafond), rien pour les autres', courrier.envoyes.filter(e => e.type === 'lien-ordinateur').length, 4);
+            } finally { courrier.reel = false; }
+        }
         // nouvelle session (la réinitialisation a révoqué les sessions)
         const conn2 = await H.appel(V, '/api/compte/connexion', { methode: 'POST', corps: { email: 'ab@gmail.com', motDePasse: 'nouveau-mot-de-passe-solide' }, entetes: siteH(null) });
         cookie = /rm_session=[^;]+/.exec(conn2.entetes['set-cookie'] || '')?.[0];
@@ -970,6 +988,7 @@ const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empr
             'POST /api/compte/lier': { chemin: '/api/compte/lier', corps: { code: 'ABCDEF' } },
             'POST /api/compte/delier': { chemin: '/api/compte/delier', corps: {} },
             'POST /api/compte/renvoyer-verification': { chemin: '/api/compte/renvoyer-verification', corps: { email: 'a@exemple.fr' } },
+            'POST /api/lien-ordinateur': { chemin: '/api/lien-ordinateur', corps: { email: 'a@exemple.fr', turnstile: 't' } },
             'POST /api/banc/correction': { chemin: '/api/banc/correction', corps: { scanId: fauxId, idProduct: 1 } },
             'POST /api/banc/etiquette': { chemin: '/api/banc/etiquette', corps: { scanId: fauxId, verdict: 'juste', rev: 1 }, entetes: { authorization: 'Bearer ' + 'a'.repeat(32) } },
             'POST /api/banc/photo': { chemin: `/api/banc/photo?scanId=${fauxId}`, entetes: { authorization: 'Bearer ' + 'a'.repeat(32) } },
@@ -990,7 +1009,7 @@ const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empr
         for (const [route, q] of Object.entries(REQ503)) {
             const entetes = { origin: EXT, ...siteH(null), ...(q.entetes || {}) };
             if (q.form) await jouerFormulaire(V, route, 'garde d\'index : routes v2 fermées', 503, q.chemin, formulaire(), { ...siteH('rm_session=x'), ...ip() }, { garde: true });
-            else await jouer(q.serveur === 'mesures' ? svM.url : V, route, 'garde d\'index : routes v2 fermées', 503, q.chemin, { corps: q.corps, garde: true, entetes: { ...entetes, origin: route.includes('/compte') || route.includes('/scanner') || route.includes('/collection') ? SITE : EXT } });
+            else await jouer(q.serveur === 'mesures' ? svM.url : V, route, 'garde d\'index : routes v2 fermées', 503, q.chemin, { corps: q.corps, garde: true, entetes: { ...entetes, origin: route.includes('/compte') || route.includes('/scanner') || route.includes('/collection') || route.includes('/lien-ordinateur') ? SITE : EXT } });
         }
         pret.armer(M.verifierIndex);
     }
@@ -1047,7 +1066,7 @@ const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empr
     H.v('un code produit par le serveur et absent de la liste fermée / du schéma', horsListe, []);
     const JAMAIS = Object.keys(CODES).filter(c => !produits.has(c));
     console.log(`   codes de la liste fermée produits : ${Object.keys(CODES).length - JAMAIS.length} / ${Object.keys(CODES).length} ; non produits par le banc : ${JAMAIS.join(', ') || 'aucun'}`);
-    const CODES_NON_PRODUITS = { VERIFICATION: 'O3 : un compte non confirmé n\'est plus un porteur, donc aucune requête n\'atteint plus les gardes « compte vérifié » (identifier, scanner, collection) — elles restent en profondeur ; test-comptes-o3.js prouve le refus à la source', INTERDIT: 'GALERIE : produit seulement par les routes de la Communauté (derrière V2_GALERIE=1, éteint dans ce banc) ; joué par test-galerie-routes.js et test-galerie-conformite.js', FICHIER: 'GALERIE : refus de fichier du dépôt d\'un art, joués par test-galerie-routes.js §5 (cinq causes) et test-galerie-images.js', LIMITE_DEBIT: 'GALERIE : limite de débit des routes de la Communauté, jouée par test-galerie-routes.js et test-galerie-conformite.js', EN_RECONCILIATION: 'ne naît que d\'une clé de débit rejouée dont la ligne attend la réconciliation (test-argent-tour4.js) — état fabriqué par ce banc-là, pas par une route sur un état courant' };
+    const CODES_NON_PRODUITS = { VERIFICATION: 'O3 : un compte non confirmé n\'est plus un porteur, donc aucune requête n\'atteint plus les gardes « compte vérifié » (identifier, scanner, collection) — elles restent en profondeur ; test-comptes-o3.js prouve le refus à la source', INTERDIT: 'GALERIE : produit seulement par les routes de la Communauté (derrière V2_GALERIE=1, éteint dans ce banc) ; joué par test-galerie-routes.js et test-galerie-conformite.js', FICHIER: 'GALERIE : refus de fichier du dépôt d\'un art, joués par test-galerie-routes.js §5 (cinq causes) et test-galerie-images.js', EN_RECONCILIATION: 'ne naît que d\'une clé de débit rejouée dont la ligne attend la réconciliation (test-argent-tour4.js) — état fabriqué par ce banc-là, pas par une route sur un état courant' };
     H.v('codes de la liste fermée jamais produits et non déclarés', JAMAIS.filter(c => !(c in CODES_NON_PRODUITS)), []);
     H.v('déclarations « code non produit » périmées (le code a été produit : retirer la déclaration)', Object.keys(CODES_NON_PRODUITS).filter(c => produits.has(c)), []);
     // les causes de non-remboursement servies (RAISONS_NON_REMBOURSE, une source) : celles que le banc a vues, et celles qu'il ne sait pas fabriquer (dites)
