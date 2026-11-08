@@ -172,6 +172,9 @@ function lireCorpsPublication(b, nbPages) {
 }
 /** Dépose (ou remplace) la mise à jour en attente d'un classeur DÉJÀ public : une seule par classeur (index unique sur `remplace`). */
 async function deposerMiseAJour(id, auteurId, pseudo, snap, maintenant) {
+    // TOUR 2 (M3) : on relit la version COURANTE du classeur avant l'upsert — un PUT plus ancien, arrivé après qu'un PUT identique à la version publique a retiré la mise à jour, ne la recrée pas (le classeur n'est plus à cette version)
+    const courant = await G.col('classeurs').findOne({ _id: id, auteurId }, { projection: { version: 1 } });
+    if (!courant || courant.version > snap.versionClasseur) return;
     // TOUR 1 (M2) : une synchronisation PLUS ANCIENNE n'écrase jamais une plus récente : le filtre exige que la version déjà posée ne soit pas supérieure. Quand elle l'est, l'upsert se heurte à l'index unique `remplace` : rien n'est écrit.
     for (let essai = 0; essai < 2; essai++) {
         try {
@@ -197,7 +200,7 @@ async function ecrirePublication(id, mien, pseudo, snap, maintenant) {
         const apres = await G.col('publications').findOne({ _id: id }, { projection: { etat: 1, versionClasseur: 1 } });
         if (apres && apres.etat === main.etat && apres.versionClasseur > snap.versionClasseur) return 'ecrite';      // une copie plus récente est déjà posée
     }
-    return 'ecrite';
+    return 'echec';          // TOUR 2 (m2) : quatre essais sans écrire (l'état ne cesse de changer) : un état EXPLICITE, jamais « écrite » à tort — l'appelant rend la place et répond 503
 }
 /** { introuvable } | { refus } (classeur-vide, illustration-refusee) | { ok } */
 async function publier({ compteId, pseudo, id, corps, reserver = null, rendre = null, maintenant = new Date() }) {
@@ -214,13 +217,16 @@ async function publier({ compteId, pseudo, id, corps, reserver = null, rendre = 
     const main = await G.col('publications').findOne({ _id: id }, { projection: { etat: 1 } });
     if (main && main.etat === 'retire') return { conflit: 'etat' };         // M7 : retirée par la modération, elle ne se republie pas (comme une illustration retirée)
     // m1 : la place du jour ne se prend que si une publication est RÉELLEMENT posée (une copie encore en attente qu'on remplace ne compte pas) ; G1 : le jour de Paris (quota-publications.js)
-    const compte = !main || main.etat !== 'en-attente';
+    // TOUR 2 (m3) : un classeur PUBLIC qui a déjà une mise à jour en attente la remplace : rien de nouveau n'est publié, aucune place n'est prise
+    const attente = main && main.etat === 'public' ? await G.col('publications').findOne({ remplace: id, etat: 'en-attente' }, { projection: { _id: 1 } }) : null;
+    const compte = !main || (main.etat !== 'en-attente' && !attente);
     let reserve = false;
     if (compte && reserver) { const q = await reserver(mien); if (!q.permis) return { limite: q.reessayerDans }; reserve = true; }
     const annuler = async () => { if (reserve && rendre) await rendre(mien); };
     let issue;
     try { issue = await ecrirePublication(id, mien, pseudo, snap, maintenant); } catch (e) { await annuler(); throw e; }
     if (issue === 'retire') { await annuler(); return { conflit: 'etat' }; }
+    if (issue === 'echec') { await annuler(); return { indispo: true }; }
     // G2 : le classeur (ou le compte) a pu disparaître ENTRE la lecture et l'écriture (DELETE concurrent, suppression de compte) : une publication ne reste jamais sans classeur
     const vivant = await G.col('classeurs').findOne({ _id: id, auteurId: mien }, { projection: { _id: 1 } }) && await G.col('profils').findOne({ _id: mien }, { projection: { _id: 1 } });
     if (!vivant) { await retirerPublication(id, mien); await annuler(); return { introuvable: true }; }
@@ -228,12 +234,17 @@ async function publier({ compteId, pseudo, id, corps, reserver = null, rendre = 
     if (ids.length) {
         await G.col('arts').updateMany({ _id: { $in: ids }, auteurId: mien, etat: 'prive' }, { $set: { etat: 'en-attente', recuLe: maintenant, certification: { droits: true, nonOfficielle: true, le: maintenant } } });
         await G.col('arts').updateMany({ _id: { $in: ids }, auteurId: mien, etat: { $in: ['prive', 'en-attente'] } }, { $addToSet: { viaClasseurs: id } });
+        // TOUR 2 (M1) : le classeur a pu disparaître ENTRE le contrôle ci-dessus et ces marquages : on contrôle APRÈS aussi, et on libère (retirerPublication retrouve les arts marqués par `viaClasseurs` même sans publication)
+        if (!(await G.col('classeurs').findOne({ _id: id, auteurId: mien }, { projection: { _id: 1 } }))) { await retirerPublication(id, mien); await annuler(); return { introuvable: true }; }
     }
     return { ok: true };
 }
 /** M6 : au retrait d'une publication, ses illustrations privées qu'elle avait fait passer « en-attente » redeviennent privées — sauf si un autre classeur de l'auteur les cite encore (`viaClasseurs`) ou si l'auteur les a publiées lui-même (`publieeParAuteur`). */
 async function libererIllustrations(id, auteurId, docs) {
-    const ids = unique(docs.flatMap(d => [...P.artsCites(d.pagesBlocs || []), ...(d.couverture && d.couverture.illustration ? [d.couverture.illustration] : [])]));
+    // TOUR 2 (M2) : les arts à rendre se cherchent aussi DIRECTEMENT par leur marque `viaClasseurs` — la publication a pu disparaître avant (suppression de compte partielle, retrait antérieur) et ne plus les citer.
+    // Limite documentée : un art « en-attente » SANS champ `viaClasseurs` (publié par un classeur avant le tour 1) n'a pas de marque : il ne se rend pas tout seul (décision de modération, ou dépublication par l'auteur).
+    const marques = await G.col('arts').find({ auteurId, viaClasseurs: id }, { projection: { _id: 1 } }).toArray();
+    const ids = unique([...docs.flatMap(d => [...P.artsCites(d.pagesBlocs || []), ...(d.couverture && d.couverture.illustration ? [d.couverture.illustration] : [])]), ...marques.map(a => a._id)]);
     if (!ids.length) return;
     await G.col('arts').updateMany({ _id: { $in: ids }, auteurId, viaClasseurs: id }, { $pull: { viaClasseurs: id } });
     await G.col('arts').updateMany({ _id: { $in: ids }, auteurId, etat: 'en-attente', viaClasseurs: { $size: 0 }, publieeParAuteur: { $ne: true } }, { $set: { etat: 'prive', motif: null } });

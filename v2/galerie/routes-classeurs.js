@@ -71,6 +71,7 @@ function routesClasseurs(router, x) {
         if (r.refus) return entree(res, r.refus);
         if (r.limite !== undefined) return repondreErreur(res, 'LIMITE_DEBIT', 'Trop de requêtes, réessayez plus tard.', { reessayerDans: r.limite });
         if (r.conflit) return repondreErreur(res, 'CONFLIT', 'Le classeur n\'est pas dans l\'état attendu', { detail: 'etat' });
+        if (r.indispo) return repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible', { reessayerDans: 1 });      // m2 : la publication n'a pas pu être posée (l'état changeait sans cesse) ; la place du jour est rendue
         privee(res);
         return res.status(200).json({ success: true, classeur: await C.vueDe(req.v2.porteur.id, req.params.id) });
     }));

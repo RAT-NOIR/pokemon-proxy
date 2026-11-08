@@ -40,7 +40,12 @@ function creer({ max, maintenant }) {
         try {
             await G.col('limites').findOneAndUpdate({ cle, n: { $lt: max } }, { $inc: { n: 1 }, $setOnInsert: { expireLe: new Date(now.getTime() + 3 * 86400e3) } }, { upsert: true, returnDocument: 'after' });
             return { permis: true };
-        } catch (e) { if (estDup(e)) return { permis: false, reessayerDans: secondesAvantMinuitParis(now) }; throw e; }
+        } catch (e) {
+            if (!estDup(e)) throw e;
+            // TOUR 2 (m1) : le doublon a deux causes — le jour est PLEIN (n ≥ max), ou deux premières réservations simultanées ont toutes deux tenté d'INSÉRER. On réessaie UNE fois SANS upsert : le document existe maintenant, la place se prend s'il en reste.
+            const pris = await G.col('limites').findOneAndUpdate({ cle, n: { $lt: max } }, { $inc: { n: 1 } }, { returnDocument: 'after' });
+            return pris ? { permis: true } : { permis: false, reessayerDans: secondesAvantMinuitParis(now) };
+        }
     }
     /** Reprend une place (l'effet réservé n'a pas eu lieu). Jamais sous 0. */
     async function rendre(compteId) {
