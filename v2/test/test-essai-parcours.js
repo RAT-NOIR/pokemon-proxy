@@ -63,6 +63,12 @@ const EN = { 'x-rat-market-mesure': SEC };
     });
     H.v('production : la route d\'administration rend le 404 NATIF, identique à une route inconnue (avec le bon secret et la bonne adresse)', [natif.lien.statut, natif.lien.texte.replace('lien-confirmation', 'inconnue') === natif.inconnue.texte], [404, true]);
     H.v('production : connexion, inscription, oubli, renvoi avec le bon en-tête et l\'adresse de test => 422 defi-anti-robot', [natif.connexion, natif.inscription, natif.oubli, natif.renvoi].map(st), Array(4).fill(DEFI));
+    // LISTE FERMÉE : chacune des trois adresses (test + deux comptes de mesure), avec le bon secret, sous un environnement où UNE des trois conditions de la garde manque => 422 sur connexion, oubli et renvoi
+    const LISTE = ['ratmarket.contact+essai@gmail.com', 'banc-mesure@rat-market.invalid', 'banc-ordinaire@rat-market.invalid'];
+    for (const [nom, env] of [['base de production (test)', { ...ESSAI, MONGODB_BASE: 'test' }], ['autre service Render', { ...ESSAI, RENDER_SERVICE_ID: 'srv-autre' }], ['V2_CIBLE absente', (({ V2_CIBLE, ...r }) => r)(ESSAI)]]) {
+        const r = await cas(env, async appel => { const o = []; for (const a of LISTE) for (const [ch, c] of [['/api/compte/connexion', { email: a, motDePasse: MDP }], ['/api/compte/mot-de-passe-oublie', { email: a }], ['/api/compte/renvoyer-verification', { email: a }]]) o.push(st(await appel(ch, c, EN))); return o; });
+        H.v(`liste fermée, ${nom} : les 3 adresses x 3 routes avec le bon secret => 422 defi-anti-robot (aucune exemption)`, r, Array(9).fill(DEFI));
+    }
     H.vrai('production : après un montage réel et des requêtes portant le secret, le module n\'est TOUJOURS pas chargé (require.cache)', !chargeEssai());
 
     // ---- 2. SUR L'ESSAI ----
@@ -136,6 +142,30 @@ const EN = { 'x-rat-market-mesure': SEC };
     const cfgE = lireConfig(ESSAI);
     H.vrai('le secret et son condensé ne sont ni dans JSON.stringify(cfg) ni dans util.inspect(cfg)', ![JSON.stringify(cfgE), require('util').inspect(cfgE, { depth: 6 })].some(s => s.includes(SEC) || s.includes(require('crypto').createHash('sha256').update(SEC).digest('hex'))));
     H.v('essai : secret absent ou trop court => exemption inactive avec sa raison', [lireConfig({ ...ESSAI, V2_SECRET_MESURE: undefined }).mesure, lireConfig({ ...ESSAI, V2_SECRET_MESURE: 'y'.repeat(31) }).mesure.actif].map(x => typeof x === 'object' ? [x.actif, /absent/.test(x.raison)] : x), [[false, true], false]);
+
+    // ---- 2 bis. La liste fermée sur l'essai : les comptes de mesure gardent l'exemption, rien d'autre ----
+    {
+        const EP = require('../essai-parcours');
+        H.v('la liste fermée contient exactement trois adresses : le compte de test et les deux comptes de mesure', [...EP.ADRESSES_EXEMPTEES].sort(), [...LISTE].sort());
+        H.vrai('les adresses de mesure de la liste sont celles de leurs définitions (exemption-banc.js, compte-essai.js)', EP.ADRESSES_EXEMPTEES.includes(require('../installations/exemption-banc').ADRESSE_ORDINAIRE) && /ADRESSE_BANC = 'banc-mesure@rat-market\.invalid'/.test(fs.readFileSync(path.join(__dirname, '..', 'admin', 'compte-essai.js'), 'utf8')));
+        const proches = ['banc-mesure@rat-market.invalid.evil.fr', 'banc-mesure2@rat-market.invalid', 'banc-mesure@rat-market.fr', 'xbanc-ordinaire@rat-market.invalid', 'admin@rat-market.invalid'];
+        const r = await cas(ESSAI, async appel => {
+            const o = {};
+            o.listeConnexion = []; o.listeOubli = []; o.listeSans = [];
+            for (const a of LISTE.slice(1)) {
+                o.listeConnexion.push((await appel('/api/compte/connexion', { email: a, motDePasse: MDP }, EN)).statut);          // défi passé : compte inexistant => 401
+                o.listeOubli.push((await appel('/api/compte/mot-de-passe-oublie', { email: a }, EN)).statut);
+                o.listeSans.push(st(await appel('/api/compte/connexion', { email: a, motDePasse: MDP })));                      // sans secret : 422
+            }
+            o.proches = []; for (const a of proches) o.proches.push(st(await appel('/api/compte/connexion', { email: a, motDePasse: MDP }, EN)));
+            o.lien = (await appel('/api/essai/lien-confirmation', { email: LISTE[1] }, EN)).texte.startsWith('<');                  // la route du lien : 404 natif (page HTML) pour un compte de mesure
+            return o;
+        });
+        H.v('essai : les deux comptes de mesure avec le bon secret passent le défi (connexion 401 faute de compte, oubli 202)', [r.listeConnexion, r.listeOubli], [[401, 401], [202, 202]]);
+        H.v('essai : sans secret, ces deux comptes restent soumis au défi (422)', r.listeSans, [DEFI, DEFI]);
+        H.v('essai : cinq adresses voisines de la liste, bon secret => 422', r.proches, Array(5).fill(DEFI));
+        H.vrai('essai : la route du lien de confirmation ne répond pas pour un compte de mesure (404 natif)', r.lien);
+    }
 
     // ---- 3. L'expiration et l'usage unique du lien, sur une horloge fausse ----
     {

@@ -151,7 +151,7 @@ async function demarrerAvecCors(cfg) {
             await s.fermer(); return r;
         };
         const SERVICE_ESSAI = 'srv-db7ticgm7kps73crjibg';
-        const ESSAI = { MONGODB_BASE: 'rm_essai', V2_CIBLE: 'essai', V2_SECRET_MESURE: SEC, RENDER_SERVICE_ID: SERVICE_ESSAI }, EN = { 'x-rat-market-mesure': SEC };
+        const ESSAI = { MONGODB_BASE: 'rm_essai', V2_SECRET_EMPREINTE: 'valeur-de-banc-seize', V2_CIBLE: 'essai', V2_SECRET_MESURE: SEC, RENDER_SERVICE_ID: SERVICE_ESSAI }, EN = { 'x-rat-market-mesure': SEC };
         const st = r => [r.statut, r.json && r.json.erreur && r.json.erreur.detail];
         H.v('mesure : sans en-tête => 422 defi-anti-robot', st(await cas(ESSAI, {})), [422, 'defi-anti-robot']);
         H.v('mesure : en-tête faux => 422', st(await cas(ESSAI, { 'x-rat-market-mesure': SEC + 'z' })), [422, 'defi-anti-robot']);

@@ -20,6 +20,12 @@ const DUREE_LIEN_MS = 15 * 60e3;
 /** Forme comparée : la même normalisation de base que emailCle (NFKC, espaces, minuscules) mais SANS l'effacement des points ni des « + » de Gmail : l'adresse doit être EXACTEMENT celle du compte de test. */
 const forme = s => (typeof s === 'string' && s.length <= 254 ? s.normalize('NFKC').trim().toLowerCase() : null);
 const estAdresseTest = s => forme(s) === ADRESSE_TEST;
+// LISTE FERMÉE des adresses que l'exemption du défi peut dispenser (arbitrage du coordinateur, 2026-11-08) : le compte de test du site et les DEUX comptes de mesure de l'essai (v2/admin/compte-essai.js :
+// ADRESSE_BANC ; installations/exemption-banc.js : ADRESSE_ORDINAIRE), pour que les outils de mesure (connexion-essai, parcours-test, juge en un clic) gardent l'exemption qu'ils avaient. Rien d'autre :
+// toute autre adresse passe le contrôle normal. La route du lien de confirmation ne vaut que pour l'adresse de test (les deux autres sont en `.invalid` : aucun courriel n'en part).
+const ADRESSE_MESURE = 'banc-mesure@rat-market.invalid', ADRESSE_MESURE_ORDINAIRE = 'banc-ordinaire@rat-market.invalid';
+const ADRESSES_EXEMPTEES = Object.freeze([ADRESSE_TEST, ADRESSE_MESURE, ADRESSE_MESURE_ORDINAIRE]);
+const estAdresseExemptee = s => { const f = forme(s); return f !== null && ADRESSES_EXEMPTEES.includes(f); };
 const adresseDuCorps = req => (req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body.email : undefined);
 
 /** Temps constant : deux condensés SHA-256 de même longueur. */
@@ -41,7 +47,8 @@ function depuis(env, { maintenant = () => Date.now() } = {}) {
     const sha = mesure.actif ? crypto.createHash('sha256').update(secret).digest('hex') : null;
     let garde = null;   // { lien, expireA } : le dernier lien de confirmation du compte de test, un seul
 
-    const autorise = req => mesure.actif === true && secretEgal(sha, req.get(ENTETE)) && estAdresseTest(adresseDuCorps(req));
+    const autorise = req => mesure.actif === true && secretEgal(sha, req.get(ENTETE)) && estAdresseExemptee(adresseDuCorps(req));
+    const autoriseLien = req => mesure.actif === true && secretEgal(sha, req.get(ENTETE)) && estAdresseTest(adresseDuCorps(req));   // la route du lien : l'adresse de test SEULE
     const retenir = lien => { if (typeof lien === 'string' && lien) garde = { lien, expireA: maintenant() + DUREE_LIEN_MS }; };
     const prendre = () => {   // usage unique : lu, il disparaît ; expiré, il disparaît aussi
         const g = garde; garde = null;
@@ -60,7 +67,7 @@ function depuis(env, { maintenant = () => Date.now() } = {}) {
             }
         } catch { /* pas de courrier : aucun lien ne sera retenu, la route répondra « introuvable » */ }
         router.post(CHEMIN_LIEN, (req, res, next) => {
-            if (!autorise(req)) return next();   // sans le secret, ou une autre adresse : la route n'existe pas (404 natif d'Express, octet pour octet)
+            if (!autoriseLien(req)) return next();   // sans le secret, ou une autre adresse : la route n'existe pas (404 natif d'Express, octet pour octet)
             const g = prendre();
             res.setHeader('Cache-Control', 'no-store');
             if (!g) return res.status(404).json({ success: false, erreur: { code: 'INTROUVABLE', message: 'Aucun lien de confirmation en attente' } });
@@ -74,4 +81,4 @@ function depuis(env, { maintenant = () => Date.now() } = {}) {
     return mesure;
 }
 
-module.exports = { depuis, ADRESSE_TEST, ENTETE, CHEMIN_LIEN, DUREE_LIEN_MS, estAdresseTest };
+module.exports = { depuis, ADRESSE_TEST, ADRESSES_EXEMPTEES, ENTETE, CHEMIN_LIEN, DUREE_LIEN_MS, estAdresseTest, estAdresseExemptee };
