@@ -419,6 +419,18 @@
     "schema": "ReponseCodeLiaison",
     "description": "Code de liaison : 6 caractères, 10 minutes, usage unique."
   },
+  "lien-ordinateur.json": {
+    "route": "POST /api/lien-ordinateur",
+    "statut": 202,
+    "schema": "ReponseSimple",
+    "description": "LIEN-ORDINATEUR (derrière V2_LIEN_ORDINATEUR=1) : une fois le défi passé, TOUJOURS 202 { success: true } — adresse valide ou non, déjà servie dans les dernières 24 h ou non. Rien n'est révélé."
+  },
+  "lien-ordinateur-limite.json": {
+    "route": "POST /api/lien-ordinateur",
+    "statut": 429,
+    "schema": "ReponseErreur",
+    "description": "LIEN-ORDINATEUR : plus de 3 demandes par IP et par jour, ou plafond global d'envois du jour de Paris atteint : attendre `reessayerDans` secondes (en-tête Retry-After aussi)."
+  },
   "compte.json": {
     "route": "GET /api/compte",
     "statut": 200,

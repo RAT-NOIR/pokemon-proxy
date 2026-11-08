@@ -87,6 +87,7 @@ Deux adresses pour le même serveur, même base, mêmes réponses : `https://api
 | `POST /api/admin/moderation/{id}/decision` | site | cookie, rôle administrateur ou modérateur | non | `RequeteDecisionModeration` → `ReponseDecisionModeration` |
 | `PUT /api/collection/produits/{idproduct}` | site | cookie, **compte vérifié** | non (idempotent par nature) | `RequeteCocher` → `ReponseCocherProduit` (§1.8, L5) |
 | `PUT /api/collection/sets/{slug}/fiches/{cle}/exemplaires` | site | cookie, **compte vérifié** | non (idempotent par nature) | `RequeteExemplaires` → `ReponseExemplaires` (§1.8, K5) |
+| `POST /api/lien-ordinateur` | site | aucune (+ Turnstile), derrière `V2_LIEN_ORDINATEUR=1` | non | `RequeteLienOrdinateur` → `202 ReponseSimple` (toujours, adresse valide ou non, déjà servie ou non ; §1.11) |
 | `GET /ping` | les deux | aucune | non | santé → `ReponsePing` ; v2 allumée, ajoute `versionMinExtension` et `capacites` (§1.9) |
 
 **Sans `contrat: 2` dans le corps, `POST /api/identifier` répond comme aujourd'hui** (la 1.0.x continue de marcher). De même `POST /api/solde` et `POST /api/retour-live` sans `Authorization: Bearer` gardent leur forme d'aujourd'hui.
@@ -1226,6 +1227,35 @@ Un compte coche, set par set, les fiches qu'il possède. **Trois routes, sur la 
 
 **Ce que ce lot ne fait PAS (hors de la liste fermée).** Les profils, la recherche, `recentes`, la liste de recherche ; une page de la galerie peut aussi être posée par l'exploitation (`publierPourExploitation`).
 
+### 1.11 Recevoir le lien de l'extension sur son ordinateur : `POST /api/lien-ordinateur` (lot LIEN-ORDINATEUR, 2026-11-08, demande D1 du site)
+
+**Statut : écrit et testé, derrière `V2_LIEN_ORDINATEUR=1` (valeur « 1 » EXACTEMENT) ; PAS déployé sur l'essai tant qu'une entrée du journal du site ne le dit pas.** Éteint (défaut, toute autre valeur comprise), **la route n'existe pas** (404 natif) et le profil CORS du site ne la nomme pas. Source de la forme : l'entrée « 2026-11-08 (SITE) », D1, de `DEMANDE-SERVEUR-SITE.md` ; **c'est ce paragraphe, avec l'OpenAPI, qui fait foi.**
+
+Un visiteur **sans compte**, au téléphone, donne une adresse ; il reçoit **UN courriel** dont le seul contenu est le lien de la fiche de l'extension sur le Chrome Web Store (`https://chromewebstore.google.com/detail/rat-market/…`, la même adresse que `CHROME_STORE_URL` du site). Aucun compte n'est créé.
+
+```json schema=RequeteLienOrdinateur
+{ "email": "visiteur@exemple.fr", "turnstile": "jeton-du-widget" }
+```
+
+| réponse | quand |
+|---|---|
+| `202 { "success": true }` | le défi est passé — **adresse valide ou non, jetable ou non, déjà servie dans les 24 h ou non** : la réponse est identique à l'octet, elle ne révèle rien sur l'adresse |
+| `400 ENTREE` | le corps n'est pas un objet JSON, ou (après le défi) `email` n'est pas un texte |
+| `403 ORIGINE` | `Origin` autre que `https://rat-market.fr` ou `https://www.rat-market.fr` (comparaison à l'octet), ou `X-Rat-Market` différent de `1` |
+| `422 ENTREE`, detail `defi-anti-robot` | jeton Turnstile absent, vide, non texte, refusé, ou émis pour une autre action. Rendu **avant toute lecture de l'adresse** |
+| `429 LIMITE_DEBIT` (avec `reessayerDans` et `Retry-After`) | plus de 3 demandes par IP et par jour UTC, ou plafond global de 200 envois par jour civil de Paris atteint (`reessayerDans` : les secondes jusqu'à minuit à Paris) |
+| `503 INDISPONIBLE` | Cloudflare (Turnstile) injoignable ; service de courriel injoignable ou refusant (clé, droits) ; pilote de courrier qui n'envoie pas pour de vrai ; base injoignable |
+
+`Cache-Control: no-store` sur les réponses de la route, `facturation: null` sur ses erreurs. **Turnstile** : `action` = `lien-ordinateur` (liste des actions du widget : inscription, connexion, oubli, renvoi, **lien-ordinateur**) ; `hostname` `rat-market.fr` ou `www.rat-market.fr`. La dispense des outils de mesure de l'essai ne s'applique **pas** à cette route. **CORS** : le profil du site (l'apex et `www`), `POST` seulement, `Content-Type` et `X-Rat-Market` ; la requête ne porte aucun cookie utile (`credentials: 'omit'` convient, `include` est admis).
+
+**Les gardes, dans l'ordre** : `no-store` → origine exacte + `X-Rat-Market` → limite par IP (**avant** le défi : un robot sans jeton compte) → corps lisible → pilote de courrier réel → Turnstile → lecture de l'adresse → **une marque par boîte et par 24 h** (écrite AVANT l'envoi par une insertion à clé unique : deux demandes simultanées pour la même boîte, un seul courriel) → plafond du jour → envoi. « Boîte » : minuscules, espaces retirés, points de Gmail et `+étiquette` retirés (`a.b+x@gmail.com` et `ab@gmail.com` sont la même boîte). Un échec dont on est sûr que rien n'est parti (Brevo répond non, plafond) **rend** la marque ; un échec ambigu (réseau, délai) la **garde** : jamais un doublon.
+
+**Le message est FIXE** : sujet, texte et HTML sont des constantes (gabarits du site, `gabarits-courriel.js::lienOrdinateur()`, une fonction sans paramètre). Aucun champ du corps n'y entre ; l'adresse ne sert que de destinataire. Le seul lien du message est la fiche du Store. Expéditeur : celui des courriels de comptes (`Rat-Market <no-reply@rat-market.fr>`).
+
+**Données.** L'adresse n'est écrite **nulle part** (ni base, ni journal, ni message d'erreur). Seule une empreinte **HMAC-SHA256** (secret serveur `V2_SECRET_EMPREINTE`, domaine `lien-ordinateur`) de la boîte est gardée dans `limites` (`{ cle, n, expireLe }`), **24 heures**, effacée ensuite par l'index TTL ; le compteur par IP garde l'empreinte de l'IP (2 jours au plus), le compteur du jour un entier par jour de Paris. **Durée à écrire dans la politique de confidentialité : 24 heures.**
+
+**Écarts avec la proposition du site** : (1) le chemin est `/api/lien-ordinateur` (comme nos autres routes), pas `/api/v2/lien-ordinateur` ; (2) la réponse est `{ "success": true }` (la forme de toutes nos réponses), pas `{ ok: true }` ; (3) `422 defi-anti-robot`, `403 ORIGINE` et `503 INDISPONIBLE` s'ajoutent au 400 et au 429 annoncés ; (4) la limite d'envoi porte sur la **boîte** (pas la chaîne saisie) ; (5) un plafond global de 200 envois par jour de Paris protège le quota de Brevo et la réputation du domaine ; (6) le lien envoyé est la fiche du Store (la préférence du site).
+
 ---
 
 ## 2. Les règles du contrat
@@ -1951,7 +1981,7 @@ Un compte supprimé : ses sessions, codes et liens disparaissent, ses analyses s
 | questions | `question-repondue`, `question-abandonnee-aucune`, `question-abandonnee-ne-sait-pas`, `question-plafond` |
 | prix lu | `retour-live`, `retour-live-sans-prix`, `retour-live-repli-non-rembourse` (REPLI-QUOTA : lecture ratée, repli servi, non remboursée) |
 | solde de chaque porteur | `solde-installation-non-liee`, `solde-installation-liee`, `solde-compte-non-verifie`, `solde-abonnement` |
-| comptes | `installation-creee`, `lier`, `code-liaison`, `compte`, `compte-non-verifie` |
+| comptes | `installation-creee`, `lier`, `code-liaison`, `compte`, `compte-non-verifie`, `lien-ordinateur` (202, LIEN-ORDINATEUR), `lien-ordinateur-limite` (429) |
 | santé | `ping` (`GET /ping`, v2 configurée : `versionMinExtension` et `capacites`, la liste fermée complète, archive des visuels chargée et index d'empreintes chargé — CAPACITES-PING) |
 
 ---

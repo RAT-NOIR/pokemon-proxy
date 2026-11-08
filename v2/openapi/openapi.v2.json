@@ -1435,6 +1435,103 @@
         }
       }
     },
+    "/api/lien-ordinateur": {
+      "post": {
+        "operationId": "lienOrdinateur",
+        "tags": [
+          "comptes"
+        ],
+        "summary": "Envoie le lien de l'extension (fiche du Chrome Web Store) à une adresse, par UN courriel au message fixe (202 TOUJOURS une fois le défi passé)",
+        "description": "LIEN-ORDINATEUR (D1 du site, accordée par l'éditeur le 2026-11-08). Un visiteur SANS compte, sur téléphone, donne une adresse : il reçoit un courriel dont le seul contenu est le lien de la fiche de l'extension sur le Chrome Web Store (sujet, texte et HTML constants : aucun champ du corps n'y entre, l'adresse ne sert que de destinataire). Gardes, dans l'ordre : Origin exacte + `X-Rat-Market: 1` (403), limite par IP (3 par jour UTC, 429), corps lisible (400), Turnstile avec l'action `lien-ordinateur` (422 `defi-anti-robot`, 503 si Cloudflare est injoignable), puis l'adresse : un seul envoi par BOÎTE et par 24 h (minuscules, points de Gmail et `+étiquette` retirés), un plafond global de 200 envois par jour civil de Paris (429). La réponse ne dépend ni de la validité de l'adresse ni de l'existence d'un envoi antérieur : `202 { success: true }`. L'adresse n'est jamais écrite ; seule une empreinte HMAC-SHA256 à secret serveur est gardée 24 heures. Profil CORS du site (l'apex et `www`), méthode POST seulement.",
+        "x-conditionnel": "V2_LIEN_ORDINATEUR=1 : éteint (défaut), la route n'existe pas (404 natif)",
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteLienOrdinateur"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Demande prise en compte. Rendu quand le défi passe, que l'adresse soit valide ou non, déjà servie ou non (jamais un indice sur l'adresse).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseSimple"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ENTREE : le corps n'est pas un objet JSON, ou `email` n'est pas un texte (après le défi).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGINE : `Origin` autre que `https://rat-market.fr` ou `https://www.rat-market.fr`, ou `X-Rat-Market` différent de `1`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ENTREE avec detail `defi-anti-robot` : jeton Turnstile absent, vide, non texte, refusé ou émis pour une autre action. Rendu avant toute lecture de l'adresse.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "LIMITE_DEBIT (avec `reessayerDans` et `Retry-After`) : plus de 3 demandes par IP et par jour, ou plafond global d'envois du jour de Paris atteint.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE : Cloudflare (Turnstile) ou le service de courriel injoignable, pilote de courrier qui n'envoie pas pour de vrai, base injoignable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/compte/reinitialiser": {
       "post": {
         "operationId": "reinitialiserMotDePasse",
@@ -11235,6 +11332,24 @@
           "turnstile": {
             "type": "string",
             "description": "Jeton Cloudflare Turnstile du widget du site (le même que pour l'inscription). OBLIGATOIRE (L1) : absent, vide, non texte ou refusé => 422 ENTREE, detail `defi-anti-robot`. Usage unique."
+          }
+        },
+        "required": [
+          "email",
+          "turnstile"
+        ]
+      },
+      "RequeteLienOrdinateur": {
+        "type": "object",
+        "description": "LIEN-ORDINATEUR : l'adresse du visiteur (destinataire du seul courriel) et le jeton Turnstile du widget du site (action `lien-ordinateur`). AUCUN autre champ n'est lu ni transmis : un champ supplémentaire est ignoré, il n'atteint jamais le courriel.",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "L'adresse qui reçoit le lien. Une adresse invalide, jetable ou déjà servie dans les dernières 24 h reçoit la MÊME réponse 202, sans courriel."
+          },
+          "turnstile": {
+            "type": "string",
+            "description": "Jeton Cloudflare Turnstile, action `lien-ordinateur` (hostnames rat-market.fr et www.rat-market.fr). OBLIGATOIRE : absent, vide, non texte, refusé ou d'une autre action => 422 ENTREE, detail `defi-anti-robot`. Usage unique."
           }
         },
         "required": [
