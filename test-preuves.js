@@ -838,7 +838,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
                 cartes: [{ _id: 77, nomEn: 'Switch', categorie: 'dresseur', images: cleR2.map(c => ({ cleR2: c })) }], codesSet: [{ idExpansion: 5000, codeSet: 'SV-P/ID' }] });
             const man = JSON.parse(fs.readFileSync(path.join(w.racine, 'MCD', 'preuves.json'), 'utf8'));
             man.entrees[0].attendu.langue = 'id';
-            man.entrees[0].lu = { ...man.entrees[0].lu, langue: 'id', nom: 'Tukar Pokémon', total: '', codeSet: 'SV-P/ID', illustrationRelue: { par: 'coordinateur', reference, le: '2026-11-08' } };
+            man.entrees[0].lu = { ...man.entrees[0].lu, langue: 'id', nom: 'Tukar Pokémon', total: '21', codeSet: 'SV-P/ID', illustrationRelue: { par: 'coordinateur', reference, le: '2026-11-08' } };
             fs.writeFileSync(path.join(w.racine, 'MCD', 'preuves.json'), JSON.stringify(man));
             return K.construirePlanAvec({ dossier: w.racine, cache: w.cache, lire: w.lire, etat: w.etat, lecteur: RC.lecteurNatif(w.db), fichiers: w.F });
         };
