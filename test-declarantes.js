@@ -16,6 +16,18 @@ const pikachuOrdinaire = { _id: 1, nomEn: 'Pikachu', bulba: { titre: 'Pikachu (J
 const produit = (nom, attaques) => ({ nom, attaques });
 
 t('une carte ordinaire se joint sous son nom', () => assert.deepStrictEqual(nomsDeclarante(pikachuOrdinaire), ['Pikachu']));
+// (2026-11-08, Delta Reign) un nom de CARTE écrit autrement par Cardmarket (« Legendary Marine Trench » pour la page « Legendary Trench ») :
+// alias NOMMÉ par l'appelant, par identifiant de carte ; sans lui, rien ne change
+const trench = { _id: 359046, nomEn: 'Legendary Trench', bulba: { titre: 'Legendary Trench (Delta Reign 98)' }, attaques: [] };
+const summit = { _id: 2, nomEn: 'Legendary Summit', bulba: { titre: 'Legendary Summit (Delta Reign 96)' }, attaques: [] };
+t('alias de carte : sans alias, « Legendary Marine Trench » ne désigne aucune déclarante', () =>
+    assert.strictEqual(declarantesDuProduit([trench, summit], 'Legendary Marine Trench', produit('Legendary Marine Trench', ['Left']), clesNom).length, 0));
+t('alias de carte : nommé pour 359046, il désigne cette carte et elle seule', () =>
+    assert.deepStrictEqual(declarantesDuProduit([trench, summit], 'Legendary Marine Trench', produit('Legendary Marine Trench', ['Left']), clesNom, { aliasCarte: { 359046: ['Legendary Marine Trench'] } }).map(c => c._id), [359046]));
+t('alias de carte : l\'alias d\'une carte ne sert jamais à une AUTRE carte', () =>
+    assert.strictEqual(declarantesDuProduit([summit], 'Legendary Marine Trench', produit('Legendary Marine Trench', ['Left']), clesNom, { aliasCarte: { 359046: ['Legendary Marine Trench'] } }).length, 0));
+t('alias de carte : le nom propre de la carte reste valable avec l\'alias', () =>
+    assert.deepStrictEqual(nomsDeclarante(trench, { 359046: ['Legendary Marine Trench'] }), ['Legendary Trench', 'Legendary Marine Trench']));
 t('une carte ☆ (le ☆ est dans le TITRE) se joint sous « … Gold Star », jamais sous le nom nu', () => assert.deepStrictEqual(nomsDeclarante(pikachuEtoile), ['Pikachu Gold Star']));
 t('le ☆ d\'une parenthèse de titre ne compte pas (« (Set ☆ 4) »)', () => assert.deepStrictEqual(nomsDeclarante({ nomEn: 'Eevee', bulba: { titre: 'Eevee (Set ☆ 4)' } }), ['Eevee']));
 t('le produit « Pikachu Gold Star » désigne la Pikachu ☆ et elle seule', () => {

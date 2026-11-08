@@ -121,8 +121,15 @@ const TIRAGES = {
     4301: ['jp', 'page : « Japanese-exclusive Half Deck Deck Kit » (copie Wayback 20260615150011) ; declarations : le nom « Giratina vs Dialga Deck Kit » (deck « Giratina Half Deck ») est déclaré en jp (jpexpansion), aucun autre tirage (calculé à l\'exécution)'],
     // (2026-11-01, signal du site : « 6704, 6922, 6697 n'ont pas de set, le verrou du site est rouge ») — lues sur nos données, zéro requête :
     6922: ['zh-hans', 'CS…C : CSVH6C (codes_set, appris le 2026-10-24) ; famille : CSVH1C, CSVH2C, CSVH3C, CSVH4C, CSVH5C (les cinq Happy Sets) sont zh-hans en base'],
-    6697: ['intl', 'codes_set : 43 des 80 produits étaient, à l\'export du 2026-08-30 (backup-2026-09-24-avant-export), rangés sous HS, SUM, TEU, SSH et BRS — occidental chez codes_set, sets intl en base, aucun sous une expansion japonaise ou asiatique ; complément : les 37 autres étaient déjà sous 6697 (UEN)']
-    // 6704 N'EST PAS ICI : aucun produit appris (ni slug ni numéro) — le nom du set ne vit que chez Cardmarket ; « Delta Reign » (déclaré par 21 de nos pages) n'est pas prouvé être ce nom.
+    6697: ['intl', 'codes_set : 43 des 80 produits étaient, à l\'export du 2026-08-30 (backup-2026-09-24-avant-export), rangés sous HS, SUM, TEU, SSH et BRS — occidental chez codes_set, sets intl en base, aucun sous une expansion japonaise ou asiatique ; complément : les 37 autres étaient déjà sous 6697 (UEN)'],
+    // (2026-11-08, apprentissage du testeur par l'userscript 1.13 : 141/141 produits de 6704, 174/175 de 6928, 174/174 de 6929, 15/15 de 6940, lus par
+    // sonde-apprentissage-expansion.js) — le nom du set vit maintenant chez nous (slugSet appris) ; lues sur nos données, zéro requête :
+    6704: ['intl', 'declarations : 21 cartes (25 impressions) déclarent « Delta Reign » en intl (expansion), aucun autre tirage ; complément : slugSet Cardmarket appris « Delta-Reign », numéros « DLR001 »…'],
+    6928: ['zh-hans', 'famille : numéros Cardmarket appris « CSV105C001 »… (famille CS…C), et CSV9C, CSV9.5C, CSV10C sont zh-hans en base ; nom : slugSet Cardmarket appris « Black-Bolt-S-CH » (S-CH : Simplified Chinese)'],
+    6929: ['zh-hans', 'famille : numéros Cardmarket appris « CSV106C001 »… (famille CS…C), et CSV9C, CSV9.5C, CSV10C sont zh-hans en base ; nom : slugSet Cardmarket appris « White-Flare-S-CH » (S-CH : Simplified Chinese)'],
+    6940: ['intl', 'famille : M23 et M24 (McDonald\'s Match Battle 2023, McDonald\'s Collection 2024) sont intl en base (M26 : numéros Cardmarket appris « M26001 »…) ; complément : slugSet Cardmarket appris « McDonalds-Collection-2026 »']
+    // 6933 (Delta-Reign-Additionals) N'EST PAS ICI : sa preuve serait la famille de DLR, qui n'existera en base qu'après la création de 6704 (lot suivant).
+    // 5415, 6303 : aucune preuve admise (chasse du 08/11, chasse\matin-0811\TIRAGES\RAPPORT.md) ; 6925 : aucun produit appris.
 };
 // LES CARTES DÉCLARANTES (2026-10-07, testeur : « My First Battle : feu vert, rattache les 8 produits à Potion et Switch, sous la garde ») :
 // pour ces expansions, des cartes de la base déclarent DÉJÀ le nom d'expansion — la garde « des cartes en base déclarent déjà … » refuserait
@@ -137,12 +144,16 @@ const DECLARANTES = { 5526: 'My First Battle', 5723: 'Quick Construction Packs',
     4267: { nom: 'Leafeon vs Metagross Expert Deck', deck: 'Metagross Deck' },
     // ALIAS (T4b fix1) : la carte 58456 (Conductive Quarry) déclare « Giratina vs Dialga » (sans « Deck Kit »), deck Dialga Half Deck, 014/014. Mesuré sur toute
     // la base (T4\s14-alias.js) : cette écriture n'existe que sur CETTE impression (jp, ce deck) ; l'alias est nommé pour ces deux sets seulement.
-    4300: { nom: 'Giratina vs Dialga Deck Kit', deck: 'Dialga Half Deck', alias: ['Giratina vs Dialga'] }, 4301: { nom: 'Giratina vs Dialga Deck Kit', deck: 'Giratina Half Deck', alias: ['Giratina vs Dialga'] } };
+    4300: { nom: 'Giratina vs Dialga Deck Kit', deck: 'Dialga Half Deck', alias: ['Giratina vs Dialga'] }, 4301: { nom: 'Giratina vs Dialga Deck Kit', deck: 'Giratina Half Deck', alias: ['Giratina vs Dialga'] },
+    // (2026-11-08) 21 cartes de la base déclarent DÉJÀ « Delta Reign » (intl) : leurs produits leur sont joints, jamais doublés d'une fiche simple.
+    // aliasCarte : Cardmarket écrit « Legendary Marine Trench [Left|Right] » (DLR098, DLR099) le Stade que la page appelle « Legendary Trench »
+    // (Delta Reign 098, moitiés 098/099) — lu le 08/11 dans catalogue_produits ; le témoin du numéro (TEMOIN_NUMERO) contrôle chaque jointure.
+    6704: { nom: 'Delta Reign', aliasCarte: { 359046: ['Legendary Marine Trench'] } } };
 // LES RÈGLES T4b, PAR LISTE FERMÉE (aucun « par défaut » : une expansion absente de ces listes se comporte exactement comme avant) :
 //   TEMOIN_NUMERO — la jointure par le nom est contrôlée par le numéro ; une contradiction (Sceptile 78071) n'est PAS écrite, elle est listée ;
 //   DEPARTAGE_NUMERO — les Arceus Lv.100 se départagent par le numéro d'impression (declarantes.js, test-declarantes.js) ;
 //   PASSE_PREFIXE — « Boss's Orders - Giovanni » → « Boss's Orders » (même numéro, séparateur « - » : 268 vraies, 0 fausse sur 64 181 produits).
-const TEMOIN_NUMERO = new Set([5527, 5528, 5529, 4279, 4267, 4300, 4301, 4319]);
+const TEMOIN_NUMERO = new Set([5527, 5528, 5529, 4279, 4267, 4300, 4301, 4319, 6704]);
 const DEPARTAGE_NUMERO = new Set([4279]);
 const PASSE_PREFIXE = new Set([5527, 5528, 5529]);
 //   CONCORDANCE_TOTALE — la preuve porte la concordance de numérotation (produit = impression du deck), calculée ; non totale => le set n'est pas créé, il est listé ;
@@ -201,7 +212,8 @@ const nuNum = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+
         let ambiguDecl = null;
         const contredits = [];   // (T4b) jointure par le nom contredite par le numéro : listée, jamais écrite
         const trous = [];        // (T4b fix1) produit d'un set PAS_DE_SIMPLE sans déclarante : un TROU listé, jamais une fiche simple
-        const optNom = DEPARTAGE_NUMERO.has(exp) ? { set: setDecl } : null;
+        const aliasCarte = D0 && typeof D0 !== 'string' ? D0.aliasCarte ?? null : null;   // (2026-11-08) noms de CARTE écrits autrement, par carteId
+        const optNom = DEPARTAGE_NUMERO.has(exp) || aliasCarte ? { ...(DEPARTAGE_NUMERO.has(exp) ? { set: setDecl } : {}), ...(aliasCarte ? { aliasCarte } : {}) } : null;
         const nomDe = p => (p.nom || decomposerNomCardmarket(p.name ?? '').nom || '').trim();
         // les déclarantes déjà prises PAR LE NOM : la passe « - » ne voit que les restantes
         const prisesParNom = new Set(nomDecl ? aJoindre.flatMap(p => { const d = declarantesDuProduit(declarantes, nomDe(p), p, clesNom, optNom); return d.length === 1 ? [d[0]._id] : []; }) : []);

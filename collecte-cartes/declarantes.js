@@ -12,10 +12,16 @@ const { nomJointDe } = require('./jointure');
 
 const nu = s => String(s ?? '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
 
-/** Le(s) nom(s) sous lequel une carte déclarante se joint. */
-function nomsDeclarante(c) {
+/**
+ * Le(s) nom(s) sous lequel une carte déclarante se joint. `aliasCarte` (2026-11-08, Delta Reign) : { <carteId>: [noms] }, des noms de CARTE
+ * écrits autrement par Cardmarket (« Legendary Marine Trench » pour la page « Legendary Trench »), NOMMÉS par l'appelant pour un set précis
+ * et par identifiant de carte : l'alias d'une carte ne sert jamais à une autre. Sans `aliasCarte`, le comportement d'avant.
+ */
+function nomsDeclarante(c, aliasCarte = null) {
     const n = nomJointDe(c);
-    return /☆/.test(String(c.bulba?.titre ?? '').replace(/\s*\([^()]*\)\s*$/, '')) ? [`${n} Gold Star`] : [n];
+    const propres = /☆/.test(String(c.bulba?.titre ?? '').replace(/\s*\([^()]*\)\s*$/, '')) ? [`${n} Gold Star`] : [n];
+    const alias = aliasCarte && Object.hasOwn(aliasCarte, c?._id) ? aliasCarte[c._id] : [];
+    return [...propres, ...alias];
 }
 
 /**
@@ -58,7 +64,7 @@ function attaquesIncluses(c, p) {
  * numéro (deux éléments) plus les attaques, à UNE seule carte ; sinon l'ambiguïté reste. `clesNom` : la fonction de la jointure.
  */
 function declarantesDuProduit(declarantes, nomProduit, p, clesNom, o = null) {
-    let dd = declarantes.filter(c => nomsDeclarante(c).some(nc => clesNom(nc).some(k => clesNom(nomProduit).includes(k))));
+    let dd = declarantes.filter(c => nomsDeclarante(c, o?.aliasCarte ?? null).some(nc => clesNom(nc).some(k => clesNom(nomProduit).includes(k))));
     if (dd.length > 1) { const f = dd.filter(c => attaquesDeLaCarteDansLeProduit(c, p)); if (f.length === 1) dd = f; }
     if (dd.length > 1 && o?.set && nn(p.numero)) {
         const f = dd.filter(c => numerosDeclares(c, o.set).includes(nn(p.numero)) && attaquesIncluses(c, p));
