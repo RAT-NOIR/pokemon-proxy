@@ -38,7 +38,9 @@ const MESURE = {
     // test de detection deterministe (detection-page.mjs) : liste fermee, comptes et durees
     detection: ouNul(objetSimple),
     // test des grandes photos (grandes-page.mjs) : jusqu'a 6 photos par depot, des empreintes SHA-256 et des nombres, jamais une image
-    grandesPhotos: ouNul(objetSimple)
+    grandesPhotos: ouNul(objetSimple),
+    // lot « premier scan » : la préparation (cache, téléchargement, compilation, création de session, temps jusqu'à « prêt », scans)
+    preparation: ouNul(objetSimple)
 };
 const GRANDES = { version: chaine(30), photos: v => Array.isArray(v) && v.length >= 1 && v.length <= 6 };
 const GRANDE_PHOTO = {
@@ -50,6 +52,20 @@ const DETECTION = {
     version: chaine(30), nImages: entier(0, 100), nIdentiques: entier(0, 100), nRgb640: entier(0, 100), nQuads: entier(0, 100), nCartes: entier(0, 100), voieCanvas: entier(0, 100), voiePillow: entier(0, 100),
     ecarts: chaine(200), empreinteLot: ouNul(hexN(64)), msOpencv: ouNul(nombre(0, 1e7)), msMediane: ouNul(nombre(0, 1e7)), msTotal: ouNul(nombre(0, 1e7)),
     jsHeapMo: ouNul(nombre(0, 1e5)), jsHeapApresMo: ouNul(nombre(0, 1e5)), wasmHeapMo: ouNul(nombre(0, 1e5)), erreur: ouNul(chaine(200))
+};
+const ETAT_CACHE = parmi('touche', 'manque', 'indisponible', 'corrompu', 'perime');
+const SOURCE = parmi('cache', 'reseau');
+const duree = ouNul(nombre(0, 1e8));
+const PREPARATION = {
+    etat: parmi('pret', 'echec', 'abandon', 'manuel'),                              // pret : la page était prête avant le clic ou l'a été ; manuel : elle n'a pas préparé seule (garde) ; echec / abandon : sans session
+    auto: booleen, froid: booleen,                                                    // froid : le modèle est venu du RÉSEAU (premier chargement) ; sinon du cache
+    cacheModele: ETAT_CACHE, cacheWasm: ETAT_CACHE, cacheEcriture: parmi('ok', 'echec', 'sans'), sourceModele: SOURCE, sourceWasm: SOURCE,
+    telechargementModeleMs: duree, lectureCacheModeleMs: duree, verifShaMs: duree, chargementMoteurMs: duree, wasmMs: duree, wasmOctets: ouNul(entier(0, 2e9)), wasmCompileMs: duree, creationSessionMs: duree,
+    ouvertureAPretMs: duree,                                                          // de l'ouverture de la page à « session prête »
+    attenteAvantScanMs: duree,                                                        // temps passé à ATTENDRE la préparation après le clic (0 si elle était finie)
+    clicAPremierResultatMs: duree,                                                    // du clic au premier résultat : attente + premier scan, l'attente n'est jamais cachée
+    premierScanMs: duree, scanSuivantMedianeMs: duree, scanSuivantP95Ms: duree,       // une carte : décodage + redimensionnement + inférence, session prête
+    nScans: ouNul(entier(0, 100)), filsSession: ouNul(entier(0, 64)), stockagePersistant: ouNul(booleen), interrompueAvant: booleen
 };
 const STAT = { n: entier(0, 1e8), max: entier(0, 255), somme: entier(0, 1e11), nDiff: entier(0, 1e8), moy: nombre(0, 255), pctDiff: nombre(0, 100) };
 const DIAGNOSTIC = {
@@ -107,6 +123,8 @@ function valider(corps) {
         d = defaut(ent, ENTREE, 'mesure.entree.'); if (d) return { ok: false, detail: d };
         if (ent.refus !== null && ent.refus !== undefined) { d = defaut(ent.refus, REFUS, 'mesure.entree.refus.'); if (d) return { ok: false, detail: d }; }
     }
+    const prep = corps.mesure.preparation;
+    if (prep !== null && prep !== undefined) { d = defaut(prep, PREPARATION, 'mesure.preparation.'); if (d) return { ok: false, detail: d }; }
     const ori = corps.mesure.orientationNavigateur;
     if (ori !== null && ori !== undefined) { d = defaut(ori, ORIENTATION, 'mesure.orientationNavigateur.'); if (d) return { ok: false, detail: d }; }
     const det = corps.mesure.detection;

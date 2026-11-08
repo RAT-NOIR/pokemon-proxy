@@ -9,6 +9,10 @@ import { cosinus, course, sonderAdaptateur, creerSessionGpu } from './moteur-ort
 import { jugerLot, jugerMesure, gardeExtension, texteGarde, ecartChaine, moteurRealise, texteErreur, classerBlocage, hoteFinal, detecterIOS, choisirMoteur, webgpuForce, optionsSession, statsPixels, assemblerDiagnostic, texteDiagnostic, TEXTE_WEBGPU_IOS, libererOctets,
     resumerEntree, comptePil, resumerTemoin, texteEntree, avisEntree, etatOrientation, texteOrientation } from './verdict.mjs';
 import { decoder, reduire640, VERSION_DECODEUR } from './decodeur.mjs';
+import { chargerOctets, peutPreparerSeul } from './preparation.mjs';
+// LOT « PREMIER SCAN » : la page PRÉPARE seule, dès son ouverture (modèle + moteur .wasm demandés en parallèle, rangés dans Cache Storage, session créée en arrière-plan) ; un clic avant « prêt » ATTEND et le dit.
+// Mesure (RAPPORT-PREMIER-SCAN.md) : les ~15 s attribuées à la « création de session » étaient le téléchargement du .wasm d'ORT (14 Mo) que ORT va chercher lui-même dans InferenceSession.create ; le graphe et la
+// compilation en prennent ~1 s. Le moteur est donc obtenu ICI (cache, sinon réseau compressé par l'API) et fourni à ORT en octets (env.wasm.wasmBinary). Le modèle, la session et les empreintes sont ceux d'avant.
 // LOT DÉCODEUR : l'ENTRÉE du modèle est décodée par NOTRE code (decodeur.mjs : JavaScript entier, identique au bit sur tout appareil), pas par le navigateur ; le navigateur reste TÉMOIN (mêmes cartes, comparées octet à octet)
 // et REPLI (un refus du décodeur, avec son code, retombe sur le navigateur : la carte est comptée « NON IDENTIQUE AU BIT », jamais un écran vide). Le verdict (jugerMesure), ses seuils et mesurer() sont ceux d'avant.
 // NOTE (tour 1) : la page infère sur le FIL PRINCIPAL (l'extension le fait dans un Worker) : les temps et le p95 s'en lisent comme tels (le fil principal gèle l'affichage pendant l'inférence).
@@ -21,7 +25,9 @@ const SHA = meta('modele-sha256'), OCTETS = Number(meta('modele-octets')) || 0;
 const aleaHex = n => Array.from(crypto.getRandomValues(new Uint8Array(n)), b => b.toString(16).padStart(2, '0')).join('');
 const RECHERCHE = (() => { try { return String(location.search || ''); } catch { return ''; } })();
 const E = { shaVerifie: null, modeleOctets: null, telechargementMs: null, verifShaMs: null, lot: null, vecWasm: null, runId: aleaHex(8), gpu: null, reseau: null, infoModeleDeposee: false, mesures: {}, etapes: [], orientation: undefined,
-    ios: detecterIOS({ ua: navigator.userAgent, platform: navigator.platform, maxTouchPoints: navigator.maxTouchPoints }), forcer: webgpuForce(RECHERCHE), session: optionsSession(RECHERCHE), diagnostic: undefined };
+    ios: detecterIOS({ ua: navigator.userAgent, platform: navigator.platform, maxTouchPoints: navigator.maxTouchPoints }), forcer: webgpuForce(RECHERCHE), session: optionsSession(RECHERCHE), diagnostic: undefined,
+    // la préparation en arrière-plan : son état (attente | en-cours | pret | echec | manuel), la phase RÉELLE en cours, et chaque durée mesurée (ms depuis l'ouverture de la page pour pretMs)
+    prep: { etat: 'attente', auto: false, raison: null, phase: '', pretMs: null, chargementMoteurMs: null, wasm: null, modele: null, wasmCompileMs: null, creationSessionMs: null, erreur: null, stockagePersistant: null, interrompueAvant: false } };
 
 // ── affichage
 const ascii = s => String(s == null ? '' : s).replace(/[^\x20-\x7E]/g, '?');
@@ -70,46 +76,59 @@ const rgbaVersRgb = (rgba, n) => { const rgb = new Uint8Array(n * 3); for (let i
 async function chargerModele() {
     if (!/^[0-9a-f]{64}$/.test(SHA)) throw new ErreurBanc('modele-non-configure : l\'API ne publie aucun sha256 de modèle');
     etape('telechargement-modele');
-    const t = performance.now();
-    let rep; const url = `/api/modele-empreinte/${SHA}`;
+    const url = `/api/modele-empreinte/${SHA}`;
     E.reseau = { redirige: null, hoteFinal: null, blocage: null };
-    try { rep = await fetch(url, { credentials: 'omit', cache: 'no-store' }); }
-    catch (e) {
-        // M9 : un TypeError ne dit pas pourquoi. Sonde « no-cors » (réponse opaque, aucun octet lu, abandonnée aussitôt) : si elle aboutit, le réseau et la CSP laissent passer et c'est le CORS qui manque.
-        // Sous COEP (page isolée) une réponse opaque sans CORP est refusée elle aussi : la sonde ne peut alors rien séparer (dit « indetermine-isole » : rejouer avec ?iso=0).
-        let sondeOk = false; const ctl = new AbortController();
-        try { await fetch(url, { mode: 'no-cors', credentials: 'omit', cache: 'no-store', signal: ctl.signal }); sondeOk = true; } catch { sondeOk = false; }
-        try { ctl.abort(); } catch { /* deja termine */ }
-        E.reseau.blocage = classerBlocage(sondeOk, self.crossOriginIsolated === true);
-        throw new ErreurBanc(`telechargement-modele-bloque:${E.reseau.blocage}`);
-    }
-    E.reseau.redirige = rep.redirected === true; E.reseau.hoteFinal = hoteFinal(rep.url);
-    if (!rep.ok) throw new ErreurBanc(`telechargement-modele:HTTP-${rep.status}`);
-    const total = Number(rep.headers.get('content-length')) || OCTETS;
-    if (!total) throw new ErreurBanc('telechargement-modele : taille inconnue');
-    const tampon = new Uint8Array(total); let recu = 0;
-    const lecteur = rep.body.getReader();
-    for (;;) {
-        const { done, value } = await lecteur.read();
-        if (done) break;
-        if (recu + value.length > total) throw new ErreurBanc('telechargement-modele : plus d\'octets que annonce');
-        tampon.set(value, recu); recu += value.length;
-        if (((recu / 1048576) | 0) % 5 === 0) etat('TÉLÉCHARGEMENT', `${f(recu / 1048576, 0)} / ${f(total / 1048576, 0)} Mo`, 'attente');
-    }
-    if (recu !== total) throw new ErreurBanc(`telechargement-modele : ${recu} octets recus sur ${total}`);
-    const duree = performance.now() - t; if (E.telechargementMs == null) E.telechargementMs = duree;
-    E.modeleOctets = recu;
-    journal(`modèle reçu : ${recu} octets en ${f(duree / 1000, 1)} s`);
-    if (self.crypto && crypto.subtle) {
+    const reseau = async () => {
+        let rep;
+        try { rep = await fetch(url, { credentials: 'omit', cache: 'no-store' }); }
+        catch (e) {
+            // M9 : un TypeError ne dit pas pourquoi. Sonde « no-cors » (réponse opaque, aucun octet lu, abandonnée aussitôt) : si elle aboutit, le réseau et la CSP laissent passer et c'est le CORS qui manque.
+            // Sous COEP (page isolée) une réponse opaque sans CORP est refusée elle aussi : la sonde ne peut alors rien séparer (dit « indetermine-isole » : rejouer avec ?iso=0).
+            let sondeOk = false; const ctl = new AbortController();
+            try { await fetch(url, { mode: 'no-cors', credentials: 'omit', cache: 'no-store', signal: ctl.signal }); sondeOk = true; } catch { sondeOk = false; }
+            try { ctl.abort(); } catch { /* deja termine */ }
+            E.reseau.blocage = classerBlocage(sondeOk, self.crossOriginIsolated === true);
+            throw new ErreurBanc(`telechargement-modele-bloque:${E.reseau.blocage}`);
+        }
+        E.reseau.redirige = rep.redirected === true; E.reseau.hoteFinal = hoteFinal(rep.url);
+        if (!rep.ok) throw new ErreurBanc(`telechargement-modele:HTTP-${rep.status}`);
+        return rep;
+    };
+    // le sha256 se rejoue à CHAQUE lecture, du cache comme du réseau : une entrée du cache n'est jamais crue sur parole
+    const verifier = async tampon => {
+        if (!(self.crypto && crypto.subtle)) { E.shaVerifie = null; journal('sha256 NON vérifié (crypto.subtle absent : contexte non sécurisé) : aucun verdict ne sera rendu'); return true; }
         etape('verification-sha256'); etat('VÉRIFICATION', 'sha256 du modèle…', 'attente');
-        const tv = performance.now();
         const h = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', tampon)), b => b.toString(16).padStart(2, '0')).join('');
-        const dv = performance.now() - tv; if (E.verifShaMs == null) E.verifShaMs = dv;
         E.shaVerifie = h === SHA;
-        if (!E.shaVerifie) throw new ErreurBanc('modele-sha256-different : le fichier recu n\'est pas le modele attendu');
-        journal(`sha256 vérifié (${f(dv / 1000, 1)} s)`);
-    } else { E.shaVerifie = null; journal('sha256 NON vérifié (crypto.subtle absent : contexte non sécurisé) : aucun verdict ne sera rendu'); }
-    return tampon;
+        return E.shaVerifie;
+    };
+    const r = await chargerOctets({ cle: url, reseau, caches: cachesOuNul(), octetsAttendus: OCTETS, verifier, surProgres: progres('modèle'), surPhase: phaseModele });
+    if (r.verifie === false) throw new ErreurBanc('modele-sha256-different : le fichier recu n\'est pas le modele attendu');
+    E.modeleOctets = r.octets.length;
+    if (r.source === 'reseau' && E.telechargementMs == null) E.telechargementMs = r.ms.reseau;
+    if (r.ms.verif != null && E.verifShaMs == null) E.verifShaMs = r.ms.verif;
+    E.modeleCache = { source: r.source, cache: r.cache, ecriture: r.ecriture, lectureCacheMs: r.ms.cacheLecture, telechargementMs: r.ms.reseau, verifShaMs: r.ms.verif };
+    journal(r.source === 'cache' ? `modèle lu dans le cache : ${r.octets.length} octets en ${f((r.ms.cacheLecture || 0) / 1000, 1)} s` : `modèle reçu : ${r.octets.length} octets en ${f((r.ms.reseau || 0) / 1000, 1)} s (cache : ${r.cache}, écriture : ${r.ecriture}${r.erreurEcriture ? ' [' + r.erreurEcriture + ']' : ''})`);
+    if (r.ms.verif != null) journal(E.shaVerifie === null ? 'sha256 non vérifiable' : `sha256 vérifié (${f(r.ms.verif / 1000, 1)} s)`);
+    return r.octets;
+}
+const cachesOuNul = () => { try { return typeof self.caches === 'object' ? self.caches : null; } catch { return null; } };
+// la progression est REELLE : des octets reçus sur un total, et la phase en cours — jamais un pourcentage inventé ; elle dit aussi d'où viennent les octets (cache ou réseau)
+const PROG = {};      // une ligne par flux en cours (le modèle et le moteur arrivent EN MÊME TEMPS : l'écran dit les deux)
+const majPrep = () => { const t = Object.values(PROG).filter(Boolean).join(' · '); E.prep.phase = t; if (E.prep.etat === 'en-cours') etat('PRÉPARATION', t, 'attente'); };
+const progres = qui => (recu, total) => { if (((recu / 1048576) | 0) % 2 === 0 || recu === total) { PROG[qui] = `${qui} ${f(recu / 1048576, 0)} / ${f(total / 1048576, 0)} Mo`; majPrep(); } };
+const NOMS_PHASE = { 'cache-lecture': 'lecture du cache', telechargement: 'téléchargement', verification: 'vérification sha256' };
+const phaseDe = qui => (nom, e) => { if (e === 'debut') { PROG[qui] = `${qui} : ${NOMS_PHASE[nom] || nom}`; majPrep(); } };
+const phaseModele = phaseDe('modèle');
+
+// ── le moteur (.wasm d'ORT, 14 Mo) : par le cache durable ; sinon par l'API, qui le sert COMPRIMÉ (brotli) ; revalidé par l'étiquette du serveur (un fichier changé est redemandé)
+async function chargerWasm() {
+    const url = new URL('ort/ort-wasm-simd-threaded.wasm', import.meta.url).pathname;
+    const MAGIE = [0x00, 0x61, 0x73, 0x6d];
+    const reseau = async () => { const rep = await fetch(url, { credentials: 'omit', cache: 'no-store' }); if (!rep.ok) throw new ErreurBanc(`telechargement-moteur:HTTP-${rep.status}`); return rep; };
+    const verifier = async o => o.length > 8 && MAGIE.every((x, i) => o[i] === x);
+    const revalider = async ({ etag }) => { if (!etag) return 'inconnu'; const r = await fetch(url, { method: 'HEAD', credentials: 'omit', cache: 'no-store' }); if (!r.ok) return 'inconnu'; const e = r.headers.get('etag'); return e ? (e === etag ? 'valide' : 'change') : 'inconnu'; };
+    return chargerOctets({ cle: url, reseau, caches: cachesOuNul(), verifier, revalider, surProgres: progres('moteur'), surPhase: phaseDe('moteur') });
 }
 async function chargerLot() {
     if (E.lot) return E.lot;
@@ -277,32 +296,92 @@ async function mesurer(moteur, ort, session, filsDemandes, creationMs) {
         tenseursIdentiquesNavigateur: temoin ? temoin.tenseursIdentiquesNavigateur : null, ecartMaxNavigateur: temoin ? temoin.ecartMaxNavigateur : null, cosMinNavigateur: temoin && temoin.cosMinNavigateur != null ? arrondi(temoin.cosMinNavigateur, 7) : null,
         msRmMediane: msRm.length ? arrondi(mediane(msRm), 1) : null, msNavigateurMediane: msNav.length ? arrondi(mediane(msNav), 1) : null, cartes640: digests640.length, ms640: digests640.length ? arrondi(ms640, 1) : null };
     if (digests640.length && self.crypto && crypto.subtle) { const h = await hexSha(new TextEncoder().encode(digests640.join(''))); m.entree.empreinte640 = h ? h.slice(0, 12) : null; }
-    return { m, vecs };
+    // un « scan » = une carte, de ses octets à son empreinte : décodage + redimensionnement + inférence (le témoin du navigateur et les passes « modèle seul » n'y entrent pas)
+    return { m, vecs, scans: runs.map((r, i) => r + pre[i]) };
 }
 
-// ── WASM : exactement la chargerORT / creerWasm de l'extension
+// ── WASM : la session est PRÉPARÉE (à l'ouverture de la page, ou au premier clic si la garde l'interdit) puis RÉUTILISÉE ; mêmes options, même modèle, même extension de bout en bout
+const PREP = { promesse: null, ort: null, session: null, demande: null, creationMs: null, creeAuClic: false, mesureeUneFois: false };
+const marqueur = v => { try { if (stockage) stockage.setItem('rm-banc-prep', v); } catch { /* sans stockage */ } };
+const lireMarqueur = () => { try { return stockage ? stockage.getItem('rm-banc-prep') : null; } catch { return null; } };
+// le temps que prend VRAIMENT l'instanciation du .wasm (compilation comprise) : un témoin posé autour de WebAssembly.instantiate le temps de la création, rendu aussitôt
+function sonderCompilation() {
+    const o = WebAssembly.instantiate; let ms = null;
+    try { WebAssembly.instantiate = function (...a) { const t = performance.now(); return Promise.resolve(o.apply(this, a)).then(r => { if (ms === null) ms = performance.now() - t; return r; }); }; } catch { return { fin: () => null }; }
+    return { fin: () => { try { WebAssembly.instantiate = o; } catch { /* sans effet */ } return ms; } };
+}
+function preparerWasm() {
+    if (PREP.promesse) return PREP.promesse;
+    const P = E.prep; P.etat = 'en-cours'; P.erreur = null; marqueur('en-cours');
+    PREP.promesse = (async () => {
+        etape('ort-wasm');
+        const tMoteur = performance.now();
+        const demande = nombreDeFils(navigator.hardwareConcurrency);
+        const [ort, wasm, tampon] = await Promise.all([
+            (async () => { const o = await import('./ort/ort.wasm.bundle.min.mjs'); P.chargementMoteurMs = performance.now() - tMoteur; return o; })(),
+            (async () => { const t = performance.now(); const r = await chargerWasm(); r.msTotal = performance.now() - t; return r; })(),
+            chargerModele()]);
+        P.wasm = { source: wasm.source, cache: wasm.cache, ecriture: wasm.ecriture, octets: wasm.octets.length, ms: wasm.msTotal };
+        P.modele = E.modeleCache;
+        ort.env.wasm.wasmBinary = wasm.octets;       // le moteur est fourni en octets : ORT ne le télécharge plus lui-même (c'était l'essentiel des ~15 s de « création »)
+        ort.env.wasm.numThreads = demande; ort.env.wasm.proxy = false;
+        let modele = tampon;
+        etape('creation-session-wasm'); PROG['modèle'] = ''; PROG['moteur'] = ''; PROG['session'] = 'création de la session WASM (compilation du moteur, graphe)'; majPrep();
+        const ta = performance.now(), sonde = sonderCompilation();
+        let session, cree = false;
+        try { session = await ort.InferenceSession.create(modele, { executionProviders: ['wasm'], graphOptimizationLevel: 'all', ...E.session.options }); cree = true; }
+        finally { P.wasmCompileMs = sonde.fin(); if (cree) libererOctets(modele); modele = null; try { ort.env.wasm.wasmBinary = undefined; } catch { /* sans effet */ } wasm.octets = null; }    // ORT a copié les octets dans son tas : la page ne garde plus rien du modèle ni du moteur (rendus AU SYSTÈME tout de suite)
+        const creation = performance.now() - ta; journal(`session WASM créée en ${f(creation, 0)} ms`);
+        P.creationSessionMs = creation; PROG['session'] = '';
+        PREP.ort = ort; PREP.session = session; PREP.demande = demande; PREP.creationMs = creation;
+        P.pretMs = performance.now(); P.etat = 'pret'; P.phase = ''; marqueur('pret');
+        journal(`prêt : ${f(P.pretMs / 1000, 1)} s après l'ouverture de la page`);
+        etat('PRÊT', `Session WASM prête ${f(P.pretMs / 1000, 1)} s après l'ouverture de la page (${E.modeleCache && E.modeleCache.source === 'cache' ? 'modèle du cache' : 'modèle téléchargé'}). Touchez « Mesurer en WASM ».`, 'attente');
+        try { if (navigator.storage && navigator.storage.persisted) P.stockagePersistant = await navigator.storage.persisted(); } catch { P.stockagePersistant = null; }
+        return PREP;
+    })().catch(e => { P.etat = 'echec'; P.erreur = texteErreur(ETAPE, e); marqueur('echec'); PREP.promesse = null; PROG['session'] = ''; throw e; });
+    return PREP.promesse;
+}
+/** Libère la session préparée (avant une mesure WebGPU : deux sessions ne coexistent pas) ; la suivante se prépare de nouveau, honnêtement, au clic suivant. */
+async function libererSessionPreparee() {
+    const s = PREP.session; PREP.session = null; PREP.ort = null; PREP.promesse = null; PREP.mesureeUneFois = false;
+    if (E.prep.etat === 'pret') E.prep.etat = 'attente';
+    if (s) { try { await s.release(); } catch { /* deja liberee */ } }
+}
 async function mesurerWasm() {
-    etape('ort-wasm');
-    const ort = await import('./ort/ort.wasm.bundle.min.mjs');
-    ort.env.wasm.wasmPaths = { wasm: new URL('ort/ort-wasm-simd-threaded.wasm', import.meta.url).href };
-    const demande = nombreDeFils(navigator.hardwareConcurrency);
-    ort.env.wasm.numThreads = demande; ort.env.wasm.proxy = false;
-    let modele = await chargerModele();
-    etape('creation-session-wasm'); etat('SESSION', 'création de la session WASM…', 'attente');
-    const ta = performance.now();
-    let session, cree = false;
-    try { session = await ort.InferenceSession.create(modele, { executionProviders: ['wasm'], graphOptimizationLevel: 'all', ...E.session.options }); cree = true; }
-    finally { if (cree) libererOctets(modele); modele = null; }                  // ORT a copié les octets dans son tas : la page ne garde plus rien du modèle (un seul exemplaire côté JS, rendu AU SYSTÈME tout de suite)
-    const creation = performance.now() - ta; journal(`session WASM créée en ${f(creation, 0)} ms`);
-    try {
-        const { m, vecs } = await mesurer('wasm', ort, session, demande, creation);
-        m.gardeExtension = gardeExtension(m.cosMin);       // M8 : pour WASM, le cosinus contre la référence native
-        E.vecWasm = vecs; return m;
-    } finally { try { await session.release(); } catch { /* deja liberee */ } session = null; }
+    const tClic = performance.now(), etaitPret = Boolean(PREP.session);
+    if (!etaitPret) {
+        const en = E.prep.etat === 'en-cours' ? 'préparation en cours' : 'préparation lancée par ce clic';
+        journal(`clic AVANT « prêt » : on attend (${en}${E.prep.phase ? ' : ' + E.prep.phase : ''})`);
+        etat('ATTENTE', `${en} — ${E.prep.phase || 'démarrage'}`, 'attente');
+    }
+    const P = await preparerWasm();
+    const attente = etaitPret ? 0 : performance.now() - tClic;
+    if (!etaitPret) PREP.creeAuClic = true;
+    const creation = PREP.mesureeUneFois ? null : P.creationMs;      // la session n'est créée qu'une fois : les scans suivants n'ont pas de création
+    const { m, vecs, scans } = await mesurer('wasm', P.ort, P.session, P.demande, creation);
+    m.gardeExtension = gardeExtension(m.cosMin);       // M8 : pour WASM, le cosinus contre la référence native
+    if (!PREP.mesureeUneFois) E.vecWasm = vecs;
+    const clicAResultat = performance.now() - tClic;
+    PREP.mesureeUneFois = true;
+    m.preparation = bilanPreparation({ attente, clicAResultat, scans });
+    return m;
+}
+const nul = x => (typeof x === 'number' && Number.isFinite(x) ? arrondi(x, 1) : null);
+function bilanPreparation({ attente, clicAResultat, scans }) {
+    const P = E.prep, mo = E.modeleCache || {}, w = P.wasm || {};
+    const suite = scans.slice(1);
+    return { etat: P.etat === 'echec' ? 'echec' : P.auto === true ? 'pret' : 'manuel', auto: P.auto === true, froid: mo.source === 'reseau',
+        cacheModele: mo.cache || 'indisponible', cacheWasm: w.cache || 'indisponible', cacheEcriture: mo.ecriture || 'sans', sourceModele: mo.source || 'reseau', sourceWasm: w.source || 'reseau',
+        telechargementModeleMs: nul(mo.telechargementMs), lectureCacheModeleMs: nul(mo.lectureCacheMs), verifShaMs: nul(mo.verifShaMs), chargementMoteurMs: nul(P.chargementMoteurMs), wasmMs: nul(w.ms), wasmOctets: w.octets || null,
+        wasmCompileMs: nul(P.wasmCompileMs), creationSessionMs: nul(P.creationSessionMs), ouvertureAPretMs: nul(P.pretMs), attenteAvantScanMs: nul(attente), clicAPremierResultatMs: nul(clicAResultat),
+        premierScanMs: nul(scans[0]), scanSuivantMedianeMs: nul(mediane(suite)), scanSuivantP95Ms: nul(p95(suite)), nScans: scans.length, filsSession: PREP.demande == null ? null : Number(PREP.demande),
+        stockagePersistant: typeof P.stockagePersistant === 'boolean' ? P.stockagePersistant : null, interrompueAvant: P.interrompueAvant === true };
 }
 
 // ── WebGPU : la sonde (2 s), la session (20 s) et le repli de l'extension (moteur-ort.js, sans changement)
 async function mesurerGpu() {
+    await libererSessionPreparee();         // la session WASM préparée est rendue avant la création d'une session WebGPU (jamais deux à la fois, comme avant ce lot)
     etape('sonde-gpu');
     const sonde = await sonderAdaptateur(navigator.gpu);
     if (!sonde.ok) return { moteur: 'webgpu', verdict: 'ERREUR', erreur: texteErreur(ETAPE, new ErreurBanc(`webgpu-indisponible:${sonde.raison}`)), webgpuUtilise: false };
@@ -360,6 +439,8 @@ function afficher(m) {
     $('ligne4').textContent = `4 · ${texteDiagnostic(m.diagnosticPixels)}`;
     const ent = m.entree || null, tem = ent && ent.cartesComparees ? { cartes: ent.cartesComparees, rgbIdentiquesNavigateur: ent.rgbIdentiquesNavigateur, tenseursIdentiquesNavigateur: ent.tenseursIdentiquesNavigateur, ecartMaxNavigateur: ent.ecartMaxNavigateur } : null;
     $('ligne5').textContent = `5 · ${texteEntree(ent, tem)} · ${texteOrientation(m.orientationNavigateur)}`;
+    const prl = m.preparation || null, sec = x => (x == null ? '—' : f(x / 1000, 1) + ' s');
+    $('ligne6').textContent = prl ? `6 · préparation : ${prl.froid ? 'à froid' : 'au retour'} · prête ${sec(prl.ouvertureAPretMs)} après l'ouverture · attente au clic ${sec(prl.attenteAvantScanMs)} · un scan ${f(prl.premierScanMs, 0)} ms puis ${f(prl.scanSuivantMedianeMs, 0)} ms` : '6 · préparation : —';
     const avis = avisEntree(m.verdict, ent), suite = avis ? ` · ${avis}` : '';
     if (m.webgpuDesactive) $('avisMoteur').textContent = TEXTE_WEBGPU_IOS;
     if (m.verdict === 'ERREUR') { etat('ERREUR', m.erreur || '', 'ko'); $('ligne1').textContent = `1 · verdict : ERREUR (${moteur}) — ${m.erreur || ''}`; $('ligne2').textContent = `2 · moteur : ${moteur}${m.webgpuUtilise === false ? ' · WebGPU non utilisé (repli WASM)' : ''}`; $('ligne3').textContent = `3 · garde extension 0,998 : ${texteGarde(m.gardeExtension)}`; }
@@ -384,6 +465,16 @@ function afficher(m) {
         ['entrée : décodage Rat-Market, médiane (ms) / navigateur (ms)', `${f(ent.msRmMediane, 1)} / ${f(ent.msNavigateurMediane, 1)}`],
         ['entrée : cos min si le navigateur avait décodé', ent.cosMinNavigateur == null ? '—' : f(ent.cosMinNavigateur, 7)],
         ['réduction 640 déterministe : cartes / ms / empreinte', ent.cartes640 ? `${ent.cartes640} / ${f(ent.ms640, 1)} / ${ent.empreinte640 || '—'}` : '—']);
+    const pr = m.preparation || null;
+    if (pr) {
+        const ms = x => (x == null ? '—' : f(x, 0));
+        dico.push(['préparation : à froid (modèle du réseau) ou au retour (modèle du cache)', `${pr.froid ? 'à froid' : 'au retour'} · cache modèle ${pr.cacheModele} · cache moteur ${pr.cacheWasm} · écriture ${pr.cacheEcriture} · préparée ${pr.auto ? 'seule, à l\'ouverture' : 'au clic'}`],
+            ['préparation : ouverture de la page → session prête (ms)', ms(pr.ouvertureAPretMs)], ['préparation : téléchargement du modèle / lecture du cache / sha256 (ms)', `${ms(pr.telechargementModeleMs)} / ${ms(pr.lectureCacheModeleMs)} / ${ms(pr.verifShaMs)}`],
+            ['préparation : chargement du moteur (JS) / moteur .wasm obtenu (ms, octets) / instanciation .wasm (ms)', `${ms(pr.chargementMoteurMs)} / ${ms(pr.wasmMs)} (${pr.wasmOctets == null ? '—' : pr.wasmOctets}) / ${ms(pr.wasmCompileMs)}`],
+            ['préparation : création de la session, tout compris (ms)', ms(pr.creationSessionMs)], ['clic : attente de la préparation (ms)', ms(pr.attenteAvantScanMs)], ['clic → premier résultat, attente comprise (ms)', ms(pr.clicAPremierResultatMs)],
+            ['un scan (décodage + redimensionnement + inférence) : le premier / médiane des suivants / p95 (ms)', `${ms(pr.premierScanMs)} / ${ms(pr.scanSuivantMedianeMs)} / ${ms(pr.scanSuivantP95Ms)}`],
+            ['stockage persistant (le navigateur ne le videra pas de lui-même)', pr.stockagePersistant === null ? 'non dit' : pr.stockagePersistant ? 'oui' : 'non']);
+    }
     for (const [k, v] of dico) ligne('chiffres', k, v);
 }
 async function lancer(demande) {
@@ -412,6 +503,21 @@ async function lancer(demande) {
 }
 
 decrireAppareil(); avertirReprise();
+// LA PRÉPARATION SEULE, dès l'ouverture : sauf `?prep=0`, sauf si la précédente est morte avec l'onglet (marqueur « en-cours » ou « pret » jamais refermé : mémoire ?), sauf moins de 2 Go déclarés. Dans ces cas la
+// préparation démarre au clic, comme avant ce lot. Le marqueur dit « ferme » quand la page est cachée ou quittée avec une session prête : un onglet tué en cours de route ne se prépare pas deux fois de suite seul.
+{
+    const avant = lireMarqueur(), garde = peutPreparerSeul({ marqueur: avant, deviceMemory: navigator.deviceMemory, recherche: RECHERCHE });
+    E.prep.auto = garde.auto; E.prep.raison = garde.raison; E.prep.interrompueAvant = avant === 'en-cours' || avant === 'pret';
+    document.addEventListener('visibilitychange', () => { if (PREP.session) marqueur(document.visibilityState === 'hidden' ? 'ferme' : 'pret'); });
+    window.addEventListener('pagehide', () => { if (PREP.session) marqueur('ferme'); });
+    if (garde.auto) setTimeout(() => { preparerWasm().catch(e => journal(`PRÉPARATION en échec : ${texteErreur(ETAPE, e)}`)); }, 0);
+    else {
+        E.prep.etat = 'manuel';
+        const dit = { demande: '?prep=0', interrompue: 'la préparation précédente s\'est arrêtée avec la page', 'memoire-faible': 'moins de 2 Go de mémoire déclarés' }[garde.raison] || garde.raison;
+        journal(`préparation en arrière-plan NON lancée (${dit}) : elle démarre au clic`);
+        if (!stockage || !stockage.getItem('rm-banc-etape') || stockage.getItem('rm-banc-etape') === 'fini') etat('PRÊT', `Touchez « Mesurer en WASM » (préparation non lancée seule : ${dit}).`, 'attente');
+    }
+}
 $('btnWasm').addEventListener('click', () => { lancer('wasm'); });
 $('btnGpu').addEventListener('click', () => { lancer('webgpu'); });
 window.addEventListener('error', e => journal(`ERREUR-JS non rattrapee, ligne ${Number(e.lineno) || 0}`));

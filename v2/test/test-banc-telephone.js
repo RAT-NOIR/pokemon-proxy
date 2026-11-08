@@ -42,7 +42,7 @@ const doc = (o = {}) => ({ v: 1, runId: '0123456789abcdef', modeleSha: SHA, ua: 
     // ═══ 2. le montage ═══
     const monter = async (env, extra = {}) => { const app = express(); app.use(express.json()); const router = express.Router(); monterBanc.routes(router, cfg, { banc: {}, purge: { purgerBanc: async () => ({}), anonymiserLiens: async () => ({}) }, envBancTelephone: env, nomBaseBancTelephone: 'test_scratch', baseAttendueBancTelephone: 'test_scratch', globalHeureBancTelephone: 100000, ...extra }); app.use(router); app.use((err, req, res, next) => res.status(err.status || 500).json({ success: false })); return H.serveur(app); };
     const srv = await monter(ENV_BON, { ipHeureBancTelephone: 1000 }), srvOff = await monter({ ...ENV_BON, V2_BANC_TELEPHONE: undefined }), srvAutre = await monter({ ...ENV_BON, RENDER_SERVICE_ID: 'srv-autre' }), srvProd = await monter({ ...ENV_BON, V2_CIBLE: 'prod' });
-    const brut = async (s, methode, chemin, corps) => { const x = await fetch(s.url + chemin, { method: methode, headers: corps !== undefined ? { 'content-type': 'application/json' } : {}, body: corps === undefined ? undefined : typeof corps === 'string' ? corps : JSON.stringify(corps) }); const texte = await x.text(); const h = Object.fromEntries(x.headers); delete h.date; delete h['content-length']; delete h.etag; return { statut: x.status, texte, h, tete: x.headers }; };
+    const brut = async (s, methode, chemin, corps) => { const x = await fetch(s.url + chemin, { method: methode, headers: { 'accept-encoding': 'identity', ...(corps !== undefined ? { 'content-type': 'application/json' } : {}) }, body: corps === undefined ? undefined : typeof corps === 'string' ? corps : JSON.stringify(corps) }); const texte = await x.text(); const h = Object.fromEntries(x.headers); delete h.date; delete h['content-length']; delete h.etag; return { statut: x.status, texte, h, tete: x.headers }; };
     const norm = (r, chemin) => ({ ...r, texte: r.texte.split(chemin).join('<CHEMIN>'), tete: undefined });
 
     // ═══ 3. éteint : 404 natif, octet pour octet comme une route inexistante ═══
@@ -218,7 +218,7 @@ const doc = (o = {}) => ({ v: 1, runId: '0123456789abcdef', modeleSha: SHA, ua: 
         H.v('10. assembler() accepte les routes du lot (liste blanche des chemins, routes seulement)', erreur, null);
         const r = express.Router(); routes.monter(r, cfg, { envBancTelephone: ENV_BON, nomBaseBancTelephone: 'test_scratch', baseAttendueBancTelephone: 'test_scratch' });
         const chemins = r.stack.map(c => `${Object.keys(c.route.methods).join()} ${c.route.path}`);
-        H.v('10. 23 routes : la page, 21 fichiers (dont les 5 du décodeur Rat-Market et les 6 de la détection : detection.mjs, detection-page.mjs, grandes-page.mjs, lot-detection.json, opencv.js, opencv_js.wasm), le dépôt — toutes littérales', [chemins.length, chemins.filter(c => /[*?(]|:[a-z]/i.test(c.split(' ')[1])).length], [23, 0]);
+        H.v('10. 24 routes : la page, 22 fichiers (dont les 5 du décodeur Rat-Market, les 6 de la détection : detection.mjs, detection-page.mjs, grandes-page.mjs, lot-detection.json, opencv.js, opencv_js.wasm, et preparation.mjs), le dépôt — toutes littérales', [chemins.length, chemins.filter(c => /[*?(]|:[a-z]/i.test(c.split(' ')[1])).length], [24, 0]);
         const rOff = express.Router(); H.v('10. éteint : monter() ne monte rien et le dit', [routes.monter(rOff, cfg, { envBancTelephone: {} }), rOff.stack.length], [false, 0]);
     }
 
