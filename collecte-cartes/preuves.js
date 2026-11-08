@@ -184,15 +184,16 @@ const NOMS_LATINS_IMPRIMES = Object.freeze([
 ]);
 /**
  * (tour de correction 1) Marques LATINES imprimées dans les noms de cartes, liste FERMÉE : règles (V, VMAX, VSTAR, V-UNION, ex, EX, GX, TAG TEAM, LV.X, BREAK) et la lettre de forme Méga collée à « ex » (Xex, Yex) ou seule (X, Y).
- * Retirées seulement quand elles ne touchent aucune lettre latine (« Vivid » garde son V) ; tout autre lettre latine du nom reste à juger.
+ * Ajoutées au calibrage sur les manifestes réels (08/11, cartes japonaises imprimant ces lettres) : M (Méga : « Mリザードン EX »), LEGEND (« ルギアLEGEND », imprimé en pleine chasse), vs (« …バトル 3vs3 »), TV (« TVレポーター »), W (« なんでもなおしW »).
+ * Retirées seulement quand elles ne touchent aucune lettre latine (« Vivid » garde son V) ; tout autre lettre latine du nom reste à juger. Le nom est mis en NFKC avant (« ＬＥＧＥＮＤ » pleine chasse = LEGEND, demi-chasse kana).
  */
-const MARQUES_LATINES_IMPRIMEES = /(?<![A-Za-z])(?:V-UNION|VSTAR|VMAX|TAG TEAM|LV\.X|BREAK|[XY]?ex|[XY]?EX|GX|V|X|Y)(?![A-Za-z])/g;
+const MARQUES_LATINES_IMPRIMEES = /(?<![A-Za-z])(?:V-UNION|VSTAR|VMAX|TAG TEAM|LV\.X|BREAK|LEGEND|TV|vs|[XY]?ex|[XY]?EX|GX|V|X|Y|M|W)(?![A-Za-z])/g;
 const nomLatinImprime =(lu, produit) => NOMS_LATINS_IMPRIMES.some(x => x.langue === lu.langue && x.nom === String(lu.nom ?? '').trim() && (x.categorie == null || produit?.categorie === x.categorie) && (x.idProduct == null || produit?.idProduct === x.idProduct));
 /** @returns {string|null} `nom-lu-hors-langue` ou null (langue sans contrôle d'écriture, écriture conforme, ou exception de la liste fermée). */
 function motifNomLuHorsLangue(lu, produit) {
     if (!lu || !Object.hasOwn(ECRITURES_PAR_LANGUE, lu.langue)) return null;
     // (tour de correction 1) TOUTES les lettres (\p{L}) du nom sont de l'écriture de la langue, une fois retirées les marques latines imprimées (liste fermée) ; au moins une lettre de l'écriture reste exigée
-    const reste = String(lu.nom ?? '').normalize('NFC').replace(MARQUES_LATINES_IMPRIMEES, ' ');
+    const reste = String(lu.nom ?? '').normalize('NFKC').replace(MARQUES_LATINES_IMPRIMEES, ' ');
     const lettres = reste.match(/\p{L}/gu) ?? [];
     if (lettres.length > 0 && lettres.every(c => ECRITURES_PAR_LANGUE[lu.langue].test(c))) return null;
     return nomLatinImprime(lu, produit) ? null : 'nom-lu-hors-langue';

@@ -1397,7 +1397,8 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.ok(refus('th', 'V'), 'une marque seule : aucune lettre de l\'écriture');
         assert.ok(refus('zh-hans', 'VSTAR'), 'idem');
         for (const [langue, nom] of [['th', 'โรตอมV'], ['zh-hans', '洛奇亚VSTAR'], ['th', 'กาไบต์ ของซิโรนะ'], ['zh-hans', '洗翠 野蛮鲈鱼'], ['zh-hant', '超級噴火龍Xex'], ['ja', 'ピカチュウVMAX'], ['ja', 'メタグロスV-UNION'],
-            ['zh-hans', '皮卡丘 TAG TEAM GX'], ['ja', 'ポケモンBREAK'], ['ja', 'ミュウツーLV.X'], ['zh-hans', '喷火龙ex'], ['zh-hans', '喷火龙EX'], ['ja', '佐々木ー'], ['ko', '피카츄 V']])
+            ['zh-hans', '皮卡丘 TAG TEAM GX'], ['ja', 'ポケモンBREAK'], ['ja', 'ミュウツーLV.X'], ['zh-hans', '喷火龙ex'], ['zh-hans', '喷火龙EX'], ['ja', '佐々木ー'], ['ko', '피카츄 V'],
+            ['ja', 'MリザードンEX'], ['ja', 'ルギアＬＥＧＥＮＤ'], ['ja', 'ダグトリオチームバトル ３vs３'], ['ja', 'TVレポーター'], ['ja', 'なんでもなおしW']])
             assert.ok(!refus(langue, nom), `${langue} « ${nom} » : conforme`);
     });
     await test('A (tour de correction) : en deux-sources, le contrôle A juge les DEUX lectures', async () => {
