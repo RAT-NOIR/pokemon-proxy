@@ -1,0 +1,63 @@
+{
+  "success": true,
+  "illustrations": [
+    {
+      "id": "fausseArt0000000001AbCd",
+      "titre": "Fond doux",
+      "format": "2h",
+      "largeur": 400,
+      "hauteur": 279,
+      "couleur": "#1478dc",
+      "image": "https://fictif.r2.example.test/bucket-prive/galerie/attente/fausseArt0000000001AbCd.webp?X-Amz-Expires=3600&X-Amz-Signature=fictive",
+      "vignette": "https://fictif.r2.example.test/bucket-prive/galerie/attente/fausseArt0000000001AbCd-480.webp?X-Amz-Expires=3600&X-Amz-Signature=fictive",
+      "artisteDeclare": "luma",
+      "ambiances": [
+        "douce",
+        "nuit"
+      ],
+      "formats": [
+        "3x3",
+        "double-page"
+      ],
+      "visibilite": "prive",
+      "motif": null,
+      "creeLe": "2026-11-08T09:00:00.000Z"
+    },
+    {
+      "id": "fausseArt0000000002AbCd",
+      "titre": "Colonne",
+      "format": "2v",
+      "largeur": 300,
+      "hauteur": 838,
+      "couleur": "#dc7814",
+      "image": "https://pub.fictif.example.test/galerie/pub/fausseArt0000000002AbCd.webp",
+      "vignette": "https://pub.fictif.example.test/galerie/pub/fausseArt0000000002AbCd-480.webp",
+      "artisteDeclare": "luma",
+      "ambiances": [],
+      "formats": [],
+      "visibilite": "public",
+      "motif": null,
+      "creeLe": "2026-11-07T18:00:00.000Z"
+    },
+    {
+      "id": "fausseArt0000000003AbCd",
+      "titre": "Refusée",
+      "format": "1",
+      "largeur": 300,
+      "hauteur": 419,
+      "couleur": "#aa22cc",
+      "image": null,
+      "vignette": null,
+      "artisteDeclare": "luma",
+      "ambiances": [],
+      "formats": [],
+      "visibilite": "refuse",
+      "motif": {
+        "code": "scan-de-carte",
+        "texte": ""
+      },
+      "creeLe": "2026-11-06T12:00:00.000Z"
+    }
+  ],
+  "suite": null
+}

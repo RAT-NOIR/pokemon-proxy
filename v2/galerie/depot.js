@@ -93,8 +93,8 @@ async function finaliser({ compteId, pseudo, depotId, corps, bornes, stockage, m
         for (const s of ['.webp', '-480.webp']) { try { await stockage.supprimer(`${cle}${s}`); } catch { /* le cycle de vie ne couvre pas attente/ : reprise à la main */ } }
         await clore('ouvert'); throw e;
     }
-    await G.col('arts').insertOne({ _id: artId, auteurId: mien, pseudo, nom: l.nom, mots: svc.motsDe(l.nom, pseudo), fmt: l.format, largeur: t.largeur, hauteur: t.hauteur, couleur: t.couleur, poids: t.image.length, cle, clePublique, etat: 'en-attente', recuLe: maintenant, publieLe: null,
-        nbJaime: 0, nbEnregistre: 0, motif: null, certification: { droits: true, nonOfficielle: true, le: maintenant }, depotId });
+    await G.col('arts').insertOne({ _id: artId, auteurId: mien, pseudo, nom: l.nom, mots: svc.motsDe(l.nom, pseudo), fmt: l.format, largeur: t.largeur, hauteur: t.hauteur, couleur: t.couleur, poids: t.image.length, cle, clePublique, etat: 'en-attente', recuLe: maintenant, creeLe: maintenant, publieLe: null,
+        nbJaime: 0, nbEnregistre: 0, motif: null, certification: { droits: true, nonOfficielle: true, le: maintenant }, depotId, artisteDeclare: pseudo, ambiances: [], formats: [] });
     await supprimerBrut(stockage, depot.cle);                                                 // l'octet reçu n'est jamais gardé
     await clore('finalise', { artId });
     return { ok: { id: artId, statut: 'en-attente' } };

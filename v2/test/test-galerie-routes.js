@@ -100,9 +100,10 @@ const { lireGalerie } = require('../galerie/config');
         const routeur2 = express.Router(); let ouverte = 0;
         monterGalerie.routes(routeur2, cfg, { env: A.ENV_VALIDE, stockage, ouvrirBase: async () => { ouverte++; return { db: dbG, fermer: async () => { } }; } });
         await monterGalerie.pret();
-        H.v('   allumé et prêt : les routes sont montées (29 : la liste du 01/11 et les classeurs de l\'Atelier) et la base dédiée s\'ouvre une fois', [routeur2.stack.length, ouverte, monterGalerie.etat()], [29, 1, 'monte']);
+        H.v('   allumé et prêt : les routes sont montées (34 : la liste du 01/11, les classeurs et les illustrations privées de l\'Atelier) et la base dédiée s\'ouvre une fois', [routeur2.stack.length, ouverte, monterGalerie.etat()], [34, 1, 'monte']);
         const chemins = routeur2.stack.map(l => `${Object.keys(l.route.methods)[0].toUpperCase()} ${l.route.path}`).sort();
         H.v('   la liste des routes est EXACTEMENT la liste fermée (A à E, plus les classeurs privés)', chemins, [
+            'DELETE /api/illustrations/:id', 'DELETE /api/illustrations/:id/publication', 'GET /api/illustrations', 'POST /api/illustrations/:id/publication', 'PUT /api/illustrations/:id',
             'DELETE /api/classeurs/:id', 'DELETE /api/classeurs/:id/publication', 'GET /api/classeurs', 'GET /api/classeurs/:id', 'POST /api/classeurs', 'POST /api/classeurs/:id/publication', 'PUT /api/classeurs/:id',
             'DELETE /api/classeurs/:id/enregistre', 'DELETE /api/classeurs/:id/jaime', 'DELETE /api/illustrations/:id/enregistre', 'DELETE /api/illustrations/:id/jaime',
             'GET /api/admin/moderation', 'GET /api/banque', 'GET /api/banque/formats', 'GET /api/enregistres', 'GET /api/galerie', 'GET /api/galerie/:id/pages/:n', 'GET /api/galerie/filtres', 'GET /api/illustrations/bornes',

@@ -5817,6 +5817,548 @@
         }
       }
     },
+    "/api/illustrations": {
+      "get": {
+        "operationId": "listerIllustrations",
+        "tags": [
+          "galerie"
+        ],
+        "summary": "Communauté (Atelier) : mes illustrations (privées, en attente, publiques, refusées), avec des URL signées en lecture (GET, 1 h)",
+        "x-conditionnel": "V2_GALERIE=1 (et la base dédiée MONGO_URI_GALERIE admise par la garde) : éteint, la route n'existe pas (404 natif)",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Mes illustrations, les plus récentes d'abord (30 stockées au plus).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseIllustrations"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ENTREE (aucun paramètre n'est admis).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION (cookie absent, expiré ou révoqué).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "LIMITE_DEBIT : limite de débit qui ne facture rien (`reessayerDans` et en-tête Retry-After). Jamais DEBIT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (base dédiée ou stockage injoignable, Turnstile injoignable, traitement d'image occupé avec `reessayerDans`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/illustrations/{id}": {
+      "put": {
+        "operationId": "modifierIllustration",
+        "tags": [
+          "galerie"
+        ],
+        "summary": "Communauté (Atelier) : modifier le titre, l'artiste déclaré, les ambiances ou les formats d'une de mes illustrations",
+        "x-conditionnel": "V2_GALERIE=1 (et la base dédiée MONGO_URI_GALERIE admise par la garde) : éteint, la route n'existe pas (404 natif)",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant de l'illustration.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{16,64}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteIllustration"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "L'illustration mise à jour.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseIllustration"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ENTREE (`detail` nomme le champ ou la règle refusée).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION (cookie absent, expiré ou révoqué).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGINE (Origin exacte du site et X-Rat-Market obligatoires), VERIFICATION, ou INTERDIT (`detail` : `pseudo-requis`, `pas-l-auteur`, `admin`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "INTROUVABLE — UNIFORME : un objet absent, privé, en attente, refusé ou retiré, ou celui d'un autre compte, répond le même corps ; jamais un 403 qui dirait qu'il existe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLIT `etat` : l'illustration est publique, son titre et son artiste ne se changent plus.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "LIMITE_DEBIT : limite de débit qui ne facture rien (`reessayerDans` et en-tête Retry-After). Jamais DEBIT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (base dédiée ou stockage injoignable, Turnstile injoignable, traitement d'image occupé avec `reessayerDans`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "supprimerIllustration",
+        "tags": [
+          "galerie"
+        ],
+        "summary": "Communauté (Atelier) : supprimer une de mes illustrations (objets R2 privés et publics effacés, votes effacés ; les zones d'un classeur qui la citent se lisent null)",
+        "x-conditionnel": "V2_GALERIE=1 (et la base dédiée MONGO_URI_GALERIE admise par la garde) : éteint, la route n'existe pas (404 natif)",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant de l'illustration.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{16,64}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Supprimée. Un objet R2 qui ne part pas tout de suite entre dans la file de reprise du balayeur.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseSimple"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION (cookie absent, expiré ou révoqué).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGINE (Origin exacte du site et X-Rat-Market obligatoires), VERIFICATION, ou INTERDIT (`detail` : `pseudo-requis`, `pas-l-auteur`, `admin`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "INTROUVABLE — UNIFORME : un objet absent, privé, en attente, refusé ou retiré, ou celui d'un autre compte, répond le même corps ; jamais un 403 qui dirait qu'il existe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "LIMITE_DEBIT : limite de débit qui ne facture rien (`reessayerDans` et en-tête Retry-After). Jamais DEBIT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (base dédiée ou stockage injoignable, Turnstile injoignable, traitement d'image occupé avec `reessayerDans`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/illustrations/{id}/publication": {
+      "post": {
+        "operationId": "publierIllustration",
+        "tags": [
+          "galerie"
+        ],
+        "summary": "Communauté (Atelier) : publier une de mes illustrations privées (modération avant tout affichage ; 5 publications par jour, classeur ou illustration)",
+        "x-conditionnel": "V2_GALERIE=1 (et la base dédiée MONGO_URI_GALERIE admise par la garde) : éteint, la route n'existe pas (404 natif)",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant de l'illustration.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{16,64}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequetePublicationIllustration"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "L'illustration « en-attente » (en attente ou publique déjà : rien ne change).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseIllustration"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ENTREE (`detail` : `auteur-non-certifie`, `cgu`, `ambiances`, `formats`, `artiste-declare`, `corps`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION (cookie absent, expiré ou révoqué).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGINE (Origin exacte du site et X-Rat-Market obligatoires), VERIFICATION, ou INTERDIT (`detail` : `pseudo-requis`, `pas-l-auteur`, `admin`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "INTROUVABLE — UNIFORME : un objet absent, privé, en attente, refusé ou retiré, ou celui d'un autre compte, répond le même corps ; jamais un 403 qui dirait qu'il existe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLIT `etat` : l'illustration est refusée ou retirée (ses objets sont effacés).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "LIMITE_DEBIT : limite de débit qui ne facture rien (`reessayerDans` et en-tête Retry-After). Jamais DEBIT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (base dédiée ou stockage injoignable, Turnstile injoignable, traitement d'image occupé avec `reessayerDans`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "depublierIllustration",
+        "tags": [
+          "galerie"
+        ],
+        "summary": "Communauté (Atelier) : dépublier une de mes illustrations (en attente ou publique → privée ; la copie publique est effacée, les votes aussi)",
+        "x-conditionnel": "V2_GALERIE=1 (et la base dédiée MONGO_URI_GALERIE admise par la garde) : éteint, la route n'existe pas (404 natif)",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant de l'illustration.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{16,64}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "L'illustration, privée.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseIllustration"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION (cookie absent, expiré ou révoqué).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGINE (Origin exacte du site et X-Rat-Market obligatoires), VERIFICATION, ou INTERDIT (`detail` : `pseudo-requis`, `pas-l-auteur`, `admin`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "INTROUVABLE — UNIFORME : un objet absent, privé, en attente, refusé ou retiré, ou celui d'un autre compte, répond le même corps ; jamais un 403 qui dirait qu'il existe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "LIMITE_DEBIT : limite de débit qui ne facture rien (`reessayerDans` et en-tête Retry-After). Jamais DEBIT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE : la copie privée n'a pas pu être refaite (R2) ; rien n'a changé, réessayer après `reessayerDans`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/enregistres": {
       "get": {
         "operationId": "lireEnregistres",
@@ -11658,6 +12200,322 @@
         "required": [
           "success",
           "classeurs",
+          "suite"
+        ],
+        "additionalProperties": false
+      },
+      "Illustration": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "titre": {
+            "type": "string"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "1",
+              "2h",
+              "2v",
+              "4"
+            ]
+          },
+          "largeur": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "hauteur": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "couleur": {
+            "type": "string",
+            "description": "Couleur dominante `#rrggbb`."
+          },
+          "image": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Privé ou en attente : URL R2 SIGNÉE (GET, 1 h) ; public : l'adresse publique de la copie acceptée ; refusé ou retiré : null (les objets sont effacés)."
+          },
+          "vignette": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Comme `image`, vignette de 480 px."
+          },
+          "artisteDeclare": {
+            "type": "string",
+            "description": "Le pseudo de l'auteur par défaut : la banque ne reçoit que des créations de leurs auteurs."
+          },
+          "ambiances": {
+            "type": "array",
+            "maxItems": 12,
+            "items": {
+              "type": "string",
+              "enum": [
+                "douce",
+                "sombre",
+                "lumineuse",
+                "nature",
+                "ville",
+                "nuit",
+                "mer",
+                "espace",
+                "retro",
+                "pixel",
+                "aquarelle",
+                "abstraite"
+              ]
+            }
+          },
+          "formats": {
+            "type": "array",
+            "maxItems": 7,
+            "items": {
+              "type": "string",
+              "enum": [
+                "2x2",
+                "3x2",
+                "2x3",
+                "3x3",
+                "4x3",
+                "4x4",
+                "double-page"
+              ]
+            }
+          },
+          "visibilite": {
+            "type": "string",
+            "enum": [
+              "prive",
+              "en-attente",
+              "public",
+              "refuse",
+              "retire"
+            ]
+          },
+          "motif": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": [
+                      "droits",
+                      "illustration-officielle",
+                      "scan-de-carte",
+                      "choquant",
+                      "donnees-personnelles",
+                      "harcelement",
+                      "hors-sujet",
+                      "autre"
+                    ]
+                  },
+                  "texte": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "texte"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "creeLe": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "titre",
+          "format",
+          "largeur",
+          "hauteur",
+          "couleur",
+          "image",
+          "vignette",
+          "artisteDeclare",
+          "ambiances",
+          "formats",
+          "visibilite",
+          "motif",
+          "creeLe"
+        ],
+        "additionalProperties": false,
+        "description": "Une illustration de la bibliothèque de l'auteur. Aucun octet d'image ne passe par l'API : seulement des adresses."
+      },
+      "RequeteIllustration": {
+        "type": "object",
+        "properties": {
+          "titre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "artisteDeclare": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 80,
+            "description": "null : le pseudo de l'auteur."
+          },
+          "ambiances": {
+            "type": "array",
+            "maxItems": 12,
+            "items": {
+              "type": "string",
+              "enum": [
+                "douce",
+                "sombre",
+                "lumineuse",
+                "nature",
+                "ville",
+                "nuit",
+                "mer",
+                "espace",
+                "retro",
+                "pixel",
+                "aquarelle",
+                "abstraite"
+              ]
+            },
+            "description": "Sans doublon."
+          },
+          "formats": {
+            "type": "array",
+            "maxItems": 7,
+            "items": {
+              "type": "string",
+              "enum": [
+                "2x2",
+                "3x2",
+                "2x3",
+                "3x3",
+                "4x3",
+                "4x4",
+                "double-page"
+              ]
+            },
+            "description": "Sans doublon."
+          }
+        },
+        "required": [],
+        "additionalProperties": false,
+        "description": "Au moins un champ. Sur un art PUBLIC, `titre` et `artisteDeclare` ne se changent plus (409 CONFLIT `etat`) : dépublier d'abord."
+      },
+      "RequetePublicationIllustration": {
+        "type": "object",
+        "properties": {
+          "certifieAuteur": {
+            "const": true,
+            "description": "L'auteur certifie être l'AUTEUR de l'illustration : ni scan de carte, ni illustration officielle."
+          },
+          "cgu": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "La version des CGU acceptée."
+          },
+          "artisteDeclare": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 80
+          },
+          "ambiances": {
+            "type": "array",
+            "maxItems": 12,
+            "items": {
+              "type": "string",
+              "enum": [
+                "douce",
+                "sombre",
+                "lumineuse",
+                "nature",
+                "ville",
+                "nuit",
+                "mer",
+                "espace",
+                "retro",
+                "pixel",
+                "aquarelle",
+                "abstraite"
+              ]
+            }
+          },
+          "formats": {
+            "type": "array",
+            "maxItems": 7,
+            "items": {
+              "type": "string",
+              "enum": [
+                "2x2",
+                "3x2",
+                "2x3",
+                "3x3",
+                "4x3",
+                "4x4",
+                "double-page"
+              ]
+            }
+          }
+        },
+        "required": [
+          "certifieAuteur",
+          "cgu"
+        ],
+        "additionalProperties": false
+      },
+      "ReponseIllustration": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "illustration": {
+            "$ref": "#/components/schemas/Illustration"
+          }
+        },
+        "required": [
+          "success",
+          "illustration"
+        ],
+        "additionalProperties": false
+      },
+      "ReponseIllustrations": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "illustrations": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "$ref": "#/components/schemas/Illustration"
+            }
+          },
+          "suite": {
+            "type": "null",
+            "description": "Toujours null : la bibliothèque est bornée à 30 illustrations."
+          }
+        },
+        "required": [
+          "success",
+          "illustrations",
           "suite"
         ],
         "additionalProperties": false

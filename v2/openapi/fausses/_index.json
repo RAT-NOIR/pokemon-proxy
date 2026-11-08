@@ -47,6 +47,30 @@
     "schema": "ReponseErreur",
     "description": "Lot L9 : la borne de 20 classeurs par compte (le message nomme la borne ; le client ne réessaie pas)."
   },
+  "illustration-liste.json": {
+    "route": "GET /api/illustrations",
+    "statut": 200,
+    "schema": "ReponseIllustrations",
+    "description": "Lot L10 (Atelier) : ma bibliothèque — une illustration privée (URL signées GET 1 h vers le bucket privé), une publique (adresse publique), une refusée (aucune image : ses objets sont effacés) avec son motif. Valeurs fictives."
+  },
+  "illustration-publiee-en-attente.json": {
+    "route": "POST /api/illustrations/{id}/publication",
+    "statut": 200,
+    "schema": "ReponseIllustration",
+    "description": "Lot L10 : l'illustration juste publiée se lit « en-attente » chez son auteur (rien n'est public avant la décision de la modération)."
+  },
+  "illustration-conflit-etat.json": {
+    "route": "PUT /api/illustrations/{id}",
+    "statut": 409,
+    "schema": "ReponseErreur",
+    "description": "Lot L10 : le titre et l'artiste d'un art PUBLIC ne se changent plus (la modération a jugé ce texte) ; même refus pour publier une illustration refusée ou retirée."
+  },
+  "illustration-depublier-indisponible.json": {
+    "route": "DELETE /api/illustrations/{id}/publication",
+    "statut": 503,
+    "schema": "ReponseErreur",
+    "description": "Lot L10 : la copie privée n'a pas pu être refaite (R2) — rien n'a changé, l'illustration reste publique ; réessayer après reessayerDans."
+  },
   "identifiee.json": {
     "route": "POST /api/identifier",
     "statut": 200,

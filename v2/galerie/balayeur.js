@@ -1,7 +1,7 @@
 'use strict';
 // GALERIE — LE BALAYEUR côté API (relectures 1 et 2 : la règle de cycle de vie R2 devient un FILET, pas la garde). Une passe :
 //   1. rejoue la file `purges_r2` (les suppressions R2 qui ont échoué : décision de modération, suppression de compte, objet brut) ;
-//   2. retire les objets ORPHELINS du bucket privé de plus de 24 h : `galerie/depot/…` sans document de dépôt, `galerie/attente/…` sans art « en-attente » (un art refusé, retiré ou absent ne garde pas son objet d'attente).
+//   2. retire les objets ORPHELINS du bucket privé de plus de 24 h : `galerie/depot/…` sans document de dépôt, `galerie/attente/…` sans art « en-attente » ni « prive » (un art refusé, retiré ou absent ne garde pas son objet d'attente).
 // Chaque passe est BORNÉE (`limite` suppressions pour la file, autant pour les orphelins ; une page de 1 000 clés par préfixe, curseur gardé), protégée par un VERROU (une seule passe à la fois, même avec plusieurs
 // instances) et JOURNALISÉE (collection `balayages`, conservée 12 mois). Écrit par ce qu'il AUTORISE : une clé n'est supprimée que si elle est vieille ET qu'aucun document vivant ne la désigne.
 const G = require('./base');
@@ -46,7 +46,7 @@ async function balayerOrphelins(stockage, bilan, limite, maintenant, ageMs) {
             } else {
                 const m = RE_ATTENTE.exec(o.cle);
                 const art = m ? await G.col('arts').findOne({ _id: m[1] }, { projection: { etat: 1 } }) : null;
-                if (art && art.etat === 'en-attente') continue;
+                if (art && (art.etat === 'en-attente' || art.etat === 'prive')) continue;      // une illustration PRIVÉE garde ses objets d'attente : c'est son seul exemplaire
             }
             if (await svc.supprimerOuFile(stockage, o.cle, 'balayage')) bilan.orphelins++; else bilan.orphelinsEnFile++;
         }

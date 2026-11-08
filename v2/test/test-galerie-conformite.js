@@ -120,6 +120,27 @@ const OPENAPI = require('../openapi/openapi.v2.json'); const { valider } = requi
     verifier('L9 DELETE /api/classeurs/{id}', '/api/classeurs/{id}', 'DELETE', await appel('DELETE', `/api/classeurs/${idJeu}`, { c: luma }));
     const idCl = (await appel('POST', '/api/classeurs', { c: luma, corps: { titre: 'Pour les refus', pages: [page9()] } })).json.classeur.id;     // jamais modifié par luma : les refus des autres comptes le visent
 
+    // ═══ L10. la bibliothèque d'illustrations privées : chaque réponse validée contre le schéma publié ═══
+    const artFabrique = async (auteur, pseudo, etat = 'prive') => {
+        const id = F.nouvelId();
+        await dbG.collection('arts').insertOne({ _id: id, auteurId: auteur.id, pseudo, nom: `Art ${etat}`, mots: ['art', etat], fmt: '1', largeur: 300, hauteur: 419, couleur: '#1478dc', poids: 1000, cle: `galerie/attente/${id}`, clePublique: `galerie/pub/${id}`,
+            etat, recuLe: new Date(), creeLe: new Date(), publieLe: null, nbJaime: 0, nbEnregistre: 0, motif: null, certification: null, depotId: null });
+        if (etat === 'prive') for (const k of [`galerie/attente/${id}.webp`, `galerie/attente/${id}-480.webp`]) stockage.poser(k, Buffer.from('image-fabriquee'));
+        return id;
+    };
+    const idPriv = await artFabrique(noa, 'noa'), idPub2 = await artFabrique(luma, 'luma'), idRef = await artFabrique(luma, 'luma', 'refuse');
+    const lib = await appel('GET', '/api/illustrations', { c: noa, sansSite: true });
+    verifier('L10 GET /api/illustrations', '/api/illustrations', 'GET', lib);
+    H.v('   L10 : les clés de l\'Illustration au caractère près', Object.keys(lib.json.illustrations[0]), ['id', 'titre', 'format', 'largeur', 'hauteur', 'couleur', 'image', 'vignette', 'artisteDeclare', 'ambiances', 'formats', 'visibilite', 'motif', 'creeLe']);
+    verifier('L10 PUT /api/illustrations/{id}', '/api/illustrations/{id}', 'PUT', await appel('PUT', `/api/illustrations/${idPriv}`, { c: noa, corps: { titre: 'Privée 2', ambiances: ['douce'], formats: ['3x3'] } }));
+    verifier('L10 PUT d\'un art public : titre figé (409)', '/api/illustrations/{id}', 'PUT', await appel('PUT', `/api/illustrations/${art.id}`, { c: noa, corps: { titre: 'Autre titre' } }));
+    const pubI = await appel('POST', `/api/illustrations/${idPub2}/publication`, { c: luma, corps: { certifieAuteur: true, cgu: '2026-10', ambiances: ['mer'] } });
+    verifier('L10 POST …/publication (illustration)', '/api/illustrations/{id}/publication', 'POST', pubI);
+    H.v('   L10 : la publication rend l\'illustration « en-attente »', pubI.json.illustration.visibilite, 'en-attente');
+    verifier('L10 POST …/publication d\'une illustration refusée (409)', '/api/illustrations/{id}/publication', 'POST', await appel('POST', `/api/illustrations/${idRef}/publication`, { c: luma, corps: { certifieAuteur: true, cgu: '2026-10' } }));
+    verifier('L10 DELETE …/publication (illustration)', '/api/illustrations/{id}/publication', 'DELETE', await appel('DELETE', `/api/illustrations/${idPub2}/publication`, { c: luma }));
+    verifier('L10 DELETE /api/illustrations/{id}', '/api/illustrations/{id}', 'DELETE', await appel('DELETE', `/api/illustrations/${idPub2}`, { c: luma }));
+
     // ═══ D. signalement ═══
     const sig = (corps, c) => H.appel(sv.url, '/api/signalements', { methode: 'POST', corps, entetes: { origin: SITE, 'x-rat-market': '1', 'x-forwarded-for': IP(), ...(c ? { cookie: c.cookie } : {}) } });
     const s1 = await sig({ cible: `galerie:${idPub}`, motif: 'droits', turnstile: 'jeton-valide' });
@@ -154,8 +175,8 @@ const OPENAPI = require('../openapi/openapi.v2.json'); const { valider } = requi
 
     // ═══ le contrat publié lui-même ═══
     const galerie = Object.entries(OPENAPI.paths).flatMap(([chemin, ops]) => Object.entries(ops).filter(([, op]) => op && op.tags && op.tags.includes('galerie')).map(([m, op]) => ({ chemin, m, op })));
-    H.v('le contrat publie 29 opérations de la Communauté, chacune conditionnelle à V2_GALERIE=1, avec sa sécurité déclarée', [galerie.length, galerie.every(o => /V2_GALERIE=1/.test(o.op['x-conditionnel'])), galerie.every(o => Array.isArray(o.op.security))], [29, true, true]);
-    H.v('   les écritures déclarent X-Rat-Market ; les lectures publiques ne déclarent aucune sécurité (hors celles du compte)', [galerie.filter(o => ['put', 'post', 'delete'].includes(o.m)).every(o => (o.op.parameters || []).some(p => p.$ref === '#/components/parameters/XRatMarket')), galerie.filter(o => o.m === 'get' && !/enregistres|moderation|^\/api\/classeurs/.test(o.chemin)).every(o => o.op.security.length === 0)], [true, true]);
+    H.v('le contrat publie 34 opérations de la Communauté, chacune conditionnelle à V2_GALERIE=1, avec sa sécurité déclarée', [galerie.length, galerie.every(o => /V2_GALERIE=1/.test(o.op['x-conditionnel'])), galerie.every(o => Array.isArray(o.op.security))], [34, true, true]);
+    H.v('   les écritures déclarent X-Rat-Market ; les lectures publiques ne déclarent aucune sécurité (hors celles du compte)', [galerie.filter(o => ['put', 'post', 'delete'].includes(o.m)).every(o => (o.op.parameters || []).some(p => p.$ref === '#/components/parameters/XRatMarket')), galerie.filter(o => o.m === 'get' && !/enregistres|moderation|^\/api\/classeurs|^\/api\/illustrations$/.test(o.chemin)).every(o => o.op.security.length === 0)], [true, true]);
     H.v('   les classeurs : la liste exige la session ; la lecture d\'un classeur l\'admet sans la demander (auteur ou public)', [OPENAPI.paths['/api/classeurs'].get.security, OPENAPI.paths['/api/classeurs/{id}'].get.security], [[{ session: [] }], [{ session: [] }, {}]]);
     H.v('   les quatre codes nouveaux sont dans la liste fermée des codes d\'erreur', ['INTERDIT', 'INTROUVABLE', 'FICHIER', 'LIMITE_DEBIT'].filter(c => !OPENAPI.components.schemas.ReponseErreur.properties.erreur.properties.code.enum.includes(c)), []);
     H.vrai('   les exemples du contrat valident (Publication)', valider({ id: 'k3J9x0Qw2m8LzTfA1bC4dE', pseudo: 'luma', publieLe: '2026-11-01T10:00:00.000Z', titre: 'Page Michi', categories: ['methode-michi', 'couleur'], nb: 9, pages: 2, jaime: null, petitCompteur: true, arts: [{ art: 'Zy9x8W7v6U5t4S3r2Q1pOn', col: 0, row: 0, fmt: '2h', url: 'https://pub.exemple.test/galerie/pub/Zy9x8W7v6U5t4S3r2Q1pOn.webp', largeur: 400, hauteur: 279 }], cartes: [{ cle: '1234|001', setSlug: 'Base-Set' }, null] }, OPENAPI.components.schemas.Publication, OPENAPI).ok);
@@ -185,6 +206,11 @@ const OPENAPI = require('../openapi/openapi.v2.json'); const { valider } = requi
         { m: 'DELETE', modele: '/api/classeurs/{id}', url: `/api/classeurs/${idCl}`, session: true, ecriture: true, absent: `/api/classeurs/${inconnu()}` },
         { m: 'POST', modele: '/api/classeurs/{id}/publication', url: `/api/classeurs/${idCl}/publication`, session: true, ecriture: true, corps: { certifieAuteur: true, cgu: 'c' }, mauvaisCorps: { cgu: 'c', zzz: 1 }, absent: `/api/classeurs/${inconnu()}/publication` },
         { m: 'DELETE', modele: '/api/classeurs/{id}/publication', url: `/api/classeurs/${idCl}/publication`, session: true, ecriture: true, absent: `/api/classeurs/${inconnu()}/publication` },
+        { m: 'GET', modele: '/api/illustrations', url: '/api/illustrations', session: true, mauvais: '/api/illustrations?zzz=1' },
+        { m: 'PUT', modele: '/api/illustrations/{id}', url: `/api/illustrations/${idPriv}`, session: true, ecriture: true, corps: { ambiances: ['douce'] }, mauvaisCorps: {}, absent: `/api/illustrations/${inconnu()}` },
+        { m: 'DELETE', modele: '/api/illustrations/{id}', url: `/api/illustrations/${idPriv}`, session: true, ecriture: true, absent: `/api/illustrations/${inconnu()}` },
+        { m: 'POST', modele: '/api/illustrations/{id}/publication', url: `/api/illustrations/${idPriv}/publication`, session: true, ecriture: true, corps: { certifieAuteur: true, cgu: 'c' }, mauvaisCorps: { cgu: 'c', zzz: 1 }, absent: `/api/illustrations/${inconnu()}/publication` },
+        { m: 'DELETE', modele: '/api/illustrations/{id}/publication', url: `/api/illustrations/${idPriv}/publication`, session: true, ecriture: true, absent: `/api/illustrations/${inconnu()}/publication` },
         { m: 'PUT', modele: '/api/compte/pseudo', url: '/api/compte/pseudo', session: true, ecriture: true, corps: { pseudo: 'pilote-pseudo' }, mauvaisCorps: { pseudo: 'a' } },
         { m: 'POST', modele: '/api/illustrations/depot', url: '/api/illustrations/depot', session: true, ecriture: true, corps: { type: 'image/png', octets: 1000 }, mauvaisCorps: { type: 'image/png' } },
         { m: 'POST', modele: '/api/illustrations/depot/{depot}/finaliser', url: `/api/illustrations/depot/${inconnu()}/finaliser`, session: true, ecriture: true, corps: { nom: 'x', format: '1', certifieDroits: true, certifieNonOfficielle: true }, mauvaisCorps: { nom: 1 }, absent: `/api/illustrations/depot/${inconnu()}/finaliser` },

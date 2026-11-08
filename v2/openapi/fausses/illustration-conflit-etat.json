@@ -1,0 +1,9 @@
+{
+  "success": false,
+  "erreur": {
+    "code": "CONFLIT",
+    "message": "L'illustration n'est pas dans l'état attendu",
+    "detail": "etat"
+  },
+  "facturation": null
+}

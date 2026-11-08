@@ -277,7 +277,7 @@ async function elementArt(d, secret, stockage) {
     const cible = { id: d._id, titre: d.nom, apercu: [], image: lien(`${d.cle}.webp`), vignette: lien(`${d.cle}-480.webp`) };
     for (const k of ['image', 'vignette']) if (cible[k] === undefined) delete cible[k];
     return { id: `art.${d._id}`, file: 'publications', genre: 'illustration', cible, auteur: { pseudo: d.pseudo, ref: refCompte(d.auteurId, secret) },
-        certification: d.certification ? { cgu: 'droits+non-officielle', le: iso(d.certification.le) } : null, signalements: [], recuLe: iso(d.recuLe), echeance: null };
+        certification: d.certification ? { cgu: d.certification.cgu || 'droits+non-officielle', le: iso(d.certification.le) } : null, signalements: [], recuLe: iso(d.recuLe), echeance: null };
 }
 async function elementSignalement(s, secret, stockage) {
     const coll = COLL[s.cibleType], d = await G.col(coll).findOne({ _id: s.cibleId });
@@ -397,5 +397,5 @@ async function supprimerDuCompte(compteId, stockage = null, secret = null) {
     return n;
 }
 
-module.exports = { PAGE, PAGE_ART, SEUIL_PETIT, motsDe, filtreRecherche, mettreEnFile, supprimerOuFile, jetonNeuf, refCompte, compteur, pseudoDe, poserPseudo, listerPublications, filtresDeLaGalerie, pageDePublication, versPublication, listerArts, formatsDeLaBanque, versArt,
+module.exports = { PAGE, PAGE_ART, SEUIL_PETIT, motsDe, filtreRecherche, mettreEnFile, supprimerOuFile, clesDe, jetonNeuf, refCompte, compteur, pseudoDe, poserPseudo, listerPublications, filtresDeLaGalerie, pageDePublication, versPublication, listerArts, formatsDeLaBanque, versArt,
     publierPourExploitation, voter, recompterVotes, mesVotes, remixer, signaler, fileModeration, decider, supprimerDuCompte, COLL };

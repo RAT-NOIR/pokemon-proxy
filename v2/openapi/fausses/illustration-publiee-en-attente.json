@@ -1,0 +1,23 @@
+{
+  "success": true,
+  "illustration": {
+    "id": "fausseArt0000000001AbCd",
+    "titre": "Fond doux",
+    "format": "2h",
+    "largeur": 400,
+    "hauteur": 279,
+    "couleur": "#1478dc",
+    "image": "https://fictif.r2.example.test/bucket-prive/galerie/attente/fausseArt0000000001AbCd.webp?X-Amz-Expires=3600&X-Amz-Signature=fictive",
+    "vignette": "https://fictif.r2.example.test/bucket-prive/galerie/attente/fausseArt0000000001AbCd-480.webp?X-Amz-Expires=3600&X-Amz-Signature=fictive",
+    "artisteDeclare": "luma",
+    "ambiances": [
+      "douce"
+    ],
+    "formats": [
+      "3x3"
+    ],
+    "visibilite": "en-attente",
+    "motif": null,
+    "creeLe": "2026-11-08T09:00:00.000Z"
+  }
+}

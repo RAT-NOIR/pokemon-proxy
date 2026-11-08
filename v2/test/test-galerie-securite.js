@@ -188,7 +188,7 @@ const H = A.H;
         stockage.poser('galerie/depot/xxxxxxxxxxxxxxxx/tout-neuf2', Buffer.from('x'), 1000); await Bal.passe({ stockage, secret: sec });
         H.v('   (le réel garde l\'objet de 1 s)', present('galerie/depot/xxxxxxxxxxxxxxxx/tout-neuf2'), true);
         const aGarde = await artPublic(luma, { etat: 'en-attente', publieLe: null }); stockage.poser(`galerie/attente/${aGarde}.webp`, Buffer.from('x'), 40 * 3600e3);
-        const mDoc = A.charger('balayeur.js', [["if (art && art.etat === 'en-attente') continue;", "if (false) continue;"]]);
+        const mDoc = A.charger('balayeur.js', [["if (art && (art.etat === 'en-attente' || art.etat === 'prive')) continue;", "if (false) continue;"]]);
         await mDoc.passe({ stockage, secret: sec });
         H.v('   MUTANT « le document en attente n\'est plus protégé » : l\'objet que le modérateur doit voir est supprimé', present(`galerie/attente/${aGarde}.webp`), false);
         const mRej = A.charger('balayeur.js', [["await rejouerPurges(", "0 && await rejouerPurges("]]);
