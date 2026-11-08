@@ -4,16 +4,20 @@
 // Entrée : 30 cartes de CATALOGUE (v2/banc-telephone/public/lot.json : JPEG 420 x 587, q 0,92 — la carte redressée du contrat) et, pour chacune, le vecteur de RÉFÉRENCE calculé en natif (onnxruntime CPU, Python, PIL).
 // Deux mesures de fidélité : « chaîne complète » (JPEG décodé par ce navigateur → redimPIL → modèle) et « modèle seul » (les 224 x 224 octets PIL → modèle) pour les 12 premières cartes : elles séparent le décodeur du modèle.
 // Aucun innerHTML : tout passe par textContent.
-import { versTenseur, normaliserL2, vecteurDepuisSortie, nombreDeFils, COTE_MODELE } from './empreinte.js';
+import { versTenseur, normaliserL2, vecteurDepuisSortie, nombreDeFils, COTE_MODELE, rgbVersRgba, redimPIL } from './empreinte.js';
 import { cosinus, course, sonderAdaptateur, creerSessionGpu } from './moteur-ort.js';
-import { jugerLot, jugerMesure, gardeExtension, texteGarde, ecartChaine, moteurRealise, texteErreur, classerBlocage, hoteFinal } from './verdict.mjs';
+import { jugerLot, jugerMesure, gardeExtension, texteGarde, ecartChaine, moteurRealise, texteErreur, classerBlocage, hoteFinal, detecterIOS, choisirMoteur, webgpuForce, optionsSession, statsPixels, assemblerDiagnostic, texteDiagnostic, TEXTE_WEBGPU_IOS } from './verdict.mjs';
 // NOTE (tour 1) : la page infère sur le FIL PRINCIPAL (l'extension le fait dans un Worker) : les temps et le p95 s'en lisent comme tels (le fil principal gèle l'affichage pendant l'inférence).
+// LOT iOS : (1) WebGPU est désactivé sur iOS/iPadOS (l'onglet y est tué par manque de mémoire : RAPPORT-BANC-IOS.md), `?webgpu=forcer` le rouvre pour un diagnostic ;
+// (2) le modèle (113 Mo) n'est plus GARDÉ après la création de la session : un seul exemplaire côté JS, jeté dès que la session existe ; (3) une ligne de diagnostic des pixels dit si l'écart de la chaîne vient du décodeur du navigateur.
 
 const $ = id => document.getElementById(id);
 const meta = n => (document.querySelector(`meta[name="${n}"]`) || {}).content || '';
 const SHA = meta('modele-sha256'), OCTETS = Number(meta('modele-octets')) || 0;
 const aleaHex = n => Array.from(crypto.getRandomValues(new Uint8Array(n)), b => b.toString(16).padStart(2, '0')).join('');
-const E = { modele: null, shaVerifie: null, telechargementMs: null, verifShaMs: null, lot: null, vecWasm: null, runId: aleaHex(8), gpu: null, reseau: null, infoModeleDeposee: false, mesures: {} };
+const RECHERCHE = (() => { try { return String(location.search || ''); } catch { return ''; } })();
+const E = { shaVerifie: null, modeleOctets: null, telechargementMs: null, verifShaMs: null, lot: null, vecWasm: null, runId: aleaHex(8), gpu: null, reseau: null, infoModeleDeposee: false, mesures: {}, etapes: [],
+    ios: detecterIOS({ ua: navigator.userAgent, platform: navigator.platform, maxTouchPoints: navigator.maxTouchPoints }), forcer: webgpuForce(RECHERCHE), session: optionsSession(RECHERCHE), diagnostic: undefined };
 
 // ── affichage
 const ascii = s => String(s == null ? '' : s).replace(/[^\x20-\x7E]/g, '?');
@@ -25,7 +29,7 @@ const journal = m => { $('journal').textContent += `[${((performance.now() - t0)
 const etat = (mot, detail, classe) => { $('verdictMot').textContent = mot; $('verdictDetail').textContent = detail || ''; $('verdict').className = `verdict ${classe}`; };
 let stockage = null; try { stockage = window.localStorage; } catch { stockage = null; }
 let ETAPE = 'debut';       // m1 : l'étape en cours, dite dans toute erreur
-const etape = x => { ETAPE = x; try { if (stockage) stockage.setItem('rm-banc-etape', x); } catch { /* sans stockage */ } };
+const etape = x => { ETAPE = x; try { E.etapes.push([Date.now(), x]); } catch { /* journal des étapes borné par la durée de la page */ } try { if (stockage) stockage.setItem('rm-banc-etape', x); } catch { /* sans stockage */ } };
 const pause = () => new Promise(r => setTimeout(r, 0));
 // une erreur de CETTE page porte un code lisible (`detail`) ; pour toute autre exception, seul le nom est dit (jamais le texte d'une exception du navigateur).
 class ErreurBanc extends Error { constructor(detail) { super(); this.detail = detail; } }
@@ -38,9 +42,12 @@ function decrireAppareil() {
         ['SharedArrayBuffer', typeof SharedArrayBuffer === 'function' ? 'oui' : 'non'], ['WebAssembly', typeof WebAssembly === 'object' ? 'oui' : 'non'], ['navigator.gpu (WebGPU)', gpuOk ? 'présent' : 'absent'],
         ['performance.memory', performance.memory ? 'disponible' : 'non disponible'], ['measureUserAgentSpecificMemory', self.crossOriginIsolated === true && performance.measureUserAgentSpecificMemory ? 'disponible' : 'non disponible'],
         ['modèle attendu (sha256)', SHA ? SHA.slice(0, 12) + '…' : 'NON CONFIGURÉ'], ['modèle attendu (octets)', OCTETS || 'inconnu']];
+    lignes.push(['iOS / iPadOS (détection)', `${E.ios.ios ? 'oui' : 'non'} (${E.ios.raison})`], ['WebGPU proposé', gpuOk && E.ios.ios ? (E.forcer ? 'oui, FORCÉ (?webgpu=forcer)' : 'non (désactivé sur iOS)') : gpuOk ? 'oui' : 'non'], ['options de session demandées', E.session.retenues.length ? E.session.retenues.join(',') : 'aucune (celles de l\'extension)']);
     for (const [k, v] of lignes) ligne('appareil', k, v);
-    $('btnGpu').disabled = !gpuOk;
+    E.gpuPropose = gpuOk && (!E.ios.ios || E.forcer);
+    $('btnGpu').disabled = !E.gpuPropose;
     if (!gpuOk) $('btnGpu').textContent = 'WebGPU absent sur cet appareil';
+    else if (!E.gpuPropose) { $('btnGpu').textContent = 'WebGPU désactivé sur iOS'; $('avisMoteur').textContent = TEXTE_WEBGPU_IOS; }
 }
 function avertirReprise() {
     let x = null; try { x = stockage && stockage.getItem('rm-banc-etape'); } catch { x = null; }
@@ -54,8 +61,9 @@ const p95 = a => { const s = [...a].sort((x, y) => x - y); return s.length ? s[M
 const rgbaVersRgb = (rgba, n) => { const rgb = new Uint8Array(n * 3); for (let i = 0; i < n; i++) { rgb[i * 3] = rgba[i * 4]; rgb[i * 3 + 1] = rgba[i * 4 + 1]; rgb[i * 3 + 2] = rgba[i * 4 + 2]; } return rgb; };   // pur.js de l'extension
 
 // ── le modèle : par l'API (302 vers R2), vérifié par son sha256 — comme l'extension
+// L'appelant reçoit LE SEUL exemplaire côté JS (un tableau d'octets préalloué à la taille annoncée, rempli par morceaux : ni arrayBuffer(), ni copie) et le JETTE dès que la session est créée :
+// la page ne le garde pas (avant ce lot : 113 Mo retenus pour toute la durée de la page). Une seconde mesure dans la même page retélécharge (et revérifie) le modèle.
 async function chargerModele() {
-    if (E.modele) return E.modele;
     if (!/^[0-9a-f]{64}$/.test(SHA)) throw new ErreurBanc('modele-non-configure : l\'API ne publie aucun sha256 de modèle');
     etape('telechargement-modele');
     const t = performance.now();
@@ -85,42 +93,78 @@ async function chargerModele() {
         if (((recu / 1048576) | 0) % 5 === 0) etat('TÉLÉCHARGEMENT', `${f(recu / 1048576, 0)} / ${f(total / 1048576, 0)} Mo`, 'attente');
     }
     if (recu !== total) throw new ErreurBanc(`telechargement-modele : ${recu} octets recus sur ${total}`);
-    E.telechargementMs = performance.now() - t;
-    journal(`modèle reçu : ${recu} octets en ${f(E.telechargementMs / 1000, 1)} s`);
+    const duree = performance.now() - t; if (E.telechargementMs == null) E.telechargementMs = duree;
+    E.modeleOctets = recu;
+    journal(`modèle reçu : ${recu} octets en ${f(duree / 1000, 1)} s`);
     if (self.crypto && crypto.subtle) {
         etape('verification-sha256'); etat('VÉRIFICATION', 'sha256 du modèle…', 'attente');
         const tv = performance.now();
         const h = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', tampon)), b => b.toString(16).padStart(2, '0')).join('');
-        E.verifShaMs = performance.now() - tv; E.shaVerifie = h === SHA;
+        const dv = performance.now() - tv; if (E.verifShaMs == null) E.verifShaMs = dv;
+        E.shaVerifie = h === SHA;
         if (!E.shaVerifie) throw new ErreurBanc('modele-sha256-different : le fichier recu n\'est pas le modele attendu');
-        journal(`sha256 vérifié (${f(E.verifShaMs / 1000, 1)} s)`);
+        journal(`sha256 vérifié (${f(dv / 1000, 1)} s)`);
     } else { E.shaVerifie = null; journal('sha256 NON vérifié (crypto.subtle absent : contexte non sécurisé) : aucun verdict ne sera rendu'); }
-    E.modele = tampon;
     return tampon;
 }
+// Rend les 113 Mo au système SANS attendre le ramasse-miettes : ArrayBuffer.prototype.transfer(0) détache le tampon et libère son stockage (Chrome 114+, Safari 17.4+, Firefox 122+) ; sinon, le ramasse-miettes s'en charge plus tard.
+function libererOctets(u8) { try { if (u8 && u8.buffer && typeof u8.buffer.transfer === 'function') u8.buffer.transfer(0); } catch { /* déjà détaché ou non détachable : le ramasse-miettes s'en charge */ } }
 async function chargerLot() {
     if (E.lot) return E.lot;
     etape('lot'); const r = await fetch('/api/banc/telephone/lot.json', { cache: 'no-store' });
     if (!r.ok) throw new ErreurBanc(`lot : HTTP ${r.status}`);
     const lot = await r.json();
     if (lot.modeleSha256 !== SHA) throw new ErreurBanc('lot-pour-un-autre-modele : les references ne sont pas celles du modele servi');
-    if (Array.isArray(lot.cartes)) for (const c of lot.cartes) { c.refV = new Float32Array(b64vers(c.ref).buffer); if (c.px) c.pxV = b64vers(c.px); }
+    if (Array.isArray(lot.cartes)) for (const c of lot.cartes) { c.refV = new Float32Array(b64vers(c.ref).buffer); if (c.px) c.pxV = b64vers(c.px); if (c.dec) c.decV = b64vers(c.dec); delete c.ref; delete c.px; delete c.dec; }       // les chaînes base64 décodées ne sont pas gardées (seul le JPEG sert encore, à chaque mesure)
     const cause = jugerLot(lot);        // M6 : un lot incomplet ou mal formé ne juge rien
     if (cause) throw new ErreurBanc(`lot-invalide:${cause}`);
     E.lot = lot; return lot;
 }
 
 // ── la carte : JPEG → pixels bruts (comme les références de l'extension : colorSpaceConversion « none ») → redimPIL → tenseur
-async function decoderCarte(c) {
+// `variante` : « pipeline » (celle de la chaîne : sans conversion de couleur, repli sur le défaut), « sans-conversion » (sans repli : lève si le navigateur la refuse), « defaut » (conversion par défaut du navigateur).
+async function decoderCarte(c, variante = 'pipeline') {
     const blob = new Blob([b64vers(c.jpg)], { type: 'image/jpeg' });
     let bmp;
-    try { bmp = await createImageBitmap(blob, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' }); }
-    catch { bmp = await createImageBitmap(blob); }
-    const cv = document.createElement('canvas'); cv.width = bmp.width; cv.height = bmp.height;
+    if (variante === 'defaut') bmp = await createImageBitmap(blob);
+    else if (variante === 'sans-conversion') bmp = await createImageBitmap(blob, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
+    else { try { bmp = await createImageBitmap(blob, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' }); } catch { bmp = await createImageBitmap(blob); } }
+    const cv = canvasDecodage(); cv.width = bmp.width; cv.height = bmp.height;          // un seul canvas pour toute la page (changer sa taille le remet à zéro) : pas un canvas jeté par carte
     const x = cv.getContext('2d', { willReadFrequently: true }); x.drawImage(bmp, 0, 0);
     const w = bmp.width, h = bmp.height, d = x.getImageData(0, 0, w, h);
     if (bmp.close) bmp.close();
     return { rgb: rgbaVersRgb(d.data, w * h), w, h };
+}
+let CANVAS_DECODAGE = null;
+const canvasDecodage = () => (CANVAS_DECODAGE || (CANVAS_DECODAGE = document.createElement('canvas')));
+// LE DIAGNOSTIC DES PIXELS (une fois par page) : sépare le décodeur du navigateur du reste de la chaîne. Trois mesures, contre les pixels de PIL du lot :
+//   décodage (2 cartes, pleine taille 420 x 587) : pixels décodés par le navigateur contre `dec` (PIL) · redimensionnement : redimPIL appliqué au décodage de PIL contre les 224 de PIL (`px`), le plancher du redimensionnement JS ·
+//   chaîne (12 cartes) : redimPIL appliqué au décodage du navigateur contre `px`. Les variantes « sans conversion » et « par défaut » du bitmap disent si c'est la couleur. Ne lève jamais : un trou reste null (cause « indetermine »).
+const rgbDe224 = (rgb, w, h) => rgbaVersRgb(redimPIL(rgbVersRgba(rgb, w, h), w, h, COTE_MODELE, COTE_MODELE), COTE_MODELE * COTE_MODELE);
+async function diagnostiquerPixels(lot) {
+    const L = { decodage: [], redimensionnement: [], chaine: [], bitmapSansConversion: [], bitmapAvecConversion: [] };
+    let couleurCanvas = null;
+    try {
+        const cv = document.createElement('canvas'), x = cv.getContext('2d', { willReadFrequently: true });
+        couleurCanvas = ascii((x && x.getContextAttributes && x.getContextAttributes().colorSpace) || (cv.colorSpace) || 'inconnu').slice(0, 20);
+    } catch { couleurCanvas = 'inconnu'; }
+    let sansConversionOk = true;
+    for (let i = 0; i < lot.cartes.length; i++) {
+        const c = lot.cartes[i]; if (!c.pxV) continue;
+        try {
+            const nav = await decoderCarte(c);
+            L.chaine.push(statsPixels(rgbDe224(nav.rgb, nav.w, nav.h), c.pxV));
+            if (c.decV) {
+                L.decodage.push(statsPixels(nav.rgb, c.decV));
+                L.redimensionnement.push(statsPixels(rgbDe224(c.decV, nav.w, nav.h), c.pxV));
+                if (sansConversionOk) { try { const s = await decoderCarte(c, 'sans-conversion'); L.bitmapSansConversion.push(statsPixels(s.rgb, c.decV)); } catch { sansConversionOk = false; L.bitmapSansConversion.length = 0; } }
+                try { const d = await decoderCarte(c, 'defaut'); L.bitmapAvecConversion.push(statsPixels(d.rgb, c.decV)); } catch { L.bitmapAvecConversion.length = 0; }
+            }
+        } catch { /* un trou : la mesure correspondante reste manquante */ }
+        await pause();
+    }
+    const sansTrou = l => (l.length && l.every(Boolean) ? l : []);
+    return assemblerDiagnostic({ decodage: sansTrou(L.decodage), redimensionnement: sansTrou(L.redimensionnement), chaine: sansTrou(L.chaine), bitmapSansConversion: sansConversionOk ? sansTrou(L.bitmapSansConversion) : [], bitmapAvecConversion: sansTrou(L.bitmapAvecConversion), couleurCanvas });
 }
 const tenseurDepuisPx = px => { const n = COTE_MODELE * COTE_MODELE, t = new Float32Array(3 * n); for (let i = 0; i < n; i++) for (let k = 0; k < 3; k++) t[k * n + i] = (px[i * 3 + k] / 255 - 0.5) / 0.5; return t; };
 
@@ -188,16 +232,18 @@ async function mesurerWasm() {
     ort.env.wasm.wasmPaths = { wasm: new URL('ort/ort-wasm-simd-threaded.wasm', import.meta.url).href };
     const demande = nombreDeFils(navigator.hardwareConcurrency);
     ort.env.wasm.numThreads = demande; ort.env.wasm.proxy = false;
-    const modele = await chargerModele();
+    let modele = await chargerModele();
     etape('creation-session-wasm'); etat('SESSION', 'création de la session WASM…', 'attente');
     const ta = performance.now();
-    const session = await ort.InferenceSession.create(modele, { executionProviders: ['wasm'], graphOptimizationLevel: 'all' });
+    let session, cree = false;
+    try { session = await ort.InferenceSession.create(modele, { executionProviders: ['wasm'], graphOptimizationLevel: 'all', ...E.session.options }); cree = true; }
+    finally { if (cree) libererOctets(modele); modele = null; }                  // ORT a copié les octets dans son tas : la page ne garde plus rien du modèle (un seul exemplaire côté JS, rendu AU SYSTÈME tout de suite)
     const creation = performance.now() - ta; journal(`session WASM créée en ${f(creation, 0)} ms`);
     try {
         const { m, vecs } = await mesurer('wasm', ort, session, demande, creation);
         m.gardeExtension = gardeExtension(m.cosMin);       // M8 : pour WASM, le cosinus contre la référence native
         E.vecWasm = vecs; return m;
-    } finally { try { await session.release(); } catch { /* deja liberee */ } }
+    } finally { try { await session.release(); } catch { /* deja liberee */ } session = null; }
 }
 
 // ── WebGPU : la sonde (2 s), la session (20 s) et le repli de l'extension (moteur-ort.js, sans changement)
@@ -211,10 +257,12 @@ async function mesurerGpu() {
     const ort = await import('./ort/ort.webgpu.bundle.min.mjs');
     ort.env.wasm.wasmPaths = { wasm: new URL('ort/ort-wasm-simd-threaded.asyncify.wasm', import.meta.url).href };
     ort.env.wasm.numThreads = 1; ort.env.wasm.proxy = false;      // le calcul est sur le GPU : pas de fils WASM de plus (extension : FILS_GPU)
-    const modele = await chargerModele();
+    let modele = await chargerModele();
     etape('creation-session-gpu'); etat('SESSION', 'création de la session WebGPU…', 'attente');
     const ta = performance.now();
-    const g = await creerSessionGpu({ ort, tampon: async () => modele.buffer });
+    let g;
+    try { g = await creerSessionGpu({ ort, tampon: async () => modele.buffer }); }       // moteur-ort.js (copie de l'extension) : new Uint8Array(buffer) est une VUE, pas une copie
+    finally { if (g && g.ok) libererOctets(modele); modele = null; }                      // un seul exemplaire côté JS, rendu au système dès que la session existe (sur un échec ou un délai dépassé la création peut encore lire : on laisse faire le ramasse-miettes)
     const creation = performance.now() - ta;
     if (!g.ok) return { moteur: 'webgpu', verdict: 'ERREUR', erreur: texteErreur(ETAPE, new ErreurBanc(`${g.raison}-apres-${Math.round(creation)}ms`)), webgpuUtilise: false, creationSessionMs: arrondi(creation, 1) };
     // M7 : « webgpu » n'est dit que si le périphérique existe. ort.env.webgpu.device (promesse ou valeur) ; sinon la session est un repli WASM silencieux : rien n'est mesuré sous l'étiquette webgpu.
@@ -239,11 +287,11 @@ function document_(mesure) {
     return { v: 1, runId: E.runId, modeleSha: SHA || '0'.repeat(64), ua: ascii(navigator.userAgent).slice(0, 300), isole: self.crossOriginIsolated === true, coeurs: Number.isInteger(navigator.hardwareConcurrency) && navigator.hardwareConcurrency > 0 ? navigator.hardwareConcurrency : null,
         memoireAppareilGo: typeof navigator.deviceMemory === 'number' ? navigator.deviceMemory : null, gpuDispo: typeof navigator.gpu !== 'undefined', gpu: E.gpu, reseau: E.reseau,
         // m2 : le téléchargement n'a eu lieu qu'UNE fois : la seconde mesure (le modèle est déjà en mémoire) ne redépose pas ses durées
-        modeleOctets: E.modele ? E.modele.length : null, telechargementMs: E.infoModeleDeposee ? null : arrondi(E.telechargementMs, 0), verifShaMs: E.infoModeleDeposee ? null : arrondi(E.verifShaMs, 0), shaVerifie: E.shaVerifie, mesure };
+        modeleOctets: E.modeleOctets, telechargementMs: E.infoModeleDeposee ? null : arrondi(E.telechargementMs, 0), verifShaMs: E.infoModeleDeposee ? null : arrondi(E.verifShaMs, 0), shaVerifie: E.shaVerifie, mesure };
 }
 async function envoyer(mesure) {
     const doc = document_(mesure);
-    if (E.modele) E.infoModeleDeposee = true;
+    if (E.modeleOctets != null) E.infoModeleDeposee = true;
     $('brut').textContent = JSON.stringify(doc, null, 1);
     $('envoi').textContent = 'Envoi du résultat…';
     try {
@@ -254,6 +302,8 @@ async function envoyer(mesure) {
 function afficher(m) {
     const mem = m.uaFinMo != null ? `${m.uaFinMo} Mo (navigateur)` : m.jsHeapFinMo != null ? `${m.jsHeapFinMo} Mo (tas JS)` : 'non disponible';
     const moteur = String(m.moteur || '?').toUpperCase();
+    $('ligne4').textContent = `4 · ${texteDiagnostic(m.diagnosticPixels)}`;
+    if (m.webgpuDesactive) $('avisMoteur').textContent = TEXTE_WEBGPU_IOS;
     if (m.verdict === 'ERREUR') { etat('ERREUR', m.erreur || '', 'ko'); $('ligne1').textContent = `1 · verdict : ERREUR (${moteur}) — ${m.erreur || ''}`; $('ligne2').textContent = `2 · moteur : ${moteur}${m.webgpuUtilise === false ? ' · WebGPU non utilisé (repli WASM)' : ''}`; $('ligne3').textContent = `3 · garde extension 0,998 : ${texteGarde(m.gardeExtension)}`; }
     else {
         const ok = m.verdict === 'IDENTIQUE';
@@ -274,15 +324,27 @@ function afficher(m) {
         ['garde de l\'extension (cosinus ≥ 0,998)', texteGarde(m.gardeExtension)], ['modèle reçu : redirigé / hôte final', E.reseau ? `${E.reseau.redirige === null ? '—' : E.reseau.redirige ? 'oui' : 'non'} / ${E.reseau.hoteFinal || '—'}` : '—'], ['blocage réseau', E.reseau && E.reseau.blocage ? E.reseau.blocage : '—']];
     for (const [k, v] of dico) ligne('chiffres', k, v);
 }
-async function lancer(moteur) {
+async function lancer(demande) {
     $('btnWasm').disabled = true; $('btnGpu').disabled = true;
+    // WebGPU sur iOS devient WASM (sauf ?webgpu=forcer) : le moteur mesuré, affiché et déposé est celui qui SERT ; le moteur demandé et la désactivation sont déposés à côté.
+    const choix = choisirMoteur({ demande, ios: E.ios.ios, forcer: E.forcer }), moteur = choix.moteur;
+    if (choix.texte) { journal(choix.texte); $('avisMoteur').textContent = choix.texte; }
     let m;
     try { m = moteur === 'wasm' ? await mesurerWasm() : await mesurerGpu(); }
     catch (e) { const t = texteErreur(ETAPE, e); journal(`ERREUR ${t}`); m = { moteur, verdict: 'ERREUR', erreur: t }; }
+    // le diagnostic des pixels vient APRÈS la mesure (une fois par page) : ses décodages ne coexistent jamais avec le modèle ni avec une session (il ne doit pas gonfler le pic qu'on mesure)
+    if (E.diagnostic === undefined) {
+        etape('diagnostic-pixels'); etat('DIAGNOSTIC', 'pixels décodés par ce navigateur…', 'attente');
+        try { E.diagnostic = await diagnostiquerPixels(await chargerLot()); } catch { E.diagnostic = null; }
+        journal(texteDiagnostic(E.diagnostic));
+    }
+    m.moteurDemande = demande === 'webgpu' ? 'webgpu' : 'wasm'; m.webgpuDesactive = choix.desactive; m.webgpuForce = choix.forcee;
+    if (E.session.retenues.length) m.optionsSession = E.session.retenues.join(',');
+    m.diagnosticPixels = E.diagnostic || null;
     E.mesures[moteur] = m;
     afficher(m); etape('fini');
     await envoyer(m);
-    $('btnWasm').disabled = false; $('btnGpu').disabled = typeof navigator.gpu === 'undefined';
+    $('btnWasm').disabled = false; $('btnGpu').disabled = !E.gpuPropose;
 }
 
 decrireAppareil(); avertirReprise();
