@@ -7,7 +7,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { pathToFileURL } = require('url');
 
-const PUB = path.join(__dirname, '..', 'banc-telephone', 'public');
+const PUB = process.env.RM_DECODEUR_PUB || path.join(__dirname, '..', 'banc-telephone', 'public');       // RM_DECODEUR_PUB : rejouer le banc contre une AUTRE version des modules (rouge vu contre l'ancienne)
 const FIX = path.join(__dirname, 'fixtures-decodeur');
 let ok = 0, ko = 0;
 const vrai = (nom, cond, detail) => { if (cond) ok++; else { ko++; console.log(`❌ ${nom}${detail ? ' — ' + detail : ''}`); } };
@@ -120,11 +120,11 @@ const code = f => { try { f(); return null; } catch (e) { return e && e.name ===
         vrai('6. n\'importe quoi : FORMAT', code(() => D.decoder(Buffer.from('ceci n\'est pas une image du tout, non'))) === 'FORMAT');
         vrai('6. vide : FORMAT', code(() => D.decoder(Buffer.alloc(0))) === 'FORMAT');
         vrai('6. GIF : FORMAT', code(() => D.decoder(Buffer.from('GIF89a' + '\0'.repeat(40)))) === 'FORMAT');
-        vrai('6. option d\'orientation inconnue : FORMAT', code(() => D.decoder(png, { orientation: 'x' })) === 'FORMAT');
+        vrai('6. option d\'orientation inconnue : entree-invalide', code(() => D.decoder(png, { orientation: 'x' })) === 'entree-invalide');
         // tronqué : jamais une image partielle
         const jpg = Buffer.from(fx.cas.find(x => x.nom === 'jpeg-420-257x129').b64, 'base64');
         vrai('6. JPEG tronqué à moitié : DECODAGE', code(() => D.decoder(jpg.subarray(0, jpg.length >> 1))) === 'DECODAGE');
-        vrai('6. JPEG sans EOI : DECODAGE', code(() => D.decoder(jpg.subarray(0, jpg.length - 2))) === 'DECODAGE' || true);   // un fichier sans EOI mais complet est toléré par libjpeg ; le test ne tranche pas
+        vrai('6. JPEG sans EOI : DECODAGE (libjpeg le tolère ; refuser est plus sûr)', code(() => D.decoder(jpg.subarray(0, jpg.length - 2))) === 'DECODAGE');
         vrai('6. PNG tronqué : DECODAGE', code(() => D.decoder(png.subarray(0, png.length >> 1))) === 'DECODAGE');
         const crc = Buffer.from(png); crc[crc.length - 20] ^= 1;
         vrai('6. PNG au CRC faux : DECODAGE', code(() => D.decoder(crc)) === 'DECODAGE');
@@ -135,7 +135,7 @@ const code = f => { try { f(); return null; } catch (e) { return e && e.name ===
         vrai('6. JPEG 12 bits : NON_SUPPORTE', code(() => D.decoder(p12)) === 'NON_SUPPORTE');
         // bombe de décompression : un flux zlib qui déclare moins qu'il ne produit
         const bombe = Buffer.from(png);
-        vrai('6. ErreurDecodeur porte un code fermé', ['FORMAT', 'TROP_GRAND', 'DECODAGE', 'NON_SUPPORTE'].includes(code(() => D.decoder(bombe.subarray(0, 40)))));
+        vrai('6. PNG réduit à son en-tête : DECODAGE', code(() => D.decoder(bombe.subarray(0, 40))) === 'DECODAGE');
     }
 
     // ═══ 7. déterminisme : deux décodages == mêmes octets, et la sortie ne dépend d'aucun état gardé entre deux appels ═══
@@ -157,6 +157,104 @@ const code = f => { try { f(); return null; } catch (e) { return e && e.name ===
             vrai(`8. un bit muté à l'octet ${i} : le comparateur d'octets le trouve`, premierEcart(r.rgb, mute) === i);
         }
         vrai('8. un octet de moins : le comparateur le voit', premierEcart(r.rgb, r.rgb.subarray(1)) !== -1);
+    }
+
+    // ═══ 9. robustesse (tour T1) : aucune exception brute, codes d'erreur fermés ═══
+    {
+        const png = Buffer.from(fx.cas.find(x => x.nom === 'png-rgb-64x48').b64, 'base64'), ref = D.decoder(png);
+        for (const [nom, v] of [['-1', -1], ['null', null], ['undefined', undefined], ['une chaîne', 'abc'], ['un objet', {}], ['un tableau ordinaire', [1, 2, 3]], ['un nombre', 7], ['un Float32Array de 0 octet', new Float32Array(0)]]) {
+            // un Float32Array est une vue d'ArrayBuffer : accepté comme octets, mais vide -> FORMAT ; les autres -> entree-invalide
+            const attendu = nom.startsWith('un Float32Array') ? 'FORMAT' : 'entree-invalide';
+            vrai(`9. decoder(${nom}) sort sous le code « ${attendu} », jamais une exception brute`, code(() => D.decoder(v)) === attendu);
+        }
+        vrai('9. decoder(octets, 5) : options invalides -> entree-invalide', code(() => D.decoder(png, 5)) === 'entree-invalide');
+        vrai('9. decoder(octets, { coteMax: -3 }) -> entree-invalide', code(() => D.decoder(png, { coteMax: -3 })) === 'entree-invalide');
+        vrai('9. decoder(octets, { balayagesMax: 1.5 }) -> entree-invalide', code(() => D.decoder(png, { balayagesMax: 1.5 })) === 'entree-invalide');
+        vrai('9. un ArrayBuffer et une vue (DataView) donnent les mêmes octets que le Uint8Array', sha(D.decoder(png.buffer.slice(png.byteOffset, png.byteOffset + png.length)).rgb) === sha(ref.rgb) && sha(D.decoder(new DataView(png.buffer, png.byteOffset, png.length)).rgb) === sha(ref.rgb));
+        // un RangeError d'allocation (iPhone : mémoire) devient « memoire » : simulé par un Proxy dont la lecture lève ce que lève le moteur
+        const piege = new Proxy(new Uint8Array(png), { get(c, p, r) { if (p === '0' || p === 0) throw new RangeError('Array buffer allocation failed'); const v = Reflect.get(c, p, c); return typeof v === 'function' ? v.bind(c) : v; } });
+        vrai('9. RangeError d\'allocation -> code « memoire »', code(() => D.decoder(piege)) === 'memoire');
+        vrai('9. TypeError interne imprévu -> code DECODAGE (jamais brut)', code(() => D.decoder(new Proxy(new Uint8Array(png), { get(c, p) { if (p === '0') throw new TypeError('x'); const v = Reflect.get(c, p, c); return typeof v === 'function' ? v.bind(c) : v; } }))) === 'DECODAGE');
+    }
+
+    // ═══ 10. JPEG progressif : plafond de balayages, plafond de pixels AVANT allocation, complétude ═══
+    const t1 = JSON.parse(fs.readFileSync(path.join(FIX, 'pil-t1.json'), 'utf8'));
+    const marqueursSos = o => { const r = []; let i = 2; while (i + 4 <= o.length) { if (o[i] !== 0xff) break; const m = o[i + 1]; if (m === 0xd9) break; const n = (o[i + 2] << 8) | o[i + 3]; if (m === 0xda) { r.push(i); let j = i + 2 + n; for (;;) { const k = o.indexOf(0xff, j); if (o[k + 1] === 0 || (o[k + 1] >= 0xd0 && o[k + 1] <= 0xd7)) { j = k + 2; continue; } i = k; break; } } else i += 2 + n; } return r; };
+    {
+        const base = Buffer.from(t1.cas.find(x => x.nom === 'jpeg-progressif-balayages-64x48').b64, 'base64'), sos = marqueursSos(base);
+        // un balayage AC « spectral seul » (Ah = 0, Al = 0) peut se répéter sans que la progression devienne incohérente : c'est le fichier hostile (RELECTURE-2 n°1). On prend le 2e balayage de Pillow et on force Al = 0.
+        const i2 = sos[1], fin2 = (i2 + 2 + base.readUInt16BE(i2 + 2) - 1), debut3 = sos[2];
+        const spectral = Buffer.from(base.subarray(i2, debut3)); spectral[fin2 - i2] = spectral[fin2 - i2] & 0xf0;
+        const empile = n => Buffer.concat([base.subarray(0, base.length - 2), ...Array.from({ length: n }, () => spectral), Buffer.from([0xff, 0xd9])]);       // après le dernier balayage : toutes les progressions restent cohérentes
+        vrai('10. témoin : le progressif de Pillow est décodé (balayages : ' + sos.length + ')', code(() => D.decoder(base)) === null);
+        vrai('10. 70 balayages empilés : refusé par TROP_GRAND (plafond 64)', code(() => D.decoder(empile(70))) === 'TROP_GRAND');
+        vrai('10. 60 balayages empilés (64 au total ou moins) : pas de refus par le plafond', code(() => D.decoder(empile(40))) !== 'TROP_GRAND');
+        vrai('10. le plafond est une option : à 200, 70 balayages empilés ne sont plus refusés par lui', code(() => D.decoder(empile(70), { balayagesMax: 200 })) !== 'TROP_GRAND');
+        vrai('10. le plafond de 64 ne refuse aucun progressif de Pillow du corpus', t1.cas.filter(x => x.balayages).every(x => x.balayages <= 64));
+        // pic mémoire : un progressif qui annonce 4000 x 3000 (12 Mpx, sous le plafond général) est refusé AVANT d'allouer ses coefficients
+        const gros = Buffer.from(base); for (let i = 2; i < 200; i++) if (gros[i] === 0xff && gros[i + 1] === 0xc2) { gros.writeUInt16BE(3000, i + 5); gros.writeUInt16BE(4000, i + 7); break; }
+        const avant = process.memoryUsage().arrayBuffers;
+        vrai('10. progressif 4000 x 3000 : TROP_GRAND (plafond progressif 4 Mpx)', code(() => D.decoder(gros)) === 'TROP_GRAND');
+        vrai('10. ... et rien n\'a été alloué avant le refus (arrayBuffers +< 1 Mo)', process.memoryUsage().arrayBuffers - avant < 1e6, String(process.memoryUsage().arrayBuffers - avant));
+        vrai('10. le plafond progressif est une option', code(() => D.decoder(gros, { pixelsMaxProgressif: 13000000 })) !== 'TROP_GRAND');
+        const seq = Buffer.from(fx.cas.find(x => x.nom === 'jpeg-420-257x129').b64, 'base64'); for (let i = 2; i < 200; i++) if (seq[i] === 0xff && seq[i + 1] === 0xc0) { seq.writeUInt16BE(3000, i + 5); seq.writeUInt16BE(4000, i + 7); break; }
+        vrai('10. le même format en SÉQUENTIEL garde le plafond de 12 Mpx (autre refus que TROP_GRAND)', code(() => D.decoder(seq)) !== 'TROP_GRAND');
+    }
+
+    // ═══ 11. le jeu T1 de Pillow : PNG entrelacé Adam7, palettes 1/2/4/8 bits, tRNS, table de quantification verrouillée, progressifs incomplets, adler32 ═══
+    {
+        const fam = {};
+        for (const c of t1.cas) {
+            if (c.balayages) continue;
+            const o = Buffer.from(c.b64, 'base64'), famille = c.nom.replace(/-\d+x\d+$/, '').replace(/palette\d/, 'paletteN');
+            const f = fam[famille] || (fam[famille] = { ok: 0, mal: 0 });
+            if (c.refuse) { const bon = code(() => D.decoder(o, { orientation: 'aucune' })) === c.refuse; f[bon ? 'ok' : 'mal']++; vrai(`11. ${c.nom} : refusé par ${c.refuse}`, bon); continue; }
+            let r = null; try { r = D.decoder(o, { orientation: 'aucune' }); } catch (e) { /* compté ci-dessous */ }
+            const bon = r && r.largeur === c.pil.w && r.hauteur === c.pil.h && sha(r.rgb) === c.pil.sha256;
+            f[bon ? 'ok' : 'mal']++; vrai(`11. ${c.nom} == Pillow au bit`, bon);
+        }
+        for (const f of ['png-adam7-rgb', 'png-adam7-gris', 'png-adam7-rgba', 'png-adam7-grisalpha', 'png-adam7-paletteN', 'png-plein-paletteN', 'png-pillow-palette-bits1', 'png-pillow-palette-bits2', 'png-pillow-palette-bits4', 'png-adam7-paletteN-trns', 'jpeg-progressif-dqt-redefinie']) vrai(`11. famille ${f} éprouvée`, fam[f] && fam[f].ok >= 2 && fam[f].mal === 0, JSON.stringify(fam[f]));
+        console.log('   11. éprouvés (ok / mal) : ' + Object.entries(fam).map(([k, v]) => `${k} ${v.ok}/${v.mal}`).join(', '));
+    }
+
+    // ═══ 12. refus de ce qui n'a pas de preuve : échantillonnages, séquentiel non entrelacé, DQT 16 bits, deflate sur-souscrit ═══
+    {
+        const sof = (o, f) => { const c = Buffer.from(o); for (let i = 2; i < 300; i++) if (c[i] === 0xff && c[i + 1] === 0xc0) { f(c, i); return c; } throw new Error('pas de SOF0'); };
+        const c420 = Buffer.from(fx.cas.find(x => x.nom === 'jpeg-420-64x48').b64, 'base64'), gris = Buffer.from(fx.cas.find(x => x.nom === 'jpeg-gris-64x48').b64, 'base64'), c444 = Buffer.from(fx.cas.find(x => x.nom === 'jpeg-444-64x48').b64, 'base64');
+        vrai('12. chroma Cb 2x2 : NON_SUPPORTE', code(() => D.decoder(sof(c420, (c, i) => { c[i + 14] = 0x22; }))) === 'NON_SUPPORTE');
+        vrai('12. luma 1x2 (4:4:0) : NON_SUPPORTE', code(() => D.decoder(sof(c444, (c, i) => { c[i + 11] = 0x12; }))) === 'NON_SUPPORTE');
+        vrai('12. gris échantillonné 2x2 : NON_SUPPORTE', code(() => D.decoder(sof(gris, (c, i) => { c[i + 11] = 0x22; }))) === 'NON_SUPPORTE');
+        const dqt16 = Buffer.concat([c444.subarray(0, 2), Buffer.from([0xff, 0xdb, 0, 67 + 64, 0x10]), Buffer.alloc(128, 1), c444.subarray(2)]);
+        vrai('12. table de quantification 16 bits : NON_SUPPORTE', code(() => D.decoder(dqt16)) === 'NON_SUPPORTE');
+        // séquentiel non entrelacé : un SOS à une seule composante dans une image à trois
+        const ns1 = Buffer.from(c444); { const i = ns1.indexOf(Buffer.from([0xff, 0xda])); ns1.writeUInt16BE(8, i + 2); ns1[i + 4] = 1; ns1.copy(ns1, i + 7, i + 14); ns1[i + 5] = 1; ns1[i + 6] = 0x00; }
+        vrai('12. séquentiel non entrelacé : NON_SUPPORTE', code(() => D.decoder(ns1)) === 'NON_SUPPORTE');
+        // deflate (zlib) : jeux de longueurs sur-souscrit et incomplet refusés comme zlib
+        const bitsEnOctets = bits => { const o = []; for (let i = 0; i < bits.length; i += 8) o.push(parseInt(bits.slice(i, i + 8).split('').reverse().join('').padEnd(8, '0'), 2)); return Uint8Array.from(o); };
+        const nb = (v, n) => v.toString(2).padStart(n, '0').split('').reverse().join('');      // nombre sur n bits, poids faible d'abord
+        const bloc = lc => '1' + nb(2, 2) + nb(0, 5) + nb(0, 5) + nb(0, 4) + lc.map(l => nb(l, 3)).join('');       // BFINAL, BTYPE 2, HLIT 257, HDIST 1, HCLEN 4, longueurs des 4 codes (16, 17, 18, 0)
+        const zl = bits => Uint8Array.from([0x78, 0x9c, ...bitsEnOctets(bits), 0, 0, 0, 0, 0, 0]);
+        const { inflater } = await import(pathToFileURL(path.join(PUB, 'decodeur-png.mjs')).href);
+        const msg = f => { try { f(); return 'accepté'; } catch (e) { return e.detail || e.message; } };
+        vrai('12. longueurs de codes de longueurs SUR-SOUSCRITES (4 codes de longueur 1) : refusé', /sur-souscrit/.test(msg(() => inflater(zl(bloc([1, 1, 1, 1])), 4))));
+        vrai('12. longueurs de codes de longueurs INCOMPLÈTES (1 code de longueur 1) : refusé', /incomplet/.test(msg(() => inflater(zl(bloc([1, 0, 0, 0])), 4))));
+    }
+
+    // ═══ 13. WebP : 400 flux ALÉATOIRES + 193 CIBLÉS (netteté x niveaux, filtre simple, saut, deltas, petite quantification) (outils/decodeur/generateur-webp.mjs) lus par Pillow : filtre simple, partitions, netteté, deltas, segments, saut, probabilités ═══
+    {
+        const dif = JSON.parse(fs.readFileSync(path.join(FIX, 'pil-webp-differentiel.json'), 'utf8')), cible = JSON.parse(fs.readFileSync(path.join(FIX, 'pil-webp-differentiel-cible.json'), 'utf8'));
+        dif.cas = [...dif.cas, ...cible.cas];
+        const n = { total: 0, identiques: 0, simple: 0, partitions: 0, nettete: 0, deltas: 0, segAbs: 0, segRel: 0, segCarte: 0, skip: 0, majProbas: 0, niveau0: 0 };
+        for (const c of dif.cas) {
+            n.total++;
+            let r = null; try { r = D.decoder(Buffer.from(c.b64, 'base64'), { orientation: 'aucune' }); } catch (e) { /* compté */ }
+            const bon = c.pil && r && r.largeur === c.pil.w && r.hauteur === c.pil.h && sha(r.rgb) === c.pil.sha256;
+            vrai(`13. ${c.nom} == Pillow au bit`, bon);
+            if (bon) { n.identiques++; if (c.simple) n.simple++; if (c.nparts > 1) n.partitions++; if (c.nettete > 0) n.nettete++; if (c.deltas) n.deltas++; if (c.segActif && c.segAbs) n.segAbs++; if (c.segActif && !c.segAbs) n.segRel++; if (c.segCarte) n.segCarte++; if (c.skip) n.skip++; if (c.majProbas) n.majProbas++; if (c.niveau === 0) n.niveau0++; }
+        }
+        for (const k of ['simple', 'partitions', 'nettete', 'deltas', 'segAbs', 'segRel', 'segCarte', 'skip', 'majProbas', 'niveau0']) vrai(`13. drapeau « ${k} » exercé par au moins 20 flux identiques à Pillow`, n[k] >= 20, String(n[k]));
+        vrai('13. 593 flux (400 aléatoires + 193 ciblés), tous identiques', n.total === 593 && n.identiques === 593, JSON.stringify(n));
+        console.log('   13. flux aléatoires identiques à Pillow : ' + JSON.stringify(n));
     }
 
     console.log(`\n${ok} réussis, ${ko} échoués`);

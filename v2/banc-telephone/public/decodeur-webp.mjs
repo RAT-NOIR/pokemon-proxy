@@ -4,6 +4,8 @@
 // filtres de boucle, sur-échantillonnage « fancy » des chromas et conversion YUV -> RGB en virgule fixe.
 // Pris : WebP avec perte, image fixe (RIFF « WEBP » avec un seul chunk « VP8 », ou « VP8X » sans animation ; un chunk « ALPH » est ignoré : Pillow convert('RGB') ignore l'alpha).
 // Refusés avec un CODE : sans perte (VP8L), animation, image tronquée, partitions incohérentes. Jamais un résultat approché.
+// CRÉDITS : le comportement reproduit est celui de libwebp (BSD-3-Clause, Copyright (c) 2010 Google Inc. and contributors) : lecteur booléen, GetCoeffs, transformées, filtres de boucle, upsampling, conversion YUV.
+// Aucun code de libwebp n'est copié ; les tables numériques viennent de la RFC 6386 (voir decodeur-webp-tables.mjs). RÈGLE : tout ce qui est accepté a été comparé à Pillow (libwebp) au bit près.
 import { ErreurDecodeur, orientationExif } from './decodeur-jpeg.mjs';
 import { DC_Q, AC_Q, KF_BMODE_PROBS, COEFF_UPDATE_PROBS, COEFF_PROBS } from './decodeur-webp-tables.mjs';
 
@@ -39,7 +41,7 @@ export function orientationWebp(b) {
 }
 
 // ── le lecteur booléen de libwebp (octet par octet : mêmes décisions, même drapeau de fin de flux `eof`)
-class Lecteur {
+export class Lecteur {
     constructor(b, debut, fin) { this.b = b; this.pos = debut; this.fin = fin; this.range = 254; this.value = 0; this.bits = -8; this.eof = false; this.charger(); }
     charger() {
         if (this.pos < this.fin) { this.bits += 8; this.value = (this.value * 256) + this.b[this.pos++]; }
@@ -85,6 +87,9 @@ function grandeValeur(br, P, p) {
     }
     return v;
 }
+let crochetCoeff = null;
+/** Réservé au banc : un crochet appelé avec chaque coefficient déquantifié (null par défaut : aucun effet en production). */
+export function definirCrochetCoeff(f) { crochetCoeff = f; }
 /** GetCoeffs de libwebp : rend l'indice (dans l'ordre zigzag) qui suit le dernier coefficient non nul ; écrit dans `sortie` en ordre raster, déquantifié. */
 function lireCoeffs(br, P, t, ctx, dq0, dq1, n, sortie, so) {
     let p = ((t * 8 + BANDS[n]) * 3 + ctx) * 11;
@@ -94,7 +99,9 @@ function lireCoeffs(br, P, t, ctx, dq0, dq1, n, sortie, so) {
         const pn = (t * 8 + BANDS[n + 1]) * 33;
         let v;
         if (!br.get(P[p + 2])) { v = 1; p = pn + 11; } else { v = grandeValeur(br, P, p); p = pn + 22; }
-        sortie[so + ZIGZAG[n]] = (br.get(0x80) ? -v : v) * (n > 0 ? dq1 : dq0);
+        const w = (br.get(0x80) ? -v : v) * (n > 0 ? dq1 : dq0);
+        if (crochetCoeff !== null) crochetCoeff(w);      // banc seulement (générateur différentiel) : borne les coefficients des flux fabriqués
+        sortie[so + ZIGZAG[n]] = w;
     }
     return 16;
 }
@@ -155,13 +162,32 @@ export function decoderWebp(b, { coteMax = 4096, pixelsMax = 12000000 } = {}) {
     if (part0 > f.length - 10) refuser('DECODAGE', 'première partition tronquée');
     const mbw = (W + 15) >> 4, mbh = (H + 15) >> 4;
     const br = new Lecteur(f, 10, 10 + part0);
+    const brut = lireEntetesBruts(br);
+    if (br.eof) refuser('DECODAGE', 'en-tête tronqué');
+    const E = construireEntetes(brut);
+    // partitions de jetons : leurs tailles (3 octets chacune sauf la dernière) suivent la première partition
+    const nparts = E.nparts;
+    const off = 10 + part0, tailleFin = f.length, tailles = 3 * (nparts - 1);
+    if (off + tailles > tailleFin) refuser('DECODAGE', 'tailles de partitions tronquées');
+    let debutPart = off + tailles;
+    const parts = [];
+    for (let i = 0; i < nparts; i++) {
+        const sz = i < nparts - 1 ? u24le(f, off + 3 * i) : Math.max(0, tailleFin - debutPart);
+        if (debutPart + sz > tailleFin) refuser('DECODAGE', 'partition tronquée');
+        parts.push(new Lecteur(f, debutPart, debutPart + sz));
+        debutPart += sz;
+    }
+    return decoderTrame(E, br, parts, W, H);
+}
 
-    // ── en-têtes
+/** Les champs BRUTS de l'en-tête de la première partition, dans l'ordre de la RFC 6386 (§9.2 à 9.11, 19.2). Leur écriture, symétrique, est dans outils/decodeur/generateur-webp.mjs (banc seulement). */
+export function lireEntetesBruts(br) {
     if (br.valeur(2)) refuser('NON_SUPPORTE', 'bits réservés (espace colorimétrique / écrêtage)');
-    const seg = { actif: br.get(0x80), majMap: 0, abs: 0, q: [0, 0, 0, 0], lf: [0, 0, 0, 0], probas: [255, 255, 255] };
+    const seg = { actif: br.get(0x80), majMap: 0, majData: 0, abs: 1, q: [0, 0, 0, 0], lf: [0, 0, 0, 0], probas: [255, 255, 255] };
     if (seg.actif) {
         seg.majMap = br.get(0x80);
-        if (br.get(0x80)) {
+        seg.majData = br.get(0x80);
+        if (seg.majData) {
             seg.abs = br.get(0x80);
             for (let s = 0; s < 4; s++) seg.q[s] = br.get(0x80) ? br.signee(7) : 0;
             for (let s = 0; s < 4; s++) seg.lf[s] = br.get(0x80) ? br.signee(6) : 0;
@@ -173,25 +199,22 @@ export function decoderWebp(b, { coteMax = 4096, pixelsMax = 12000000 } = {}) {
         for (let i = 0; i < 4; i++) if (br.get(0x80)) lf.ref[i] = br.signee(6);
         for (let i = 0; i < 4; i++) if (br.get(0x80)) lf.mode[i] = br.signee(6);
     }
-    const filtre = lf.niveau === 0 ? 0 : lf.simple ? 1 : 2;
-    // partitions de jetons
     const nparts = 1 << br.valeur(2);
-    let off = 10 + part0;
-    const tailleFin = f.length;
-    const tailles = 3 * (nparts - 1);
-    if (off + tailles > tailleFin) refuser('DECODAGE', 'tailles de partitions tronquées');
-    let debutPart = off + tailles;
-    const parts = [];
-    for (let i = 0; i < nparts; i++) {
-        const sz = i < nparts - 1 ? u24le(f, off + 3 * i) : Math.max(0, tailleFin - debutPart);
-        if (debutPart + sz > tailleFin) refuser('DECODAGE', 'partition tronquée');
-        parts.push(new Lecteur(f, debutPart, debutPart + sz));
-        debutPart += sz;
-    }
-    // quantification
     const base = br.valeur(7);
-    const dqy1dc = br.get(0x80) ? br.signee(4) : 0, dqy2dc = br.get(0x80) ? br.signee(4) : 0, dqy2ac = br.get(0x80) ? br.signee(4) : 0, dquvdc = br.get(0x80) ? br.signee(4) : 0, dquvac = br.get(0x80) ? br.signee(4) : 0;
+    const dq = [0, 0, 0, 0, 0];     // y1 dc, y2 dc, y2 ac, uv dc, uv ac
+    for (let i = 0; i < 5; i++) dq[i] = br.get(0x80) ? br.signee(4) : 0;
+    br.get(0x80);        // refresh_entropy_probs : sans effet sur une image fixe
+    const P = new Uint8Array(1056);
+    for (let i = 0; i < 1056; i++) P[i] = br.get(COEFF_UPDATE_PROBS[i]) ? br.valeur(8) : COEFF_PROBS[i];
+    const utiliseSkip = br.get(0x80), probaSkip = utiliseSkip ? br.valeur(8) : 0;
+    return { seg, lf, nparts, base, dq, P, utiliseSkip, probaSkip };
+}
+
+/** Les grandeurs dérivées des champs bruts : quantificateurs par segment, forces de filtrage par segment et type de macrobloc. */
+export function construireEntetes({ seg, lf, nparts, base, dq, P, utiliseSkip, probaSkip }) {
+    const filtre = lf.niveau === 0 ? 0 : lf.simple ? 1 : 2;
     const cl = (v, m) => (v < 0 ? 0 : v > m ? m : v);
+    const [dqy1dc, dqy2dc, dqy2ac, dquvdc, dquvac] = dq;
     const dqm = [];
     for (let i = 0; i < 4; i++) {
         let q;
@@ -199,13 +222,6 @@ export function decoderWebp(b, { coteMax = 4096, pixelsMax = 12000000 } = {}) {
         const y2ac = Math.floor((AC_Q[cl(q + dqy2ac, 127)] * 101581) / 65536);
         dqm.push({ y1: [DC_Q[cl(q + dqy1dc, 127)], AC_Q[cl(q, 127)]], y2: [DC_Q[cl(q + dqy2dc, 127)] * 2, y2ac < 8 ? 8 : y2ac], uv: [DC_Q[cl(q + dquvdc, 117)], AC_Q[cl(q + dquvac, 127)]] });
     }
-    br.get(0x80);        // refresh_entropy_probs : sans effet sur une image fixe
-    const P = new Uint8Array(1056);
-    for (let i = 0; i < 1056; i++) P[i] = br.get(COEFF_UPDATE_PROBS[i]) ? br.valeur(8) : COEFF_PROBS[i];
-    const utiliseSkip = br.get(0x80), probaSkip = utiliseSkip ? br.valeur(8) : 0;
-    if (br.eof) refuser('DECODAGE', 'en-tête tronqué');
-
-    // forces de filtrage par segment
     const forces = [];
     for (let s = 0; s < 4; s++) {
         let niveauBase;
@@ -226,6 +242,13 @@ export function decoderWebp(b, { coteMax = 4096, pixelsMax = 12000000 } = {}) {
         }
         forces.push(deux);
     }
+    return { seg, lf, filtre, nparts, dqm, P, utiliseSkip, probaSkip, forces };
+}
+
+/** Les macroblocs d'une trame clé : modes (première partition), jetons (partitions), reconstruction, filtre de boucle, conversion en RGB. `br` et `parts` sont des lecteurs (ou, pour le générateur du banc, des oracles). */
+export function decoderTrame(E, br, parts, W, H) {
+    const { seg, filtre, dqm, P, utiliseSkip, probaSkip, forces } = E;
+    const nparts = parts.length, mbw = (W + 15) >> 4, mbh = (H + 15) >> 4;
 
     // ── macroblocs : modes, jetons, reconstruction (prédiction + résidu) sur des plans NON filtrés, puis filtre de boucle sur l'image entière
     const sY = mbw * 16, sC = mbw * 8, Y = new Uint8Array(sY * mbh * 16), U = new Uint8Array(sC * mbh * 8), V = new Uint8Array(sC * mbh * 8);

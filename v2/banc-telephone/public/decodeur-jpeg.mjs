@@ -6,6 +6,9 @@
 // Formats pris : JPEG séquentiel (SOF0, SOF1) et progressif (SOF2), 8 bits, 1 ou 3 composantes, Huffman, intervalles de redémarrage.
 // Refusés avec un CODE (jamais un résultat approché) : arithmétique, sans perte, 12 bits, 4 composantes (CMYK / YCCK), fichier tronqué, plusieurs images.
 // Aucune dépendance de l'appareil : tout est entier 32 bits ; le même fichier donne les mêmes octets partout.
+// CRÉDITS : l'IDCT (idctBloc) est une transposition de jpeg_idct_islow de jidctint.c ; ce code est « based in part on the work of the Independent JPEG Group » (licence IJG, libjpeg-turbo).
+// Les tables YCC->RGB et le suréchantillonnage suivent jdcolor.c et jdsample.c (IJG / libjpeg-turbo, BSD-3-Clause). Aucun code n'est copié, aucun binaire n'est servi.
+// RÈGLE : tout ce qui est accepté a été comparé à Pillow au bit près ; le reste est refusé par un code (NON_SUPPORTE, DECODAGE, TROP_GRAND).
 export class ErreurDecodeur extends Error {
     constructor(code, detail) { super(detail ? `${code}: ${detail}` : code); this.name = 'ErreurDecodeur'; this.code = code; this.detail = detail || ''; }
 }
@@ -43,9 +46,11 @@ export function orientationExif(b, debut, fin) {
         const u16 = i => (i + 2 > fin ? -1 : le ? b[i] | (b[i + 1] << 8) : (b[i] << 8) | b[i + 1]);
         const u32 = i => (i + 4 > fin ? -1 : le ? (b[i] | (b[i + 1] << 8) | (b[i + 2] << 16) | (b[i + 3] << 24)) >>> 0 : ((b[i] << 24) | (b[i + 1] << 16) | (b[i + 2] << 8) | b[i + 3]) >>> 0);
         if (u16(t + 2) !== 42) return 0;
-        const ifd = t + u32(t + 4);
+        const decalage = u32(t + 4);
+        if (decalage < 8 || t + decalage + 2 > fin) return 0;          // le IFD doit tenir dans le segment
+        const ifd = t + decalage;
         const n = u16(ifd);
-        if (n < 0 || n > 512) return 0;
+        if (n < 0 || n > 512 || ifd + 2 + 12 * n > fin) return 0;
         for (let i = 0; i < n; i++) {
             const e = ifd + 2 + 12 * i;
             if (u16(e) === 0x0112 && u16(e + 2) === 3 && u32(e + 4) === 1) { const v = u16(e + 8); return v >= 1 && v <= 8 ? v : 0; }
@@ -55,7 +60,7 @@ export function orientationExif(b, debut, fin) {
 }
 
 /** Décode un JPEG en RGB. Rend { largeur, hauteur, rgb (Uint8Array l*h*3), orientationLue (0 si absente), transformeAdobe, espace }. L'orientation EXIF n'est PAS appliquée ici. */
-export function decoderJpeg(b, { coteMax = 4096, pixelsMax = 12000000 } = {}) {
+export function decoderJpeg(b, { coteMax = 4096, pixelsMax = 12000000, pixelsMaxProgressif = 4000000, balayagesMax = 64 } = {}) {
     if (!(b instanceof Uint8Array)) b = new Uint8Array(b);
     const n = b.length;
     if (n < 4 || b[0] !== 0xff || b[1] !== 0xd8) refuser('FORMAT', 'pas un JPEG');
@@ -75,7 +80,7 @@ export function decoderJpeg(b, { coteMax = 4096, pixelsMax = 12000000 } = {}) {
         const len = (b[pos] << 8) | b[pos + 1];
         if (len < 2 || pos + len > n) refuser('DECODAGE', 'segment tronqué');
         const s0 = pos + 2, s1 = pos + len;
-        if (m === 0xe0) { if (len >= 7 && b[s0] === 0x4a && b[s0 + 1] === 0x46 && b[s0 + 2] === 0x49 && b[s0 + 3] === 0x46 && b[s0 + 4] === 0) jfif = true; }
+        if (m === 0xe0) { if (len >= 16 && b[s0] === 0x4a && b[s0 + 1] === 0x46 && b[s0 + 2] === 0x49 && b[s0 + 3] === 0x46 && b[s0 + 4] === 0) jfif = true; }
         else if (m === 0xe1) { if (!orientation) orientation = orientationExif(b, s0, s1); }
         else if (m === 0xee) { if (len >= 14 && b[s0] === 0x41 && b[s0 + 1] === 0x64 && b[s0 + 2] === 0x6f && b[s0 + 3] === 0x62 && b[s0 + 4] === 0x65) adobe = b[s0 + 11]; }
         else if (m === 0xdb) {
@@ -83,6 +88,7 @@ export function decoderJpeg(b, { coteMax = 4096, pixelsMax = 12000000 } = {}) {
             while (i < s1) {
                 const pq = b[i] >> 4, tq = b[i] & 15; i++;
                 if (tq > 3 || pq > 1) refuser('DECODAGE', 'DQT invalide');
+                if (pq) refuser('NON_SUPPORTE', 'table de quantification 16 bits (non éprouvée contre Pillow)');
                 const t = new Int32Array(64);
                 for (let k = 0; k < 64; k++) { if (pq) { t[ZZ[k]] = (b[i] << 8) | b[i + 1]; i += 2; } else t[ZZ[k]] = b[i++]; }
                 if (i > s1) refuser('DECODAGE', 'DQT tronquée');
@@ -107,12 +113,21 @@ export function decoderJpeg(b, { coteMax = 4096, pixelsMax = 12000000 } = {}) {
             if (!(largeur >= 1 && hauteur >= 1)) refuser('DECODAGE', 'dimension nulle');
             if (largeur > coteMax || hauteur > coteMax || largeur * hauteur > pixelsMax) refuser('TROP_GRAND', `${largeur} x ${hauteur}`);
             if (nc !== 1 && nc !== 3) refuser('NON_SUPPORTE', `${nc} composantes`);
+            // un progressif garde TOUS ses coefficients en mémoire (2 octets chacun, 3 composantes) jusqu'au dernier balayage : plafond plus bas, vérifié AVANT toute allocation
+            if (m === 0xc2 && largeur * hauteur > pixelsMaxProgressif) refuser('TROP_GRAND', `progressif ${largeur} x ${hauteur} (plafond ${pixelsMaxProgressif} px)`);
             if (s1 - s0 < 6 + 3 * nc) refuser('DECODAGE', 'SOF tronqué');
             const comps = [];
             for (let i = 0; i < nc; i++) {
                 const id = b[s0 + 6 + 3 * i], h = b[s0 + 7 + 3 * i] >> 4, v = b[s0 + 7 + 3 * i] & 15, tq = b[s0 + 8 + 3 * i];
                 if (h < 1 || h > 4 || v < 1 || v > 4 || tq > 3) refuser('DECODAGE', 'SOF invalide');
-                comps.push({ id, h, v, tq });
+                if (comps.some(x => x.id === id)) refuser('DECODAGE', 'identifiants de composantes répétés');
+                comps.push({ id, h, v, tq, q: null, vu: false, bits: new Int8Array(64).fill(-1) });
+            }
+            // seuls les échantillonnages que Pillow sait écrire (donc éprouvés) : gris 1x1 ; couleur 4:4:4, 4:2:2 (Y 2x1), 4:2:0 (Y 2x2), chromas 1x1
+            if (nc === 1) { if (comps[0].h !== 1 || comps[0].v !== 1) refuser('NON_SUPPORTE', 'gris échantillonné'); }
+            else {
+                const [y, cb, cr] = comps;
+                if (cb.h !== 1 || cb.v !== 1 || cr.h !== 1 || cr.v !== 1 || !((y.h === 1 && y.v === 1) || (y.h === 2 && y.v === 1) || (y.h === 2 && y.v === 2))) refuser('NON_SUPPORTE', 'échantillonnage non éprouvé contre Pillow');
             }
             frame = { progressif: m === 0xc2, largeur, hauteur, comps };
             const maxH = Math.max(...comps.map(c => c.h)), maxV = Math.max(...comps.map(c => c.v));
@@ -138,18 +153,41 @@ export function decoderJpeg(b, { coteMax = 4096, pixelsMax = 12000000 } = {}) {
                 c.tDC = tables >> 4; c.tAC = tables & 15; dansScan.push(c);
             }
             const ss = b[s0 + 1 + 2 * ns], se = b[s0 + 2 + 2 * ns], ah = b[s0 + 3 + 2 * ns] >> 4, al = b[s0 + 3 + 2 * ns] & 15;
+            // plafond du nombre de balayages : chacun parcourt tous les blocs (un fichier de quelques Ko peut en empiler des milliers)
+            if (++scans > balayagesMax) refuser('TROP_GRAND', `plus de ${balayagesMax} balayages`);
+            if (!frame.progressif && frame.comps.length > 1 && dansScan.length !== frame.comps.length) refuser('NON_SUPPORTE', 'séquentiel non entrelacé (non éprouvé contre Pillow)');
+            // libjpeg verrouille la table de quantification de chaque composante à son PREMIER balayage : une redéfinition ultérieure est sans effet
+            for (const c of dansScan) {
+                if (!c.q) { const t = qt[c.tq]; if (!t) refuser('DECODAGE', 'table de quantification absente'); c.q = t; }
+                if (!frame.progressif) { if (c.vu) refuser('DECODAGE', 'composante lue deux fois'); c.vu = true; }
+            }
+            if (frame.progressif) {
+                // jdphuff.c start_pass : bandes valides, raffinement d'un seul bit, progression cohérente (libjpeg ne fait qu'avertir ; refuser est plus sûr)
+                if (ss === 0) { if (se !== 0) refuser('DECODAGE', 'scan DC invalide'); }
+                else if (ss > se || se > 63 || dansScan.length !== 1) refuser('DECODAGE', 'scan AC invalide');
+                if (al > 13 || (ah !== 0 && al !== ah - 1)) refuser('DECODAGE', 'approximation successive invalide');
+                for (const c of dansScan) for (let k = ss; k <= se; k++) {
+                    const attendu = c.bits[k] < 0 ? 0 : c.bits[k];
+                    if (ah !== attendu) refuser('DECODAGE', 'progression incohérente');
+                    c.bits[k] = al;
+                }
+            }
             pos = decoderScan(b, s1, frame, dansScan, restart, frame.progressif ? { ss, se, ah, al } : { ss: 0, se: 63, ah: 0, al: 0 }, dc, ac);
-            scans++;
             continue;
         }
         pos = s1;
     }
     if (!frame || !scans) refuser('DECODAGE', 'aucune image');
+    // complétude : libjpeg-turbo LISSE les blocs d'un progressif dont des coefficients n'ont pas reçu leur dernier balayage (do_block_smoothing) ; ce lissage n'est pas reproduit, donc ces fichiers sont refusés
+    for (const c of frame.comps) {
+        if (frame.progressif) { for (let k = 0; k < 64; k++) if (c.bits[k] !== 0) refuser('NON_SUPPORTE', 'JPEG progressif incomplet (libjpeg le lisserait)'); }
+        else if (!c.vu) refuser('DECODAGE', 'composante sans balayage');
+    }
 
     // IDCT de chaque bloc, puis suréchantillonnage, puis couleur
     const { largeur: W, hauteur: H } = frame;
     const pleins = frame.comps.map(c => {
-        const q = qt[c.tq]; if (!q) refuser('DECODAGE', 'table de quantification absente');
+        const q = c.q;
         const plan = idctPlan(c, q);
         return suréchantillonner(plan, c, frame);
     });
@@ -369,7 +407,13 @@ function idctBloc(co, off, q, sortie, so, stride) {
 }
 function idctPlan(c, q) {
     const pw = c.blocsParLigneMcu * 8, ph = c.blocsParColonneMcu * 8, plan = new Uint8Array(pw * ph);
-    for (let br = 0; br < c.blocsParColonneMcu; br++) for (let bc = 0; bc < c.blocsParLigneMcu; bc++) idctBloc(c.coef, 64 * (br * c.blocsParLigneMcu + bc), q, plan, br * 8 * pw + bc * 8, pw);
+    const co = c.coef;
+    for (let br = 0; br < c.blocsParColonneMcu; br++) for (let bc = 0; bc < c.blocsParLigneMcu; bc++) {
+        const o = 64 * (br * c.blocsParLigneMcu + bc);
+        // un produit coefficient x quantificateur hors d'un entier 16 bits : libjpeg-turbo SIMD (Pillow) et son C scalaire divergent ; ni l'un ni l'autre n'est éprouvé, le fichier est refusé
+        for (let i = 0; i < 64; i++) { const p = co[o + i] * q[i]; if (p > 32767 || p < -32768) refuser('DECODAGE', 'coefficient hors plage 16 bits'); }
+        idctBloc(co, o, q, plan, br * 8 * pw + bc * 8, pw);
+    }
     c.coef = null;
     return { plan, pw };
 }

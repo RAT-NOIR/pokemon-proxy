@@ -24,7 +24,10 @@ const T = {
     COEFF_PROBS: table('k_default_coeff_probs [BLOCK_TYPES][COEFF_BANDS]', 1056)
 };
 const somme = a => a.reduce((s, x) => s + x, 0);
-let s = '// GÉNÉRÉ par outils/decodeur/extraire-tables-vp8.js depuis la RFC 6386 (VP8) : ne pas éditer à la main. Tables numériques du format (quantification, probabilités).\n';
+const sha256Rfc = require('crypto').createHash('sha256').update(fs.readFileSync(entree)).digest('hex');
+let s = '// GÉNÉRÉ par outils/decodeur/extraire-tables-vp8.js : ne pas éditer à la main. Tables numériques du format VP8 (quantification, probabilités).\n'
+    + '// Source : RFC 6386 « VP8 Data Format and Decoding Guide » (J. Bankoski et al., Google, novembre 2011), https://www.rfc-editor.org/rfc/rfc6386.txt, texte lu le 2026-11-08 par la porte réseau, sha256 ' + sha256Rfc + '.\n'
+    + '// Licence : les valeurs sont des constantes du format ; le code de référence de la RFC (dixie) est sous licence BSD de Google Inc. (Copyright (c) 2010, 2011, Google Inc. All rights reserved.), dont les tables sont tirées.\n';
 for (const [k, v] of Object.entries(T)) s += `export const ${k} = Uint8Array.from([${v.join(',')}]);   // ${v.length} valeurs, somme ${somme(v)}\n`;
 // DC_Q et AC_Q dépassent 255 : en Int16Array
 s = s.replace('export const DC_Q = Uint8Array', 'export const DC_Q = Int16Array').replace('export const AC_Q = Uint8Array', 'export const AC_Q = Int16Array');

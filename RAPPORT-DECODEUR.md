@@ -11,13 +11,13 @@ Demande de l'éditeur : entrée du modèle identique au bit sur iPhone, Android 
 
 | fichier servi | octets | sha256 |
 |---|---|---|
-| decodeur.mjs | 11 664 | 54aacaf49e7819e7aeba13538a30a90ad63d8806e7872a8d449cfcb41b7f35e9 |
-| decodeur-jpeg.mjs | 25 061 | a2929dbf1dae44f674bfb5fc846ed5cac56e1e7d1df6c5201f02168f98ac71e8 |
-| decodeur-png.mjs | 11 899 | 469e57fe6bd2b124a4bc36df2e26c0b6bdeccbf7b19ca890b2d1de3fadeff076 |
-| decodeur-webp.mjs | 32 232 | 48a9bc2d4f6a9ff2e6c5e99ea43fd4487896c566b071eddfe974257b3a09ff24 |
-| decodeur-webp-tables.mjs | 12 692 | 4f5142cdf32ad69ec67bb6562d979b5b6b6aad3e48dd8993d65c56778ca6c1dd |
+| decodeur.mjs | 13 924 | a08c8d566abe676be0ce1686e9fee85ef33cd675b622ec8b8d8db5a74f387132 |
+| decodeur-jpeg.mjs | 29 497 | 8338d016d891ae9e4c3fa7e71d4c06d9c914869eebb4a662899ef31e17bc00ca |
+| decodeur-png.mjs | 13 358 | 661bca9829519d3ecba9f5a5c8a3f1f0d8511b1ccb4474ffd88a0fd5e496564c |
+| decodeur-webp.mjs | 34 268 | a0a671744c4e213ae96d733992e7e85c53588df5b3320cb5c6d68810f3148627 |
+| decodeur-webp-tables.mjs | 13 166 | d34d39249a0020c1fdc1815f234514e8285de8dd92fa7ca9a5a4465c80be60b5 |
 
-**Poids ajouté au téléchargement : 93,5 Ko (non compressé), ~25 Ko compressé. Aucun .wasm.** (sha256 mesurés sur les fichiers du disque, fins de ligne LF.)
+**Poids ajouté au téléchargement : 104,2 Ko (non compressé, après le tour T1), ~28 Ko compressé. Aucun .wasm.** (sha256 mesurés sur les fichiers du disque, fins de ligne LF.)
 
 ## 2. Contrat (`public/decodeur.mjs`)
 
@@ -75,3 +75,33 @@ Rien n'est branché : `app.js` et `verdict.mjs` intacts. À faire ensuite : `dec
 - `v2/test/test-decodeur.js` (304 assertions, node pur, rouge vu avant le WebP : 49 échecs sans lui) ; `v2/test/fixtures-decodeur/pil-synthetique.json` (1,7 Mo), `pil-lot.json`.
 - `outils/decodeur/` : `fabriquer-fixtures.py`, `references-lot.py`, `references-catalogue.py`, `comparer-catalogue.mjs`, `extraire-tables-vp8.js`, `pilote-decodeur.js`, `preuve-page.js`.
 - Texte de la RFC 6386 lu : `C:\Users\Yung\rat-market-travail\catalogue\decodeur-rfc6386.txt` (hors dépôt).
+
+## 7. TOUR DE CORRECTION T1 (2026-11-08, après RELECTURE-1 et RELECTURE-2)
+
+Règle qui tranche tout : **ce que le décodeur accepte est comparé à Pillow au bit près, sinon il le refuse par un code. Rien d'accepté sans preuve.** Version du module : `rm-decodeur-2`. Banc `v2/test/test-decodeur.js` : **1 140 assertions, 0 échec** (304 avant).
+
+### Robustesse
+- **JPEG progressif, balayages** : plafond `balayagesMax` (64 par défaut, option), refus `TROP_GRAND` avant le décodage du balayage suivant. Maximum observé sur les **9 069 JPEG progressifs réels** du corpus : **14 balayages** (plus grand progressif : 146 700 px) : le plafond n'en refuse aucun. Banc : un progressif de Pillow suivi de 70 balayages « spectral seul » (Ah = Al = 0, cohérents, donc non arrêtés par la cohérence de progression) est refusé ; 40 empilés passent le plafond.
+- **Pic mémoire** : plafond progressif `pixelsMaxProgressif` = 4 Mpx par défaut, vérifié **dans le SOF, avant toute allocation** (banc : un progressif qui annonce 4000 x 3000 est refusé sans qu'`arrayBuffers` ne bouge de 1 Mo ; le même format en séquentiel garde le plafond de 12 Mpx). **Côté page : un refus est un code, jamais un écran vide** ; la page (au branchement) passe au chemin navigateur et le marque « non identique au bit » dans la ligne de diagnostic, ou refuse l'image avec le code ; un progressif de plus de 4 Mpx est rare (aucun dans les 9 069 du corpus ; les photos de téléphone sont séquentielles).
+- **`decoder()` n'enveloppe plus rien d'à moitié** : argument invalide (`decoder(-1)`, `null`, texte, objet, nombre, options absurdes) -> `entree-invalide` ; `RangeError` d'allocation -> `memoire` ; toute autre exception interne -> `DECODAGE`. Codes fermés : `FORMAT, TROP_GRAND, DECODAGE, NON_SUPPORTE, entree-invalide, memoire` (les deux nouveaux en minuscules, comme demandé). Banc **vu rouge** d'abord contre la version précédente (`RM_DECODEUR_PUB` rejoue le banc contre une autre version des modules) : `decoder(-1)` et 10 autres assertions rouges.
+- Mineurs : tables de Huffman deflate **sur-souscrites ou incomplètes refusées comme zlib** (banc : deux flux fabriqués à la main) ; **adler32 vérifié** (PNG à somme fausse : refusé) ; IFD EXIF borné au segment ; JFIF exigé à 16 octets comme libjpeg ; assertion `|| true` remplacée par `=== 'DECODAGE'`.
+
+### Justesse : ce qui était accepté sans preuve est maintenant prouvé ou refusé
+- **JPEG progressif incomplet** (D3 et les 8 fichiers coupés puis fermés par EOI) : libjpeg-turbo lisse les blocs quand des coefficients n'ont pas reçu leur dernier balayage ; nous ne lissons pas, donc **refus `NON_SUPPORTE`** de tout progressif dont chaque coefficient de chaque composante n'est pas à Al = 0 à la fin (suivi `coef_bits` par composante). Banc : 4 fichiers coupés à des frontières de balayage, rouge puis vert. Un séquentiel qui ne couvre pas toutes ses composantes est refusé aussi, de même qu'un balayage séquentiel non entrelacé (non éprouvé), une progression incohérente (Ah différent du dernier Al), une approximation successive invalide.
+- **Table de quantification** : verrouillée au **premier balayage** de la composante comme libjpeg (D9) : un JPEG dont la table est redéfinie entre deux balayages était décodé FAUX (2 fichiers rouges), il est maintenant identique à Pillow. Tables 16 bits **refusées** (D8) ; tout produit coefficient x quantificateur hors de 16 bits **refusé** (SIMD et C scalaire de libjpeg-turbo divergent).
+- **Échantillonnages** : seuls 1x1 (gris), 4:4:4, 4:2:2, 4:2:0 (chromas 1x1) sont acceptés ; 4:4:0, 4:1:1 et mixtes -> `NON_SUPPORTE` (D11).
+- **PNG Adam7 (D1) et palettes 1, 2, 4 bits (D2)** : Pillow ne les écrit pas mais **les lit** : `fabriquer-fixtures-t1.py` écrit à la main (zlib, filtres 0 à 4 forcés ou tirés) 173 fichiers, dont Adam7 sur 9 tailles non multiples de 8 (1x1, 2x2, 3x5, 5x3, 7x9, 9x17, 13x6, 37x29), RGB/gris/RGBA/gris+alpha/palette 1-2-4-8 bits, tRNS, palette plus courte que l'indice, des dégradés lisses pour les égalités du filtre Paeth, et la palette écrite par Pillow (`bits=`). Référence = Pillow qui LIT le fichier : **tous identiques**. Rien n'a été téléchargé.
+- **WebP (D4)** : décompte sur les **57 878** en-têtes du catalogue (`outils/decodeur/compter-drapeaux-webp.mjs`) : filtre simple **0**, plusieurs partitions **0**, netteté > 0 **0**, deltas de filtre **0**, saut de macrobloc utilisé **0** ; segmentation avec données absolues et carte : **57 878** (l'encodeur de libwebp). Donc tous les drapeaux rares n'étaient exercés par AUCUN visuel réel : d'où un **générateur différentiel** (`generateur-webp.mjs`, banc seulement) : un encodeur booléen (RFC 6386 §7.3, remplissage de libvpx) et un ORACLE qui joue le lecteur dans `decoderTrame` (chaque décision tirée au hasard selon sa probabilité est écrite dans le flux), plus un écrivain d'en-têtes symétrique de `lireEntetesBruts` ; filtre simple, 1/2/4/8 partitions, netteté 0-7, deltas de filtre, segments absolus et relatifs, carte de segments, saut de macrobloc, mises à jour de probabilités, niveaux 0-63, quantificateurs delta, 1x1 à 120x90. **593 flux (400 aléatoires + 193 ciblés) lus par Pillow : 593/593 identiques**, 0 refus de Pillow (216 filtre simple, 241 multi-partitions, 306 netteté, 227 deltas, 132 segments absolus, 209 relatifs, 359 sauts, 291 mises à jour). Le banc rejoue ces 593 fichiers sans Python. **Trouvaille** : sans mise à jour des données de segment, libwebp prend des valeurs ABSOLUES et nulles (`ResetSegmentHeader`) alors que la RFC (dixie) les prend relatives : nous suivons libwebp (la mutation correspondante est tuée). Autre trouvaille du générateur : le lecteur de libwebp veut 8 bits d'avance sur le dernier symbole (l'encodeur RFC nu produisait des flux que Pillow refuse).
+- Le décodeur refuse toujours : bits réservés du WebP (espace colorimétrique, écrêtage), VP8L, animation, trame non clé.
+
+### Corpus réel (D5) et exclusions (RELECTURE-1 §5)
+- **81 223 JPEG/PNG/WebP réels identiques à Pillow, 0 écart, 96 refus** (tous `NON_SUPPORTE PNG 16 bits`, des PNG nommés .jpg par Cardmarket) : 59 221 JPEG (dont 9 069 progressifs), 22 014 PNG, 84 WebP ; sources en lecture seule : `verrou/photos` (jeu fixe), `labo-embedding`, `CARDMARKET IMAGE` (une copie par empreinte de contenu : 6 316 doublons écartés). 6 ms par image. Et **1 500/1 500 visuels de catalogue**.
+- **Exclusion par empreinte de contenu** (`outils/decodeur/exclusions.py`) : le juge (`sha256-juge.txt`, 180), le banc eBay (3 000 `sha256`), la calibration (1 500), et le contenu des 3 927 visuels de catalogue qui sont la réponse de ces lignes ou des juges (33 clés sans fichier sur le disque, comptées) : 8 606 empreintes. Le script **lève** si une liste est vide, si aucun visuel exclu n'est retrouvé, ou si l'échantillon tiré a une empreinte exclue ; les fichiers illisibles sont comptés (1 sur 87 636 candidats). Intersection mesurée : **0**.
+
+### Mutations (D6/D7) : rejouables
+`node outils/decodeur/mutations.mjs` (copie temporaire des modules, une ligne changée à la fois, 1 007 épreuves Pillow rejouées) : **48 mutations, 48 tuées, 0 vivante**. Dont la couleur (constantes 1,41 / 1,78 / 0,72 / 0,35 et arrondi ONE_HALF), l'IDCT, les suréchantillonnages, le progressif, le verrou de table, l'EXIF, les filtres PNG (Paeth, Average), Adam7, la palette, l'adler32, les filtres de boucle WebP (strong, simple, hev, netteté, deltas), les transformées, l'upsampling, la conversion YUV, les prédictions 4x4, la quantification, les segments, les partitions, la réduction. Ses survivantes initiales ont été traitées, pas ignorées : 3 mutations ÉQUIVALENTES remplacées (arrondi de FIX sans effet, égalité a/b de Paeth impossible, support élargi du filtre bilinéaire sans effet) et 4 vraies lacunes comblées par des jeux ciblés (netteté 4, seuil du filtre simple, contexte de saut, quantification Y2 AC : `pil-webp-differentiel-cible.json`).
+
+### Non fait, avec la raison
+- Chrome headless n'a pas été rejoué après le tour T1 (le verrou tourne jusqu'à environ 15:30 UTC) ; la preuve Chrome du § 3 date du décodeur `rm-decodeur-1`. À rejouer : `node outils/decodeur/pilote-decodeur.js`.
+- Le banc `test-banc-telephone*.js` ne tourne toujours pas dans ce worktree (pas de `node_modules`).
+- Safari/iPhone non mesuré.

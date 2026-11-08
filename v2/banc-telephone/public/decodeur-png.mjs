@@ -1,5 +1,6 @@
 // DECODEUR PNG — code Rat-Market, JavaScript pur, entiers seulement. inflate (RFC 1951) écrit ici, filtres PNG (None, Sub, Up, Average, Paeth), entrelacement Adam7.
 // Pris : 8 bits par canal, types 0 (gris), 2 (RGB), 3 (palette, 1 à 8 bits), 4 (gris + alpha), 6 (RGBA). Le canal alpha est IGNORÉ (c'est ce que fait Pillow en convert('RGB')) ; gAMA, sRGB, iCCP, tRNS : ignorés.
+// CRÉDITS : l'inflate suit l'algorithme de puff.c / inftrees.c de zlib (licence zlib) pour ses refus (codes sur-souscrits ou incomplets, adler32) ; aucun code n'est copié.
 // Refusés avec un CODE : 16 bits, gris 1 à 4 bits, CRC faux, flux tronqué, taille déclarée hors bornes (vérifiée AVANT d'allouer).
 import { ErreurDecodeur } from './decodeur-jpeg.mjs';
 
@@ -10,17 +11,24 @@ const DIST_BASE = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 25
 const DIST_EXTRA = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13];
 const ORDRE_CL = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
 
-function tableHuffman(longueurs) {
+/** Table de Huffman canonique de deflate. Refuse, comme zlib (inftrees.c), un jeu de longueurs SUR-SOUSCRIT, et un jeu INCOMPLET sauf le cas d'un seul code de longueur 1 pour les codes de longueur/distance. */
+function tableHuffman(longueurs, codesDeLongueurs = false) {
     const compte = new Uint16Array(16), symboles = new Uint16Array(longueurs.length);
     for (const l of longueurs) compte[l]++;
+    let total = 0; for (let l = 1; l < 16; l++) total += compte[l];
     compte[0] = 0;
+    if (total > 0) {
+        let gauche = 1;
+        for (let l = 1; l < 16; l++) { gauche = (gauche << 1) - compte[l]; if (gauche < 0) refuser('DECODAGE', 'code de Huffman sur-souscrit'); }
+        if (gauche > 0 && (codesDeLongueurs || total !== 1 || compte[1] !== 1)) refuser('DECODAGE', 'code de Huffman incomplet');
+    }
     const offs = new Uint16Array(16);
     for (let i = 1; i < 16; i++) offs[i] = offs[i - 1] + compte[i - 1];
     for (let s = 0; s < longueurs.length; s++) if (longueurs[s]) symboles[offs[longueurs[s]]++] = s;
     return { compte, symboles };
 }
 const TABLE_FIXE_L = (() => { const l = new Uint8Array(288); l.fill(8, 0, 144); l.fill(9, 144, 256); l.fill(7, 256, 280); l.fill(8, 280, 288); return tableHuffman(l); })();
-const TABLE_FIXE_D = tableHuffman(new Uint8Array(30).fill(5));
+const TABLE_FIXE_D = tableHuffman(new Uint8Array(32).fill(5));      // 32 codes de 5 bits, comme zlib ; 30 et 31 sont refusés au décodage
 
 /** Décompresse un flux zlib (en-tête 2 octets + deflate + adler32 ignoré mais présent) ; `attendu` : taille exacte attendue (borne dure). */
 export function inflater(src, attendu) {
@@ -59,7 +67,7 @@ export function inflater(src, attendu) {
                 if (nl > 286 || nd > 30) refuser('DECODAGE', 'nombre de codes invalide');
                 const lc = new Uint8Array(19);
                 for (let i = 0; i < nc; i++) lc[ORDRE_CL[i]] = bits(3);
-                const tc = tableHuffman(lc), lens = new Uint8Array(nl + nd);
+                const tc = tableHuffman(lc, true), lens = new Uint8Array(nl + nd);
                 for (let i = 0; i < nl + nd;) {
                     const s = decoder(tc);
                     if (s < 16) lens[i++] = s;
@@ -71,6 +79,7 @@ export function inflater(src, attendu) {
                         while (rep--) lens[i++] = v;
                     }
                 }
+                if (lens[256] === 0) refuser('DECODAGE', 'code de fin de bloc absent');
                 tl = tableHuffman(lens.subarray(0, nl)); td = tableHuffman(lens.subarray(nl));
             }
             for (;;) {
@@ -89,6 +98,11 @@ export function inflater(src, attendu) {
         } else refuser('DECODAGE', 'type de bloc invalide');
     } while (!dernier);
     if (o !== attendu) refuser('DECODAGE', `${o} octets décompressés sur ${attendu}`);
+    // somme de contrôle adler32 (zlib la vérifie : un flux altéré dont le CRC de fragment a été recalculé est refusé)
+    if (pos + 4 > src.length) refuser('DECODAGE', 'adler32 absent');
+    let a = 1, b2 = 0;
+    for (let i = 0; i < sortie.length; i++) { a = (a + sortie[i]) % 65521; b2 = (b2 + a) % 65521; }
+    if ((((b2 << 16) | a) >>> 0) !== (((src[pos] << 24) | (src[pos + 1] << 16) | (src[pos + 2] << 8) | src[pos + 3]) >>> 0)) refuser('DECODAGE', 'adler32 faux');
     return sortie;
 }
 

@@ -2,20 +2,26 @@
 // Objectif de l'éditeur : l'entrée du modèle est IDENTIQUE AU BIT sur iPhone, Android et ordinateur. Tout est entier (32 bits) ; le résultat est celui de Pillow (libjpeg-turbo, libwebp, zlib).
 //
 // CONTRAT
-//   decoder(octets, { orientation = 'exif', coteMax = 4096, pixelsMax = 12000000 })
+//   decoder(octets, { orientation = 'exif' | 'aucune', orientationWebp = false, coteMax = 4096, pixelsMax = 12000000, pixelsMaxProgressif = 4000000, balayagesMax = 64 })
 //     -> { rgb: Uint8Array (largeur * hauteur * 3, RGBRGB…), largeur, hauteur, format, orientationLue, orientationAppliquee, source }
-//   · les BORNES (format admis, côté, pixels) sont vérifiées dans l'en-tête AVANT tout décodage, comme calcul/entete.js de l'extension ;
-//   · l'ORIENTATION EXIF (1 à 8) est appliquée par défaut (c'est ce que fait createImageBitmap par défaut dans Chrome et Safari : la photo d'un téléphone arrive droite) ;
-//     { orientation: 'aucune' } rend les pixels tels que décodés (c'est ce que fait Pillow sans exif_transpose : les références du lot) ;
+//   · RÈGLE QUI TRANCHE TOUT : ce que le décodeur accepte a été comparé à Pillow au bit près ; tout le reste est REFUSÉ par un code d'erreur. Rien d'accepté sans preuve.
+//   · `octets` : Uint8Array, ArrayBuffer ou vue d'ArrayBuffer ; autre chose -> ErreurDecodeur 'entree-invalide'. Aucune exception brute ne sort : un RangeError d'allocation devient 'memoire'.
+//   · les BORNES (format admis, côté, pixels) sont vérifiées dans l'en-tête AVANT tout décodage, comme calcul/entete.js de l'extension ; un JPEG PROGRESSIF (qui garde tous ses coefficients en mémoire) a un
+//     plafond plus bas (pixelsMaxProgressif, 4 Mpx) et un nombre de balayages borné (balayagesMax), vérifiés avant d'allouer ;
+//   · l'ORIENTATION EXIF (1 à 8) d'un JPEG est appliquée par défaut (mesuré dans Chrome 157 : createImageBitmap tourne les JPEG) ; celle d'un WebP est LUE mais pas appliquée (Chrome ne la tourne pas),
+//     { orientationWebp: true } l'applique ; { orientation: 'aucune' } rend les pixels tels que décodés (c'est ce que fait Pillow sans exif_transpose : les références du lot) ;
 //   · AUCUNE gestion de couleur : le profil ICC est ignoré (équivaut à colorSpaceConversion: 'none') ; le canal alpha est ignoré (équivaut à Pillow convert('RGB')) ;
-//   · toute erreur est une ErreurDecodeur à CODE fermé : FORMAT, TROP_GRAND, DECODAGE, NON_SUPPORTE. Jamais un résultat approché.
+//   · toute erreur est une ErreurDecodeur à CODE fermé : FORMAT, TROP_GRAND, DECODAGE, NON_SUPPORTE, entree-invalide, memoire. Jamais un résultat approché.
 //   reduire640(rgb, largeur, hauteur) -> { rgb, largeur, hauteur } : la réduction « inside » dans un carré de 640 (dimensions640), bilinéaire à support élargi de Pillow, en entiers.
+//
+// CRÉDITS ET LICENCES : code Rat-Market. Les algorithmes reproduits sont ceux de libjpeg-turbo (IDCT dérivée de jidctint.c : « based in part on the work of the Independent JPEG Group », licence IJG),
+// de libwebp (BSD-3-Clause, Copyright Google Inc.) et de zlib (licence zlib). Aucune ligne n'en est copiée ; aucun binaire, aucune dépendance.
 import { decoderJpeg, ErreurDecodeur } from './decodeur-jpeg.mjs';
 import { decoderPng } from './decodeur-png.mjs';
 import { decoderWebp, orientationWebp } from './decodeur-webp.mjs';
 export { ErreurDecodeur };
 
-export const VERSION_DECODEUR = 'rm-decodeur-1';
+export const VERSION_DECODEUR = 'rm-decodeur-2';
 export const COTE_MAX = 4096;
 export const PIXELS_MAX = 12000000;
 export const TAILLE_REDUCTION = 640;
@@ -95,12 +101,28 @@ export function appliquerOrientation(rgb, w, h, o) {
 }
 
 /** octets -> RGB. Voir le contrat en tête de fichier. */
-export function decoder(octets, { orientation = 'exif', orientationWebp: orientationWebpAppliquee = false, coteMax = COTE_MAX, pixelsMax = PIXELS_MAX } = {}) {
-    const b = octets instanceof Uint8Array ? octets : new Uint8Array(octets);
-    if (orientation !== 'exif' && orientation !== 'aucune') throw new ErreurDecodeur('FORMAT', 'option orientation inconnue');
+export function decoder(octets, options) {
+    try { return decoderInterne(octets, options); }
+    catch (e) {
+        if (e instanceof ErreurDecodeur) throw e;
+        if (e instanceof RangeError) throw new ErreurDecodeur('memoire', 'allocation refusée');
+        throw new ErreurDecodeur('DECODAGE', 'erreur interne ' + (e && e.name));
+    }
+}
+const entierPositif = v => Number.isInteger(v) && v >= 1 && v <= 2 ** 31;
+function decoderInterne(octets, opts) {
+    if (opts !== undefined && (opts === null || typeof opts !== 'object')) throw new ErreurDecodeur('entree-invalide', 'options');
+    const { orientation = 'exif', orientationWebp: orientationWebpAppliquee = false, coteMax = COTE_MAX, pixelsMax = PIXELS_MAX, pixelsMaxProgressif = 4000000, balayagesMax = 64 } = opts || {};
+    if (![coteMax, pixelsMax, pixelsMaxProgressif, balayagesMax].every(entierPositif) || typeof orientationWebpAppliquee !== 'boolean') throw new ErreurDecodeur('entree-invalide', 'options numériques');
+    let b;
+    if (octets instanceof Uint8Array) b = octets;
+    else if (octets instanceof ArrayBuffer) b = new Uint8Array(octets);
+    else if (ArrayBuffer.isView(octets)) b = new Uint8Array(octets.buffer, octets.byteOffset, octets.byteLength);
+    else throw new ErreurDecodeur('entree-invalide', 'octets : Uint8Array, ArrayBuffer ou vue attendus');
+    if (orientation !== 'exif' && orientation !== 'aucune') throw new ErreurDecodeur('entree-invalide', 'option orientation inconnue');
     const d = verifierDimensions(b, { coteMax, pixelsMax });                  // les bornes AVANT tout décodage
     let r;
-    if (d.format === 'jpeg') r = decoderJpeg(b, { coteMax, pixelsMax });
+    if (d.format === 'jpeg') r = decoderJpeg(b, { coteMax, pixelsMax, pixelsMaxProgressif, balayagesMax });
     else if (d.format === 'png') r = decoderPng(b, { coteMax, pixelsMax });
     else r = decoderWebp(b, { coteMax, pixelsMax });
     if (r.largeur !== d.largeur || r.hauteur !== d.hauteur) throw new ErreurDecodeur('DECODAGE', 'dimensions différentes de l\'en-tête');
