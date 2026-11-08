@@ -434,7 +434,11 @@ function motifSansPokedex(lu, produit, np, nom, nomCarte, drapeaux) {
  * Le code et le numéro ont déjà passé leurs contrôles habituels quand on arrive ici (motifDeCode en tête de motifDeNomTraduit ; le numéro est comparé par l'appelant).
  * @returns {string|null|undefined} undefined = voie non ouverte ; null = acceptée (drapeau posé) ; sinon le motif de refus.
  */
-const REGLES_NOM_TRADUIT_DRESSEUR = Object.freeze(['M-P/ID', 'SV-P/ID', 'S-P/ID', 'SM-P/ID', 'M-P/TH']);
+// (08/11, décision de l'utilisateur) promos indonésiennes et thaïes : SV-P/TH et S-P/TH rejoignent M-P/TH ; nom imprimé réel, numéro + code + langue + illustration relue. Leurs alias de code (SV-P/TH→SV-P, S-P/TH→S-P) existent déjà dans CODES_IMPRIMES_ALIAS.
+// (08/11, décision du propriétaire) chinois simplifié : SIX lignes mesurées sur le manifeste N8S5 (couverture\S8\PHASE4\N8S5\preuves.json, 84 Dresseurs/Énergies zh-hans hors Gem Packs), `codes_set.codeSet` réel des produits joints par cartes_produits :
+// SV-P/CS (6 Dresseurs ; code imprimé « SV-P », alias SV-P/CS→SV-P déjà en place), CSVE2C (10), CSVH1C (26), CSVH2C (12), CSVH3C (29), CSVH5C (1) ; le code imprimé (csvE2C…) est le code de la ligne à la casse près (norm), aucun alias à ajouter.
+// Aucune autre ligne zh (CSVH4C, S-P/CS, SM-P/CS, M-P/CS…) : non mesurée, la voie y reste fermée. Nom lu en han seulement (ECRITURES_PAR_LANGUE['zh-hans'] : le kana et le thaï n'y passent pas).
+const REGLES_NOM_TRADUIT_DRESSEUR = Object.freeze(['M-P/ID', 'SV-P/ID', 'S-P/ID', 'SM-P/ID', 'M-P/TH', 'SV-P/TH', 'S-P/TH', 'SV-P/CS', 'CSVE2C', 'CSVH1C', 'CSVH2C', 'CSVH3C', 'CSVH5C']);
 function motifIllustrationRelue(lu, produit, drapeaux) {
     const ligne = REGLES_NOM_TRADUIT_DRESSEUR.find(l => texte(produit?.codeSet) && norm(l) === norm(produit.codeSet));
     // (tour de correction 1) la relecture vit HORS du manifeste (VALIDATIONS\illustrations-<FAMILLE>.json, donnée passée par `produit.illustrationsRelues`) : un `lu.illustrationRelue` du manifeste est IGNORÉ
