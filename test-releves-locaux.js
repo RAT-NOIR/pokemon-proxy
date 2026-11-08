@@ -69,6 +69,23 @@ verifier('D3 rejouer : set différent, numéro différent, nom discordant → re
 verifier('D3 rejouer : une SEULE concordante fautive parmi deux saines refuse tout', rejouer(pk, [bonne, { ...bonne, source: 'bulbapedia' }]).ok, false);
 verifier('D3 rejouer : par « pokedex » ne passe que pour un nom illisible', [rejouer(pk, [{ ...bonne, nom: 'ピカチュウ', par: 'pokedex' }]).ok, rejouer(pk, [{ ...bonne, nom: 'Raichu', par: 'pokedex' }]).ok], [true, false]);
 
+// ── 2026-11-08 : « ldc » (liste de chasse), code NEUTRE, admis SEULEMENT pour quatre sets chinois calibrés fiables (décision du testeur) ──
+const DS = require(path.join(DIR, 'collecte-cartes', 'deux-sources.js'));
+const SL = DS.SETS_LISTE_DE_CHASSE;
+const LISTE4 = ['30th-Celebration-Simplified-Chinese', 'Chasing-Glory-Together', 'Battle-Party-Dream-Together', 'Battle-Party-Shining-Dream'];
+verifier('ldc : « ldc » est dans SOURCES_ADMISES ; SETS_LISTE_DE_CHASSE est gelée et porte exactement les quatre slugs', [SOURCES_ADMISES.includes('ldc'), Array.isArray(SL) && Object.isFrozen(SL), SL ? [...SL].sort() : null], [true, true, [...LISTE4].sort()]);
+const ldc = (set, numero, nom, extra = {}) => ({ source: 'ldc', set, numero, nom, ref: 'W3 n°' + numero, ...extra });
+verifier('ldc : acceptée sur chacun des quatre sets (même set, numéro, nom), sources = cardmarket + ldc', LISTE4.map(s => { const j = juger({ set: s, numero: '12', nom: 'Exeggutor' }, [ldc(s, '012', 'Exeggutor')]); return [j.ok, j.sources]; }), LISTE4.map(() => [true, ['cardmarket', 'ldc']]));
+const jAutre = juger({ set: 'Set-Bon', numero: '12', nom: 'Exeggutor' }, [ldc('Set-Bon', '012', 'Exeggutor')]);
+verifier('ldc : REFUSÉE sur un set hors de la liste, refus nommé', [jAutre.ok, jAutre.refusees.map(r => r.source), /liste de chasse/.test(jAutre.refusees[0]?.raison ?? '')], [false, ['ldc'], true]);
+const P4 = { set: LISTE4[0], numero: '12', nom: 'Exeggutor' };
+verifier('ldc : nom discordant refusé ; numéro discordant refusé ; set du relevé différent refusé', [juger(P4, [ldc(LISTE4[0], '012', 'Raichu')]).ok, juger(P4, [ldc(LISTE4[0], '013', 'Exeggutor')]).ok, juger(P4, [ldc(LISTE4[1], '012', 'Exeggutor')]).ok], [false, false, false]);
+verifier('ldc : pas de repli par le Pokédex (nom illisible ou absent + même n° de Pokédex → refus)', [juger(P4, [ldc(LISTE4[0], '012', '椰蛋树', { dex: [103] })], { dexProduit: [103] }).ok, juger(P4, [ldc(LISTE4[0], '012', null, { dex: [103] })], { dexProduit: [103] }).ok], [false, false]);
+verifier('ldc : Bulbapedia reste refusée même au milieu d\'un set de la liste', juger(P4, [{ source: 'bulbapedia', set: LISTE4[0], numero: '12', nom: 'Exeggutor' }, { source: 'setlist', set: LISTE4[0], numero: '12', nom: 'Exeggutor' }]).ok, false);
+const cl = { source: 'ldc', ref: 'W3 n°012', set: LISTE4[0], numero: '012', nom: 'Exeggutor', par: 'nom' };
+verifier('ldc rejouer : saine sur un set de la liste → ok ; sur un autre set → refus nommé ; nom ou numéro discordant → refus', [rejouer(P4, [cl]).ok, rejouer({ ...P4, set: 'Set-Bon' }, [{ ...cl, set: 'Set-Bon' }]).ok, /liste de chasse/.test(rejouer({ ...P4, set: 'Set-Bon' }, [{ ...cl, set: 'Set-Bon' }]).motifs[0] ?? ''), rejouer(P4, [{ ...cl, nom: 'Raichu' }]).ok, rejouer(P4, [{ ...cl, numero: '013' }]).ok], [true, false, true, false, false]);
+verifier('ldc rejouer : par « pokedex » avec nom illisible ne passe PAS pour ldc', rejouer(P4, [{ ...cl, nom: '椰蛋树', par: 'pokedex' }]).ok, false);
+
 console.log(`\n${ok} passés, ${ko} en échec`);
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { }
 process.exit(ko ? 1 : 0);
