@@ -15,7 +15,7 @@ const { emailCle, cleBoite, estJetable } = require('../comptes/email-cle');
 const { adresseValide } = require('../comptes/courrier-brevo');
 const { creerPlafondJour, jourDeParis } = require('../comptes/plafond-courriels');
 const PENDANTS = new Set();
-/** Les envois détachés encore en vol (les bancs, et l'arrêt propre, les attendent). */
+/** Les envois détachés encore en vol (les bancs les attendent ; `attendre` n'est branché à AUCUN arrêt de processus : un SIGTERM entre la marque et l'envoi laisse la marque sans courriel, même exposition que L1). */
 const attendre = async () => { while (PENDANTS.size) await Promise.allSettled([...PENDANTS]); };
 
 const JOUR_MS = 24 * 3600e3;
@@ -67,8 +67,8 @@ function creerService({ cfg, courrier, maintenant = () => new Date(), plafond = 
                 const nom = nomErreur(e);
                 if (nom === 'BrevoPlafond') { await rendre(); return { issue: 'plafond' }; }                              // le plafond propre du pilote : rien n'est parti
                 if (nom === 'BrevoAdresse' || nom === 'BrevoStatut400') { await rendre(); return { issue: 'ignoree' }; }   // Brevo refuse cette adresse : comme une adresse invalide
-                if (/^BrevoStatut\d{3}$/.test(nom)) { await rendre(); throw e; }                                            // Brevo a répondu non (clé, droits, panne) : rien n'est parti
-                throw e;                                                                                                    // réseau, délai, inconnue : le message a pu partir, la marque reste
+                if (/^BrevoStatut4\d\d$/.test(nom)) { await rendre(); throw e; }                                            // refus FRANC 4xx (clé, droits, limite de débit) : rien n'est parti
+                throw e;                                                                                                    // 5xx (le message a pu être accepté), réseau, délai, inconnue : la marque reste — un envoi par adresse et par 24 h
             }
             return { issue: 'envoye' };
         }
