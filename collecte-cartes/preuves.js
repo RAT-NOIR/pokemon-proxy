@@ -434,7 +434,8 @@ function motifSansPokedex(lu, produit, np, nom, nomCarte, drapeaux) {
  * Le code et le numéro ont déjà passé leurs contrôles habituels quand on arrive ici (motifDeCode en tête de motifDeNomTraduit ; le numéro est comparé par l'appelant).
  * @returns {string|null|undefined} undefined = voie non ouverte ; null = acceptée (drapeau posé) ; sinon le motif de refus.
  */
-const REGLES_NOM_TRADUIT_DRESSEUR = Object.freeze(['M-P/ID', 'SV-P/ID', 'S-P/ID', 'SM-P/ID', 'M-P/TH']);
+// (08/11, décision de l'utilisateur) promos indonésiennes et thaïes : SV-P/TH et S-P/TH rejoignent M-P/TH ; nom imprimé réel, numéro + code + langue + illustration relue. Leurs alias de code (SV-P/TH→SV-P, S-P/TH→S-P) existent déjà dans CODES_IMPRIMES_ALIAS.
+const REGLES_NOM_TRADUIT_DRESSEUR = Object.freeze(['M-P/ID', 'SV-P/ID', 'S-P/ID', 'SM-P/ID', 'M-P/TH', 'SV-P/TH', 'S-P/TH']);
 function motifIllustrationRelue(lu, produit, drapeaux) {
     const ligne = REGLES_NOM_TRADUIT_DRESSEUR.find(l => texte(produit?.codeSet) && norm(l) === norm(produit.codeSet));
     // (tour de correction 1) la relecture vit HORS du manifeste (VALIDATIONS\illustrations-<FAMILLE>.json, donnée passée par `produit.illustrationsRelues`) : un `lu.illustrationRelue` du manifeste est IGNORÉ
