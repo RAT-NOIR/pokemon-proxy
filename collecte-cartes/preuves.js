@@ -264,9 +264,19 @@ const echapper = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
  *  · sKV → sK  : planche pl-sKV.png (phase4-b-visuels), 5 cartes VSTAR Premium Trainer Box (Cherubi 001/030 … Mew 007/030) portant « sK » ; Cardmarket : slugSet Premium-Trainer-Box-VSTAR, idExpansion 4515, codeSet « sKV ».
  * Aucun autre set ne porte « mEE » ou « sK » (univers-expansions.json, table-sets.js, table-sets-auto.json, table-sets-sans-page.json : aucune occurrence, vérifié le 2026-11-02).
  *  · M-P/TH → M-P : promos thaïes imprimant « NNN/M-P » (slug Cardmarket …-M-PTH069), cartes thaïes relues le 2026-11-08 sur couverture\S8\PHASE4\N8R1\validation\planche-07.png à planche-11.png.
- *  · SV-P/TH et S-P/TH ne sont PAS admis : aucun scan cité ; ils reviendront avec leur planche.
+ *  · Promos régionales (2026-11-08, coordinateur, planches relues sous couverture\S8\PHASE4\) : la carte imprime le code SEUL, la ligne codes_set porte le suffixe de région. Chaque entrée n'est admise que sur SA ligne exacte.
+ *    - M-P/ID → M-P : N8R1\validation\planche-01 à 06 (NNN/M-P, indonésien).
+ *    - SV-P/ID → SV-P : N8R1\validation\planche-11 à 14 (NNN/SV-P, indonésien).
+ *    - SM-P/ID → SM-P : N8R1\validation\planche-15 à 18 (NNN/SM-P, indonésien).
+ *    - SV-P/TH → SV-P : N8R3\validation\planche-04 et 05 (NNN/SV-P, thaï).
+ *    - S-P/ID → S-P et S-P/TH → S-P : N8R3\validation\planche-06, 07 (NNN/S-P, indonésien et thaï) et 08.
+ *    - SV-P/CS → SV-P et S-P/CS → S-P : N8R4\validation\planche-01 à 04 (NNN/SV-P et NNN/S-P, zh-hans) ; lignes réelles lues le 2026-11-08 (base cartes, collection sets) : Scarlet-Violet-Simplified-Chinese-Promos code « SV-P/CS », Sword-Shield-Simplified-Chinese-Promos code « S-P/CS ».
+ *    Aucune ligne M-P/CT n'est demandée ; SM-P/CS et M-P/CS ne sont pas admis (aucune planche citée).
  */
-const CODES_IMPRIMES_ALIAS = Object.freeze({ mEEv: 'mEE', sKV: 'sK', 'M-P/TH': 'M-P' });
+const CODES_IMPRIMES_ALIAS = Object.freeze({
+    mEEv: 'mEE', sKV: 'sK', 'M-P/TH': 'M-P',
+    'M-P/ID': 'M-P', 'SV-P/ID': 'SV-P', 'S-P/ID': 'S-P', 'SM-P/ID': 'SM-P', 'SV-P/TH': 'SV-P', 'S-P/TH': 'S-P', 'SV-P/CS': 'SV-P', 'S-P/CS': 'S-P'
+});
 /** La clé de la table dont le code imprimé vaut `code` ET dont le code Cardmarket est celui du produit (`ligne`, ou, ligne vide, trouvé dans le slug) : indépendant de l'ordre des clés, deux clés au même code imprimé comprises.
  *  La branche « slug quand la ligne est vide » ne sert pas aux clés contenant « / » (M-P/TH) : un slug n'a jamais de « / » (`…-M-PTH069`), elle ne peut y concorder ; ces clés exigent la ligne exacte. */
 function cleAliasPour(table, code, ligne, slug = null, n = '') {
