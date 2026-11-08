@@ -216,7 +216,9 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
     const resume = { le: new Date().toISOString(), source: SRC.SOURCE, lot: SRC.LOT, familles: noms, entrees: entreesParFamille, parRegle, unitesProuvees: unitesBrutes.length, decisions, aAjouter: aAjouter.length,
         dontRemplacentUneBasseDefinition: aAjouter.filter(u => u.decision.remplace.length).length,
         // ➕ 2026-11-08 : les entrées de langue NON PROUVÉE qu'une famille de la table fermée (basse-definition.js) remplace — comptées et listées à part, à journaliser avant le lot
-        dontRemplacentUneLangueNonProuvee: aAjouter.filter(u => BD.remplacementsLangueNonProuvee([u]).length).length, remplacementsLangueNonProuvee: BD.remplacementsLangueNonProuvee(aAjouter), refus, refusParMotif, avertissements,
+        dontRemplacentUneLangueNonProuvee: aAjouter.filter(u => BD.remplacementsLangueNonProuvee([u]).length).length, remplacementsLangueNonProuvee: BD.remplacementsLangueNonProuvee(aAjouter),
+        // ➕ 2026-11-08 : les entrées qu'une unité de la table DÉCIDÉE (famille + produits, décision du testeur) fait sortir — comptées et listées à part
+        dontRemplacentParDecision: aAjouter.filter(u => BD.remplacementsDecides([u]).length).length, remplacementsDecides: BD.remplacementsDecides(aAjouter), refus, refusParMotif, avertissements,
         // les unités dont le numéro doit être vérifié à l'œil sur une rognure (un autre produit du même set partage Pokédex et règle) : comptées à part
         jumeauxDansLeSet: jumeauxDansLeSet.filter(id => unitesBrutes.some(u => u.produits.includes(id))) };
     return { resume, unites: decidees, restes: refus, empreintes, trousAuto };
