@@ -1308,12 +1308,20 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         const poke = id('Charmander', { dex: 4, pv: 70, codeSet: 'MA5', numero: '012' });
         assert.deepStrictEqual(lue(poke, ptrad({ tirage: 'id', numero: '012', slug: 'Charmander-MA5-012', nomEn: 'Charmander', categorie: 'pokemon' })), { ok: true, motifs: [] }, 'Pokémon id : inchangé');
         assert.deepStrictEqual(lue(poke, ptrad({ tirage: 'id', numero: '012', slug: 'Charmander-MA5-012', nomEn: 'Charmander' })), { ok: true, motifs: [] }, 'Pokémon id sans catégorie : inchangé');
-        // la liste fermée des noms propres réellement imprimés à l'identique : injectable, vide par défaut
-        assert.strictEqual(PV.NOMS_ID_IMPRIMES_IDENTIQUES.length, 0, 'vide tant que la preuve n\'est pas écrite');
-        const lu = { langue: 'id', nom: 'Dawn' }, pd = { nomEn: 'Dawn', categorie: 'dresseur' };
+        // la liste fermée des noms propres réellement imprimés à l'identique (relus sur scans le 2026-11-08) : cinq noms, ni plus ni moins ; PokéPad en est exclu
+        assert.deepStrictEqual([...PV.NOMS_ID_IMPRIMES_IDENTIQUES], ['Dawn', 'Tool Scrapper', 'Judge', 'Guzma', 'Gladion']);
+        for (const n of PV.NOMS_ID_IMPRIMES_IDENTIQUES) assert.strictEqual(PV.motifNomLuIdentiqueProduit({ langue: 'id', nom: n }, { nomEn: n, categorie: 'dresseur' }), null, `${n} : admis (id)`);
+        assert.strictEqual(PV.motifNomLuIdentiqueProduit({ langue: 'id', nom: 'PokéPad' }, { nomEn: 'Poké Pad', categorie: 'dresseur' }), null, 'PokéPad imprimé ≠ Poké Pad produit : le contrôle ne se déclenche pas');
+        assert.ok(!PV.NOMS_ID_IMPRIMES_IDENTIQUES.some(n => /pok.?.?pad/i.test(n)), 'PokéPad n\'est pas dans la liste');
+        // la liste ne vaut que pour l'indonésien : un autre latin n'est pas excusé, et le nom d'une langue à écriture propre reste refusé
+        for (const [langue, tirage] of [['th', 'th'], ['ja', 'jp'], ['zh-hans', 'zh-hans']])
+            assert.match(mt(trad({ langue, nom: 'Dawn', dex: null, pv: null }), ptrad({ tirage, nomEn: 'Dawn', categorie: 'dresseur' })), /nom-lu-hors-langue/, `${langue} : « Dawn » refusé malgré la liste`);
+        assert.match(mt(trad({ langue: 'id', nom: 'Dawn', dex: null, pv: null, codeSet: 'SV-P/ID' }), ptrad({ tirage: 'id', nomEn: 'Dawn', categorie: 'dresseur', slug: 'Dawn-SV-PID005', codeSet: 'SV-P/ID' })), /^$|nom-traduit-sans-temoin|^(?!.*nom-lu-identique-produit)/, 'id : Dawn n\'est pas refusé par le contrôle d\'identité');
+        const lu = { langue: 'id', nom: 'Switch' }, pd = { nomEn: 'Switch', categorie: 'dresseur' };
         assert.strictEqual(PV.motifNomLuIdentiqueProduit(lu, pd), 'nom-lu-identique-produit');
-        assert.strictEqual(PV.motifNomLuIdentiqueProduit(lu, pd, ['Dawn']), null, 'nom propre listé : admis');
-        assert.strictEqual(PV.motifNomLuIdentiqueProduit(lu, { ...pd, nomEn: 'Dawn [Foo]' }, ['Dawn']), null);
+        assert.strictEqual(PV.motifNomLuIdentiqueProduit({ langue: 'en', nom: 'Switch' }, pd), null, 'langue autre que id : le contrôle ne s\'applique pas');
+        assert.strictEqual(PV.motifNomLuIdentiqueProduit(lu, pd, ['Switch']), null, 'liste injectée : admis');
+        assert.strictEqual(PV.motifNomLuIdentiqueProduit(lu, { ...pd, nomEn: 'Switch [Foo]' }, ['Switch']), null);
         assert.strictEqual(PV.motifNomLuIdentiqueProduit(lu, pd, ['Judge']), 'nom-lu-identique-produit');
     });
     // ───────── B : Dresseur / Énergie au nom traduit : numéro + code + langue + illustration relue, liste fermée ─────────
@@ -1358,17 +1366,11 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         // l'écriture thaïe doit rester thaïe : le contrôle A passe avant la règle B
         assert.match(mt({ ...eth, lu: { ...eth.lu, nom: 'Switch' }, attendu: { ...eth.attendu, numero: '069' } }, pth), /nom-lu-hors-langue/, 'A avant B');
     });
-    await test('réel : N8R1 (th) — les Dresseurs et Énergies à lu.nom anglais sont refusés nom-lu-hors-langue', () => {
-        const f = 'C:\\Users\\Yung\\rat-market-travail\\catalogue\\couverture\\S8\\PHASE4\\N8R1\\preuves.json';
-        if (!fs.existsSync(f)) return;   // lecture seule ; sans le manifeste réel, rien à rejouer
-        const j = JSON.parse(fs.readFileSync(f, 'utf8')), es = (Array.isArray(j) ? j : j.entrees).filter(e => e.regle === 'preuve-lue' && e.lu?.langue === 'th');
-        const latins = es.filter(e => !/[\u0E00-\u0E7F]/.test(String(e.lu.nom ?? '')));
-        assert.ok(es.length > 0 && latins.length > 0, `N8R1 : ${es.length} entrées th, ${latins.length} à nom latin`);
-        for (const e of latins) {
-            const p = produit({ idProduct: e.idProduct, tirage: 'th', numero: e.attendu?.numero ?? null, nomEn: e.attendu?.nom ?? null, slug: null });
-            const r = PV.evaluerPreuveLue({ entree: e, produit: p, langueProduit: 'th' });
-            assert.ok(!r.ok && r.motifs.includes('nom-lu-hors-langue'), `${e.idProduct} « ${e.lu.nom} » : ${r.motifs.join(',')}`);
-        }
+    await test('jeu fictif (forme de N8R1) : un Dresseur id à nom anglais et un Dresseur th à nom anglais sont refusés', () => {
+        const eth = trad({ langue: 'th', nom: 'Energy Search', dex: null, pv: null, codeSet: 'SV-P/TH' }), pth = ptrad({ tirage: 'th', nomEn: 'Energy Search', categorie: 'energie', slug: 'Energy-Search-SV-PTH005', codeSet: 'SV-P/TH' });
+        assert.ok(mt(eth, pth).includes('nom-lu-hors-langue'), 'th : nom anglais');
+        const eid = trad({ langue: 'id', nom: 'Crushing Hammer', dex: null, pv: null, codeSet: 'SV-P/ID' }), pid = ptrad({ tirage: 'id', nomEn: 'Crushing Hammer', categorie: 'dresseur', slug: 'Crushing-Hammer-SV-PID005', codeSet: 'SV-P/ID' });
+        assert.ok(mt(eid, pid).includes('nom-lu-identique-produit'), 'id : nom anglais identique au produit');
     });
     await test('nom traduit : chaque discordance REFUSE, avec son motif', () => {
         assert.match(mt(trad({ pv: null }), ptrad()), /pv-non-lu/, 'PV absent');
