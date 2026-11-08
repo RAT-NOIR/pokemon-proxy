@@ -132,6 +132,7 @@ function entreesARemplacer(images, candidat, { fausses = FAUSSES, champsTampon =
         if (!e || e.set !== candidat.set || cleNumero(e.numero) !== numero) return false;
         if (brancheLangue && langueNonProuvee(e)) {
             // entrée de langue absente d'une source de la table : remplacée seulement à IMPRESSION identique (mêmes marqueurs, document lisible) et largeur de la candidate connue
+            if (typeof e.cleR2 !== 'string' || e.cleR2 === '') return false;   // le $pull de remplacerBasseDefinition porte cleR2 : sans clé, on ne sort rien
             if (!brancheLangue.sources.includes(e.source) || (e.source === candidat.source && e.cleR2 === candidat.cleR2)) return false;
             const effL = marqueursEffectifs(e, documents);
             return !!effL && wC != null && memeVariante(effL, candidat);
