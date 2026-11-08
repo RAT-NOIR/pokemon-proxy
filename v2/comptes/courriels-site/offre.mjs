@@ -16,8 +16,8 @@
  *     3 analyses par jour sans compte, 10 avec un compte gratuit à l'adresse confirmée (0 tant qu'elle ne l'est pas), remise à zéro
  *     au minuit de Paris, un lot de N cartes = ⌈N/10⌉ analyses et 20 cartes au plus, les analyses sans résultat rendues dans la
  *     limite de plafonds quotidiens, Pro sans quota montré (l'offre réservée a celui de Pro : lib/tarifs.ts, sa page seule le dit).
- * ⛔ Le plafond technique de Pro (200 par jour pour l'API) N'EST PAS ÉCRIT ICI : l'API le dit « à valider par l'éditeur » — tant
- * qu'il ne l'a pas confirmé, aucune page ne donne de nombre, et aucune ne dit « illimité » (écart 1 de l'API).
+ * Le plafond technique de Pro (200 par jour pour l'API) : confirmé par l'éditeur le 2026-11-08, écrit aux CGV SEULEMENT (`PLAFOND_PRO_CGV`) ;
+ * toute autre page dit « usage raisonnable » sans nombre, et aucune ne dit « illimité » (écart 1 de l'API).
  */
 
 /** L'offre de la 1.0.5 publiée (servie aujourd'hui). */
@@ -46,14 +46,13 @@ export const OFFRE_V2 = {
 export const etatOffre = (lances         )            => (lances ? "v2" : "servie");
 
 /**
- * ⏳ ATTEND L'ÉDITEUR (écart 3 de l'API) : « au lancement » accolé aux 10 analyses par jour du compte gratuit. L'API : « le 10 est
- * le chiffre DÉFINITIF, pas un chiffre de lancement ; retirer “au lancement” ou le garder seulement si l'éditeur veut garder la
- * liberté de le changer ». Gardé tel qu'aujourd'hui (`true`) ; `false` le retire d'un geste des passages qui le disaient avant le lot
- * « source unique » (FAQ, CGU, CGV, politique, scanner, inscription, installer, compte). Une constante de TEXTE, pas un interrupteur.
+ * TRANCHÉ par l'éditeur le 2026-11-08 (écart 3 de l'API) : « au lancement » accolé aux 10 analyses par jour du compte gratuit est RETIRÉ
+ * (le 10 est le chiffre DÉFINITIF côté API). `false` : FAQ, CGU, CGV, politique, scanner, inscription, installer, compte ne le disent plus.
+ * Gardée comme UNE ligne de retour en arrière (`true` le rend à tous ces passages) — une constante de TEXTE, pas un interrupteur.
  * ⛔ Tarifs et le bloc « accès » de l'accueil ne la lisent PAS : allumés, ils ne disent jamais « au lancement » (on ne promet pas ce qui
  * est lancé — tour 1 du 2026-10-31) ; éteint, Tarifs garde « avec un compte gratuit, au lancement » (= « quand les comptes ouvriront »).
  */
-export const DIRE_AU_LANCEMENT = true;
+export const DIRE_AU_LANCEMENT = false;
 
 /** « , au lancement » / « au lancement » après `avant`, ou rien si l'éditeur l'a retiré. */
 export const auLancement = (avant        )         => (DIRE_AU_LANCEMENT ? `${avant}au lancement` : "");
@@ -65,12 +64,18 @@ export const REMBOURSEMENT =
 /** Écart 5 : le coût d'une photo à plusieurs cartes (⌈N/10⌉ : une tranche ENTAMÉE compte, 20 au plus). Scanner de la v2. */
 export const COUT_D_UN_LOT = `un lot de cartes compte une analyse par tranche de ${OFFRE_V2.lot.cartesParAnalyse}\u00a0cartes entamée, ${OFFRE_V2.lot.cartesMax}\u00a0cartes au plus`;
 
+/** Le plafond technique de Pro, par jour (API) : tranché par l'éditeur le 2026-11-08 ; seules les CGV l'écrivent, par `PLAFOND_PRO_CGV`. */
+export const PLAFOND_PRO_JOUR = 200;
+
 /**
- * Écart 1 : l'usage raisonnable de Pro, SANS NOMBRE (le plafond technique de l'API attend l'éditeur) et sans « illimité » : l'API
- * refuse au-delà d'un plafond du jour (refus « quota »), elle ne ralentit pas. CGV de lancement, art. 3.
+ * Écart 1, tranché le 2026-11-08 : l'usage raisonnable de Pro, défini aux CGV de lancement (art. 3), nomme son plafond — phrase validée par
+ * l'éditeur. Sans « illimité » : l'API refuse au-delà du plafond du jour (refus « quota »), elle ne ralentit pas. ⛔ Tarifs et les pages
+ * publiques disent « usage raisonnable » SANS nombre ; le nombre n'est lu que par cette phrase (lib/offre.test.ts).
  */
-export const PLAFOND_PRO =
-  "Au-delà d’un plafond quotidien fixé pour prévenir les abus, les analyses sont refusées jusqu’au minuit suivant, heure de Paris.";
+export const PLAFOND_PRO_CGV = `Au-delà d’un plafond de ${PLAFOND_PRO_JOUR}\u00a0analyses par jour, fixé pour prévenir les abus, les analyses sont refusées jusqu’au minuit suivant, heure de Paris.`;
+
+/** A1 : ce que Tarifs allumé dit à côté de l'offre « sans compte » (qui est celle de l'extension) : le scanner web demande un compte. */
+export const SCANNER_WEB_COMPTE_GRATUIT = "Le scanner web demande un compte gratuit.";
 
 /** Écart 7 : un compte non confirmé n'a aucune analyse (refus « VERIFICATION ») ; l'inscription le répète. */
 export const CONFIRMATION_OUVRE_LES_ANALYSES = "Les analyses du compte s’ouvrent quand l’adresse e\u2011mail est confirmée.";
