@@ -44,7 +44,7 @@ async function reclamer(cle, empreinteCorps, maintenant, cfg) {
  *  `porteur` (facultatif) : fonction (req) → texte, pour une route SANS porteur résolu (POST /api/installation : personne n'a encore de jeton). Sans lui : le porteur de la requête.
  *  `sceller` (facultatif) : la réponse conservée est SCELLÉE (transport/scelle.js) — pour une réponse qui porte un jeton, jamais en clair dans la base ; rejouée, elle est ouverte,
  *  et un scellé illisible ne se rejoue pas ET ne s'exécute pas de nouveau (503). */
-function idempotente(route, { obligatoire = true, porteur: porteurRoute = null, sceller = false, forme = FORME } = {}, cfg) {
+function idempotente(route, { obligatoire = true, porteur: porteurRoute = null, sceller = false, forme = FORME, rejeu = null } = {}, cfg) {
     const dureeFiniMs = cfg.retention.idempotenceHeures * 3600000;
     const secret = cfg.empreinte && cfg.empreinte.secret;
     if (sceller && (typeof secret !== 'string' || secret.length < 16)) throw new Error('idempotente : sceller exige cfg.empreinte.secret');
@@ -71,6 +71,11 @@ function idempotente(route, { obligatoire = true, porteur: porteurRoute = null, 
                         catch (e) { journal(e, 'ouverture'); return repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible'); }   // jamais de nouvelle exécution : l'effet a déjà eu lieu
                         res.set('Cache-Control', 'no-store');
                     }
+                    // PRO-PRIX-RESERVE : le rejeu suit l'offre ACTUELLE (identifier/reserve-pro-prix.js::rejeuSelonOffre). `null` : on ne peut pas conclure, jamais un prix par défaut.
+                    if (rejeu) {
+                        try { corps = await rejeu(corps, req); } catch (e) { journal(e, 'rejeu'); corps = null; }
+                        if (typeof corps !== 'string') return repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible');
+                    }
                     return res.status(ex.statut).set('Idempotency-Replayed', 'true').type('application/json').send(corps);
                 }
                 return repondreErreur(res, 'DEBIT', 'Requête identique en cours de traitement', { reessayerDans: 2 });   // 2 s : le claim vit 2 min, mais le client doit réessayer vite
@@ -96,8 +101,10 @@ function idempotente(route, { obligatoire = true, porteur: porteurRoute = null, 
                 if (!viaJson || fini || typeof corps !== 'string') return origSend.call(this, corps);
                 fini = true; clearInterval(battement); res.json = origJson; res.send = origSend;
                 const statut = this.statusCode;
+                // PRO-PRIX-RESERVE : la route peut demander que la réponse COMPLÈTE soit conservée à la place de la réponse servie (res.locals.reponseAConserver) ; seulement quand cette idempotence a un transformeur de rejeu
+                const aConserver = rejeu && this.locals && typeof this.locals.reponseAConserver === 'string' ? this.locals.reponseAConserver : corps;
                 const travail = statut < 300
-                    ? col('idempotence').updateOne(filtre, { $set: { etat: 'fini', statut, reponse: sceller ? scelle.fermer(corps, secret, cle) : corps, expireLe: new Date(Date.now() + dureeFiniMs) } })
+                    ? col('idempotence').updateOne(filtre, { $set: { etat: 'fini', statut, reponse: sceller ? scelle.fermer(aConserver, secret, cle) : aConserver, expireLe: new Date(Date.now() + dureeFiniMs) } })
                     : col('idempotence').deleteOne(filtre);          // une panne ou un QUOTA n'est jamais rejoué figé
                 travail.catch(e => journal(e, 'fin')).then(() => origSend.call(this, corps));   // le rejeu doit trouver le résultat DÈS que le client a la réponse
                 return this;
@@ -105,6 +112,7 @@ function idempotente(route, { obligatoire = true, porteur: porteurRoute = null, 
             // LIBÉRATION du claim (la seule : celle des échecs ci-dessous, aussi offerte à une route qui n'a RIEN exécuté — `req.idempotence.liberer()`, p. ex. le scanner dont
             // le client a coupé avant le traitement) : le battement s'arrête et le claim est supprimé, la clé redevient rejouable. Filtre = propriétaire : jamais le claim d'un autre.
             const liberer = () => { clearInterval(battement); return col('idempotence').deleteOne(filtre).catch(e => journal(e, 'nettoyage')); };
+            if (rejeu && res.locals) res.locals.rejeuReserve = true;      // PRO-PRIX-RESERVE : la route sait que la réponse complète peut être conservée (conserverComplet)
             req.idempotence = { liberer, cle };         // O5 : la clé du claim, que la marque de livraison d'un scan range pour retrouver la réponse stockée
             res.on('close', () => clearInterval(battement));
             res.on('finish', () => {                                // réponse sans res.json : en échec, le claim part ; en succès, il reste (2 min) : jamais de double exécution

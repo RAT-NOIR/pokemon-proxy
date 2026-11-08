@@ -8,20 +8,20 @@ const V = path.join(__dirname, '..');
 const BANCS = 'test';
 const LOT = 'identifier/lot.js';
 const BANC = 'test-lot-sans-prix.js';
-const BRANCHE = "} else if (!lotAfficheUnPrix(cartes, lectures)) {";
+const BRANCHE = "} else if (!lotAfficheUnPrix(cartes, lectures, acces)) {";
 
 // [nom, fichier (relatif à v2/), ancre, remplacement, banc, équivalent? (raison)]
 const MUTANTS = [
     ['la branche n\'est jamais prise (un lot sans prix reste compté)', LOT, BRANCHE, "} else if (false) {", BANC],
     ['la branche est toujours prise (un lot qui affiche un prix est rendu)', LOT, BRANCHE, "} else if (true) {", BANC],
-    ['les candidats d\'une question ne comptent plus (un candidat au guide ne suffit pas)', LOT, "c.candidats.some(k => afficheUnPrix({ prixRendu: prixServi(k) || !langueNonLue(c, lectures) }));", "c.candidats.some(k => afficheUnPrix({ prixRendu: !langueNonLue(c, lectures) }));", BANC],
+    ['les candidats d\'une question ne comptent plus (un candidat au guide ne suffit pas)', LOT, "c.candidats.some(k => afficheUnPrix({ prixRendu: prixServi(k) || (acces && !langueNonLue(c, lectures)) }));", "c.candidats.some(k => afficheUnPrix({ prixRendu: (acces && !langueNonLue(c, lectures)) }));", BANC],
     // tour 2 (I2, M2)
-    ['I2 : la langue lue d\'une question ne compte plus (seuls les guides des candidats)', LOT, "prixRendu: prixServi(k) || !langueNonLue(c, lectures) }", "prixRendu: prixServi(k) }", BANC],
+    ['I2 : la langue lue d\'une question ne compte plus (seuls les guides des candidats)', LOT, "prixRendu: prixServi(k) || (acces && !langueNonLue(c, lectures)) }", "prixRendu: prixServi(k) }", BANC],
     ['I2 : une langue de lecture inconnue (lecture absente) est lue « langue non lue »', LOT, "return Boolean(l) && typeof l === 'object' && l.codeLangue === null;", "return !l || typeof l !== 'object' || l.codeLangue == null;", BANC],
-    ['I2 : le lot ne transmet plus ses lectures à la règle', LOT, "} else if (!lotAfficheUnPrix(cartes, lectures)) {", "} else if (!lotAfficheUnPrix(cartes)) {", BANC],
+    ['I2 : le lot ne transmet plus ses lectures à la règle', LOT, "} else if (!lotAfficheUnPrix(cartes, lectures, acces)) {", "} else if (!lotAfficheUnPrix(cartes, undefined, acces)) {", BANC],
     ['M2 : une question sans candidat est lue « sans prix »', LOT, "|| c.candidats.length === 0 ||", "||", BANC],
-    ['le guide d\'une carte identifiée ne compte plus (seul le repli)', LOT, "prixRendu: prixServi(c.carte) || instructionEnDirect(c), repli:", "prixRendu: instructionEnDirect(c), repli:", BANC],
-    ['le repli servi ne compte plus (seul le guide)', LOT, "repli: avecRepliAnalyse(c).prixRepli ?? null })", "repli: null })", BANC],
+    ['le guide d\'une carte identifiée ne compte plus (seul le repli)', LOT, "prixRendu: prixServi(c.carte) || (acces && instructionEnDirect(c)), repli:", "prixRendu: (acces && instructionEnDirect(c)), repli:", BANC],
+    ['le repli servi ne compte plus (seul le guide)', LOT, "repli: PRO.repliSelonOffre(avecRepliAnalyse(c).prixRepli ?? null, acces) })", "repli: null })", BANC],
     ['un prixGuide absent (undefined) est lu « sans prix »', LOT, "p.prixGuide !== null : true", "p.prixGuide != null : true", BANC],
     ['un introuvable compte pour un prix affiché', LOT, "if (c.statut === 'introuvable') return false;", "if (c.statut === 'introuvable') return true;", BANC],
     ['un statut inconnu est lu « sans prix » (remboursement sur un doute)', LOT, "return true; // statut inconnu : un prix est supposé affiché", "return false; // statut inconnu : un prix est supposé affiché", BANC],
@@ -35,7 +35,7 @@ const MUTANTS = [
     ['l\'administrateur passe après le remboursement (il serait rendu)', LOT, "if (admin) facturation = fabriquerFacturation({ motif: 'administrateur', rembourse: false });\n        else {\n            const r = await rendre('sans-prix');", "if (false) facturation = fabriquerFacturation({ motif: 'administrateur', rembourse: false });\n        else {\n            const r = await rendre('sans-prix');", BANC],
     ['la réservation de question qui échoue ne sait plus que le lot est rendu', LOT, " || sansPrixRendu);", ");", BANC],
     // tour 1 (I1) : l'instruction de prix en direct
-    ['I1 : une instruction de prix en direct (langue lue) ne compte plus (le lot est rendu)', LOT, "prixRendu: prixServi(c.carte) || instructionEnDirect(c), repli:", "prixRendu: prixServi(c.carte), repli:", BANC],
+    ['I1 : une instruction de prix en direct (langue lue) ne compte plus (le lot est rendu)', LOT, "prixRendu: prixServi(c.carte) || (acces && instructionEnDirect(c)), repli:", "prixRendu: prixServi(c.carte), repli:", BANC],
     ['I1 : un prixLive absent (undefined) est lu « aucune instruction »', LOT, "const instructionEnDirect = c => c.prixLive !== null;", "const instructionEnDirect = c => c.prixLive != null;", BANC],
     // tour 1 (M1) : la facturation d'une réponse sur un lot déjà rendu
     ['M1 : la décision du lot rendu n\'est plus écrite sur ses questions', LOT, "        if (sansPrixRendu) {\n            try {", "        if (false) {\n            try {", BANC],

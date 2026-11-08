@@ -22,7 +22,8 @@ const etatChargeur = require('../chargeur/etat');
 const { col } = require('../db');
 const { facturation: fabriquerFacturation, raisonPublique } = require('../argent/facturation');
 const { natureDuMotif } = require('../argent/nature-du-motif');
-const { afficheUnPrix, avecRepliAnalyse } = require('./prix-repli');       // LOT-SANS-PRIX : la SEULE règle « ce scan affiche-t-il un prix ? » (REPLI-QUOTA), appelée telle quelle
+const { afficheUnPrix, avecRepliAnalyse } = require('./prix-repli');
+const PRO = require('./reserve-pro-prix');       // PRO-PRIX-RESERVE : sans accès Pro, ni prixLive ni repli d'état n'est servi : ils ne comptent plus comme « prix affiché »       // LOT-SANS-PRIX : la SEULE règle « ce scan affiche-t-il un prix ? » (REPLI-QUOTA), appelée telle quelle
 
 const { imagesDeLaChaine } = require('./photos-recues');   // PHOTOS-MULTIPLES (7d) : les photos reçues avant le scan (octets) à la place des URLs, quand il y en a
 const { cartesParScanMax } = require('./cartes-par-scan');   // /reponse et /retour-live n'adressent que les cartes 0 à MAX-1 : au-delà, une question serait sans réponse possible
@@ -67,21 +68,21 @@ const instructionEnDirect = c => c.prixLive !== null;
 // LOT-SANS-PRIX tour 2 (I2) : une QUESTION n'a pas de `prixLive` tant qu'elle n'est pas tranchée, mais la réponse OUI (routes.js, prixLiveDe) en sert un dès que la langue de la carte est lue. La langue lue de la carte d'entrée i est
 // `lectures[i].codeLangue` (ce que l'adaptateur a lu, calculé dans executerLot) : seule la valeur exactement `null` de CETTE carte vaut « langue non lue » ; lectures absentes, trop courtes ou d'une forme inconnue : un doute.
 const langueNonLue = (c, lectures) => { const l = Array.isArray(lectures) ? lectures[c.index] : undefined; return Boolean(l) && typeof l === 'object' && l.codeLangue === null; };
-function carteAfficheUnPrix(c, lectures) {
+function carteAfficheUnPrix(c, lectures, acces = true) {
     try {
         if (!c || typeof c !== 'object') return true;
         if (c.statut === 'introuvable') return false;                                          // aucune fiche, aucun prix à montrer
-        if (c.statut === 'identifiee') return afficheUnPrix({ prixRendu: prixServi(c.carte) || instructionEnDirect(c), repli: avecRepliAnalyse(c).prixRepli ?? null });
+        if (c.statut === 'identifiee') return afficheUnPrix({ prixRendu: prixServi(c.carte) || (acces && instructionEnDirect(c)), repli: PRO.repliSelonOffre(avecRepliAnalyse(c).prixRepli ?? null, acces) });
         // une question : si l'un de ses candidats montre un prix au client, le lot en affiche un (le candidat est montré avec son prixGuide)
         // M2 : une question sans candidat est un doute. I2 : une question à langue lue (ou dont la lecture est inconnue) recevra une instruction de prix en direct après un OUI : prix possiblement affiché.
-        if (c.statut === 'a-trancher') return !Array.isArray(c.candidats) || c.candidats.length === 0 || c.candidats.some(k => afficheUnPrix({ prixRendu: prixServi(k) || !langueNonLue(c, lectures) }));
+        if (c.statut === 'a-trancher') return !Array.isArray(c.candidats) || c.candidats.length === 0 || c.candidats.some(k => afficheUnPrix({ prixRendu: prixServi(k) || (acces && !langueNonLue(c, lectures)) }));
         return true; // statut inconnu : un prix est supposé affiché
     } catch (_) { return true; } // on ne peut pas conclure : un prix est supposé affiché
 }
 /** Vrai quand AU MOINS UNE carte du lot affiche un prix (ou qu'on ne peut pas le dire) ; faux seulement si TOUTES sont positivement sans prix. Ne lève jamais. */
-function lotAfficheUnPrix(cartes, lectures) {
+function lotAfficheUnPrix(cartes, lectures, acces = true) {
     if (!Array.isArray(cartes) || cartes.length === 0) return true;
-    return cartes.some(c => carteAfficheUnPrix(c, lectures));
+    return cartes.some(c => carteAfficheUnPrix(c, lectures, acces));
 }
 
 /**
@@ -190,11 +191,13 @@ async function executerLot(p) {
     }
     // 5. un lot ENTIÈREMENT introuvable est remboursé (toutes ses unités) ; un lot dont AUCUNE carte n'affiche de prix l'est aussi (LOT-SANS-PRIX) ; une seule carte qui affiche un prix et il reste compté
     let facturation, sansPrixRendu = false;
+    // PRO-PRIX-RESERVE : la décision unique, relue sur l'offre du porteur (éteint : aucune lecture, accès pour tous) ; ce que la réponse SERT décide si le lot « affiche un prix »
+    const acces = await PRO.accesPour({ cfg, porteur, argent });
     if (lotInfo.identifiees === 0 && lotInfo.aTrancher === 0) {
         const r = await rendre('introuvable', toutesParLaGarde ? { compteur: 'jumeaux', unites: cartes.length } : {});          // lot entièrement refusé PAR LA GARDE (carte par carte, `every`) : une unité par carte ; constaté par le serveur, rendu sans plafond (PLAFOND-DECLARE)
         facturation = p.facturationDe('introuvable', { admin, rendu: r.rendu, question: false, cause: r.cause });
         if (!admin && !r.rendu) facturation = { ...facturation, debite: cout };          // remboursement refusé : le client a payé TOUT le lot, la facturation le dit
-    } else if (!lotAfficheUnPrix(cartes, lectures)) {
+    } else if (!lotAfficheUnPrix(cartes, lectures, acces)) {
         // LOT-SANS-PRIX : des cartes lues (ou à trancher), mais AUCUN prix affiché par aucune (ni guide, ni repli, ni candidat) : le lot est rendu en entier, par le MÊME chemin que le lot introuvable (`rendre` :
         // la claim `rb|scanId` — une fois par scan —, UN seul passage au plafond, chaque unité à SA poche). Le serveur seul constate qu'aucun prix n'est servi (le client n'a rien déclaré) : le compteur est celui des
         // CONSTATS, celui de `natureDuMotif('sans-prix')` comme pour un lot introuvable, jamais celui des déclarations. Motif de la liste fermée : `sans-prix` (l'unité n'est pas un « introuvable » : les cartes sont lues).

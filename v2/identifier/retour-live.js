@@ -21,6 +21,7 @@ const { facturation: fabriquerFacturation, raisonPublique } = require('../argent
 const { cartesParScanMax } = require('./cartes-par-scan');
 const { offreSur, avecOffre } = require('../argent/offre-sur');
 const { repliRetourLive, idConfirme, afficheUnPrix, avec: avecRepli } = require('./prix-repli');
+const PRO = require('./reserve-pro-prix');      // PRO-PRIX-RESERVE : la décision unique ; sans accès Pro, le repli d'état est retiré AVANT la décision d'argent (il n'est plus un « prix affiché »)
 
 const VERDICTS = Object.freeze(['bonne-affaire', 'correct', 'cher', 'aucun']);
 const CAUSES = Object.freeze(['defi', 'blocage', 'grille-vide', 'sans-prix', 'sans-offre-reverse', 'onglet']);
@@ -103,11 +104,13 @@ function traiterRetourLive(cfg, deps = {}) {
         // PRIX-LISIBLE : le repli honnête (tendance et moyennes du guide, ou l'offre dans l'état le plus proche), SEULEMENT si la fiche a une donnée de prix ; sa panne ne casse jamais la réponse.
         // REPLI-QUOTA : calculé UNE SEULE FOIS par requête, et c'est CE repli qui décide du remboursement ET qui part dans la réponse (ce que le client voit et ce que le serveur facture ne peuvent pas diverger).
         let repli = null, repliCalcule = false;
+        // PRO-PRIX-RESERVE : la décision UNIQUE, relue sur l'offre du porteur (éteint : aucune lecture, accès pour tous). Une lecture qui échoue donne le gratuit (offreSur rend undefined).
+        const acces = await PRO.accesPour({ cfg, porteur, argent });
         // `strict` (la DÉCISION d'une lecture ratée définitive) : un repli qu'on n'a pas pu calculer n'est pas « aucun repli » — on ne sait pas si un prix est affiché, donc l'erreur remonte (INDISPONIBLE, avant tout
         // remboursement). Sans `strict` (la réponse d'un prix lu, ou d'une lecture non définitive), l'échec reste une absence de repli : aucune décision d'argent n'en dépend.
         const calculerRepli = async ({ strict = false } = {}) => {
             if (repliCalcule) return repli;
-            try { repli = await repliDuRetour(porteur, scanId, carte, b, lr); }
+            try { repli = PRO.repliSelonOffre(await repliDuRetour(porteur, scanId, carte, b, lr), acces); }
             catch (e) { journalErreur('repli', e); if (strict) throw e; repli = null; }
             repliCalcule = true;
             return repli;

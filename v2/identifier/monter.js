@@ -94,21 +94,23 @@ module.exports = {
         // Sans `contrat: 2` la requête sort du routeur v2 SANS qu'un octet soit lu ni écrit : la route héritée répond comme aujourd'hui.
         // L'aiguilleur EN TÊTE (registre d'A0), prédicat strictement booléen. Puis : porteur, installation exigée, limiteur par COMPTE/installation (120/h),
         // idempotence (clé obligatoire : le débit en exige une), entrée validée AVANT tout débit, traitement.
+        // PRO-PRIX-RESERVE : le rejeu d'idempotence suit l'offre ACTUELLE (null quand le drapeau est éteint : l'idempotence reste ce qu'elle était, octet pour octet)
+        const rejeuPrix = require('./reserve-pro-prix').rejeuSelonOffre(cfg, () => registre.obtenir('argent'));
         const parPorteur = L.limiteur({ nom: 'identifier', max: cfg.limites.identifierParCompteHeure, fenetreMs: 3600e3, cle: q => (q.v2 && q.v2.porteur ? `${q.v2.porteur.type}:${q.v2.porteur.id}` : null) });
         router.post('/api/identifier',
             aiguilleur(req => Boolean(req.body && typeof req.body === 'object' && req.body.contrat === 2)),
-            resoudrePorteur(cfg), exigerInstallation, parPorteur, idempotente('identifier', {}, cfg), validerEntree(cfg), traiterIdentifier(cfg, deps));
+            resoudrePorteur(cfg), exigerInstallation, parPorteur, idempotente('identifier', { rejeu: rejeuPrix }, cfg), validerEntree(cfg), traiterIdentifier(cfg, deps));
         // (PHOTOS-MULTIPLES, 7d : les photos reçues avant le scan sortent du magasin DANS traiterIdentifier, une fois la requête acceptée — routes.js::rattacherPhotos ; la pile de cette route est celle d'avant le lot)
         // La réponse à une question : route PROPRE à la v2 (aucune forme héritée). La clé d'idempotence est honorée quand elle est donnée, mais pas exigée : la
         // réponse ne débite rien par elle-même, et la machine à états de la question rend un rejeu sans clé identique (un seul débit).
         // O4 : un plafond horaire par porteur sur chacune des trois routes suivantes (posé ICI, au montage, pas dans routes.js), après exigerInstallation et avant l'idempotence.
         const parPorteurDe = (nom, max) => L.limiteur({ nom, max, fenetreMs: 3600e3, cle: q => (q.v2 && q.v2.porteur ? `${q.v2.porteur.type}:${q.v2.porteur.id}` : null) });
-        router.post('/api/identifier/reponse', resoudrePorteur(cfg), exigerInstallation, parPorteurDe('reponse', cfg.limites.reponseParPorteurHeure), idempotente('reponse', { obligatoire: false }, cfg), traiterReponse(cfg, deps));
+        router.post('/api/identifier/reponse', resoudrePorteur(cfg), exigerInstallation, parPorteurDe('reponse', cfg.limites.reponseParPorteurHeure), idempotente('reponse', { obligatoire: false, rejeu: rejeuPrix }, cfg), traiterReponse(cfg, deps));
         // CALCUL-CLIENT : le second envoi (les mesures d'image calculées par le client), SEULEMENT si V2_MESURES_CLIENT=1 ET V2_EMPREINTE_EXTENSION=1 (éteint : la route n'existe pas, 404). Même pile que la réponse à une question
         // (le même plafond horaire par porteur que /reponse, compteur à part) : il ne débite rien par lui-même ; le jeton signé et la prise atomique rendent un rejeu sûr.
-        if (cfg.mesuresClient === true && cfg.empreinteExtension === true) router.post('/api/identifier/mesures', resoudrePorteur(cfg), exigerInstallation, parPorteurDe('mesures', cfg.limites.reponseParPorteurHeure), idempotente('mesures', { obligatoire: false }, cfg), require('./calcul-client-route').traiterMesures(cfg, deps));
+        if (cfg.mesuresClient === true && cfg.empreinteExtension === true) router.post('/api/identifier/mesures', resoudrePorteur(cfg), exigerInstallation, parPorteurDe('mesures', cfg.limites.reponseParPorteurHeure), idempotente('mesures', { obligatoire: false, rejeu: rejeuPrix }, cfg), require('./calcul-client-route').traiterMesures(cfg, deps));
         // Le prix lu en direct : avec Bearer seulement. Même remarque sur la clé (la garde « un second retour est refusé » est déjà un rejeu sûr).
-        router.post('/api/retour-live', siBearer, resoudrePorteur(cfg), exigerInstallation, parPorteurDe('retour-live', cfg.limites.retourLiveParPorteurHeure), idempotente('retour-live', { obligatoire: false }, cfg), traiterRetourLive(cfg, deps));
+        router.post('/api/retour-live', siBearer, resoudrePorteur(cfg), exigerInstallation, parPorteurDe('retour-live', cfg.limites.retourLiveParPorteurHeure), idempotente('retour-live', { obligatoire: false, rejeu: rejeuPrix }, cfg), traiterRetourLive(cfg, deps));
         // Le solde : avec Bearer seulement (lecture pure, aucun débit).
         router.post('/api/solde', siBearer, resoudrePorteur(cfg), exigerInstallation, parPorteurDe('solde', cfg.limites.soldeParPorteurHeure), async (req, res) => {
             let solde, offre;

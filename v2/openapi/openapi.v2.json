@@ -7726,6 +7726,7 @@
         "description": "Le guide quotidien de Cardmarket (trend, low, avg7, avg30) ; `date` est celle du GUIDE, jamais celle de l'import. Un zéro n'est pas un prix : absent = null."
       },
       "PrixRepli": {
+        "description": "Repli de prix. Avec la capacité prix-pro-reserve, un non-Pro ne reçoit que le repli GÉNÉRAL tendance (sans fourchette ni offre lue) ; les replis etat-proche, fourchette et tout repli à fourchette sont réservés à Pro (clé absente).",
         "oneOf": [
           {
             "$ref": "#/components/schemas/PrixRepliTendance"
@@ -8693,6 +8694,7 @@
         "additionalProperties": false
       },
       "PrixLive": {
+        "description": "Instruction de lire le prix EN DIRECT (par état et par langue). RÉSERVÉ À PRO quand le serveur annonce la capacité prix-pro-reserve (V2_PRO_PRIX_RESERVE) : sans offre Pro, la clé prixLive de la carte vaut null. Retirer prixLive retire aussi la lecture par langue. Le champ etat n'est jamais retiré.",
         "type": "object",
         "properties": {
           "idProduct": {
@@ -10978,7 +10980,8 @@
                 "mesures-client",
                 "probable",
                 "leviers-abde",
-                "promotion-surs"
+                "promotion-surs",
+                "prix-pro-reserve"
               ]
             },
             "x-conditionnel": "RM_API_V2=1",

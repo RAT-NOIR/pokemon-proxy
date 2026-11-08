@@ -18,6 +18,7 @@ const registre = require('../registre');
 const { col } = require('../db');
 const { repondreErreur } = require('../erreurs');
 const { offreSur, avecOffre } = require('../argent/offre-sur');
+const PRO = require('./reserve-pro-prix');      // PRO-PRIX-RESERVE : la décision unique du prix par état et par langue (réservé à Pro)
 const { facturation: fabriquerFacturation } = require('../argent/facturation');
 
 const VALIDITE_MS = 120e3, RESULTATS_MAX = MC.MESURES_MAX, FORME_ID = /^[0-9a-f]{24}$/i, OPENCV_MAX = 60, JETON_MAX = 200;
@@ -165,7 +166,7 @@ async function devenirProbable({ cfg, argent, porteur, scanId, an, entree, cm, o
         let solde, offre;
         try { solde = await argent.solde(porteur); } catch (e) { journalErreur('solde', e); }
         try { offre = await offreSur(porteur, argent); } catch (e) { journalErreur('offre', e); }
-        reponse = { carte, facturation, ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) };
+        reponse = { carte: PRO.carteSelonOffre(carte, PRO.accesPrixParEtat(cfg, offre)), facturation, ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) };      // PRO-PRIX-RESERVE : la même décision (une carte à trancher n'a ni prixLive ni repli : garde par construction)
         return { reponse };
     } catch (e) {
         journalErreur('probable de groupe', e);
@@ -240,15 +241,19 @@ function traiterMesures(cfg, deps = {}) {
         const { carteRepondue } = require('./routes');
         const { avecRepliAnalyse } = require('./prix-repli');
         const brute = carteRepondue(an, entree, 0, cand.id, j.promouvoir);
-        const carte = brute && avecRepliAnalyse(brute);
-        if (!carte) { console.error(`🔴 [v2 mesures] scan ${scanId} : la carte promue ne peut pas être fabriquée depuis analyses (la question, elle, est réglée)`); await noter('carte-impossible'); return repondreErreur(res, 'SERVEUR'); }
+        const carteComplete = brute && avecRepliAnalyse(brute);
+        if (!carteComplete) { console.error(`🔴 [v2 mesures] scan ${scanId} : la carte promue ne peut pas être fabriquée depuis analyses (la question, elle, est réglée)`); await noter('carte-impossible'); return repondreErreur(res, 'SERVEUR'); }
         // le journal du scan : la promotion par les mesures du client — JAMAIS dans `cartes.0.reponse` (la vérité d'une personne), jamais dans le banc réel
         try { await col('analyses').updateOne({ _id: scanId }, { $set: { 'complementMesures.issue': 'promotion', 'complementMesures.produit': j.promouvoir, 'complementMesures.lectureConcordante': j.concordante, 'cartes.0.promotionMesures': { choix: cand.id, idProduct: j.promouvoir, le: new Date(maintenant()) } } }); }
         catch (e) { journalErreur('journal de la promotion', e); }
         let solde, offre;
         try { solde = await argent.solde(porteur); } catch (e) { journalErreur('solde', e); }
         try { offre = await offreSur(porteur, argent); } catch (e) { journalErreur('offre', e); }
-        return res.status(200).json({ success: true, scanId: b.scanId, change: true, carte, facturation, ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) });
+        // PRO-PRIX-RESERVE : la décision unique sur l'offre relue ci-dessus ; la réponse COMPLÈTE est gardée pour le rejeu d'idempotence
+        const acces = PRO.accesPrixParEtat(cfg, offre), carte = PRO.carteSelonOffre(carteComplete, acces);
+        const corps = { success: true, scanId: b.scanId, change: true, carte, facturation, ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) };
+        if (carte !== carteComplete) PRO.conserverComplet(res, { ...corps, carte: carteComplete }, { acces });
+        return res.status(200).json(corps);
     };
 }
 

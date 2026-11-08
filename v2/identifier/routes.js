@@ -177,6 +177,7 @@ const { creerCatalogue } = require('./catalogue');
 const { regleVerdict: regleVerdictBrute, cacheDuModule: cacheTaux } = require('./taux');
 const regleVerdict = devise => regleVerdictBrute(devise, { cache: cacheTaux });        // PERF-SCAN P3 : le taux du jour, gardé 120 s par (devise, jour de Paris), vidé par l'écriture des taux (taux.js)
 const { avecRepliAnalyse, analyseAvecRepli } = require('./prix-repli');
+const PRO = require('./reserve-pro-prix');      // PRO-PRIX-RESERVE : la décision unique (le prix par état et par langue est réservé à Pro ; éteint, la réponse d'avant)
 const { preparerAnnonce } = require('../annonce/verifier');
 const { conserverAnnonce } = require('../annonce/conservation');
 const { facturation: fabriquerFacturation, raisonPublique } = require('../argent/facturation');
@@ -802,8 +803,13 @@ function traiterIdentifier(cfg, deps = {}) {
         const photosDites = Array.isArray(entree.photoIds) && entree.photoIds.length ? (() => { const idx = (entree.photosRecues || []).map(p => p.index).sort((a, b) => a - b); return { photosRecues: idx, photoRecue: idx.includes(0) }; })() : null;
         // PRIX-LISIBLE : une carte identifiée dont l'analyse n'a rien dicté à lire (langue non lue, état non retenu) reçoit le repli honnête `prixRepli` SI sa fiche a une donnée de prix ; toute autre carte est rendue telle quelle.
         // Posé ICI, après la lecture du tampon (qui peut refaire le Produit) : le guide du repli est celui de la carte servie. Rien n'en entre dans la ligne `analyses` (elle est écrite depuis `analyse.cartes` : le repli se recalcule à la demande).
-        const analyse0 = { ...analyseAvecRepli(resultat.analyse), regleVerdict: regle, ...(photosDites || {}) };
-        let analyse = niveauServi(cfg, entree) ? avecNiveau(analyse0, sortie.probable) : analyse0;    // PROBABLE : `niveau` et `probable` seulement si V2_PROBABLE ET une extension >= 2.0.1 ; sinon la réponse est celle d'avant, octet pour octet
+        // PRO-PRIX-RESERVE : `acces` est la décision UNIQUE (offre relue plus haut, `offre`). Sans accès, `prixLive` et les replis d'état sont retirés ICI, après le calcul du repli ; la réponse COMPLÈTE est gardée pour le rejeu d'idempotence.
+        const acces = PRO.accesPrixParEtat(cfg, offre);
+        const analysePleine0 = acces ? null : { ...analyseAvecRepli(resultat.analyse), regleVerdict: regle, ...(photosDites || {}) };
+        const analyse0 = acces ? { ...analyseAvecRepli(resultat.analyse), regleVerdict: regle, ...(photosDites || {}) } : { ...PRO.analyseSelonOffre(analysePleine0, false), regleVerdict: regle, ...(photosDites || {}) };
+        const avecNiveauSiServi = (a, p) => (niveauServi(cfg, entree) ? avecNiveau(a, p) : a);
+        let analyse = avecNiveauSiServi(analyse0, sortie.probable);
+        let analysePleine = analysePleine0 && avecNiveauSiServi(analysePleine0, sortie.probable);    // PROBABLE : `niveau` et `probable` seulement si V2_PROBABLE ET une extension >= 2.0.1 ; sinon la réponse est celle d'avant, octet pour octet
         // 9. les écritures annexes : sans effet sur la réponse
         // TEMPS-ETAPES (V2_TE_FIN_PARALLELE) : la ligne `analyses` et l'annonce sont deux écritures INDÉPENDANTES (chacune sous son propre filet, aucune ne lit l'autre) : elles partent ensemble, et la clôture de la marque
         // (ci-dessous) attend les DEUX, comme avant. Éteint : l'une puis l'autre, l'ordre d'avant.
@@ -851,7 +857,7 @@ function traiterIdentifier(cfg, deps = {}) {
                         await col('questions_v2').updateOne({ _id: `${scanId}:0`, etat: 'en-attente' }, { $set: { etat: 'remboursee', rembourse: true, regleeLe: new Date() } });
                         // TOUR 2 : le montant ANNONCÉ est celui du grand livre après l'opération : rendu (debite 0, rembourse true), plus de probable servi sur une question close, solde et offre relus
                         facturation = fabriquerFacturation({ debite: 0, reserve: 0, rembourse: true, motif: 'question' });
-                        if (niveauServi(cfg, entree)) analyse = avecNiveau(analyse0, null);
+                        if (niveauServi(cfg, entree)) { analyse = avecNiveau(analyse0, null); if (analysePleine0) analysePleine = avecNiveau(analysePleine0, null); }
                         try { solde = await soldeSur(); offre = await offreP(); } catch (e3) { journalErreur('solde après remboursement du probable', e3); }
                     } else console.error(`🔴 [v2 identifier] scan ${scanId} : écriture analyses en échec ET probable NON rendu (${(r && r.raisonNonRembourse) || 'erreur'}) — à la réconciliation`);
                 } catch (e2) { journalErreur('remboursement du probable sans analyse', e2); }
@@ -872,9 +878,12 @@ function traiterIdentifier(cfg, deps = {}) {
         if (!(emp && emp.influence)) require('../banc/crochet').apresIdentifier({ cfg, deps, req, scanId, analyse });
         // ETIQUETAGE-B : la photo d'un scan de l'ADMINISTRATEUR seul (rôle relu en base par le crochet) ; jamais attendue, ne lève jamais, rien n'entre dans la réponse
         if (admin) require('../banc/photo-admin').apresIdentifierAdmin({ cfg, deps, req, scanId, porteur }).catch(() => { });
-        return res.status(200).json({ success: true, contrat: 2, scanId: String(scanId), analyse, facturation: PS.avecPoche(facturation, await poche()),...(solde !== undefined ? { solde } : {}), ...avecOffre(offre),
+        const corpsServi = { success: true, contrat: 2, scanId: String(scanId), analyse, facturation: PS.avecPoche(facturation, await poche()),...(solde !== undefined ? { solde } : {}), ...avecOffre(offre),
             ...(sortie.empreinte ? { empreinte: sortie.empreinte.public } : {}),          // MODELE-VISUEL-API : seulement quand la requête portait des empreintes et que le drapeau est allumé
-            ...(sortie.complement ? { complement: sortie.complement.public } : {}) });     // CALCUL-CLIENT : seulement drapeau allumé, client qui l'annonce, question que des mesures pourraient trancher
+            ...(sortie.complement ? { complement: sortie.complement.public } : {}) };     // CALCUL-CLIENT : seulement drapeau allumé, client qui l'annonce, question que des mesures pourraient trancher
+        // PRO-PRIX-RESERVE : le rejeu garde la réponse complète, sauf pour un lot (la décision d'argent du lot a dépendu de la réservation : la réponse conservée est celle qui a été servie).
+        if (analysePleine) PRO.conserverComplet(res, { ...corpsServi, analyse: analysePleine }, { acces, completPourRejeu: analyse.statut !== 'lot' });
+        return res.status(200).json(corpsServi);
     };
     return async function traiterIdentifierV2(req, res) {
         const etat = { suivi: null, differe: false };
@@ -971,8 +980,8 @@ function traiterReponse(cfg, deps = {}) {
             le = (r.question.reponse && r.question.reponse.le) || le;
         }
         const resolueBrute = carteRepondue(an, entree, carte, choix, idProduct);
-        const resolue = resolueBrute && avecRepliAnalyse(resolueBrute);      // PRIX-LISIBLE : le repli honnête d'une carte tranchée dont l'analyse n'a rien dicté à lire (null reste null)
-        if (!resolue) { console.error(`🔴 [v2 reponse] scan ${scanId} : la carte ne peut pas être fabriquée depuis analyses (la question, elle, est réglée)`); return repondreErreur(res, 'SERVEUR'); }
+        const resolueComplete = resolueBrute && avecRepliAnalyse(resolueBrute);      // PRIX-LISIBLE : le repli honnête d'une carte tranchée dont l'analyse n'a rien dicté à lire (null reste null)
+        if (!resolueComplete) { console.error(`🔴 [v2 reponse] scan ${scanId} : la carte ne peut pas être fabriquée depuis analyses (la question, elle, est réglée)`); return repondreErreur(res, 'SERVEUR'); }
         // 9. la réponse est une VÉRITÉ : écrite une fois (la première gagne), sans jamais changer la réponse au client
         try { await col('analyses').updateOne({ _id: scanId, [`cartes.${carte}.reponse`]: { $exists: false } }, { $set: { [`cartes.${carte}.reponse`]: { choix, idProduct, le } } }); }
         catch (e) { journalErreur('vérité de la réponse', e); }
@@ -982,9 +991,13 @@ function traiterReponse(cfg, deps = {}) {
             catch (e) { journalErreur('probable confirmé', e); }
         }
         const solde = await soldeSur(), offre = await offreP();
+        const acces = PRO.accesPrixParEtat(cfg, offre);      // PRO-PRIX-RESERVE : la décision unique, sur l'offre relue ci-dessus
+        const resolue = PRO.carteSelonOffre(resolueComplete, acces);
         // B6.4 : le crochet du banc réel, APRÈS la vérification du porteur (analyses) et l'acceptation de la réponse ; jamais attendu, ne lève jamais
         require('../banc/crochet').apresReponse({ cfg, req, scanId: b.scanId, carte, choix, idProduct });
-        return res.status(200).json({ success: true, carte: resolue, facturation, ...(enAttente ? { remboursementEnAttente: true } : {}), ...(declaration ? { declaration } : {}), ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) });     // remboursementEnAttente : additif, présent SEULEMENT quand un remboursement de lot dû n'est pas encore fait (le balayage le fera)
+        const corpsRep = { success: true, carte: resolue, facturation, ...(enAttente ? { remboursementEnAttente: true } : {}), ...(declaration ? { declaration } : {}), ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) };     // remboursementEnAttente : additif, présent SEULEMENT quand un remboursement de lot dû n'est pas encore fait (le balayage le fera)
+        if (resolue !== resolueComplete) PRO.conserverComplet(res, { ...corpsRep, carte: resolueComplete }, { acces });      // PRO-PRIX-RESERVE : le rejeu garde la carte complète
+        return res.status(200).json(corpsRep);
     };
 }
 
