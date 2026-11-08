@@ -281,4 +281,7 @@ async function main(argv, env = process.env, deps = {}) {
 
 module.exports = { lireArgs, validerManifeste, verifierLocaux, deposer, controler, baseHttps, main, PREFIXE_FILM, CACHE_CONTROL };
 
-if (require.main === module) main(process.argv.slice(2)).then(c => process.exit(c));
+if (require.main === module) {
+    require('dotenv').config({ path: path.join(__dirname, '.env') });   // lanceur seulement : les bancs injectent leur environnement
+    main(process.argv.slice(2)).then(c => process.exit(c));
+}
