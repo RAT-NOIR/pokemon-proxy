@@ -127,8 +127,9 @@ const TIRAGES = {
     6704: ['intl', 'declarations : 21 cartes (25 impressions) déclarent « Delta Reign » en intl (expansion), aucun autre tirage ; complément : slugSet Cardmarket appris « Delta-Reign », numéros « DLR001 »…'],
     6928: ['zh-hans', 'famille : numéros Cardmarket appris « CSV105C001 »… (famille CS…C), et CSV9C, CSV9.5C, CSV10C sont zh-hans en base ; nom : slugSet Cardmarket appris « Black-Bolt-S-CH » (S-CH : Simplified Chinese)'],
     6929: ['zh-hans', 'famille : numéros Cardmarket appris « CSV106C001 »… (famille CS…C), et CSV9C, CSV9.5C, CSV10C sont zh-hans en base ; nom : slugSet Cardmarket appris « White-Flare-S-CH » (S-CH : Simplified Chinese)'],
-    6940: ['intl', 'famille : M23 et M24 (McDonald\'s Match Battle 2023, McDonald\'s Collection 2024) sont intl en base (M26 : numéros Cardmarket appris « M26001 »…) ; complément : slugSet Cardmarket appris « McDonalds-Collection-2026 »']
-    // 6933 (Delta-Reign-Additionals) N'EST PAS ICI : sa preuve serait la famille de DLR, qui n'existera en base qu'après la création de 6704 (lot suivant).
+    6940: ['intl', 'famille : M23 et M24 (McDonald\'s Match Battle 2023, McDonald\'s Collection 2024) sont intl en base (M26 : numéros Cardmarket appris « M26001 »…) ; complément : slugSet Cardmarket appris « McDonalds-Collection-2026 »'],
+    // 6933 (Delta-Reign-Additionals) : ajoutée APRÈS le lot qui a créé Delta-Reign (08/11, 10:43 UTC), pour que sa famille soit en base quand elle est lue
+    6933: ['intl', 'famille : DLR est intl (Delta-Reign, créé le 2026-11-08) (xDLR, ses Additionals : slugSet Cardmarket appris « Delta-Reign-Additionals »)'],
     // 5415, 6303 : aucune preuve admise (chasse du 08/11, chasse\matin-0811\TIRAGES\RAPPORT.md) ; 6925 : aucun produit appris.
 };
 // LES CARTES DÉCLARANTES (2026-10-07, testeur : « My First Battle : feu vert, rattache les 8 produits à Potion et Switch, sous la garde ») :
