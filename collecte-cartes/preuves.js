@@ -699,9 +699,8 @@ async function evaluerDeuxSources({ entree, produit, langueProduit, octets, deci
     if (!ta.ok) return non('tampon-inconnu');
     // tour 1 (3) : la SECONDE image porte sa propre lecture, jugée comme la première (P2) — la concordance d'image ne prouve que le dessin, jamais le tirage
     if (!objet(s.lu)) return non('seconde-sans-lecture');
-    // (tour de correction 1) le contrôle A juge les DEUX lectures : la première n'est pas toujours jugée ci-dessous, la seconde l'est par evaluerPreuveLue
+    // (tour de correction 1) le contrôle A juge les DEUX lectures : la première n'est pas toujours jugée ci-dessous ; la seconde l'est toujours, par evaluerPreuveLue (motifDeNom, A en tête)
     const a1 = motifNomLuHorsLangue(entree.lu, produit) ?? motifNomLuIdentiqueProduit(entree.lu, produit); if (a1) return non(`premiere-lecture:${a1}`);
-    const a2 = motifNomLuHorsLangue(s.lu, produit) ?? motifNomLuIdentiqueProduit(s.lu, produit); if (a2) return non(`seconde-lecture:${a2}`);
     // décision 5 : pour un set de la liste fermée CODES_SANS_TOTAL, la PREMIÈRE lecture (jusqu'ici non jugée par cette voie) est jugée aussi quand elle n'a pas de total — les deux lectures portent code et numéro
     const sansTotal = lu => lu?.total == null || String(lu.total).trim() === '';
     // (07/11) idem pour un rond seul (POSITIONS_RONDES) : la première lecture porte aussi un rond, jugé avec ses conditions (nom unique dans le set, rond = numéro)

@@ -1522,8 +1522,11 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.deepStrictEqual(lue(nu(), ptrad()).motifs, ['nom-different']);
         assert.deepStrictEqual(lue(nu({ codeSet: '', regle: '' }), ptrad()).motifs, ['nom-different'], 'un témoin vide n\'est pas un témoin saisi');
         // toutes les marques régionales (japonais, chinois, thaï, latin) sont lues dans le nom
-        for (const m of ['アローラ', 'ガラル', 'ヒスイ', 'パルデア', '阿羅拉', '阿罗拉', '伽勒爾', '伽勒尔', '洗翠', '帕底亞', '帕底亚', 'อโลลา', 'กาลาร์', 'ฮิซุย', 'ปัลเดีย', 'Alola', 'Galar', 'Hisui', 'Paldea'])
+        // (le nom lu doit être écrit dans l'écriture de sa langue — contrôle A : chaque marque est jugée dans la sienne)
+        for (const m of ['アローラ', 'ガラル', 'ヒスイ', 'パルデア', '阿羅拉', '阿罗拉', '伽勒爾', '伽勒尔', '洗翠', '帕底亞', '帕底亚'])
             assert.match(mt(trad({ nom: `${m}ピカチュウ`, dex: 25, pv: 60 }), ptrad({ nomEn: 'Pikachu', slug: 'X-svAL005' })), /forme-regionale/, m);
+        for (const m of ['อโลลา', 'กาลาร์', 'ฮิซุย', 'ปัลเดีย'])
+            assert.match(mt(trad({ langue: 'th', nom: `${m}พิคาชู`, dex: 25, pv: 60 }), ptrad({ tirage: 'th', nomEn: 'Pikachu', slug: 'X-svAL005' })), /forme-regionale/, m);
         assert.deepStrictEqual(lue(nu({ langue: 'zh-hans', nom: '皮卡丘' }), ptrad({ tirage: 'zh-hans' })).motifs, ['nom-langue-non-anglaise']);
         // les champs-témoin n\'ouvrent rien pour l\'anglais ni le français : le nom se compare comme avant
         assert.match(mt(entree({ lu: { ...entree().lu, nom: 'Squirtle', dex: 7, pv: 40, codeSet: 'AA' } }), produit()), /nom-different/);
