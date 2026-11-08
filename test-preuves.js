@@ -762,7 +762,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
             fiches: async (carteIds, slugs) => lignes.filter(l => carteIds.includes(l.carteId) && slugs.includes(l.slugSet)),
             numeros: async ids => ids.map(i => ({ idProduct: i, numero: produits[i]?.numeroNumeros ?? null, slug: produits[i]?.slugNumeros ?? null, nomFr: produits[i]?.nomFrNumeros ?? null })).filter(x => x.numero != null || x.nomFr != null),
             sets: async slugs => sets.filter(s => slugs.includes(s._id)),
-            nomsJa: async ids => cartes.filter(c => ids.includes(c._id)).map(c => ({ _id: c._id, nomJa: c.nomJa ?? null, nomEn: c.nomEn, ndex: c.ndex, pv: c.pv, categorie: c.categorie })),
+            nomsJa: async ids => cartes.filter(c => ids.includes(c._id)).map(c => ({ _id: c._id, nomJa: c.nomJa ?? null, nomEn: c.nomEn, ndex: c.ndex, pv: c.pv, categorie: c.categorie, images: c.images })),
             codesSet: async ids => codesSet.filter(c => ids.includes(c.idExpansion)),
             produitsDuSet: async slugs => lignes.filter(l => slugs.includes(l.slugSet)).map(l => ({ idProduct: l.idProduct, slugSet: l.slugSet, numeroFiche: l.numeroFiche })),
             cartesDeNomEn: async noms => cartes.filter(c => noms.includes(c.nomEn) && c.nomJa && c._id > 0).map(c => ({ _id: c._id, nomEn: c.nomEn, nomJa: c.nomJa })),

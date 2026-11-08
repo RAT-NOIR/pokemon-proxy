@@ -103,7 +103,8 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
         // a-reste (japonais) : le nom JAPONAIS de la carte désignée par la ligne, lu seulement pour les entrées qui LISENT du japonais (lu.langue 'ja') — témoin de lecture, jamais écrit en public
         const nomsJa = new Map(), cartesLues = new Map();
         // (nom TRADUIT : les entrées qui portent Pokédex / PV / règle / code lisent aussi la carte désignée — son nomEn, son ndex, ses PV, sa catégorie —, toujours en lecture seule)
-        const luitLaCarte = lu => lu?.langue === 'ja' || PV.porteUnTemoinTraduit(lu);
+        // (08/11) le contrôle « nom lu contre langue » (exception ENERGY : catégorie), l'id latin (catégorie) et la règle de l'illustration relue (cleR2 des visuels de la carte) lisent aussi la carte
+        const luitLaCarte = lu => lu?.langue === 'ja' || PV.porteUnTemoinTraduit(lu) || lu?.langue === 'id' || ['th', 'zh-hans', 'zh-hant', 'ko'].includes(lu?.langue) || lu?.illustrationRelue != null;
         const carteIdsJa = [...new Set(r.appariees.filter(a => luitLaCarte(a.entree.lu)).flatMap(a => (lignesDe.get(a.entree.idProduct) ?? []).map(l => l.carteId)).filter(c => c != null))];
         if (carteIdsJa.length && lire.nomsJa) for (const c of await lire.nomsJa(carteIdsJa)) { nomsJa.set(c._id, c.nomJa ?? null); cartesLues.set(c._id, c); }
         // le code du set (codes_set) de la ligne, et la TABLE de traduction officielle : le nomJa des autres cartes (vraies pages) de même nomEn — seulement pour les entrées à nom traduit
@@ -147,6 +148,7 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
             if ((set.tirage ?? set.region) !== E.langue) { non('tirage-du-set-different', `set ${set.tirage ?? set.region}, état ${E.langue}`); continue; }
             const produit = { idProduct: id, idExpansion: E.idExpansion ?? L.idExpansion ?? null, tirage: E.langue, tamponnee: E.tamponnee ?? null, numero: L.numeroFiche ?? numerosDe.get(id)?.numero ?? null, carteId: L.carteId, slugSet: L.slugSet, slug: L.slug ?? numerosDe.get(id)?.slug ?? null, nomEn: E.name ?? null, nomFr: numerosDe.get(id)?.nomFr ?? null, nomJa: nomsJa.get(L.carteId) ?? null };
             // nom TRADUIT : les témoins que la règle lit (rien d'écrit) — la carte quand elle existe (nomEn, ndex, PV, catégorie), le code du set de la ligne, la table de traduction officielle
+            { const cl = cartesLues.get(L.carteId); if (cl) { produit.categorie = cl.categorie ?? null; produit.cleR2Carte = Array.isArray(cl.images) ? cl.images.map(i => i?.cleR2).filter(c => typeof c === 'string' && c !== '') : []; } }
             if (PV.porteUnTemoinTraduit(e.lu)) {
                 const cl = cartesLues.get(L.carteId);
                 if (cl) { produit.nomEnCarte = cl.nomEn ?? null; produit.ndex = cl.ndex ?? null; produit.pv = cl.pv ?? null; produit.categorie = cl.categorie ?? null; produit.attaquesCarte = Array.isArray(cl.attaques) ? cl.attaques.map(a => ({ nom: a?.nom ?? null, degats: a?.degats ?? null })) : null; }
@@ -259,7 +261,7 @@ function lireDepuisLaBase(db, prodDb) {
         fiches: (carteIds, slugs) => par(db.collection('cartes_produits'), { carteId: { $in: carteIds }, slugSet: { $in: slugs } }, { _id: 0, idProduct: 1, carteId: 1, slugSet: 1, numeroFiche: 1 }),
         numeros: ids => lots(ids, lot => par(prodDb.collection('numeros_cartes'), { idProduct: { $in: lot } }, { _id: 0, idProduct: 1, numero: 1, slug: 1, nomFr: 1 })),
         sets: slugs => par(db.collection('sets'), { _id: { $in: slugs } }, { tirage: 1, region: 1 }),
-        nomsJa: ids => lots(ids, lot => par(db.collection('cartes'), { _id: { $in: lot } }, { nomJa: 1, nomEn: 1, ndex: 1, pv: 1, categorie: 1, 'attaques.nom': 1, 'attaques.degats': 1 })),
+        nomsJa: ids => lots(ids, lot => par(db.collection('cartes'), { _id: { $in: lot } }, { nomJa: 1, nomEn: 1, ndex: 1, pv: 1, categorie: 1, 'attaques.nom': 1, 'attaques.degats': 1, 'images.cleR2': 1 })),
         // nom traduit (lecture seule) : le code du set d'une expansion (codes_set, base de production) et les cartes à page qui portent un nomJa pour un nomEn donné (la table officielle)
         codesSet: ids => lots(ids, lot => par(prodDb.collection('codes_set'), { idExpansion: { $in: lot } }, { _id: 0, idExpansion: 1, codeSet: 1 })),
         cartesDeNomEn: noms => lots(noms, lot => par(db.collection('cartes'), { nomEn: { $in: lot }, nomJa: { $nin: [null, ''] }, _id: { $gt: 0 } }, { nomEn: 1, nomJa: 1 })),
