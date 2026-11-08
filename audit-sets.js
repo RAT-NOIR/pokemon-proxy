@@ -105,16 +105,28 @@ async function lireBase() {
     audit.ecart = ec;
     if (!sansEcriture) { fs.writeFileSync(jsonSortie, JSON.stringify(audit)); fs.writeFileSync(mdSortie, A.formaterMd(audit, ec)); }
     const T = audit.totaux, D = audit.denominateurs;
+    console.log(`DÉFINITION de l'audit : ${audit.definition} (doublons et manquants redéfinis ; ne se comparent pas à une définition antérieure)`);
     console.log(`dénominateurs : ${JSON.stringify(D)}`);
     console.log(`sets à 100 % ${T.sets100} · troués ${T.setsTroues} · trous ${T.trous} : ` + A.TYPES.map(t => `${A.TITRES[t]} ${T[t]}`).join(' · '));
     for (const t of A.TYPES) console.log(`  ${t} : ${JSON.stringify(audit.parCause[t])}`);
     console.log(`EXCLUS du compte (imprimés à part, jamais disparus) : ${audit.exclus.total} · par cause ${JSON.stringify(audit.exclus.parCause)} · sur ${Object.keys(audit.exclus.parSet).length} sets`);
+    for (const [t, f] of [['doublons', s => s.doublons.groupes.map(g => `${g.nom} n°${g.base} (${g.membres.map(m => `${m.carteId}:${m.numero}`).join(', ')})`)], ['manquants', s => s.manquants.items.map(m => `${m.numero ?? '?'}×${m.nombre} ${m.cause}`)]]) {
+        const l = audit.sets.filter(s => s[t].n > 0); console.log(`${t} restants : ${l.reduce((a, s) => a + s[t].n, 0)} sur ${l.length} sets`);
+        for (const s of l) console.log(`  ${t} ${s.set} (${s[t].n}) : ${f(s).join(' ; ')}`);
+    }
+    console.log(`ABSORBÉS par la définition 2 des manquants (à part des exclus) : ${audit.absorbes.total} · par cause ${JSON.stringify(audit.absorbes.parCause)} · sur ${Object.keys(audit.absorbes.parSet).length} sets (le plancher de la règle Additionals dépend de l'export : produits numérotés lus imprimés)`);
+    for (const [s, l] of Object.entries(audit.absorbes.parSet)) for (const a of l) console.log(`  absorbé ${s} : ${a.numeros.length} (${a.numeros.slice(0, 6).join(',')}${a.numeros.length > 6 ? '…' : ''}) ${a.cause}${a.produitsNumerotesLus != null ? ` · ${a.produitsNumerotesLus} produits numérotés lus` : ''}`);
+    console.log(`DOUBLONS ÉCARTÉS (chaque membre a son produit propre ; non comptés, listés dans le JSON et le Markdown) : écartés car produit propre à chaque membre : ${audit.doublonsEcartes.groupes} groupes, ${audit.doublonsEcartes.enTrop} fiches`);
     console.log('10 sets les plus touchés par expansion-declaree-sans-impression :');
     for (const x of A.suspectsExpansion(audit)) console.log(`  ${x.set} ${x.n} · déclarée ${JSON.stringify(x.expansionsDeclarees)} · ` + x.exemples.map(e => `${e.nom} → ${e.plusProche ? `${e.plusProche.tirage}/« ${e.plusProche.expansion} »/${e.plusProche.numero}` : 'aucune'}`).join(' ; '));
     for (const id of args.filter(a => a.startsWith('--set=')).map(a => a.slice(6))) {   // détail par set demandé : trous, causes, exclusions
         const s = audit.sets.find(x => x.set === id);
         console.log(s ? `  [${id}] trous ${s.trous} · causes ${JSON.stringify(s.causes)} · exclus ${JSON.stringify(Object.fromEntries(Object.entries(s.exclusParCause || {}).map(([k, v]) => [k, v.length])))}` : `  [${id}] absent des sets publiés`);
     }
-    if (ec) console.log(`écart contre ${ec.avantLe} : ${JSON.stringify(ec.totaux)} · passés à 100 % ${ec.setsPassesA100.length} (par une vraie collecte ${ec.setsPassesA100ParCollecte.length} · uniquement par les exclusions ${ec.setsPassesA100ParExclusions.length})${ec.memeDenominateur ? '' : ' ⚠️ dénominateur différent'}`);
+    if (ec && ec.memeDefinition === false) console.log(`⚠️ DÉFINITION DIFFÉRENTE (${ec.definitionAvant} → ${ec.definitionApres}) : doublons et manquants NE SONT PAS COMPARÉS (changement de définition, pas un progrès)`);
+    if (ec) {
+        console.log(`écart contre ${ec.avantLe} : ${A.ecartTotauxTexte(ec).replace(/^- /, '')} · passés à 100 % ${ec.setsPassesA100.length} (par une vraie collecte ${ec.setsPassesA100ParCollecte.length} · uniquement par les exclusions ${ec.setsPassesA100ParExclusions.length})${ec.memeDenominateur ? '' : ' ⚠️ dénominateur différent'}`);
+        if (ec.memeDefinition === false) console.log(`  changement de définition, non comparé, PAS une collecte : ${ec.setsChangementDefinition.length} sets (${ec.setsChangementDefinition.join(', ') || '—'}) · nouvellement troués par la définition ${ec.setsNouvellementTrouesChangementDefinition.length}`);
+    }
     console.log(sansEcriture ? `--sans-ecriture : rien d'écrit · ${Math.round((Date.now() - t0) / 1000)} s` : `écrit ${jsonSortie} et ${mdSortie} · ${Math.round((Date.now() - t0) / 1000)} s`);
 })().catch(e => { console.error(String(e && e.stack || e).replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>')); process.exit(1); });
