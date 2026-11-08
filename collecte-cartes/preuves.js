@@ -196,9 +196,11 @@ const horsPokemonDeProduit = produit => {
     return !(n && TPC.dexDuNom(n));
 };
 /**
- * Noms PROPRES réellement imprimés à l'identique sur une carte indonésienne de Dresseur (Dawn, Judge, Guzma, Gladion…) : liste FERMÉE, chaque entrée avec sa preuve (planche relue). VIDE tant qu'aucune n'est prouvée.
+ * Noms PROPRES réellement imprimés à l'identique sur une carte indonésienne de Dresseur : liste FERMÉE, valable pour `id` SEULEMENT (le contrôle ne s'applique qu'à lu.langue 'id' ; th, zh, ja, ko refusent tout nom latin avant).
+ * PREUVE : relus sur les scans le 2026-11-08, chasse\soir-0811\N8R1-relecture\relecture.json — la carte imprime exactement le nom du produit : Dawn, Tool Scrapper, Judge, Guzma, Gladion.
+ * « PokéPad » n'y est PAS : la carte imprime « PokéPad », le produit s'appelle « Poké Pad » ; les deux ne sont pas identiques, le contrôle ne se déclenche pas.
  */
-const NOMS_ID_IMPRIMES_IDENTIQUES = Object.freeze([]);
+const NOMS_ID_IMPRIMES_IDENTIQUES = Object.freeze(['Dawn', 'Tool Scrapper', 'Judge', 'Guzma', 'Gladion']);
 /**
  * Le latin ne dit rien de la langue : un Dresseur ou une Énergie indonésiens dont `lu.nom` est IDENTIQUE au nom du produit anglais est le nom du produit recopié, pas le nom imprimé (les Dresseurs sont traduits, « Tukar Pokémon »),
  * sauf nom propre de la liste fermée. Un Pokémon (qui imprime son nom anglais) reste jugé par la règle existante.
