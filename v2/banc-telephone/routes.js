@@ -22,6 +22,12 @@ const FICHIERS = Object.freeze({
     '/api/banc/telephone/moteur-ort.js': { f: 'moteur-ort.js', t: JS },
     '/api/banc/telephone/verdict.mjs': { f: 'verdict.mjs', t: JS },
     '/api/banc/telephone/lot.json': { f: 'lot.json', t: 'application/json; charset=utf-8' },
+    // le décodeur d'images Rat-Market (JavaScript pur, aucun .wasm : donc aucune règle CSP de plus que « self »)
+    '/api/banc/telephone/decodeur.mjs': { f: 'decodeur.mjs', t: JS },
+    '/api/banc/telephone/decodeur-jpeg.mjs': { f: 'decodeur-jpeg.mjs', t: JS },
+    '/api/banc/telephone/decodeur-png.mjs': { f: 'decodeur-png.mjs', t: JS },
+    '/api/banc/telephone/decodeur-webp.mjs': { f: 'decodeur-webp.mjs', t: JS },
+    '/api/banc/telephone/decodeur-webp-tables.mjs': { f: 'decodeur-webp-tables.mjs', t: JS },
     '/api/banc/telephone/ort/ort.wasm.bundle.min.mjs': { f: 'ort/ort.wasm.bundle.min.mjs', t: JS },
     '/api/banc/telephone/ort/ort.webgpu.bundle.min.mjs': { f: 'ort/ort.webgpu.bundle.min.mjs', t: JS },
     '/api/banc/telephone/ort/ort-wasm-simd-threaded.wasm': { f: 'ort/ort-wasm-simd-threaded.wasm', t: 'application/wasm' },
