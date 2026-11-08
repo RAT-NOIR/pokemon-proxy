@@ -1,0 +1,180 @@
+{
+ "resume": {
+  "etiquette": "ios-iphone",
+  "moteur": "webgpu",
+  "query": "webgpu=forcer",
+  "echantillons": 4751,
+  "picsSysteme": {
+   "browser": {
+    "workingSetMo": 156,
+    "memoirePriveeMo": 56
+   },
+   "renderer": {
+    "workingSetMo": 793,
+    "memoirePriveeMo": 766
+   },
+   "GPU": {
+    "workingSetMo": 334,
+    "memoirePriveeMo": 514
+   },
+   "network.mojom.NetworkService": {
+    "workingSetMo": 39,
+    "memoirePriveeMo": 20
+   },
+   "storage.mojom.StorageService": {
+    "workingSetMo": 17,
+    "memoirePriveeMo": 8
+   }
+  },
+  "phases": {
+   "webgpu": {
+    "maxParType": {
+     "browser": 56,
+     "renderer": 762,
+     "GPU": 514,
+     "network.mojom.NetworkService": 18,
+     "storage.mojom.StorageService": 8
+    },
+    "maxSommeMo": 1307
+   }
+  },
+  "avantMo": 128,
+  "etapes": [
+   {
+    "etape": "sonde-gpu",
+    "rendererMo": 29,
+    "gpuMo": 160,
+    "dureeMs": 557
+   },
+   {
+    "etape": "ort-webgpu",
+    "rendererMo": 0,
+    "gpuMo": 0,
+    "dureeMs": 20
+   },
+   {
+    "etape": "telechargement-modele",
+    "rendererMo": 185,
+    "gpuMo": 160,
+    "dureeMs": 1098
+   },
+   {
+    "etape": "verification-sha256",
+    "rendererMo": 298,
+    "gpuMo": 160,
+    "dureeMs": 156
+   },
+   {
+    "etape": "creation-session-gpu",
+    "rendererMo": 665,
+    "gpuMo": 289,
+    "dureeMs": 2123
+   },
+   {
+    "etape": "lot",
+    "rendererMo": 762,
+    "gpuMo": 376,
+    "dureeMs": 8124
+   },
+   {
+    "etape": "mesures (cartes)",
+    "rendererMo": 465,
+    "gpuMo": 514,
+    "dureeMs": 2282
+   },
+   {
+    "etape": "diagnostic-pixels",
+    "rendererMo": 444,
+    "gpuMo": 487,
+    "dureeMs": 353
+   },
+   {
+    "etape": "fini",
+    "rendererMo": 417,
+    "gpuMo": 487,
+    "dureeMs": 1874
+   }
+  ],
+  "mesures": [
+   {
+    "moteur": "webgpu",
+    "verdict": "IDENTIQUE",
+    "cosMin": 0.9999999,
+    "cosMinModeleSeul": 1,
+    "medianeMs": 42.2,
+    "creationSessionMs": 2122,
+    "jsHeapApresCreationMo": 26.5,
+    "jsHeapFinMo": 32.6,
+    "uaApresCreationMo": null,
+    "uaFinMo": null,
+    "moteurDemande": "webgpu",
+    "webgpuDesactive": false,
+    "webgpuForce": true,
+    "diagnostic": {
+     "cause": "aucune",
+     "cartesDecodage": 2,
+     "cartesChaine": 12,
+     "decodage": {
+      "n": 1479240,
+      "max": 0,
+      "somme": 0,
+      "nDiff": 0,
+      "moy": 0,
+      "pctDiff": 0
+     },
+     "redimensionnement": {
+      "n": 301056,
+      "max": 1,
+      "somme": 38,
+      "nDiff": 38,
+      "moy": 0.000126,
+      "pctDiff": 0.012622
+     },
+     "chaine": {
+      "n": 1806336,
+      "max": 1,
+      "somme": 124,
+      "nDiff": 124,
+      "moy": 0.000069,
+      "pctDiff": 0.006865
+     },
+     "bitmapSansConversion": {
+      "n": 1479240,
+      "max": 0,
+      "somme": 0,
+      "nDiff": 0,
+      "moy": 0,
+      "pctDiff": 0
+     },
+     "bitmapAvecConversion": {
+      "n": 1479240,
+      "max": 0,
+      "somme": 0,
+      "nDiff": 0,
+      "moy": 0,
+      "pctDiff": 0
+     },
+     "couleurCanvas": "srgb"
+    }
+   }
+  ],
+  "ecranAvant": {
+   "btnGpuDesactive": false,
+   "btnGpuTexte": "Mesurer en WebGPU",
+   "avis": "",
+   "ios": [
+    "iOS / iPadOS (détection) = oui (iphone-ipad-ipod)",
+    "WebGPU proposé = oui, FORCÉ (?webgpu=forcer)",
+    "options de session demandées = aucune (celles de l'extension)"
+   ]
+  }
+ },
+ "ecran": {
+  "mot": "IDENTIQUE",
+  "detail": "WEBGPU · cos min 1,000000 sur 30 cartes · modèle seul 1,000000",
+  "l1": "1 · verdict : IDENTIQUE (WEBGPU) — cos min 1,000000",
+  "l2": "2 · moteur : WEBGPU · 1 fil(s) · isolé oui · 16 cœurs",
+  "envoi": "Résultat envoyé (webgpu). Rien d'autre à faire.",
+  "journal": "[2.0 s] WebGPU forcé sur iOS (diagnostic) : plantage mémoire possible\n[2.6 s] adaptateur WebGPU : amd / rdna-2\n[3.7 s] modèle reçu : 118202501 octets en 1,1 s\n[3.8 s] sha256 vérifié (0,2 s)\n[5.9 s] session WebGPU créée en 2122 ms (périphérique GPU présent)\n[27.0 s] diagnostic des pixels : cause aucune (pixels identiques au plancher) · décodage navigateur contre PIL (2 cartes) max 0 · moy 0 · redimensionnement de référence max 1 · moy 0,000126 · chaîne complète (12 cartes) max 1 · moy 0,000069\n"
+ }
+}

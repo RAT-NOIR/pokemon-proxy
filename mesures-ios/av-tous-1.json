@@ -1,0 +1,123 @@
+{
+ "resume": {
+  "etiquette": "avant-tous-1",
+  "moteur": "tous",
+  "query": "",
+  "echantillons": 9810,
+  "picsSysteme": {
+   "browser": {
+    "workingSetMo": 156,
+    "memoirePriveeMo": 59
+   },
+   "renderer": {
+    "workingSetMo": 813,
+    "memoirePriveeMo": 1116
+   },
+   "GPU": {
+    "workingSetMo": 340,
+    "memoirePriveeMo": 530
+   },
+   "network.mojom.NetworkService": {
+    "workingSetMo": 41,
+    "memoirePriveeMo": 20
+   },
+   "storage.mojom.StorageService": {
+    "workingSetMo": 17,
+    "memoirePriveeMo": 8
+   }
+  },
+  "phases": {
+   "wasm": {
+    "maxParType": {
+     "browser": 58,
+     "renderer": 579,
+     "GPU": 128,
+     "network.mojom.NetworkService": 19,
+     "storage.mojom.StorageService": 8
+    },
+    "maxSommeMo": 904
+   },
+   "webgpu": {
+    "maxParType": {
+     "browser": 59,
+     "renderer": 1111,
+     "GPU": 530,
+     "network.mojom.NetworkService": 19,
+     "storage.mojom.StorageService": 8
+    },
+    "maxSommeMo": 1598
+   }
+  },
+  "avantMo": 128,
+  "etapes": [],
+  "memoiresLineaires": [
+   {
+    "apres": "wasm",
+    "memoiresLineairesMo": [
+     254
+    ]
+   },
+   {
+    "apres": "webgpu",
+    "memoiresLineairesMo": [
+     254,
+     254
+    ]
+   }
+  ],
+  "tamponsGpu": {
+   "n": 729,
+   "totalMo": 287.27,
+   "maxMo": 8,
+   "vivantsMo": 0,
+   "picVivantsMo": 151.17,
+   "plusGros": [
+    8,
+    8,
+    6.75,
+    6.75,
+    4
+   ],
+   "limites": {
+    "maxBufferSize": 2147483648,
+    "maxStorageBufferBindingSize": 2147483644,
+    "demande": "{\"maxBindGroups\":4,\"maxStorageBuffersPerShaderStage\":16,\"maxStorageBufferBindingSize\":2147483644,\"maxBufferSize\":2147483648,\"maxComputeWorkgroupStorageSize\":32768,\"maxComputeInvocationsPerWorkgroup\":1024,\"maxComputeWorkgroupSizeX\":1024,\"maxComputeWorkgroupSizeY\":1024,\"maxComputeWorkgroupSizeZ\":64,\"m"
+   },
+   "peripheriques": 1
+  },
+  "mesures": [
+   {
+    "moteur": "wasm",
+    "verdict": "IDENTIQUE",
+    "cosMin": 0.9999999,
+    "cosMinModeleSeul": 1,
+    "medianeMs": 508.4,
+    "creationSessionMs": 720.4,
+    "jsHeapApresCreationMo": 133.2,
+    "jsHeapFinMo": 133.5,
+    "uaApresCreationMo": null,
+    "uaFinMo": null
+   },
+   {
+    "moteur": "webgpu",
+    "verdict": "IDENTIQUE",
+    "cosMin": 0.9999999,
+    "cosMinModeleSeul": 1,
+    "medianeMs": 38.8,
+    "creationSessionMs": 1660.7,
+    "jsHeapApresCreationMo": 125.1,
+    "jsHeapFinMo": 146.8,
+    "uaApresCreationMo": null,
+    "uaFinMo": 380
+   }
+  ]
+ },
+ "ecran": {
+  "mot": "IDENTIQUE",
+  "detail": "WEBGPU · cos min 1,000000 sur 30 cartes · modèle seul 1,000000",
+  "l1": "1 · verdict : IDENTIQUE (WEBGPU) — cos min 1,000000",
+  "l2": "2 · moteur : WEBGPU · 1 fil(s) · isolé oui · 16 cœurs",
+  "envoi": "Résultat envoyé (webgpu). Rien d'autre à faire.",
+  "journal": "[2.4 s] modèle reçu : 118202501 octets en 0,4 s\n[2.5 s] sha256 vérifié (0,1 s)\n[3.3 s] session WASM créée en 720 ms\n[44.5 s] adaptateur WebGPU : amd / rdna-2\n[46.2 s] session WebGPU créée en 1661 ms (périphérique GPU présent)\n"
+ }
+}

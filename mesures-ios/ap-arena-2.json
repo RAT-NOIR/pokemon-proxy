@@ -1,0 +1,169 @@
+{
+ "resume": {
+  "etiquette": "apres-arena-2",
+  "moteur": "wasm",
+  "query": "session=arena0,pattern0",
+  "echantillons": 7129,
+  "picsSysteme": {
+   "browser": {
+    "workingSetMo": 151,
+    "memoirePriveeMo": 60
+   },
+   "renderer": {
+    "workingSetMo": 588,
+    "memoirePriveeMo": 730
+   },
+   "GPU": {
+    "workingSetMo": 121,
+    "memoirePriveeMo": 129
+   },
+   "network.mojom.NetworkService": {
+    "workingSetMo": 39,
+    "memoirePriveeMo": 19
+   },
+   "storage.mojom.StorageService": {
+    "workingSetMo": 17,
+    "memoirePriveeMo": 8
+   }
+  },
+  "phases": {
+   "wasm": {
+    "maxParType": {
+     "browser": 59,
+     "renderer": 568,
+     "GPU": 128,
+     "network.mojom.NetworkService": 18,
+     "storage.mojom.StorageService": 8
+    },
+    "maxSommeMo": 872
+   }
+  },
+  "avantMo": 128,
+  "etapes": [
+   {
+    "etape": "ort-wasm",
+    "rendererMo": 0,
+    "gpuMo": 0,
+    "dureeMs": 11
+   },
+   {
+    "etape": "telechargement-modele",
+    "rendererMo": 316,
+    "gpuMo": 128,
+    "dureeMs": 334
+   },
+   {
+    "etape": "verification-sha256",
+    "rendererMo": 316,
+    "gpuMo": 128,
+    "dureeMs": 141
+   },
+   {
+    "etape": "creation-session-wasm",
+    "rendererMo": 568,
+    "gpuMo": 128,
+    "dureeMs": 707
+   },
+   {
+    "etape": "lot",
+    "rendererMo": 375,
+    "gpuMo": 128,
+    "dureeMs": 8076
+   },
+   {
+    "etape": "mesures (cartes)",
+    "rendererMo": 437,
+    "gpuMo": 121,
+    "dureeMs": 555
+   },
+   {
+    "etape": "diagnostic-pixels",
+    "rendererMo": 381,
+    "gpuMo": 121,
+    "dureeMs": 230
+   },
+   {
+    "etape": "fini",
+    "rendererMo": 371,
+    "gpuMo": 125,
+    "dureeMs": 1793
+   }
+  ],
+  "memoiresLineaires": [
+   {
+    "apres": "wasm",
+    "memoiresLineairesMo": [
+     253
+    ]
+   }
+  ],
+  "mesures": [
+   {
+    "moteur": "wasm",
+    "verdict": "IDENTIQUE",
+    "cosMin": 0.9999999,
+    "cosMinModeleSeul": 1,
+    "medianeMs": 503.9,
+    "creationSessionMs": 703.6,
+    "jsHeapApresCreationMo": 27.7,
+    "jsHeapFinMo": 11.6,
+    "uaApresCreationMo": null,
+    "uaFinMo": null,
+    "diagnostic": {
+     "cause": "aucune",
+     "cartesDecodage": 2,
+     "cartesChaine": 12,
+     "decodage": {
+      "n": 1479240,
+      "max": 0,
+      "somme": 0,
+      "nDiff": 0,
+      "moy": 0,
+      "pctDiff": 0
+     },
+     "redimensionnement": {
+      "n": 301056,
+      "max": 1,
+      "somme": 38,
+      "nDiff": 38,
+      "moy": 0.000126,
+      "pctDiff": 0.012622
+     },
+     "chaine": {
+      "n": 1806336,
+      "max": 1,
+      "somme": 124,
+      "nDiff": 124,
+      "moy": 0.000069,
+      "pctDiff": 0.006865
+     },
+     "bitmapSansConversion": {
+      "n": 1479240,
+      "max": 0,
+      "somme": 0,
+      "nDiff": 0,
+      "moy": 0,
+      "pctDiff": 0
+     },
+     "bitmapAvecConversion": {
+      "n": 1479240,
+      "max": 0,
+      "somme": 0,
+      "nDiff": 0,
+      "moy": 0,
+      "pctDiff": 0
+     },
+     "couleurCanvas": "srgb"
+    }
+   }
+  ]
+ },
+ "ecran": {
+  "mot": "IDENTIQUE",
+  "detail": "WASM · cos min 1,000000 sur 30 cartes · modèle seul 1,000000",
+  "l1": "1 · verdict : IDENTIQUE (WASM) — cos min 1,000000",
+  "l2": "2 · moteur : WASM · 4 fil(s) · isolé oui · 16 cœurs",
+  "envoi": "Résultat envoyé (wasm). Rien d'autre à faire.",
+  "journal": "[2.3 s] modèle reçu : 118202501 octets en 0,3 s\n[2.4 s] sha256 vérifié (0,1 s)\n[3.1 s] session WASM créée en 704 ms\n[41.8 s] diagnostic des pixels : cause aucune (pixels identiques au plancher) · décodage navigateur contre PIL (2 cartes) max 0 · moy 0 · redimensionnement de référence max 1 · moy 0,000126 · chaîne complète (12 cartes) max 1 · moy 0,000069\n"
+ }
+}

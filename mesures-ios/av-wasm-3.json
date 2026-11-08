@@ -1,0 +1,74 @@
+{
+ "resume": {
+  "etiquette": "avant-wasm-3",
+  "moteur": "wasm",
+  "query": "",
+  "echantillons": 7294,
+  "picsSysteme": {
+   "browser": {
+    "workingSetMo": 149,
+    "memoirePriveeMo": 58
+   },
+   "renderer": {
+    "workingSetMo": 595,
+    "memoirePriveeMo": 741
+   },
+   "GPU": {
+    "workingSetMo": 119,
+    "memoirePriveeMo": 130
+   },
+   "network.mojom.NetworkService": {
+    "workingSetMo": 40,
+    "memoirePriveeMo": 19
+   },
+   "storage.mojom.StorageService": {
+    "workingSetMo": 17,
+    "memoirePriveeMo": 8
+   }
+  },
+  "phases": {
+   "wasm": {
+    "maxParType": {
+     "browser": 58,
+     "renderer": 570,
+     "GPU": 128,
+     "network.mojom.NetworkService": 19,
+     "storage.mojom.StorageService": 8
+    },
+    "maxSommeMo": 892
+   }
+  },
+  "avantMo": 128,
+  "etapes": [],
+  "memoiresLineaires": [
+   {
+    "apres": "wasm",
+    "memoiresLineairesMo": [
+     253
+    ]
+   }
+  ],
+  "mesures": [
+   {
+    "moteur": "wasm",
+    "verdict": "IDENTIQUE",
+    "cosMin": 0.9999999,
+    "cosMinModeleSeul": 1,
+    "medianeMs": 485.5,
+    "creationSessionMs": 816.3,
+    "jsHeapApresCreationMo": 133.2,
+    "jsHeapFinMo": 124.3,
+    "uaApresCreationMo": null,
+    "uaFinMo": null
+   }
+  ]
+ },
+ "ecran": {
+  "mot": "IDENTIQUE",
+  "detail": "WASM · cos min 1,000000 sur 30 cartes · modèle seul 1,000000",
+  "l1": "1 · verdict : IDENTIQUE (WASM) — cos min 1,000000",
+  "l2": "2 · moteur : WASM · 4 fil(s) · isolé oui · 16 cœurs",
+  "envoi": "Résultat envoyé (wasm). Rien d'autre à faire.",
+  "journal": "[2.4 s] modèle reçu : 118202501 octets en 0,4 s\n[2.5 s] sha256 vérifié (0,1 s)\n[3.3 s] session WASM créée en 816 ms\n"
+ }
+}

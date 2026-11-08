@@ -1,0 +1,94 @@
+{
+ "resume": {
+  "etiquette": "avant-gpu-2",
+  "moteur": "webgpu",
+  "query": "",
+  "echantillons": 3483,
+  "picsSysteme": {
+   "browser": {
+    "workingSetMo": 154,
+    "memoirePriveeMo": 59
+   },
+   "renderer": {
+    "workingSetMo": 831,
+    "memoirePriveeMo": 799
+   },
+   "GPU": {
+    "workingSetMo": 341,
+    "memoirePriveeMo": 523
+   },
+   "network.mojom.NetworkService": {
+    "workingSetMo": 40,
+    "memoirePriveeMo": 19
+   },
+   "storage.mojom.StorageService": {
+    "workingSetMo": 17,
+    "memoirePriveeMo": 8
+   }
+  },
+  "phases": {
+   "webgpu": {
+    "maxParType": {
+     "browser": 57,
+     "renderer": 793,
+     "GPU": 523,
+     "network.mojom.NetworkService": 18,
+     "storage.mojom.StorageService": 8
+    },
+    "maxSommeMo": 1332
+   }
+  },
+  "avantMo": 0,
+  "etapes": [],
+  "memoiresLineaires": [
+   {
+    "apres": "webgpu",
+    "memoiresLineairesMo": [
+     254
+    ]
+   }
+  ],
+  "tamponsGpu": {
+   "n": 729,
+   "totalMo": 287.27,
+   "maxMo": 8,
+   "vivantsMo": 0,
+   "picVivantsMo": 151.17,
+   "plusGros": [
+    8,
+    8,
+    6.75,
+    6.75,
+    4
+   ],
+   "limites": {
+    "maxBufferSize": 2147483648,
+    "maxStorageBufferBindingSize": 2147483644,
+    "demande": "{\"maxBindGroups\":4,\"maxStorageBuffersPerShaderStage\":16,\"maxStorageBufferBindingSize\":2147483644,\"maxBufferSize\":2147483648,\"maxComputeWorkgroupStorageSize\":32768,\"maxComputeInvocationsPerWorkgroup\":1024,\"maxComputeWorkgroupSizeX\":1024,\"maxComputeWorkgroupSizeY\":1024,\"maxComputeWorkgroupSizeZ\":64,\"m"
+   },
+   "peripheriques": 1
+  },
+  "mesures": [
+   {
+    "moteur": "webgpu",
+    "verdict": "IDENTIQUE",
+    "cosMin": 0.9999999,
+    "cosMinModeleSeul": 1,
+    "medianeMs": 41.4,
+    "creationSessionMs": 2436.1,
+    "jsHeapApresCreationMo": 132.8,
+    "jsHeapFinMo": 137.6,
+    "uaApresCreationMo": null,
+    "uaFinMo": 379
+   }
+  ]
+ },
+ "ecran": {
+  "mot": "IDENTIQUE",
+  "detail": "WEBGPU · cos min 1,000000 sur 30 cartes · modèle seul 1,000000",
+  "l1": "1 · verdict : IDENTIQUE (WEBGPU) — cos min 1,000000",
+  "l2": "2 · moteur : WEBGPU · 1 fil(s) · isolé oui · 16 cœurs",
+  "envoi": "Résultat envoyé (webgpu). Rien d'autre à faire.",
+  "journal": "[2.1 s] adaptateur WebGPU : amd / rdna-2\n[6.8 s] modèle reçu : 118202501 octets en 4,7 s\n[7.0 s] sha256 vérifié (0,2 s)\n[9.4 s] session WebGPU créée en 2436 ms (périphérique GPU présent)\n"
+ }
+}
