@@ -22,9 +22,10 @@ const DOSSIER_CACHE = path.join(DOSSIER, 'audit-cache');
 const OUTILS = 'C:/Users/Yung/rat-market-travail/catalogue/trous-outils';
 
 const args = process.argv.slice(2);
-const inconnu = args.filter(a => !['--depuis-cache', '--sans-cache'].includes(a) && !/^--avant=.+$/.test(a));
+const inconnu = args.filter(a => !['--depuis-cache', '--sans-cache', '--sans-ecriture'].includes(a) && !/^--(avant|set)=.+$/.test(a));
 if (inconnu.length) { console.error(`argument inconnu : ${inconnu.join(' ')} (une ligne de commande est une garde : rien ne s'ouvre sur un drapeau non reconnu)`); process.exit(2); }
 const depuisCache = args.includes('--depuis-cache'), sansCache = args.includes('--sans-cache');
+const sansEcriture = args.includes('--sans-ecriture');   // imprime les comptes, n'écrit ni AUDIT-SETS.json/.md ni .precedent ni le cache (rejouer depuis une copie de travail)
 const avantArg = (args.find(a => a.startsWith('--avant=')) || '').slice(8) || null;
 
 const sortie = nom => autoriser(path.join(DOSSIER, nom), [DOSSIER]);
@@ -81,16 +82,16 @@ async function lireBase() {
     const { exclure } = require(`${OUTILS}/faux-trous-f3`);
     // les annexes (« Yellow A ») : le site les range dans le set de leur carte parente (lib/annexes.ts) — importées, jamais recopiées ; une fonction absente lève
     const site = async f => import(require('url').pathToFileURL(`C:/Users/Yung/Desktop/rat-market-site/lib/${f}`).href);
-    const [{ annexeDuSet }, { expansionsDuSet, tirageDuSet, editionLocaleDuSet }, { imageDeLImpression }, { visuelAdmisPourLaRegion }] = await Promise.all([site('annexes.ts'), site('entreesDuSet.ts'), site('imageDeLImpression.ts'), site('langueDuVisuel.ts')]);
-    for (const [k, f] of Object.entries({ annexeDuSet, expansionsDuSet, tirageDuSet, editionLocaleDuSet, imageDeLImpression, visuelAdmisPourLaRegion })) if (typeof f !== 'function') throw new Error(`règle du site non importée : ${k}`);
-    const regles = { impressionDuSet, normaliserNumero, memeCodeSaufFin, exclure: s => exclure(s), annexeDuSet, expansionsDuSet, tirageDuSet, editionLocaleDuSet, imageDeLImpression, visuelAdmisPourLaRegion };
+    const [{ annexeDuSet }, { expansionsDuSet, tirageDuSet, editionLocaleDuSet }, { imageDeLImpression }, { visuelAdmisPourLaRegion }, { estAdditionals }] = await Promise.all([site('annexes.ts'), site('entreesDuSet.ts'), site('imageDeLImpression.ts'), site('langueDuVisuel.ts'), site('additionals.ts')]);
+    for (const [k, f] of Object.entries({ estAdditionals, annexeDuSet, expansionsDuSet, tirageDuSet, editionLocaleDuSet, imageDeLImpression, visuelAdmisPourLaRegion })) if (typeof f !== 'function') throw new Error(`règle du site non importée : ${k}`);
+    const regles = { impressionDuSet, normaliserNumero, memeCodeSaufFin, exclure: s => exclure(s), estAdditionals, annexeDuSet, expansionsDuSet, tirageDuSet, editionLocaleDuSet, imageDeLImpression, visuelAdmisPourLaRegion };
 
     const cache = autoriser(path.join(DOSSIER_CACHE, 'lecture.json'), [DOSSIER]);
     let lecture;
     if (depuisCache) { lecture = lireJson(cache); if (lecture.formatCache !== 2) throw new Error('cache d\'un autre format que 2 : relancer sans --depuis-cache'); console.log(`lecture relue du cache (${lecture.le})`); }
     else {
         lecture = await lireBase();
-        if (!sansCache) { fs.mkdirSync(path.dirname(cache), { recursive: true }); fs.writeFileSync(cache, JSON.stringify(lecture)); console.log(`cache écrit : ${cache}`); }
+        if (!sansCache && !sansEcriture) { fs.mkdirSync(path.dirname(cache), { recursive: true }); fs.writeFileSync(cache, JSON.stringify(lecture)); console.log(`cache écrit : ${cache}`); }
     }
     const audit = A.auditer(lecture, regles);
     audit.le = new Date().toISOString(); audit.lectureDu = lecture.le;
@@ -99,17 +100,21 @@ async function lireBase() {
     const jsonSortie = sortie('AUDIT-SETS.json'), mdSortie = sortie('AUDIT-SETS.md'), prec = sortie('AUDIT-SETS.precedent.json');
     let avant = null;
     if (avantArg) avant = lireJson(avantArg);
-    else if (fs.existsSync(jsonSortie)) { avant = lireJson(jsonSortie); fs.copyFileSync(jsonSortie, prec); }
+    else if (fs.existsSync(jsonSortie)) { avant = lireJson(jsonSortie); if (!sansEcriture) fs.copyFileSync(jsonSortie, prec); }
     const ec = A.ecart(avant, audit);
     audit.ecart = ec;
-    fs.writeFileSync(jsonSortie, JSON.stringify(audit));
-    fs.writeFileSync(mdSortie, A.formaterMd(audit, ec));
+    if (!sansEcriture) { fs.writeFileSync(jsonSortie, JSON.stringify(audit)); fs.writeFileSync(mdSortie, A.formaterMd(audit, ec)); }
     const T = audit.totaux, D = audit.denominateurs;
     console.log(`dénominateurs : ${JSON.stringify(D)}`);
     console.log(`sets à 100 % ${T.sets100} · troués ${T.setsTroues} · trous ${T.trous} : ` + A.TYPES.map(t => `${A.TITRES[t]} ${T[t]}`).join(' · '));
     for (const t of A.TYPES) console.log(`  ${t} : ${JSON.stringify(audit.parCause[t])}`);
+    console.log(`EXCLUS du compte (imprimés à part, jamais disparus) : ${audit.exclus.total} · par cause ${JSON.stringify(audit.exclus.parCause)} · sur ${Object.keys(audit.exclus.parSet).length} sets`);
     console.log('10 sets les plus touchés par expansion-declaree-sans-impression :');
     for (const x of A.suspectsExpansion(audit)) console.log(`  ${x.set} ${x.n} · déclarée ${JSON.stringify(x.expansionsDeclarees)} · ` + x.exemples.map(e => `${e.nom} → ${e.plusProche ? `${e.plusProche.tirage}/« ${e.plusProche.expansion} »/${e.plusProche.numero}` : 'aucune'}`).join(' ; '));
-    if (ec) console.log(`écart contre ${ec.avantLe} : ${JSON.stringify(ec.totaux)} · passés à 100 % ${ec.setsPassesA100.length}${ec.memeDenominateur ? '' : ' ⚠️ dénominateur différent'}`);
-    console.log(`écrit ${jsonSortie} et ${mdSortie} · ${Math.round((Date.now() - t0) / 1000)} s`);
+    for (const id of args.filter(a => a.startsWith('--set=')).map(a => a.slice(6))) {   // détail par set demandé : trous, causes, exclusions
+        const s = audit.sets.find(x => x.set === id);
+        console.log(s ? `  [${id}] trous ${s.trous} · causes ${JSON.stringify(s.causes)} · exclus ${JSON.stringify(Object.fromEntries(Object.entries(s.exclusParCause || {}).map(([k, v]) => [k, v.length])))}` : `  [${id}] absent des sets publiés`);
+    }
+    if (ec) console.log(`écart contre ${ec.avantLe} : ${JSON.stringify(ec.totaux)} · passés à 100 % ${ec.setsPassesA100.length} (par une vraie collecte ${ec.setsPassesA100ParCollecte.length} · uniquement par les exclusions ${ec.setsPassesA100ParExclusions.length})${ec.memeDenominateur ? '' : ' ⚠️ dénominateur différent'}`);
+    console.log(sansEcriture ? `--sans-ecriture : rien d'écrit · ${Math.round((Date.now() - t0) / 1000)} s` : `écrit ${jsonSortie} et ${mdSortie} · ${Math.round((Date.now() - t0) / 1000)} s`);
 })().catch(e => { console.error(String(e && e.stack || e).replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>')); process.exit(1); });

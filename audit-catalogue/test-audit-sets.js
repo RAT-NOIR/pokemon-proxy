@@ -287,11 +287,121 @@ test('écart : par cause, sets passés à 100 %, sets nouvellement troués', () 
     assert.strictEqual(e.parCause['sansVisuel/aucune-image-en-base'], -3);
     assert.strictEqual(e.parCause['sansProduit/jumelle-suffixe-sans-produit'], 2);
 });
+test('écart : un set passé à 100 % UNIQUEMENT par les exclusions est séparé de celui qui y passe par une vraie collecte', () => {
+    const ex = n => ({ 'sansNumero/numero-non-imprime:dp': Array.from({ length: n }, (_, i) => ({ carteId: i })) });
+    const avant = { le: 'x', sets: [{ set: 'E', trous: 5 }, { set: 'C', trous: 4 }, { set: 'M', trous: 6 }], parCause: {}, totaux: {}, denominateurs: { sets: 3 } };
+    const apres = { le: 'y', sets: [{ set: 'E', trous: 0, exclusParCause: ex(5) }, { set: 'C', trous: 0 }, { set: 'M', trous: 0, exclusParCause: ex(2) }], parCause: {}, totaux: {}, denominateurs: { sets: 3 } };
+    const e = A.ecart(avant, apres);
+    assert.deepStrictEqual(e.setsPassesA100.sort(), ['C', 'E', 'M']);
+    assert.deepStrictEqual(e.setsPassesA100ParExclusions, ['E']);
+    assert.deepStrictEqual(e.setsPassesA100ParCollecte.sort(), ['C', 'M']);     // M : 4 collectés + 2 exclus
+    const md = A.formaterMd({ ...apres, denominateurs: { sets: 3, setsPublies: 3, setsNonPublies: 0, cartes: 0, cartesAffichables: 0, lignes: 0, produits: 0, produitsSansSetPublie: 0, entreesAffichees: 0 }, totaux: { trous: 0, exclus: 7, sets100: 3, setsTroues: 0, sansVisuel: 0, sansNumero: 0, sansProduit: 0, doublons: 0, produitsSansFiche: 0, manquants: 0 } }, e);
+    assert.ok(/UNIQUEMENT PAR LES EXCLUSIONS \(1\)/.test(md)); assert.ok(/VRAIE COLLECTE \(2\)/.test(md));
+});
 test('écart : un dénominateur différent est dit', () => {
     const e = A.ecart({ sets: [], parCause: {}, totaux: { trous: 0 }, denominateurs: { sets: 2 } }, { sets: [], parCause: {}, totaux: { trous: 0 }, denominateurs: { sets: 3 } });
     assert.strictEqual(e.memeDenominateur, false);
 });
 test('écart sans mesure précédente : null, jamais 0', () => assert.strictEqual(A.ecart(null, { sets: [] }), null));
+
+// ── EXCLUS DU COMPTE DES TROUS (décision du testeur 2026-11-08 : « le compte des trous doit dire la vérité ») — jamais retirés de la sortie : comptés par cause et par set
+const TABLE = { S1: { famille: 'avant-dp', imprime: 'No. NNN (n° Pokédex)', cartes: ['A', 'B', 'C'], date: '2026-11-08' } };
+const reglesTable = { ...regles, sansNumeroImprime: TABLE };
+const sansNum = (id, nom) => carte(id, nom, [null], { images: [img('S1')], attaques: ['A' + id] });
+test('exclusion « numéro non imprimé » : un set de la table sort du compte, l\'exclusion reste comptée et listée', () => {
+    const a = auditer(lecture({ cartes: [sansNum('c1', 'A'), sansNum('c2', 'B')], produits: [prod(5, { fiche: { classe: 'FICHE_OK', carteId: 'cX', numero: '9', setId: 'S1' } })] }), reglesTable);
+    const s = un(a);
+    assert.strictEqual(s.sansNumero.n, 0);
+    assert.strictEqual((s.causes['sansNumero/impression-sans-numero'] || 0), 0);
+    assert.strictEqual(s.exclusParCause['sansNumero/numero-non-imprime:avant-dp'].length, 2);
+    assert.strictEqual(a.exclus.total, 2);
+    assert.strictEqual(a.exclus.parCause['sansNumero/numero-non-imprime:avant-dp'], 2);
+    assert.strictEqual(a.exclus.parSet.S1['sansNumero/numero-non-imprime:avant-dp'], 2);
+    assert.strictEqual(a.totaux.exclus, 2);
+});
+test('exclusion : le MÊME set hors table garde ses trous (refus)', () => {
+    const a = auditer(lecture({ cartes: [sansNum('c1', 'A')] }), { ...regles, sansNumeroImprime: {} });
+    assert.strictEqual(un(a).sansNumero.n, 1); assert.strictEqual(a.exclus.total, 0);
+});
+test('exclusion : sans table injectée, la table du dépôt s\'applique ; un set inconnu d\'elle garde son trou', () => {
+    assert.strictEqual(un(auditer(lecture({ cartes: [sansNum('c1', 'A')] }))).sansNumero.n, 1);
+});
+test('exclusion : une impression « expansion déclarée sans impression » n\'est PAS un numéro non imprimé (refus)', () => {
+    const c = carte('c1', 'A', [], { impressions: [{ tirage: 'jp', expansion: 'Exp', numero: '1', total: 3 }], images: [img('S1')] });
+    const a = auditer(lecture({ cartes: [c] }), reglesTable);
+    assert.strictEqual(un(a).sansNumero.n, 1); assert.strictEqual(a.exclus.total, 0);
+});
+test('exclusion : une entrée numérotée d\'un set de la table reste une entrée normale', () => {
+    const a = auditer(lecture({ cartes: [carte('c1', 'A', '1', { images: [img('S1', '1')] }), sansNum('c2', 'B')] }), reglesTable);
+    assert.strictEqual(un(a).exclusParCause['sansNumero/numero-non-imprime:avant-dp'].length, 1);
+    assert.strictEqual(un(a).affichees, 2);
+});
+test('exclusion : une cause d\'exclusion hors liste fermée lève', () => assert.throws(() => A.verifierExclusion('sansNumero', 'inventee'), /exclusion/));
+const addSet = (o = {}) => set({ _id: 'S1-Additionals', code: 'xS1', nomAffichage: 'Set Un Additionals', ...o });
+const lecAdd = (cartes, produits, numerosProduits) => lecture({ sets: [addSet()], cartes: cartes.map(c => ({ ...c, sets: ['S1-Additionals'], images: [img('S1-Additionals', c.impressions[0].numero)] })), produits: produits.map(p => ({ ...p, setId: 'S1-Additionals' })), numerosProduits });
+const estAdditionals = s => /-Additionals$/.test(s);
+const unAdd = a => a.sets.find(s => s.set === 'S1-Additionals');
+const prodSL = (id, o = {}) => prod(id, { fiche: { classe: 'SANS_LIGNE', motifs: [] }, ...o });
+test('Additionals : impression du set de base à un numéro où l\'expansion n\'a AUCUN produit → exclue, comptée', () => {
+    const a = auditer(lecAdd([carte('c1', 'A', '5')], [prodSL(900)], [{ idProduct: 900, numero: '7' }]), { ...regles, estAdditionals });
+    const s = unAdd(a);
+    assert.strictEqual(s.sansProduit.n, 0);
+    assert.strictEqual(s.exclusParCause['sansProduit/impression-hors-additionals'].length, 1);
+    assert.strictEqual(a.exclus.parCause['sansProduit/impression-hors-additionals'], 1);
+});
+test('Additionals : un produit de l\'expansion porte ce numéro (par cleNumero : 005 = 5) → vrai trou, jamais exclu', () => {
+    const a = auditer(lecAdd([carte('c1', 'A', '5')], [prodSL(900)], [{ idProduct: 900, numero: '005' }]), { ...regles, estAdditionals });
+    assert.strictEqual(unAdd(a).sansProduit.n, 1); assert.strictEqual(a.exclus.total, 0);
+});
+test('Additionals : un produit d\'une classe de fiche AUTRE que SANS_LIGNE au même numéro bloque aussi l\'exclusion (condition non redondante)', () => {
+    const ok = prod(901, { fiche: { classe: 'FICHE_OK', motifs: [], carteId: 'cX', numero: '5', setId: 'S1-Additionals' } });
+    const a = auditer(lecAdd([carte('c1', 'A', '5')], [prodSL(900), ok], [{ idProduct: 900, numero: '7' }, { idProduct: 901, numero: '5' }]), { ...regles, estAdditionals });
+    assert.strictEqual(unAdd(a).sansProduit.n, 1); assert.strictEqual(a.exclus.total, 0);
+});
+test('Additionals : un produit SANS numéro au nom de la carte l\'empêche d\'être exclue ; un produit sans numéro d\'un autre nom non', () => {
+    const memeNom = auditer(lecAdd([carte('c1', 'Tynamo', '5')], [prodSL(900, { name: 'Tynamo [Charge]' })], [{ idProduct: 900, numero: null }]), { ...regles, estAdditionals });
+    assert.strictEqual(unAdd(memeNom).sansProduit.n, 1); assert.strictEqual(memeNom.exclus.total, 0);
+    const autre = auditer(lecAdd([carte('c1', 'Tynamo', '5')], [prodSL(900, { name: 'Air Balloon' })], [{ idProduct: 900, numero: null }]), { ...regles, estAdditionals });
+    assert.strictEqual(unAdd(autre).sansProduit.n, 0); assert.strictEqual(autre.exclus.total, 1);
+});
+test('Additionals : un set NON Additionals garde son trou (refus)', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', '5', { images: [img('S1', '5')] })], produits: [prodSL(900)], numerosProduits: [{ idProduct: 900, numero: '7' }] });
+    const a = auditer(l, { ...regles, estAdditionals });
+    assert.deepStrictEqual(causes(un(a).sansProduit.items), ['produits-sans-ligne-dans-l-expansion']); assert.strictEqual(a.exclus.total, 0);
+});
+test('Additionals : sans la règle du site injectée, rien n\'est exclu', () => {
+    const a = auditer(lecAdd([carte('c1', 'A', '5')], [prodSL(900)], [{ idProduct: 900, numero: '7' }]));
+    assert.strictEqual(unAdd(a).sansProduit.n, 1); assert.strictEqual(a.exclus.total, 0);
+});
+test('markdown : les exclusions sont IMPRIMÉES à part (cause, nombre, set), jamais disparues', () => {
+    const a = auditer(lecture({ cartes: [sansNum('c1', 'A')] }), reglesTable);
+    const md = A.formaterMd(a, null);
+    assert.ok(/Exclus du compte des trous/.test(md)); assert.ok(md.includes('sansNumero/numero-non-imprime:avant-dp')); assert.ok(md.includes('S1'));
+});
+test('écart : les exclus ont leur propre écart (un contrôle qui rétrécit son périmètre doit le dire)', () => {
+    const avant = { le: 'x', sets: [], parCause: {}, totaux: { trous: 5, exclus: 0 }, denominateurs: { sets: 1 }, exclus: { total: 0, parCause: {}, parSet: {} } };
+    const apres = { le: 'y', sets: [], parCause: {}, totaux: { trous: 3, exclus: 2 }, denominateurs: { sets: 1 }, exclus: { total: 2, parCause: { 'sansNumero/numero-non-imprime:dp': 2 }, parSet: {} } };
+    const e = A.ecart(avant, apres);
+    assert.strictEqual(e.exclus.total, 2); assert.strictEqual(e.exclus.parCause['sansNumero/numero-non-imprime:dp'], 2);
+    assert.ok(/exclus/i.test(A.formaterMd({ ...apres, le: 'y', denominateurs: { sets: 1, setsPublies: 1, setsNonPublies: 0, cartes: 0, cartesAffichables: 0, lignes: 0, produits: 0, produitsSansSetPublie: 0, entreesAffichees: 0 }, totaux: { trous: 3, exclus: 2, sets100: 0, setsTroues: 0, sansVisuel: 0, sansNumero: 0, sansProduit: 0, doublons: 0, produitsSansFiche: 0, manquants: 0 }, sets: [], parCause: {} }, e)));
+});
+
+// ── la table fermée SANS_NUMERO_IMPRIME : chaque entrée porte sa PREUVE
+test('table SANS_NUMERO_IMPRIME : chaque set porte ce qui est imprimé, ≥ 3 cartes regardées, une date, une famille fermée', () => {
+    const { SANS_NUMERO_IMPRIME, FAMILLES } = require('./sans-numero-imprime');
+    const ids = Object.keys(SANS_NUMERO_IMPRIME);
+    assert.ok(ids.length >= 1);
+    for (const id of ids) {
+        const e = SANS_NUMERO_IMPRIME[id];
+        assert.ok(FAMILLES.includes(e.famille), `${id} : famille`);
+        assert.ok(typeof e.imprime === 'string' && e.imprime.length > 10, `${id} : imprime`);
+        assert.ok(Array.isArray(e.cartes) && e.cartes.length >= 3, `${id} : ≥ 3 cartes regardées`);
+        assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(e.date), `${id} : date`);
+    }
+    // la liste EXACTE (mutation M1 : retirer ou ajouter un set sans preuve doit se voir) — 31 sets, chacun vérifié sur scans ou sur planche citée
+    assert.deepStrictEqual(ids.slice().sort(), ['10th-Movie-Commemoration-Set', 'Awakening-Legends', 'Challenge-from-the-Darkness', 'Crossing-the-Ruins', 'Cry-from-the-Mysterious', 'Darkness-and-to-Light', 'Dawn-Dash', 'Dialga-LVX-Constructed-Standard-Deck', 'Expansion-Pack', 'Expansion-Sheet', 'Gold-Silver-to-a-New-World', 'Guren-Town-Gym', 'Hanada-City-Gym', 'Heatran-vs-Regigigas-Deck-Kit', 'Kuchiba-City-Gym', 'Leaders-Stadium', 'Magmortar-vs-Electivire-Deck-Kit', 'Moonlit-Pursuit', 'Mystery-of-the-Fossils', 'Nivi-City-Gym', 'Palkia-LVX-Constructed-Standard-Deck', 'Pokemon-Jungle', 'Rampardos-the-Attacker', 'Rocket-Gang', 'Secret-of-the-Lakes', 'Shining-Darkness', 'Southern-Islands-JP', 'Space-Time-Creation', 'Tamamushi-City-Gym', 'Temple-of-Anger', 'Yamabuki-City-Gym'].sort());
+    for (const refuse of ['Unnumbered-Promos', 'XY-Promos', 'Entry-Pack-08', 'Bastiodon-the-Defender']) assert.ok(!ids.includes(refuse), `${refuse} ne doit pas y entrer sans preuve`);
+});
 
 // ── Markdown
 test('markdown : formule du score en tête, dénominateurs, tableau trié', () => {
