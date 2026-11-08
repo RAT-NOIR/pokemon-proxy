@@ -1,0 +1,287 @@
+{
+ "resume": {
+  "etiquette": "t1-1",
+  "moteur": "tous",
+  "query": "",
+  "echantillons": 9731,
+  "picsSysteme": {
+   "browser": {
+    "workingSetMo": 157,
+    "memoirePriveeMo": 60
+   },
+   "renderer": {
+    "workingSetMo": 969,
+    "memoirePriveeMo": 1032
+   },
+   "GPU": {
+    "workingSetMo": 346,
+    "memoirePriveeMo": 540
+   },
+   "network.mojom.NetworkService": {
+    "workingSetMo": 40,
+    "memoirePriveeMo": 19
+   },
+   "storage.mojom.StorageService": {
+    "workingSetMo": 17,
+    "memoirePriveeMo": 8
+   }
+  },
+  "phases": {
+   "wasm": {
+    "maxParType": {
+     "browser": 58,
+     "renderer": 588,
+     "GPU": 129,
+     "network.mojom.NetworkService": 19,
+     "storage.mojom.StorageService": 8
+    },
+    "maxSommeMo": 892
+   },
+   "webgpu": {
+    "maxParType": {
+     "browser": 59,
+     "renderer": 1028,
+     "GPU": 540,
+     "network.mojom.NetworkService": 18,
+     "storage.mojom.StorageService": 8
+    },
+    "maxSommeMo": 1570
+   }
+  },
+  "avantMo": 129,
+  "etapes": [
+   {
+    "etape": "ort-wasm",
+    "rendererMo": 0,
+    "gpuMo": 0,
+    "dureeMs": 13
+   },
+   {
+    "etape": "telechargement-modele",
+    "rendererMo": 202,
+    "gpuMo": 129,
+    "dureeMs": 368
+   },
+   {
+    "etape": "verification-sha256",
+    "rendererMo": 315,
+    "gpuMo": 129,
+    "dureeMs": 159
+   },
+   {
+    "etape": "creation-session-wasm",
+    "rendererMo": 588,
+    "gpuMo": 129,
+    "dureeMs": 824
+   },
+   {
+    "etape": "lot",
+    "rendererMo": 415,
+    "gpuMo": 129,
+    "dureeMs": 8100
+   },
+   {
+    "etape": "mesures (cartes)",
+    "rendererMo": 411,
+    "gpuMo": 122,
+    "dureeMs": 644
+   },
+   {
+    "etape": "diagnostic-pixels",
+    "rendererMo": 390,
+    "gpuMo": 124,
+    "dureeMs": 253
+   },
+   {
+    "etape": "fini",
+    "rendererMo": 395,
+    "gpuMo": 128,
+    "dureeMs": 1520
+   },
+   {
+    "etape": "sonde-gpu",
+    "rendererMo": 395,
+    "gpuMo": 163,
+    "dureeMs": 316
+   },
+   {
+    "etape": "ort-webgpu",
+    "rendererMo": 0,
+    "gpuMo": 0,
+    "dureeMs": 9
+   },
+   {
+    "etape": "telechargement-modele",
+    "rendererMo": 573,
+    "gpuMo": 163,
+    "dureeMs": 378
+   },
+   {
+    "etape": "verification-sha256",
+    "rendererMo": 652,
+    "gpuMo": 154,
+    "dureeMs": 145
+   },
+   {
+    "etape": "creation-session-gpu",
+    "rendererMo": 1028,
+    "gpuMo": 432,
+    "dureeMs": 9659
+   },
+   {
+    "etape": "mesures (cartes)",
+    "rendererMo": 778,
+    "gpuMo": 540,
+    "dureeMs": 1590
+   },
+   {
+    "etape": "fini",
+    "rendererMo": 697,
+    "gpuMo": 512,
+    "dureeMs": 1842
+   }
+  ],
+  "mesures": [
+   {
+    "moteur": "wasm",
+    "verdict": "IDENTIQUE",
+    "cosMin": 0.9999999,
+    "cosMinModeleSeul": 1,
+    "medianeMs": 513.8,
+    "creationSessionMs": 823.5,
+    "jsHeapApresCreationMo": 27.7,
+    "jsHeapFinMo": 11.3,
+    "uaApresCreationMo": null,
+    "uaFinMo": null,
+    "moteurDemande": "wasm",
+    "webgpuDesactive": false,
+    "webgpuForce": false,
+    "diagnostic": {
+     "cause": "aucune",
+     "cartesDecodage": 2,
+     "cartesChaine": 12,
+     "decodage": {
+      "n": 1479240,
+      "max": 0,
+      "somme": 0,
+      "nDiff": 0,
+      "moy": 0,
+      "pctDiff": 0
+     },
+     "redimensionnement": {
+      "n": 301056,
+      "max": 1,
+      "somme": 38,
+      "nDiff": 38,
+      "moy": 0.000126,
+      "pctDiff": 0.012622
+     },
+     "chaine": {
+      "n": 1806336,
+      "max": 1,
+      "somme": 124,
+      "nDiff": 124,
+      "moy": 0.000069,
+      "pctDiff": 0.006865
+     },
+     "bitmapSansConversion": {
+      "n": 1479240,
+      "max": 0,
+      "somme": 0,
+      "nDiff": 0,
+      "moy": 0,
+      "pctDiff": 0
+     },
+     "bitmapAvecConversion": {
+      "n": 1479240,
+      "max": 0,
+      "somme": 0,
+      "nDiff": 0,
+      "moy": 0,
+      "pctDiff": 0
+     },
+     "couleurCanvas": "srgb"
+    }
+   },
+   {
+    "moteur": "webgpu",
+    "verdict": "IDENTIQUE",
+    "cosMin": 0.9999999,
+    "cosMinModeleSeul": 1,
+    "medianeMs": 32.1,
+    "creationSessionMs": 1655.7,
+    "jsHeapApresCreationMo": 11.9,
+    "jsHeapFinMo": 14.7,
+    "uaApresCreationMo": null,
+    "uaFinMo": 266,
+    "moteurDemande": "webgpu",
+    "webgpuDesactive": false,
+    "webgpuForce": false,
+    "diagnostic": {
+     "cause": "aucune",
+     "cartesDecodage": 2,
+     "cartesChaine": 12,
+     "decodage": {
+      "n": 1479240,
+      "max": 0,
+      "somme": 0,
+      "nDiff": 0,
+      "moy": 0,
+      "pctDiff": 0
+     },
+     "redimensionnement": {
+      "n": 301056,
+      "max": 1,
+      "somme": 38,
+      "nDiff": 38,
+      "moy": 0.000126,
+      "pctDiff": 0.012622
+     },
+     "chaine": {
+      "n": 1806336,
+      "max": 1,
+      "somme": 124,
+      "nDiff": 124,
+      "moy": 0.000069,
+      "pctDiff": 0.006865
+     },
+     "bitmapSansConversion": {
+      "n": 1479240,
+      "max": 0,
+      "somme": 0,
+      "nDiff": 0,
+      "moy": 0,
+      "pctDiff": 0
+     },
+     "bitmapAvecConversion": {
+      "n": 1479240,
+      "max": 0,
+      "somme": 0,
+      "nDiff": 0,
+      "moy": 0,
+      "pctDiff": 0
+     },
+     "couleurCanvas": "srgb"
+    }
+   }
+  ],
+  "ecranAvant": {
+   "btnGpuDesactive": false,
+   "btnGpuTexte": "Mesurer en WebGPU",
+   "avis": "",
+   "ios": [
+    "iOS / iPadOS (détection) = non (non)",
+    "WebGPU proposé = oui",
+    "options de session demandées = aucune (celles de l'extension)"
+   ]
+  }
+ },
+ "ecran": {
+  "mot": "IDENTIQUE",
+  "detail": "WEBGPU · cos min 1,000000 sur 30 cartes · modèle seul 1,000000",
+  "l1": "1 · verdict : IDENTIQUE (WEBGPU) — cos min 1,000000",
+  "l2": "2 · moteur : WEBGPU · 1 fil(s) · isolé oui · 16 cœurs",
+  "envoi": "Résultat envoyé (webgpu). Rien d'autre à faire.",
+  "journal": "[2.3 s] modèle reçu : 118202501 octets en 0,4 s\n[2.5 s] sha256 vérifié (0,2 s)\n[3.3 s] session WASM créée en 824 ms\n[42.3 s] diagnostic des pixels : cause aucune (pixels identiques au plancher) · décodage navigateur contre PIL (2 cartes) max 0 · moy 0 · redimensionnement de référence max 1 · moy 0,000126 · chaîne complète (12 cartes) max 1 · moy 0,000069\n[44.1 s] adaptateur WebGPU : amd / rdna-2\n[44.5 s] modèle reçu : 118202501 octets en 0,4 s\n[44.7 s] sha256 vérifié (0,1 s)\n[46.3 s] session WebGPU créée en 1656 ms (périphérique GPU présent)\n"
+ }
+}

@@ -5,6 +5,11 @@ sont les copies de l'extension, inchangées (le banc `m5` compare leurs sha256 :
 
 Tout ce qui suit a été **mesuré dans Chrome 157 headless sur le PC de développement (Windows, GPU AMD RDNA2)**, avec les fonctions de production de la page. **Rien n'a été mesuré sur un iPhone** : ce qui ne vaut que pour iOS est écrit « supposé ».
 
+> **TOUR DE CORRECTION 1 — à lire d'abord.** (a) **Le gain de mémoire en WASM seul (le cas de l'iPhone, où WebGPU est coupé) n'est PAS établi** : les séries avant/après se chevauchent (privé 715-741 contre 676-739 ; résident 571-595 contre 537-594). Le gain mesuré (−105 Mo, −83 Mo en privé) ne vaut que pour les scénarios avec WebGPU, que l'iPhone n'exécute plus par défaut.
+> (b) Les deux métriques sont données §3 avec toutes les valeurs : la mémoire validée (commit, `PeakPagefileUsage`) et le pic résident ; **le résident ne montre pas de gain net sur Chrome PC** (il monte même pour « WASM puis WebGPU » : 1 049 / 1 051 après contre 813 / 813 avant).
+> (c) « 254 Mo » et « second tas à l'import d'ORT-WebGPU » sont des **tailles déclarées de mémoire linéaire, lues après une mesure complète**, pas des pages touchées ni la taille à l'import (le second tas peut naître à `InferenceSession.create`) ; elles **ne se transposent pas à l'empreinte d'un iPhone**. La cause « manque de mémoire par cumul » reste la plus probable ; **seul l'essai `?webgpu=forcer` sur l'iPhone, sans WASM avant, la confirmera**.
+> (d) Corrigé aussi : le canvas de décodage partagé est retiré (décodage et redimensionnement redevenus ceux de la copie de l'extension) ; la cause du diagnostic dit « non établie » quand le décodage est jugé sur moins de cartes que la chaîne ; un agent utilisateur vide bloque WebGPU ; le repli sans `ArrayBuffer.prototype.transfer` est joué par les tests.
+
 ---
 
 ## 1. La cause du plantage WebGPU
@@ -65,18 +70,19 @@ Les empreintes WASM sont donc déterministes d'un lancement à l'autre (4 fils) 
 
 ### Les deux chiffres
 
-Mémoire **privée** du processus de rendu de la page, **pic exact** du système (psapi), Chrome headless :
+Deux métriques, **toutes les valeurs** (chaque case = un essai), pic exact du système (psapi), processus de rendu de la page, Chrome headless. **Validée** = `PeakPagefileUsage` (commit : un tas réservé non touché y compte en entier). **Résidente** = `PeakWorkingSetSize` (pages en mémoire ; erratique : le système rogne le working set quand il veut, le même code a donné 813 puis 1 123 Mo).
 
-| scénario | page d'origine (d2c28b30) | après ce lot | écart |
-|---|---|---|---|
-| **WASM seul** (cas de l'iPhone) | **727 Mo** (715 / 727 / 741) | **687 Mo** (739 / 676 / 687) | −40 Mo (−5,5 %), dans la dispersion d'un essai à l'autre (676-741) |
-| **WASM puis WebGPU**, même page | **1 139 Mo** (1 116 / 1 139 ; série : 1 122) | **1 034 Mo** (1 033 / 1 034 ; série : 1 039) | −105 Mo (−9 %), stable |
-| WebGPU seul | 832 Mo (865 / 799) | 749 Mo (756 / 742) | −83 Mo |
-| niveau de la page à la fin (série « WASM puis WebGPU ») | 861 Mo | 729 Mo | −132 Mo |
-| processus GPU (privé) | 525-530 Mo | 524-527 Mo | inchangé |
+| scénario | validée AVANT (d2c28b30) | validée APRÈS | résidente AVANT | résidente APRÈS |
+|---|---|---|---|---|
+| **WASM seul** (iPhone) | 715 / 727 / 741 | 739 / 676 / 687 | 571 / 581 / 595 | 594 / 537 / 547 |
+| WASM seul, `?session=arena0,pattern0` | — | 757 / 730 / 820 | — | 585 / 588 / 640 |
+| **WASM puis WebGPU**, même page | 1 116 / 1 139 (série : 1 122) | 1 033 / 1 034 (série : 1 039) | 813 / 813 (série : 1 123) | 1 049 / 1 051 (série : 852) |
+| WebGPU seul | 865 / 799 | 756 / 742 | 812 / 831 | 785 / 771 |
+| niveau à la fin (série « WASM puis WebGPU », validée) | 861 | 729 | | |
+| processus GPU (validée) | 511-530 | 511-527 | | |
 
-**Le pic de création de la session WASM n'a pas baissé de façon mesurable** (−5 % au milieu d'un écart de ±5 %) : il est dominé par la mémoire d'ORT (254 Mo de tas, le code WebAssembly compilé, les fils), pas par ce que la page tient. Ce que le lot réduit réellement,
-c'est ce que la page **garde** : les 113 Mo du modèle ne sont plus conservés. **Le « pic » résident (working set) du système n'est pas fiable** : le même code donne 813 puis 1 123 Mo d'un essai à l'autre (le système rogne le working set quand il veut) ; je ne le cite pas.
+**Lecture honnête** : (1) **WASM seul : aucun gain établi** (séries qui se chevauchent dans les deux métriques) ; (2) le gain en mémoire validée (−105 Mo pour « WASM puis WebGPU », −83 Mo pour WebGPU seul) **ne vaut que pour les scénarios avec WebGPU**, que l'iPhone n'exécute plus par défaut ; (3) **la mémoire résidente ne montre pas de gain net** (elle monte même
+pour « WASM puis WebGPU » : 1 049 / 1 051 contre 813 / 813, sauf la série à 852 : métrique trop instable pour trancher). Ce que le lot change avec certitude, c'est ce que la page **garde** (tas JS 133 Mo avant, 17-28 Mo après), pas le pic de création de la session, dominé par la mémoire d'ORT.
 
 ### Ce qui a été fait
 
@@ -86,7 +92,7 @@ c'est ce que la page **garde** : les 113 Mo du modèle ne sont plus conservés. 
    *Premier essai écarté* : jeter la référence sans détacher donnait **+300 Mo** sur « WASM puis WebGPU » (deux copies de 113 Mo coexistent tant que le ramasse-miettes n'a pas tourné) ; c'est le `transfer(0)` qui a rendu le gain.
 2. **Chargement en flux** : il existait déjà (lecture du corps par morceaux dans un tableau préalloué de la taille annoncée, pas d'`arrayBuffer()`) ; rien à changer. Le `sha256` reste fait par WebCrypto (la série montre ~70 Mo de plus pendant cette étape, que j'attribue à une copie du tampon : supposé ; ce n'est pas le pic de la mesure WASM ;
    un sha256 incrémental en JavaScript l'éviterait mais coûterait du temps sur téléphone : non fait).
-3. **Session libérée** entre deux mesures et avant WebGPU : déjà le cas, conservé. Les tampons d'entrée sont de petits `Float32Array` jetés à chaque carte ; les chaînes base64 du lot sont supprimées après décodage ; un seul canvas de décodage pour toute la page.
+3. **Session libérée** entre deux mesures et avant WebGPU : déjà le cas, conservé. Les tampons d'entrée sont de petits `Float32Array` jetés à chaque carte ; les chaînes base64 du lot sont supprimées après décodage. (Le canvas de décodage partagé du premier jet est **retiré** au tour 1 : un canvas par carte comme dans la copie de l'extension ; son gain n'était pas établi et son effet sur Safari non démontré.)
 4. **Options d'ORT** `enableCpuMemArena: false` / `enableMemPattern: false` : essayées (paramètre `?session=arena0,pattern0`, liste fermée) : **empreintes identiques au bit près, mais aucun gain** (pic 730-820, médiane **757 Mo** contre 687) → **non adoptées**. Le paramètre reste, pour le diagnostic.
 5. **Le diagnostic des pixels est calculé APRÈS la mesure**, pour ne jamais coexister avec le modèle ni avec une session (sa première version, avant la mesure, ajoutait de la mémoire au pic).
 6. **Reste hors de portée de la page** : un tas WASM ne se rend qu'en fermant la page. Un seul moyen de séparer vraiment WASM et WebGPU dans une même séance : recharger la page entre les deux moteurs (non fait : ça change le parcours, et le pilote enchaîne les deux dans une page). Proposition.
@@ -105,7 +111,8 @@ redonne exactement les 224 × 224 du lot ; rien d'autre du lot n'a changé, vér
 * **chaîne** (12 cartes) : `redimPIL(décodage du navigateur)` contre les 224 de PIL ;
 * et les mêmes décodages avec `colorSpaceConversion: 'none'` (sans repli, `null` si le navigateur le refuse) et par défaut, plus l'espace couleur du canvas.
 
-Cause rendue (`causeEcart`) : **decodeur** (le décodage diffère déjà), **autre-etape** (décodage identique, chaîne pire que le plancher : couleur, alpha, bitmap), **aucune**, **indetermine** (une mesure manque : jamais « aucune » par défaut).
+Cause rendue (`causeEcart`) : **decodeur** (le décodage diffère déjà), **autre-etape** (décodage identique sur TOUTES les cartes de la chaîne, chaîne pire que le plancher : couleur, alpha, bitmap), **non-etablie** (décodage identique mais jugé sur 2 cartes alors que la chaîne en compte 12 et dépasse le plancher : le décodeur peut différer sur les autres ; on n'étend pas `dec` aux 12 cartes, +6 Mo pour tous), **aucune**, **indetermine** (une mesure manque : jamais « aucune » par défaut).
+Le libellé « décodage » désigne en fait *décodeur + chemin canvas* (`getImageData`), les variantes de bitmap séparant en partie la couleur.
 
 **Valeurs de Chrome PC** (pour lire celles du téléphone) : décodage max 0 (Chrome = PIL au pixel près, 0 octet sur 1 479 240) ; plancher du redimensionnement max 1, 38 octets sur 301 056 (0,0126 %) ; chaîne max 1, 124 octets sur 1 806 336 (0,0069 %) ; bitmaps avec et sans conversion : 0 ;
 canvas `srgb` ⇒ cause « aucune », cos min 0,9999999. Sur l'iPhone, un `decodage.max` > 0 dira « decodeur ».
