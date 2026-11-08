@@ -207,8 +207,11 @@ const NOMS_ID_IMPRIMES_IDENTIQUES = Object.freeze(['Dawn', 'Tool Scrapper', 'Jud
  */
 function motifNomLuIdentiqueProduit(lu, produit, exceptions = NOMS_ID_IMPRIMES_IDENTIQUES) {
     if (lu?.langue !== 'id' || !horsPokemonDeProduit(produit)) return null;
-    if (!(memeNomQueLeProduit(lu.nom, produit?.nomEn) || memeNomQueLeProduit(lu.nom, produit?.nomEnCarte))) return null;
-    return exceptions.some(x => texte(x) && memeNomQueLeProduit(lu.nom, x)) ? null : 'nom-lu-identique-produit';
+    // IDENTIQUE au sens strict (casse, accents et espaces multiples ignorés, mais PAS les espaces : « PokéPad » ≠ « Poké Pad ») — `memeNomQueLeProduit` fusionne ces deux-là par `clesNom`, trop large ici
+    const f = s => (texte(s) ? SANS_ACCENTS(J.decomposerNomCardmarket(s).nom).normalize('NFC').toLowerCase().replace(/\s+/g, ' ').trim() : '');
+    const lu_ = f(lu.nom);
+    if (!lu_ || !(lu_ === f(produit?.nomEn) || lu_ === f(produit?.nomEnCarte))) return null;
+    return exceptions.some(x => f(x) === lu_) ? null : 'nom-lu-identique-produit';
 }
 /**
  * Tour 4 (1) : le nom lu est exigé PARTOUT. Lu en anglais, il se compare au nom anglais du produit (`nomEn`).
