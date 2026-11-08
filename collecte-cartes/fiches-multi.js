@@ -285,4 +285,5 @@ async function executer({ db, deps, sets, attendu = null, ecrire = false, log = 
     return { code: 0, rapport };
 }
 
-module.exports = { SOURCE, SETS_AUTORISES, expansionDe, planFiche, fichesMultiOrigine, analyserSet, ecrireSet, relire, executer };
+// (poser-numeros-imprimes.js réutilise lireSet, parImpressionDe, rafraichirAvant, ecrireSet et relire : UNE écriture, UNE relecture — §21 bis)
+module.exports = { SOURCE, SETS_AUTORISES, expansionDe, planFiche, fichesMultiOrigine, analyserSet, ecrireSet, relire, executer, lireSet, parImpressionDe, rafraichirAvant };
