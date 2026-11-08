@@ -1280,6 +1280,36 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         // un Dresseur : inchangé
         assert.match(mt(lugia({ nom: '奇树VSTAR' }), plugia({ nomEn: 'Nemona VSTAR', nomEnCarte: 'Nemona VSTAR', categorie: 'dresseur' })), /nom-traduit-sans-temoin/, 'Dresseur : inchangé');
     });
+    await test('illustration pleine sans Pokédex (08/11) : liste FERMÉE de deux produits indonésiens, PV + dégâts + code + numéro', () => {
+        assert.ok(Array.isArray(PV.ILLUSTRATIONS_PLEINES_SANS_POKEDEX) && PV.ILLUSTRATIONS_PLEINES_SANS_POKEDEX.join() === '879266,859859' && Object.isFrozen(PV.ILLUSTRATIONS_PLEINES_SANS_POKEDEX), 'liste fermée exportée et gelée');
+        const wl = (o = {}) => entree({ idProduct: 879266, attendu: { ...entree().attendu, numero: '059' }, lu: { nom: 'Wattrel Mistika', numero: '059', total: null, langue: 'id', tampon: null, finition: 'normale', marques: ['code M-P imprimé'], codeSet: 'M-P', pv: 60, attaques: [{ nom: 'Serangan Cepat', degats: 10 }], ...o } });
+        const pw = (o = {}) => ptrad({ idProduct: 879266, tirage: 'id', numero: '059', slug: 'Iono-s-Wattrel-M-P059', codeSet: 'M-P/ID', nomEn: "Iono's Wattrel", nomEnCarte: "Iono's Wattrel", pv: 60, categorie: 'pokemon', attaquesCarte: [{ nom: 'Quick Attack', degats: '10+' }], ...o });
+        const mr = (o = {}) => entree({ idProduct: 859859, attendu: { ...entree().attendu, numero: '253' }, lu: { nom: 'Meowth Tim Roket', numero: '253', total: null, langue: 'id', tampon: null, finition: 'normale', marques: ['code SV-P imprimé'], codeSet: 'SV-P', pv: 70, attaques: [{ nom: 'Kucing Maling', degats: null }, { nom: 'Cakaran Kacau', degats: 20 }], ...o } });
+        const pm = (o = {}) => ptrad({ idProduct: 859859, tirage: 'id', numero: '253', slug: 'Team-Rocket-s-Meowth-SV-P253', codeSet: 'SV-P/ID', nomEn: "Team Rocket's Meowth", nomEnCarte: "Team Rocket's Meowth", pv: 70, categorie: 'pokemon', attaquesCarte: [{ nom: 'Pilfer', degats: null }, { nom: 'Scratch Frenzy', degats: '20×' }], ...o });
+        assert.deepStrictEqual(lue(wl(), pw()), { ok: true, motifs: [] }, 'Wattrel accepté');
+        assert.ok(drap(wl(), pw()).includes('temoin-illustration-pleine-sans-pokedex'), 'drapeau Wattrel');
+        assert.deepStrictEqual(lue(mr(), pm()), { ok: true, motifs: [] }, 'Meowth accepté');
+        assert.ok(drap(mr(), pm()).includes('temoin-illustration-pleine-sans-pokedex'), 'drapeau Meowth');
+        assert.match(mt(wl({ pv: 70 }), pw()), /pv-different/, 'PV différent');
+        assert.match(mt(wl({ pv: null }), pw()), /pv-non-lu/, 'PV non lu');
+        assert.match(mt(wl({ attaques: [{ nom: 'Serangan Cepat', degats: 20 }] }), pw()), /attaques-differentes/, 'dégâts différents');
+        assert.match(mt(wl({ attaques: [] }), pw()), /attaques-non-lues/, 'attaques non lues');
+        assert.match(mt(wl({ attaques: undefined }), pw()), /attaques-non-lues/, 'champ absent');
+        assert.match(mt(wl({ attaques: [{ nom: 'Serangan Cepat', degats: '10+' }] }), pw()), /attaques-non-lues/, 'dégâts en chaîne refusés');
+        assert.match(mt(wl(), pw({ attaquesCarte: [{ nom: 'Quick Attack', degats: null }] })), /attaques-de-base-inconnues/, 'base sans dégâts');
+        assert.match(mt(wl({ codeSet: 'SV-P' }), pw()), /code-set-different/, 'code faux');
+        assert.match(mt(wl({ numero: '058' }), pw()), /numero-different/, 'numéro faux');
+        assert.ok(!lue(wl({ langue: 'th' }), pw({ tirage: 'th' })).ok, 'langue th refusée');
+        assert.ok(!lue(wl({ langue: 'ja' }), pw({ tirage: 'jp' })).ok, 'langue ja refusée');
+        assert.ok(!lue(wl({ dex: 744 }), pw()).ok && !drap(wl({ dex: 744 }), pw()).includes('temoin-illustration-pleine-sans-pokedex'), 'avec dex : pas la variante');
+        // hors liste, mêmes lectures : refus comme avant
+        const hors = lue({ ...wl(), idProduct: 879267 }, pw({ idProduct: 879267 }));
+        assert.strictEqual(hors.ok, false, 'produit hors liste refusé');
+        assert.ok(!drap({ ...wl(), idProduct: 879267 }, pw({ idProduct: 879267 })).includes('temoin-illustration-pleine-sans-pokedex'));
+        // un V ordinaire : inchangé
+        const v = lue(entree({ attendu: { ...entree().attendu, numero: '161' }, lu: { nom: '洛奇亚VSTAR', numero: '161', total: '131', langue: 'zh-hans', tampon: null, finition: 'normale', marques: ['code cs6aC imprimé'], codeSet: 'cs6aC', pv: 280, attaques: [{ nom: 'a', degats: 220 }, { nom: 'b', degats: null }] } }), ptrad({ tirage: 'zh-hans', numero: '161', slug: 'Lugia-VSTAR-cs6aC-161', codeSet: 'cs6aC', nomEn: 'Lugia VSTAR', nomEnCarte: 'Lugia VSTAR', pv: 280, categorie: 'pokemon', attaquesCarte: [{ nom: 'T', degats: '220' }] }));
+        assert.strictEqual(v.ok, true, 'V ordinaire inchangé');
+    });
     // ───────── (08/11, décision du testeur) A : le nom lu doit être écrit dans l'ÉCRITURE de la langue lue ─────────
     await test('A : nom lu contre langue — th, zh, ja, ko : un nom latin est refusé nom-lu-hors-langue, un nom dans la bonne écriture passe ce contrôle', () => {
         const cas = [['th', 'th', 'Energy Search', 'ค้นหาพลังงาน'], ['zh-hans', 'zh-hans', 'Energy Search', '能量搜索'], ['zh-hant', 'zh-hant', 'Energy Search', '能量搜尋'],
