@@ -1317,7 +1317,8 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.deepStrictEqual(lue(poke, ptrad({ tirage: 'id', numero: '012', slug: 'Charmander-MA5-012', nomEn: 'Charmander', categorie: 'pokemon' })), { ok: true, motifs: [] }, 'Pokémon id : inchangé');
         assert.deepStrictEqual(lue(poke, ptrad({ tirage: 'id', numero: '012', slug: 'Charmander-MA5-012', nomEn: 'Charmander' })), { ok: true, motifs: [] }, 'Pokémon id sans catégorie : inchangé');
         // la liste fermée des noms propres réellement imprimés à l'identique (relus sur scans le 2026-11-08) : cinq noms, ni plus ni moins ; PokéPad en est exclu
-        assert.deepStrictEqual([...PV.NOMS_ID_IMPRIMES_IDENTIQUES], ['Dawn', 'Tool Scrapper', 'Judge', 'Guzma', 'Gladion']);
+        assert.deepStrictEqual([...PV.NOMS_ID_IMPRIMES_IDENTIQUES], ['Dawn', 'Tool Scrapper', 'Judge', 'Guzma', 'Gladion', 'Volkner', 'Ingo & Emmet', 'Lisia', 'Whitney', 'Kahili', 'Faba', 'Mina', 'Nanu', 'Cynthia', 'Gardenia', 'Mars', 'Bonnie', 'Diantha',
+            'Looker', 'Jasmine', 'Morgan', 'Dana', 'Evelyn', 'Nita', 'Hala', 'Plumeria', 'Lusamine', 'Ilima', 'Kiawe', 'Lana', 'Hau', 'Olivia']);
         for (const n of PV.NOMS_ID_IMPRIMES_IDENTIQUES) assert.strictEqual(PV.motifNomLuIdentiqueProduit({ langue: 'id', nom: n }, { nomEn: n, categorie: 'dresseur' }), null, `${n} : admis (id)`);
         assert.strictEqual(PV.motifNomLuIdentiqueProduit({ langue: 'id', nom: 'PokéPad' }, { nomEn: 'Poké Pad', categorie: 'dresseur' }), null, 'PokéPad imprimé ≠ Poké Pad produit : le contrôle ne se déclenche pas');
         assert.ok(!PV.NOMS_ID_IMPRIMES_IDENTIQUES.some(n => /pok.?.?pad/i.test(n)), 'PokéPad n\'est pas dans la liste');
