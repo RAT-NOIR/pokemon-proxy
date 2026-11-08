@@ -72,7 +72,7 @@ const fermer = async res => { if (!res.c.destroyed) res.c.destroy(); await atten
     const rl = require(dep('express-rate-limit'));
     const cle6 = rl.ipKeyGenerator('2001:db8:aaaa:bb00::1');
     const chargees = Object.keys(require.cache);
-    v('ipKeyGenerator charge ip-address et regroupe une IPv6 par /56', cle6, '2001:db8:aaaa:bb00::');
+    v('ipKeyGenerator charge ip-address et regroupe une IPv6 par /56', cle6, '2001:db8:aaaa:bb00::/56');
     v('axios chargé (suit les redirections par follow-redirects)', typeof axios.get, 'function');
     for (const [nom, consommateur, plancher] of PLANCHERS) {
         const resolu = resoudreDepuis(nom, consommateur);
@@ -127,7 +127,7 @@ const fermer = async res => { if (!res.c.destroyed) res.c.destroy(); await atten
                 ['corps seul', unique(route, enc, ok1), [reponseOk[route]], true],
                 ['corps + zéros', unique(route, enc, Buffer.concat([ok1, Buffer.alloc(100)])), [reponseOk[route]], true],
                 ['corps + octets (écriture TCP unique)', unique(route, enc, Buffer.concat([ok1, junk])), enc === 'gzip' ? [400] : [reponseOk[route]], enc === 'deflate'],
-                ['dépasse la limite (300 Ko décompressés) + octets', unique(route, enc, Buffer.concat([groB, junk])), [route === '/json-grand' ? reponseOk[route] : 413], false],
+                ['dépasse la limite (300 Ko décompressés) + octets', unique(route, enc, Buffer.concat([groB, junk])), route === '/json-grand' ? (enc === 'gzip' ? [400] : [reponseOk[route]]) : [413], false],   // 2400 Ko : 300 Ko passent ; les octets finaux font échouer le gzip
                 ['charset inconnu, corps valide', unique(route, enc, ok1, '; charset=bogus'), route === '/raw' || route === '/webhook' ? [reponseOk[route]] : [415], false],
             ];
             for (const [nom, requete, statuts, etat] of cas) {
@@ -158,8 +158,8 @@ const fermer = async res => { if (!res.c.destroyed) res.c.destroy(); await atten
     // flot de 32 Mo après un corps deflate complet : la requête est consommée jusqu'au bout, la réponse part
     for (const [route, lib] of [ROUTES[0], ROUTES[2]]) {
         const avant = nonCapturees.length; const total = 32 * 1024 * 1024;
-        const res = await requeteBrute(port, null, { finMs: 8000, apres: c => {
-            c.write(`${entete(route, 'deflate')}Transfer-Encoding: chunked\r\n\r\n`); c.write(chunk(df));
+        const res = await requeteBrute(port, null, { finMs: 4000, apres: c => {             // sans « Connection: close » : un serveur qui ferme avec un corps non lu fait perdre la réponse au client (RST), quelle que soit la version
+            c.write(`${entete(route, 'deflate').replace('Connection: close\r\n', '')}Transfer-Encoding: chunked\r\n\r\n`); c.write(chunk(df));
             const bloc = chunk(Buffer.alloc(65536, 0x41)); let ecrit = 0;
             const pomper = () => { while (ecrit < total) { const o = c.write(bloc); ecrit += 65536; if (!o) return c.once('drain', pomper); } c.write('0\r\n\r\n'); };
             setTimeout(pomper, 100);
