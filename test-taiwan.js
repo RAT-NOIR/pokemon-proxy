@@ -87,7 +87,7 @@ const LISTE = F('asie-id-liste-SV-P-page1.html').replace(/class="resultNumber">2
     const AVEC = (site, slug) => { const L = ligneTpc(site, slug); return L && { ...L, cartes: 1 }; };
     const lancer = async (B, tr, ligneDe) => {
         const depots = [];
-        const client = T.fabriquerClientTpc({ site: 'tpc-asie', transport: tr, cadenceMs: 0, reessaiMs: 0, verrou });
+        const client = T.fabriquerClientTpc({ site: 'tpc-asie', transportDeBanc: tr, cadenceMs: 0, reessaiMs: 0, verrou });
         const r = silencieux();
         try { return { b: await collecterSet(uniteDeLaLigne(ligneTpc('tpc-asie', SLUG)), B.M, { verrou, client, deposer: async (...a) => depots.push(a), fabriquerVerrouSet: verrouSet, ligneDe }), depots }; }
         finally { r(); }

@@ -403,11 +403,13 @@ function autoriseParRobots(texteRobots, chemin, agent = UA) {
 const PORTE_SORTIES = 'sorties';
 let compteurSorties = 0;
 /** @param {{porte?: object}} [o] — `porte` : le module de la porte (injecté par les bancs ; par défaut le vrai, chargé à la demande : il requiert ce module-ci). */
-function fabriquerTransportPorte({ porte = null } = {}) {
+const TRANSPORTS_PORTE = new WeakSet();      // les seuls transports que `transport` accepte : ceux qui sortent d'ici
+function fabriquerTransportPorte({ porte = null, avant = null } = {}) {
     const P = () => porte || require('./porte-reseau');
-    return {
+    const t = {
         parLaPorte: true,
         async get(url, { binaire = false } = {}) {
+            if (avant) await avant(url);             // compteur / plafond d'un outil (mesurer-tpc-tw) : peut refuser en levant
             const p = P();
             const dossier = path.join(p.DOSSIER_PORTE_FIXE, PORTE_SORTIES);
             const sortie = path.join(dossier, `tpc-${process.pid}-${Date.now()}-${++compteurSorties}.tmp`);
@@ -426,8 +428,17 @@ function fabriquerTransportPorte({ porte = null } = {}) {
                         return { status: s, type: 'application/octet-stream', texte: '' };
                     }
                     if (e && Number.isInteger(e.status)) return { status: e.status, type: 'text/html', texte: '' };
-                    throw Object.assign(e, { reseau: true });
+                    // seule une coupure TRANSITOIRE (délai, réseau) se réessaie ; tout autre échec technique de la porte (trop grande, verrou de cadence, écriture, sortie…) = ELLE ne peut pas conclure : on s'arrête
+                    if (e && e.transitoire) throw Object.assign(e, { reseau: true });
+                    throw Object.assign(new Error(`échec technique de la porte réseau (elle ne peut pas conclure) : ${e && e.message}`), { porte: true, bloque: true });
                 }
+                // MÊME HÔTE EXACT, sinon arrêt : la porte suit les sauts de la même racine (asia. → www. sont la même racine) ; le client ne le tolère jamais
+                const hoteDemande = new URL(url).hostname.toLowerCase();
+                let hoteFinal = null;
+                if (r.redirige) { try { hoteFinal = new URL(r.redirige).hostname.toLowerCase(); } catch { /* illisible */ } }
+                else if (r.urlFinale) { try { hoteFinal = new URL(r.urlFinale).hostname.toLowerCase(); } catch { /* illisible */ } }
+                else throw Object.assign(new Error('la porte ne rend pas l\'adresse finale : on ne peut pas conclure'), { porte: true, bloque: true });
+                if (hoteFinal !== hoteDemande) throw Object.assign(new Error(`hôte « ${hoteFinal ?? 'illisible'} » hors du site (${hoteDemande}) : une redirection ne change jamais d'hôte`), { porte: true, bloque: true });
                 if (r.redirige) return { status: r.status || 302, location: r.redirige };
                 const corps = fs.readFileSync(sortie);
                 if (binaire) return { status: r.status, type: typeImage(corps), octets: corps };
@@ -435,7 +446,11 @@ function fabriquerTransportPorte({ porte = null } = {}) {
             } finally { try { fs.unlinkSync(sortie); } catch { /* jamais écrite (refus) ou déjà retirée */ } }
         }
     };
+    TRANSPORTS_PORTE.add(t);
+    return t;
 }
+/** Un banc = un processus lancé sur un fichier test-*.js (les seuls à pouvoir injecter un faux transport). */
+const processusDeBanc = () => /^test-.*\.js$/i.test(path.basename(require.main?.filename || ''));
 /** Le type d'une image lu sur ses octets (la porte l'a déjà classée « image »). */
 function typeImage(b) {
     if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8) return 'image/jpeg';
@@ -444,7 +459,7 @@ function typeImage(b) {
     if (b.length > 3 && b.subarray(0, 3).toString('latin1') === 'GIF') return 'image/gif';
     return 'image/png';
 }
-const transportFetch = fabriquerTransportPorte();      // nom conservé (mesurer-tpc-tw.js) : ce n'est plus un appel direct
+const transportFetch = fabriquerTransportPorte();      // nom conservé : ce n'est plus un appel direct
 // 🔑 LA RÈGLE COMMUNE DE RÉPONSE (2026-10-18) : le défi, la fausse page introuvable, la pause et le compteur par hôte vivent dans reponse-hote.js — ce client les APPELLE, il n'en garde aucune copie.
 const RH = require('./reponse-hote');
 
@@ -455,10 +470,17 @@ const RH = require('./reponse-hote');
  */
 // TAIWAN (2026-10-18, lanceur dédié) : `plafond` = le nombre de requêtes qu'AUCUNE relance ne peut dépasser — `compteInitial` est le cumul des passages précédents (lu dans le cache disque du lanceur),
 // `surRequete(compte)` le lui rend après CHAQUE requête. Le client REFUSE la requête n° plafond + 1 (erreur `plafond: true`), avant d'envoyer quoi que ce soit. Sans `plafond`, rien ne change.
-function fabriquerClientTpc({ site, transport = transportFetch, cadenceMs = CADENCE_MS, reessaiMs = REESSAI_MS, verrou = null, agent = UA, suivi = RH.suiviDuProcessus(), dossierPauses = RH.DOSSIER_PAUSES, connues = null, plafond = null, compteInitial = 0, surRequete = null } = {}) {
+function fabriquerClientTpc({ site, transport: transportDemande = transportFetch, transportDeBanc = undefined, cadenceMs = CADENCE_MS, reessaiMs = REESSAI_MS, verrou = null, agent = UA, suivi = RH.suiviDuProcessus(), dossierPauses = RH.DOSSIER_PAUSES, connues = null, plafond = null, compteInitial = 0, surRequete = null } = {}) {
     const S = SITES[site];
     if (!S) throw new Error(`TPC : site « ${site} » hors de la liste (${SOURCES_TPC.join(', ')})`);
     if (plafond !== null && !(Number.isInteger(plafond) && plafond > 0)) throw new Error(`TPC : plafond « ${plafond} » : un entier positif ou rien`);
+    // GARDE ÉCRITE PAR CE QU'ELLE AUTORISE : un transport venu de la porte, ou un faux transport nommé `transportDeBanc` dans un processus de banc ; tout le reste est refusé
+    let transport;
+    if (transportDeBanc !== undefined) {
+        if (!processusDeBanc()) throw new Error('TPC : transportDeBanc refusé hors banc (processus test-*.js) — toute requête de production passe par la porte réseau');
+        transport = transportDeBanc;
+    } else if (TRANSPORTS_PORTE.has(transportDemande)) transport = transportDemande;
+    else throw new Error('TPC : transport refusé — seul le transport de la porte réseau est accepté (un faux transport s\'injecte par `transportDeBanc`, dans un banc)');
     const hoteNom = new URL(S.hote).hostname;
     let lie = verrou, file = Promise.resolve(), dernier = 0, compte = compteInitial, bloque = null, pauseHote = null, robots;   // robots : undefined = pas encore lu
     const statuts = {};

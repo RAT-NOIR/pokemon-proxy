@@ -136,7 +136,7 @@ async function telecharger({ reelle, slug, cacheDir, racineAutorisee, plafond, v
         const compteInitial = lireCompteur(f.compteur);
         let aEcrire = 0;
         const surRequete = n => { ecrireJson(f.compteur, { requetes: n, plafond, le: new Date().toISOString() }); if (++aEcrire % 10 === 0) local.ecrireFichier(); };
-        const client = T.fabriquerClientTpc({ site, verrou, transport, cadenceMs, reessaiMs: pourBanc ? 0 : undefined, plafond, compteInitial, surRequete, ...(dossierPauses ? { dossierPauses } : {}) });
+        const client = T.fabriquerClientTpc({ site, verrou, ...(transport ? { transportDeBanc: transport } : {}), cadenceMs, reessaiMs: pourBanc ? 0 : undefined, plafond, compteInitial, surRequete, ...(dossierPauses ? { dossierPauses } : {}) });
         const bilan = { site, etat: 'termine', plafond, compteInitial, listes: null, fiches: 0, prouves: 0, images: { telechargees: 0, enCache: 0, absentes: 0 }, restes: {}, dossierPauses: dossierPauses ?? RH.DOSSIER_PAUSES };
         const compteurs = {}, compter = k => { compteurs[k] = (compteurs[k] || 0) + 1; };
         let lu;

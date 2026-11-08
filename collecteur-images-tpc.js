@@ -454,7 +454,7 @@ async function planReel({ cx, M, sets, fichierCache, verrouAttendu = null, trans
     const tenuPar = await verrou.prendre();
     if (tenuPar) { console.error(`⛔ verrou global ${site} tenu par pid ${tenuPar.pid} sur ${tenuPar.hote} (battement il y a ${tenuPar.ageS} s) — on s'arrête, aucune requête.`); return { arret: 'verrou-tenu', tenuPar }; }
     const local = baseLocale(cx.db, fichierCache);
-    const client = T.fabriquerClientTpc({ site, verrou, ...(transport ? { transport } : {}), ...(cadenceMs != null ? { cadenceMs, reessaiMs: 0 } : {}) });
+    const client = T.fabriquerClientTpc({ site, verrou, ...(transport ? { transportDeBanc: transport } : {}), ...(cadenceMs != null ? { cadenceMs, reessaiMs: 0 } : {}) });
     const bilan = [];
     const statutsHttp = () => ({ [T.SITES[site].hote]: client.statuts() });     // 200/3xx/403/429/5xx par hôte
     try {
