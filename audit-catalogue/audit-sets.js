@@ -23,6 +23,10 @@ const { cleNumero } = require('../collecte-cartes/jointure');   // LA clé de nu
 //  1 = définition d'origine ; 2 = doublons (plusieurs carteId, même numéro normalisé lettre comprise, sans produit propre par membre) et manquants (Additionals : numéros de leurs produits ;
 //      numéros de queue sans produit numéroté absorbés par des produits sans numéro en nombre égal). Types touchés : doublons, manquants.
 const DEFINITION = 2;
+// Liste FERMÉE (un set, sa preuve) des numéros de queue qui n'ont ni produit numéroté ni fiche à attendre. Tout autre set garde ses manquants.
+const QUEUE_SANS_PRODUIT = Object.freeze({
+    'Pokemon-CardVS': Object.freeze({ numeros: Object.freeze(['143', '144', '145', '146', '147', '148', '149', '150', '151']),
+        preuve: 'Pokémon Card VS (VS, expansion Cardmarket 4168, total imprimé 151) : 142 numéros joints, 143-151 = les 9 Énergies de base, sans numéro imprimé ni produit numéroté chez Cardmarket (9 produits sans numéro) — instruction du 2026-11-08, PLAN-LOT.md §2' }) });
 const TYPES_DEFINITION = Object.freeze(['doublons', 'manquants']);
 const TYPES = Object.freeze(['sansVisuel', 'sansNumero', 'sansProduit', 'doublons', 'produitsSansFiche', 'manquants']);
 const CAUSES = Object.freeze({
@@ -67,7 +71,7 @@ const baseNumero = n => { const m = /(\d+)/.exec(String(n ?? '')); return m ? St
 const suffixeLettre = n => /\d[a-z]+$/i.test(String(n ?? ''));
 
 function auditer(lecture, regles) {
-    const { impressionDuSet, normaliserNumero, memeCodeSaufFin, exclure, expansionsDuSet, tirageDuSet, editionLocaleDuSet, imageDeLImpression, visuelAdmisPourLaRegion, annexeDuSet = null, estAdditionals = null, sansNumeroImprime = SANS_NUMERO_IMPRIME } = regles || {};   // annexeDuSet (lib/annexes.ts) et estAdditionals (lib/additionals.ts) : facultatifs, règles du site ; sans eux, aucune exclusion de ce genre
+    const { impressionDuSet, normaliserNumero, memeCodeSaufFin, exclure, expansionsDuSet, tirageDuSet, editionLocaleDuSet, imageDeLImpression, visuelAdmisPourLaRegion, annexeDuSet = null, estAdditionals = null, sansNumeroImprime = SANS_NUMERO_IMPRIME, queueSansProduit = QUEUE_SANS_PRODUIT } = regles || {};   // annexeDuSet (lib/annexes.ts) et estAdditionals (lib/additionals.ts) : facultatifs, règles du site ; sans eux, aucune exclusion de ce genre
     for (const [k, f] of Object.entries({ impressionDuSet, normaliserNumero, memeCodeSaufFin, exclure, expansionsDuSet, tirageDuSet, editionLocaleDuSet, imageDeLImpression, visuelAdmisPourLaRegion })) if (typeof f !== 'function') throw new Error(`auditer : règle injectée absente (${k}) — jamais de repli`);
     const sets = lecture.sets || [], cartes = lecture.cartes || [], lignes = lecture.lignes || [], produits = lecture.produits || [];
     if (!sets.length) throw new Error('auditer : population vide (0 set) — un audit sur zéro set n\'est pas une mesure (§41)');
@@ -176,7 +180,7 @@ function auditer(lecture, regles) {
         }
         // ── doublons de faits : même nom + PV + attaques + numéro de base, dans le set
         const parFaits = indexer(entrees.filter(e => e.numero !== null), e => JSON.stringify([e.c.nomEn, e.c.pv ?? null, (e.c.attaques || []).join('|'), baseNumero(e.numero)]));
-        const groupes = [];
+        const groupes = [], ecartes = [];   // ecartes : plusieurs carteId au même numéro mais un produit propre à chacun — plus comptés, jamais cachés (relire)
         for (const g of parFaits.values()) {
             if (g.length < 2) continue;
             // DÉFINITION 2 : un doublon de FICHES = plusieurs documents (carteId) au MÊME numéro normalisé (lettre comprise) ET sans produit propre à chaque membre.
@@ -185,7 +189,7 @@ function auditer(lecture, regles) {
             if (cartesIds.size < 2 || numeros.size !== 1) continue;
             const compte = new Map(); for (const e of g) for (const id of new Set(e.liesIds || [])) compte.set(id, (compte.get(id) || 0) + 1);
             const chacunSonProduit = g.every(e => (e.liesIds || []).some(id => compte.get(id) === 1));
-            if (chacunSonProduit) continue;
+            if (chacunSonProduit) { ecartes.push({ nom: g[0].c.nomEn, base: baseNumero(g[0].numero), numero: g[0].numero, raison: 'produit-propre-a-chaque-membre', membres: g.map(e => ({ carteId: e.c._id, numero: e.numero, produits: [...(e.liesIds || [])] })) }); continue; }
             const cause = 'doublon-deux-documents';
             groupes.push({ nom: g[0].c.nomEn, base: baseNumero(g[0].numero), cause: verifierCause('doublons', cause), membres: g.map(e => ({ carteId: e.c._id, numero: e.numero })) });
         }
@@ -216,26 +220,28 @@ function auditer(lecture, regles) {
         let attenduDetail = numerosAttendus({ totalImprime: attendu, numerosPresents: nums });
         // DÉFINITION 2 (a) : pour un set Additionals, l'attendu est l'ensemble des numéros de SES produits (même règle `numerosDeLExpansion` que sansProduit), jamais le total du set principal
         const clesPresentes = new Set([...nums].map(cleNumero));
+        const absorbes = [];   // { cause, numeros, ... } : sortis du compte des manquants par la définition 2, comptés par cause et imprimés À PART (jamais mêlés aux exclus)
+        let produitsNumerotesLus = null;
         if (numerosDeLExpansion) {
             const cles = [...numerosDeLExpansion].sort((a, b) => (parseInt(a.replace(/\D/g, ''), 10) || 0) - (parseInt(b.replace(/\D/g, ''), 10) || 0) || (a < b ? -1 : 1));
+            produitsNumerotesLus = cles.length;
+            const horsProduits = attenduDetail.manquants.filter(n => !numerosDeLExpansion.has(cleNumero(n)));   // manquants de la définition 1 (total du set principal) qu'aucun produit de l'expansion ne porte
+            if (horsProduits.length) absorbes.push({ cause: 'additionals-numero-sans-produit', numeros: horsProduits, produitsNumerotesLus });
             attendu = cles.length || null;
             attenduDetail = { attendu, totalImprime: total, principaux: null, prefixes: null, annexes: null, manquants: cles.filter(k => !clesPresentes.has(k)), libelle: `attendu : Additionals — les ${cles.length} numéros de ses produits Cardmarket (pas le total ${total ?? '?'} du set principal)` };
         }
         if (attendu && parNumeros) {
             let liste = attenduDetail.manquants;
-            // DÉFINITION 2 (b) : des numéros de QUEUE (au-delà du plus grand numéro de produit) qui n'ont aucun produit numéroté ne sont pas manquants quand l'expansion a exactement autant de produits SANS numéro
-            // (Pokémon VS : 143-151 = 9 Énergies de base, sans numéro imprimé ni chez Cardmarket). Egalité stricte de comptes, queue seulement : un numéro du milieu n'est jamais absorbé.
-            let sansProduitNumerote = [];
-            if (!numerosDeLExpansion) {
-                const prodsNum = prods.filter(p => nonVide(numProd.get(p.idProduct)));
-                const nSansNumero = prods.length - prodsNum.length;
-                const clesProd = new Set(prodsNum.map(p => cleNumero(numProd.get(p.idProduct))));
-                const maxProd = [...clesProd].filter(k => /^\d+$/.test(k)).reduce((a, k) => Math.max(a, Number(k)), 0);
-                const candidats = liste.filter(n => !clesProd.has(cleNumero(n)));
-                if (candidats.length > 0 && candidats.length === nSansNumero && prodsNum.length > 0 && candidats.every(n => /^\d+$/.test(n) && Number(n) > maxProd)) { sansProduitNumerote = candidats; liste = liste.filter(n => !candidats.includes(n)); }
+            // DÉFINITION 2 (b) : LISTE FERMÉE (table QUEUE_SANS_PRODUIT, preuve par set) — jamais une égalité de comptes, qui peut être un hasard. Un numéro n'est absorbé que s'il est listé pour CE set ET n'a aucun produit numéroté.
+            const entreeQueue = queueSansProduit[s._id];
+            if (entreeQueue && !numerosDeLExpansion) {
+                const clesProd = new Set(prods.filter(p => nonVide(numProd.get(p.idProduct))).map(p => cleNumero(numProd.get(p.idProduct))));
+                const listes = new Set(entreeQueue.numeros.map(String));
+                const pris = liste.filter(n => listes.has(String(n)) && !clesProd.has(cleNumero(n)));
+                if (pris.length) { absorbes.push({ cause: `queue-liste-fermee:${s._id}`, numeros: pris, preuve: entreeQueue.preuve }); liste = liste.filter(n => !pris.includes(n)); }
             }
             const ex = exclure({ set: s._id, trous: liste, manque: liste.length });
-            exclusPasUnTrou = ex.exclus.concat(sansProduitNumerote);
+            exclusPasUnTrou = ex.exclus;
             const numerosProdSansFiche = new Set(produitsSansFiche.map(p => numProd.get(p.idProduct)).filter(Boolean).map(cleNumero));
             // un reste ne se nomme que s'il désigne CE numéro (le produit du reste porte ce numéro) — jamais le type dominant du set
             const resteDuNumero = n => { const p = prods.find(x => restesParProduit[x.idProduct] && numProd.get(x.idProduct) != null && cleNumero(numProd.get(x.idProduct)) === cleNumero(n)); return p ? restesParProduit[p.idProduct] : null; };
@@ -250,7 +256,7 @@ function auditer(lecture, regles) {
         const manquantsN = manquants.reduce((a, m) => a + m.nombre, 0);
         const offres = [].concat(s.idExpansion ?? []).reduce((a, e) => a + (offresDe[e] || 0), 0);
         const entree = { sansVisuel: { n: sansVisuel.length, items: sansVisuel }, sansNumero: { n: sansNumero.length, items: sansNumero }, sansProduit: { n: sansProduit.length, items: sansProduit },
-            doublons: { n: doublonsN, groupes }, produitsSansFiche: { n: produitsSansFiche.length, items: produitsSansFiche }, manquants: { n: manquantsN, items: manquants } };
+            doublons: { n: doublonsN, groupes, ecartes }, produitsSansFiche: { n: produitsSansFiche.length, items: produitsSansFiche }, manquants: { n: manquantsN, items: manquants } };
         const causes = {};
         for (const t of TYPES) for (const it of (entree[t].items || entree[t].groupes)) { const k = `${t}/${it.cause}`; causes[k] = (causes[k] || 0) + (t === 'doublons' ? it.membres.length - 1 : (it.nombre || 1)); }
         const trous = TYPES.reduce((a, t) => a + entree[t].n, 0);
@@ -262,20 +268,24 @@ function auditer(lecture, regles) {
             return { carteId: x.carteId, nom: x.nom, plusProche: p ? { tirage: p.tirage ?? null, expansion: p.expansion ?? null, numero: p.numero ?? null } : null };
         }) } : null;
         resultats.push({ set: s._id, code: s.code ?? null, nom: s.nomAffichage, tirage: cible.tirage, type: s.type ?? null, attendu, attenduDetail, totalImprime: total, affichees: entrees.length, cartesDocuments: docs.length, produitsCardmarket: prods.length, offres,
-            ...entree, exclusPasUnTrou, exclusParCause, diagnosticExpansion, trous, causes });
+            ...entree, absorbes, produitsNumerotesLus, exclusPasUnTrou, exclusParCause, diagnosticExpansion, trous, causes });
     }
     const sorted = trier(resultats);
     const parCause = {}; const totaux = { trous: 0, setsTroues: 0, sets100: 0, exclus: 0 };
     const exclus = { total: 0, parCause: {}, parSet: {} };
     for (const t of TYPES) { parCause[t] = {}; totaux[t] = 0; }
+    const absorbes = { total: 0, parCause: {}, parSet: {} }, doublonsEcartes = { groupes: 0, enTrop: 0, liste: [] };
     for (const r of sorted) {
+        for (const a of r.absorbes) { const k = a.cause.startsWith('queue-liste-fermee') ? 'queue-liste-fermee' : a.cause; absorbes.total += a.numeros.length; absorbes.parCause[k] = (absorbes.parCause[k] || 0) + a.numeros.length; (absorbes.parSet[r.set] = absorbes.parSet[r.set] || []).push(a); }
+        for (const g of r.doublons.ecartes) { doublonsEcartes.groupes++; doublonsEcartes.enTrop += g.membres.length - 1; doublonsEcartes.liste.push({ set: r.set, ...g }); }
         for (const [k, liste] of Object.entries(r.exclusParCause)) { exclus.total += liste.length; exclus.parCause[k] = (exclus.parCause[k] || 0) + liste.length; (exclus.parSet[r.set] = exclus.parSet[r.set] || {})[k] = liste.length; }
         totaux.trous += r.trous; if (r.trous > 0) totaux.setsTroues++; else totaux.sets100++;
         for (const t of TYPES) totaux[t] += r[t].n;
         for (const [k, n] of Object.entries(r.causes)) { const [t, ...c] = k.split('/'); const cause = c.join('/'); parCause[t][cause] = (parCause[t][cause] || 0) + n; }
     }
     totaux.exclus = exclus.total;
-    return { definition: DEFINITION, exclus, denominateurs: { sets: sets.length, setsPublies: publies.length, setsNonPublies: sets.length - publies.length, cartes: cartes.length, cartesAffichables: affichables.length, lignes: lignes.length, produits: produits.length, produitsSansSetPublie, entreesAffichees: sorted.reduce((a, r) => a + r.affichees, 0) },
+    totaux.absorbes = absorbes.total; totaux.doublonsEcartes = doublonsEcartes.enTrop;
+    return { definition: DEFINITION, exclus, absorbes, doublonsEcartes, denominateurs: { sets: sets.length, setsPublies: publies.length, setsNonPublies: sets.length - publies.length, cartes: cartes.length, cartesAffichables: affichables.length, lignes: lignes.length, produits: produits.length, produitsSansSetPublie, entreesAffichees: sorted.reduce((a, r) => a + r.affichees, 0) },
         sets: sorted, parCause, totaux };
 }
 
@@ -304,13 +314,32 @@ function ecart(avant, apres) {
     for (const k of new Set([...Object.keys(xa), ...Object.keys(xb)])) { const d = (xb[k] || 0) - (xa[k] || 0); if (d !== 0) exParCause[k] = d; }
     const exclus = { total: ((apres.exclus || {}).total || 0) - ((avant.exclus || {}).total || 0), parCause: exParCause };
     const memeDefinition = (avant.definition ?? 1) === (apres.definition ?? 1);   // un audit sans champ `definition` est de définition 1
-    return { avantLe: avant.le ?? null, definitionAvant: avant.definition ?? 1, definitionApres: apres.definition ?? 1, memeDefinition, memeDenominateur: d1.sets === d2.sets && d1.setsPublies === d2.setsPublies, totaux, parCause, exclus, setsPassesA100, setsPassesA100ParCollecte, setsPassesA100ParExclusions, setsNouvellementTroues };
+    const setsChangementDefinition = [], setsNouvellementTrouesChangementDefinition = [];
+    if (!memeDefinition) {
+        // 🔑 deux définitions : AUCUN set « passé à 100 % par une collecte », AUCUN « nouvellement troué » ; les totaux qui mêlent les types redéfinis sont NON COMPARÉS
+        // (trous = recalculé sur les 4 types inchangés seulement ; setsTroues / sets100 = null)
+        setsChangementDefinition.push(...setsPassesA100ParCollecte, ...setsPassesA100ParExclusions); setsPassesA100ParCollecte.length = 0; setsPassesA100ParExclusions.length = 0;
+        setsNouvellementTrouesChangementDefinition.push(...setsNouvellementTroues); setsNouvellementTroues.length = 0;
+        setsPassesA100.length = 0;
+        for (const k of Object.keys(parCause)) if (TYPES_DEFINITION.some(t => k.startsWith(t + '/'))) delete parCause[k];
+        delete totaux.absorbes; delete totaux.doublonsEcartes;
+        totaux.trous = TYPES.filter(t => !TYPES_DEFINITION.includes(t)).reduce((a, t) => a + (totaux[t] || 0), 0);
+        totaux.setsTroues = null; totaux.sets100 = null; totaux.doublons = null; totaux.manquants = null;
+    }
+    return { avantLe: avant.le ?? null, definitionAvant: avant.definition ?? 1, definitionApres: apres.definition ?? 1, memeDefinition, memeDenominateur: d1.sets === d2.sets && d1.setsPublies === d2.setsPublies, totaux, parCause, exclus, setsPassesA100, setsPassesA100ParCollecte, setsPassesA100ParExclusions, setsNouvellementTroues, setsChangementDefinition, setsNouvellementTrouesChangementDefinition };
 }
 
 // ── LE MARKDOWN
 const descriptionDefinition = d => d >= 2
     ? 'doublons = plusieurs documents au même numéro normalisé (lettre comprise) sans produit propre à chaque membre ; manquants = Additionals : numéros de leurs produits, queue sans produit numéroté absorbée par des produits sans numéro en nombre égal. Les doublons et manquants d\'une définition 1 ne se comparent pas à ceux-ci.'
     : 'définition d\'origine (doublons par faits sans condition de numéro ni de produit ; manquants sur le total du set).';
+/** Les totaux de l'écart, en texte ; deux définitions : les totaux qui mêlent les types redéfinis sont « non comparés ». Même texte en console et en Markdown. */
+function ecartTotauxTexte(ec) {
+    const nc = ec.memeDefinition === false;
+    const typ = TYPES.map(t => nc && TYPES_DEFINITION.includes(t) ? `${TITRES[t]} non comparé` : `${TITRES[t]} ${signe(ec.totaux[t] || 0)}`).join(' · ');
+    if (!nc) return `- trous ${signe(ec.totaux.trous || 0)} · ${typ}`;
+    return `- trous (4 types inchangés seulement) ${signe(ec.totaux.trous || 0)} · sets troués non comparé · sets à 100 % non comparé · ${typ}`;
+}
 const signe = n => (n > 0 ? `+${n}` : String(n));
 function formaterMd(audit, ec, { lignes = 150, detail = 40, parSet = 8 } = {}) {
     const D = audit.denominateurs, T = audit.totaux, out = [];
@@ -343,11 +372,23 @@ function formaterMd(audit, ec, { lignes = 150, detail = 40, parSet = 8 } = {}) {
         if (sources.length) { out.push('', '| set exclu (sans numéro imprimé) | famille | ce que la carte imprime | cartes regardées | date |', '|---|---|---|---|---|'); for (const id of sources) { const p = SANS_NUMERO_IMPRIME[id]; out.push(`| ${id} | ${p.famille} | ${p.imprime}${p.note ? ' — ' + p.note : ''} | ${p.cartes.join(' ; ')} | ${p.date} |`); } }
         out.push('');
     }
+    {   // 🔑 définition 2 : ce qui est sorti du compte des manquants et des doublons s'IMPRIME à part (jamais mêlé aux exclus ci-dessus)
+        const AB = audit.absorbes || { total: 0, parCause: {}, parSet: {} };
+        out.push(`## Absorbés par la définition 2 des manquants (${AB.total}) — comptés par cause, jamais disparus`, '');
+        out.push('- par cause : ' + (Object.entries(AB.parCause).sort((a, b) => b[1] - a[1]).map(([c, n]) => `${c} ${n}`).join(' · ') || '—'));
+        for (const [s, l] of Object.entries(AB.parSet)) for (const a of l) out.push(`- ${s} : ${a.numeros.length} numéro(s) ${a.numeros.slice(0, 12).join(', ')}${a.numeros.length > 12 ? '…' : ''} — ${a.cause}${a.produitsNumerotesLus != null ? ` (règle Additionals : attendu = ${a.produitsNumerotesLus} produits numérotés LUS dans l'export)` : ''}${a.preuve ? ` — preuve : ${a.preuve}` : ''}`);
+        out.push('', '⚠️ Le plancher de la règle Additionals dépend de l\'export Cardmarket : un produit absent de l\'export réduit l\'attendu ; le nombre de produits numérotés lus est imprimé pour chaque set concerné. Hors liste fermée (`QUEUE_SANS_PRODUIT`), aucun set n\'absorbe de queue.', '');
+        const DE = audit.doublonsEcartes || { groupes: 0, enTrop: 0, liste: [] };
+        out.push(`## Doublons écartés car chaque membre a son produit propre : ${DE.groupes} groupes (${DE.enTrop} fiches) — non comptés, à relire`, '');
+        for (const g of DE.liste.slice(0, 200)) out.push(`- ${g.set} · ${g.nom} n°${g.numero} : ` + g.membres.map(m => `carte ${m.carteId} → produit(s) ${m.produits.join('/') || '—'}`).join(' ; '));
+        out.push('');
+    }
     if (ec) {
         out.push(`## Écart avec l'audit précédent (${ec.avantLe ?? '?'})${ec.memeDenominateur ? '' : ' — ⚠️ DÉNOMINATEUR DIFFÉRENT, un écart n\'est pas un progrès'}`, '');
         if (ec.memeDefinition === false) out.push(`- ⚠️ **DÉFINITION DIFFÉRENTE (${ec.definitionAvant} → ${ec.definitionApres}) : doublons et manquants NE SONT PAS COMPARÉS** — leur écart est un changement de définition, pas un progrès (ni une régression) ; seuls les autres types se comparent.`);
-        out.push('- trous ' + signe(ec.totaux.trous || 0) + ' · ' + TYPES.map(t => ec.memeDefinition === false && TYPES_DEFINITION.includes(t) ? `${TITRES[t]} non comparé` : `${TITRES[t]} ${signe(ec.totaux[t] || 0)}`).join(' · '));
+        out.push(ecartTotauxTexte(ec));
         out.push(`- exclus du compte ${signe(ec.exclus ? ec.exclus.total : 0)} (${Object.entries((ec.exclus || {}).parCause || {}).map(([c, n]) => `${c} ${signe(n)}`).join(' · ') || 'aucun changement'}) — une baisse des trous qui n'est qu'une hausse des exclus n'est PAS un progrès`);
+        if (ec.memeDefinition === false) out.push(`- sets dont le compte change PAR LE CHANGEMENT DE DÉFINITION, non comparé (${(ec.setsChangementDefinition || []).length} passés à 100 % ou à moins de trous : ${(ec.setsChangementDefinition || []).slice(0, 60).join(', ') || '—'} · ${(ec.setsNouvellementTrouesChangementDefinition || []).length} nouvellement troués : ${(ec.setsNouvellementTrouesChangementDefinition || []).slice(0, 60).join(', ') || '—'}) — ce n'est PAS une collecte`);
         out.push(`- sets passés à 100 % PAR UNE VRAIE COLLECTE (${(ec.setsPassesA100ParCollecte || []).length}) : ${(ec.setsPassesA100ParCollecte || []).slice(0, 60).join(', ') || '—'}`);
         out.push(`- sets passés à 100 % UNIQUEMENT PAR LES EXCLUSIONS (${(ec.setsPassesA100ParExclusions || []).length}) — pas un progrès de collecte : ${(ec.setsPassesA100ParExclusions || []).slice(0, 60).join(', ') || '—'}`);
         out.push(`- sets passés à 100 % au total (${ec.setsPassesA100.length}) : ${ec.setsPassesA100.slice(0, 60).join(', ') || '—'}`);
@@ -387,4 +428,4 @@ function suspectsExpansion(audit, n = 10) {
         .map(s => ({ set: s.set, n: s.diagnosticExpansion.n, expansionsDeclarees: s.diagnosticExpansion.expansionsDeclarees, exemples: s.diagnosticExpansion.exemples }));
 }
 
-module.exports = { DEFINITION, suspectsExpansion, auditer, ecart, trier, score, formaterMd, verifierCause, verifierExclusion, EXCLUSIONS, CAUSES, TYPES, TITRES, baseNumero, suffixeLettre };
+module.exports = { QUEUE_SANS_PRODUIT, ecartTotauxTexte, DEFINITION, suspectsExpansion, auditer, ecart, trier, score, formaterMd, verifierCause, verifierExclusion, EXCLUSIONS, CAUSES, TYPES, TITRES, baseNumero, suffixeLettre };

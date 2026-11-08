@@ -245,14 +245,61 @@ test('Additionals : un numéro de produit sans fiche reste un manquant, et se no
     const m = un(auditer(l, additionals)).manquants;
     assert.deepStrictEqual(m.items.map(x => x.numero), ['3']); assert.strictEqual(m.items[0].cause, 'produit-cardmarket-existe-sans-fiche');
 });
-test('numéros de queue sans produit numéroté et produits sans numéro en nombre égal : pas des manquants (Pokémon VS : 9 Énergies)', () => {
+const listeFermee = { S1: { numeros: ['4', '5'], preuve: 'preuve de test' } };
+test('liste fermée : les numéros de queue listés pour CE set, sans produit numéroté, sont absorbés (Pokémon VS : 9 Énergies), comptés par cause à part', () => {
     const l = avecProduits([pn(1, '1'), pn(2, '2'), pn(3, '3'), pn(7, null), pn(8, null)], { sets: [set({ totalImprime: 5 })], cartes: [carte('c1', 'A', '1'), carte('c2', 'B', '2'), carte('c3', 'C', '3')] });
-    const s = un(auditer(l));
-    assert.strictEqual(s.manquants.n, 0); assert.deepStrictEqual(s.exclusPasUnTrou, ['4', '5']);
+    const a = auditer(l, { ...regles, queueSansProduit: listeFermee }), s = un(a);
+    assert.strictEqual(s.manquants.n, 0);
+    assert.deepStrictEqual(s.absorbes.map(x => [x.cause, x.numeros]), [['queue-liste-fermee:S1', ['4', '5']]]);
+    assert.strictEqual(a.absorbes.total, 2); assert.deepStrictEqual(a.absorbes.parCause, { 'queue-liste-fermee': 2 });
+    assert.deepStrictEqual(s.exclusPasUnTrou, []);     // jamais mêlés aux exclus
+    assert.ok(A.formaterMd(a, null).includes('Absorbés par la définition 2'));
 });
-test('numéros de queue sans produit numéroté : un compte de produits sans numéro différent → toujours manquants', () => {
-    const l = avecProduits([pn(1, '1'), pn(2, '2'), pn(3, '3'), pn(7, null)], { sets: [set({ totalImprime: 6 })], cartes: [carte('c1', 'A', '1'), carte('c2', 'B', '2'), carte('c3', 'C', '3')] });
-    assert.deepStrictEqual(un(auditer(l)).manquants.items.map(x => x.numero), ['5', '6']);     // 4, 5, 6 sans produit numéroté pour 1 seul produit sans numéro ; le 4 est exclu par la règle de test
+test('liste fermée : un AUTRE set à comptes égaux (2 numéros de queue, 2 produits sans numéro) garde ses manquants', () => {
+    const l = avecProduits([pn(1, '1'), pn(2, '2'), pn(3, '3'), pn(7, null), pn(8, null)], { sets: [set({ totalImprime: 5 })], cartes: [carte('c1', 'A', '1'), carte('c2', 'B', '2'), carte('c3', 'C', '3')] });
+    const a = auditer(l, { ...regles, queueSansProduit: { AUTRE: { numeros: ['4', '5'], preuve: 'x' } } });
+    assert.strictEqual(un(a).manquants.n, 1);     // 5 (le 4 est exclu par la règle de test) : rien n'est absorbé sans liste
+    assert.strictEqual(a.absorbes.total, 0);
+    assert.strictEqual(un(auditer(l)).manquants.n, 1);     // table du dépôt : S1 n'y est pas
+});
+test('liste fermée : un numéro listé qui a un produit numéroté reste un manquant', () => {
+    const l = avecProduits([pn(1, '1'), pn(2, '2'), pn(3, '3'), pn(5, '5')], { sets: [set({ totalImprime: 5 })], cartes: [carte('c1', 'A', '1'), carte('c2', 'B', '2'), carte('c3', 'C', '3')] });
+    const a = auditer(l, { ...regles, queueSansProduit: listeFermee });
+    assert.deepStrictEqual(un(a).manquants.items.map(x => x.numero), ['5']); assert.deepStrictEqual(un(a).absorbes.map(x => x.numeros), [['4']]);     // seul le 4 (sans produit numéroté) est absorbé
+});
+test('table fermée du dépôt : un seul set, avec sa preuve', () => {
+    assert.deepStrictEqual(Object.keys(A.QUEUE_SANS_PRODUIT), ['Pokemon-CardVS']);
+    assert.strictEqual(A.QUEUE_SANS_PRODUIT['Pokemon-CardVS'].numeros.length, 9); assert.ok(A.QUEUE_SANS_PRODUIT['Pokemon-CardVS'].preuve.length > 40);
+});
+test('Additionals : les numéros hors produits sont ABSORBÉS (comptés, avec le nombre de produits numérotés lus), pas perdus', () => {
+    const l = avecProduits([pn(1, '1'), pn(2, '2')], { sets: [set({ totalImprime: 6 })], cartes: [carte('c1', 'A', '1'), carte('c2', 'B', '2')] });
+    const a = auditer(l, additionals), s = un(a);
+    assert.deepStrictEqual(s.absorbes.map(x => [x.cause, x.numeros, x.produitsNumerotesLus]), [['additionals-numero-sans-produit', ['3', '4', '5', '6'], 2]]);
+    assert.strictEqual(s.produitsNumerotesLus, 2);
+    const md = A.formaterMd(a, null); assert.ok(md.includes('2 produits numérotés LUS')); assert.ok(md.includes('dépend de l\'export'));
+});
+test('doublons écartés : deux carteId, même numéro, un produit propre chacun → listés (JSON et Markdown), non comptés', () => {
+    const l = lecture({ cartes: [carte('c1', 'A', '1'), carte('c2', 'A', '1')], lignes: [lig('c1', 500, '1'), lig('c2', 501, '1')] });
+    const a = auditer(l), d = un(a).doublons;
+    assert.strictEqual(d.n, 0); assert.strictEqual(d.ecartes.length, 1);
+    assert.deepStrictEqual(d.ecartes[0].membres.map(m => [m.carteId, m.produits]), [['c1', [500]], ['c2', [501]]]);
+    assert.strictEqual(a.doublonsEcartes.groupes, 1); assert.strictEqual(a.doublonsEcartes.enTrop, 1);
+    assert.ok(A.formaterMd(a, null).includes('Doublons écartés car chaque membre a son produit propre : 1 groupes'));
+    assert.strictEqual(un(auditer(lecture({ cartes: [carte('c1', 'A', ['1', 'F1'])] }))).doublons.ecartes.length, 0);     // une seule carte : même pas listé
+});
+test('écart entre deux définitions : aucun set « passé à 100 % par une collecte », totaux mêlés non comparés', () => {
+    const avant = JSON.parse(JSON.stringify(auditer(lecture({ cartes: [carte('c1', 'A', '1'), carte('c2', 'B', '1b'), carte('c3', 'C', '1c')], sets: [set({ totalImprime: 9 })] })))); avant.definition = 1;
+    const saine = ['1', '2', '3'].map((n, i) => carte('c' + (i + 1), 'N' + n, n, { images: [img('S1', n)] }));
+    const apres = auditer(lecture({ cartes: saine, lignes: [lig('c1', 1, '1'), lig('c2', 2, '2'), lig('c3', 3, '3')], produits: [prod(1), prod(2), prod(3)], sets: [set({ totalImprime: 3 })] }));
+    assert.ok(avant.sets[0].trous > 0 && apres.sets[0].trous === 0);
+    const ec = A.ecart(avant, apres);
+    assert.strictEqual(ec.memeDefinition, false);
+    assert.strictEqual(ec.setsPassesA100ParCollecte.length, 0); assert.strictEqual(ec.setsPassesA100.length, 0); assert.strictEqual(ec.setsNouvellementTroues.length, 0);
+    assert.deepStrictEqual(ec.setsChangementDefinition, ['S1']);     // moins de trous : la définition, pas une collecte
+    assert.strictEqual(ec.totaux.setsTroues, null); assert.strictEqual(ec.totaux.sets100, null);
+    const t = A.ecartTotauxTexte(ec); assert.ok(t.includes('sets troués non comparé') && t.includes('sets à 100 % non comparé') && t.includes('doublons non comparé') && t.includes('numéros manquants non comparé'));
+    const md = A.formaterMd(apres, ec); assert.ok(md.includes('PAR LE CHANGEMENT DE DÉFINITION') && md.includes('sets troués non comparé'));
+    assert.ok(!/PAR UNE VRAIE COLLECTE \(1\)/.test(md));
 });
 test('un numéro du MILIEU sans produit n\'est jamais absorbé par les produits sans numéro', () => {
     const l = avecProduits([pn(1, '1'), pn(3, '3'), pn(4, '4'), pn(7, null)], { sets: [set({ totalImprime: 4 })], cartes: [carte('c1', 'A', '1'), carte('c3', 'C', '3'), carte('c4', 'D', '4')] });
