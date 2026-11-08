@@ -93,8 +93,10 @@ const fermer = async res => { if (!res.c.destroyed) res.c.destroy(); await atten
     app.post('/json-grand', express.json({ limit: '2400kb' }), (q, s) => s.json({ ok: 1 }));                // index.js:172
     app.post('/raw', express.raw({ type: 'application/json' }), (q, s) => s.json({ ok: 1 }));               // index.js:164
     let webhookReel = true;
-    try { require('../abonnements/webhook').monterWebhook(app, () => ({ actif: false }), '/webhook'); }    // webhook.js:173, la route RÉELLE (503 : configuration inactive, APRÈS l'analyseur de corps)
-    catch (e) { webhookReel = false; app.post('/webhook', express.raw({ type: () => true, limit: '256kb' }), (q, s) => s.status(503).json({ recu: false })); console.log(`(webhook réel non chargeable : ${e.message} ; copie de la ligne 173)`); }
+    try {                                                                                                   // webhook.js:173, la route RÉELLE (503 : configuration inactive, APRÈS l'analyseur de corps)
+        if (RACINE !== path.join(__dirname, '..', '..')) throw new Error('arbre de rejeu : webhook.js charge l\'express du dépôt, pas celui de l\'arbre rejoué');
+        require('../abonnements/webhook').monterWebhook(app, () => ({ actif: false }), '/webhook');
+    } catch (e) { webhookReel = false; app.post('/webhook', express.raw({ type: () => true, limit: '256kb' }), (q, s) => s.status(503).json({ recu: false })); console.log(`(webhook réel non chargeable : ${e.message} ; copie de la ligne 173)`); }
     app.get('/ip', (q, s) => s.json({ ip: q.ip, ips: q.ips }));
     const { requeteRefusee } = require('../index');                                                         // v2/index.js:68, la vraie fonction
     app.get('/q', (q, s) => { let refus; try { refus = requeteRefusee(q.query); } catch (e) { refus = `THROW ${e.message}`; } s.json({ query: q.query, refus }); });
