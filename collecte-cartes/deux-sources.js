@@ -12,7 +12,13 @@ const { clesNom, cleNumero } = require('./jointure');
 /** Les sources indépendantes de Cardmarket ET de Bulbapedia, admises. Une source absente d'ici ne compte pas. */
 // (2026-10-24, décision du testeur) la liste LOCALE : dépôts et JSON clonés (type-null, TCGdex, pokemontcg.io), relevés pokedata (pdt), CardTrader (ctr), Pokéllector, pkmncards (pkc), pokemon.com,
 // pokemon-card.com, TPC Asie, Pokumon, PikaQian ; plus artofpkm (en cache) et l'API TCGdex (≤ 50 requêtes). Bulbapedia reste exclue par son nom.
-const SOURCES_ADMISES = Object.freeze(['tcgdex', 'tpc-asie', 'pokemon-card-com', 'artofpkm', 'pikaqian', 'pokumon', 'pokemontcg.io', 'tcgdex-api', 'type-null', 'pdt', 'ctr', 'pokellector', 'pkc', 'pokemon-com', 'preuve-par-set', 'ppd', 'btq-ok2']);
+const SOURCES_ADMISES = Object.freeze(['tcgdex', 'tpc-asie', 'pokemon-card-com', 'artofpkm', 'pikaqian', 'pokumon', 'pokemontcg.io', 'tcgdex-api', 'type-null', 'pdt', 'ctr', 'pokellector', 'pkc', 'pokemon-com', 'preuve-par-set', 'ppd', 'btq-ok2', 'ldc']);
+// ➕ 2026-11-08 'ldc' (liste de chasse) : listes de sets chinois trouvées par la chasse sur des sites publics qui ne bloquent pas la collecte — des FAITS seuls (numéro, nom anglais), sous un code NEUTRE ; aucune image n'en est tirée.
+//    Décision de l'utilisateur (2026-11-08) : on écrit quand le nom ET le numéro concordent avec la liste. Garde écrite par ce qu'elle AUTORISE : `ldc` n'est admise QUE pour un set de SETS_LISTE_DE_CHASSE
+//    (les quatre sets calibrés fiables) ; pour tout autre set, refus nommé — dans `juger` comme dans `rejouer`. Jamais de repli par le Pokédex pour `ldc` : seul le nom lisible, égal, vaut.
+const SETS_LISTE_DE_CHASSE = Object.freeze(['30th-Celebration-Simplified-Chinese', 'Chasing-Glory-Together', 'Battle-Party-Dream-Together', 'Battle-Party-Shining-Dream']);
+/** Le refus de `ldc` hors de sa liste fermée ; null si rien à refuser. */
+const refusLdc = (source, set) => source === 'ldc' && !SETS_LISTE_DE_CHASSE.includes(set) ? `source « ldc » : set hors de la liste de chasse (${set})` : null;
 // ➕ 2026-11-01 'ppd' et 'btq-ok2' : deux sources de FAITS (type, numéro, nom) sous un code NEUTRE — aucun nom de site dans un champ posé ; aucune image n'en est tirée. Décision de l'éditeur ; robots.txt permis, conditions sans interdiction.
 //    (packmagik.com est ÉCARTÉE : ses conditions exigent un accord — jamais admise, ses relevés moissonnés ne servent pas.)
 // ➕ 2026-10-31 'preuve-par-set' : la liste d'un set (kado.hk) dont TOUS les noms se traduisent par des tables indépendantes de Cardmarket et concordent avec les produits du MÊME set, sous un jugement qui sait dire non
@@ -35,11 +41,12 @@ function juger(produit, relevés, { dexProduit = null } = {}) {
     const concordantes = [], refusees = [];
     for (const r of relevés || []) {
         if (SOURCES_EXCLUES.includes(r.source) || !SOURCES_ADMISES.includes(r.source)) { refusees.push({ source: r.source, raison: SOURCES_EXCLUES.includes(r.source) ? 'source exclue (Bulbapedia)' : 'source hors de la liste admise' }); continue; }
+        const rl = refusLdc(r.source, produit.set); if (rl) { refusees.push({ source: r.source, ref: r.ref, raison: rl }); continue; }
         if (r.set !== produit.set) { refusees.push({ source: r.source, ref: r.ref, raison: `set différent (${r.set})` }); continue; }
         if (produit.numero == null || r.numero == null || cleNumero(String(r.numero)) !== cleNumero(String(produit.numero))) { refusees.push({ source: r.source, ref: r.ref, raison: `numéro différent (${r.numero} / ${produit.numero})` }); continue; }
         const nomOk = r.nom ? memeNom(produit.nom, r.nom) : false;
         // (D4) le repli par le Pokédex ne vaut QUE pour un nom illisible (absent ou non latin) : un nom lisible et discordant est un désaccord, jamais rattrapé par le numéro de Pokédex
-        const dexOk = !nomOk && !nomLisible(r.nom) && Array.isArray(r.dex) && r.dex.length && Array.isArray(dexProduit) && dexProduit.length && r.dex.some(x => dexProduit.includes(x));
+        const dexOk = !nomOk && r.source !== 'ldc' && !nomLisible(r.nom) && Array.isArray(r.dex) && r.dex.length && Array.isArray(dexProduit) && dexProduit.length && r.dex.some(x => dexProduit.includes(x));
         if (!nomOk && !dexOk) { refusees.push({ source: r.source, ref: r.ref, raison: `nom discordant (« ${r.nom ?? '—'} » / « ${produit.nom} »)` }); continue; }
         concordantes.push({ source: r.source, ref: r.ref ?? null, set: r.set, numero: r.numero, nom: r.nom ?? null, par: nomOk ? 'nom' : 'pokedex' });
     }
@@ -63,10 +70,11 @@ function rejouer(produit, concordantes) {
         if (!c || typeof c.source !== 'string') { motifs.push('une concordante sans source'); continue; }
         if (SOURCES_EXCLUES.includes(c.source)) { motifs.push(`${nom} : exclue (Bulbapedia)`); continue; }
         if (!SOURCES_ADMISES.includes(c.source)) { motifs.push(`${nom} : hors de la liste admise`); continue; }
+        const rl = refusLdc(c.source, produit.set); if (rl) { motifs.push(`${nom} : ${rl.replace(/^source « ldc » : /, '')}`); continue; }
         if (c.set !== produit.set) { motifs.push(`${nom} : set différent (${c.set} / ${produit.set})`); continue; }
         if (produit.numero == null || c.numero == null || cleNumero(String(c.numero)) !== cleNumero(String(produit.numero))) { motifs.push(`${nom} : numéro différent (${c.numero} / ${produit.numero})`); continue; }
         const nomOk = c.nom ? memeNom(produit.nom, c.nom) : false;
-        const dexOk = !nomOk && (c.par === 'pokedex' || (c.par === 'set' && c.source === 'preuve-par-set' && !!c.nom && !!c.ref)) &&!nomLisible(c.nom);
+        const dexOk = !nomOk && c.source !== 'ldc' && (c.par === 'pokedex' || (c.par === 'set' && c.source === 'preuve-par-set' && !!c.nom && !!c.ref)) &&!nomLisible(c.nom);
         if (!nomOk && !dexOk) motifs.push(`${nom} : nom discordant (« ${c.nom ?? '—'} » / « ${produit.nom} »)`);
     }
     return { ok: motifs.length === 0, motifs };
@@ -91,4 +99,4 @@ function contradictions(refusees, nomProduit = null) {
     });
 }
 
-module.exports = { juger, rejouer, contradictions, SOURCES_ADMISES, SOURCES_EXCLUES, memeNom, nomLisible };
+module.exports = { juger, rejouer, contradictions, SOURCES_ADMISES, SOURCES_EXCLUES, SETS_LISTE_DE_CHASSE, memeNom, nomLisible };
