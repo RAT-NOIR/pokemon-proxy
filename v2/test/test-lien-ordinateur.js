@@ -328,11 +328,13 @@ const lever = async f => { try { await f(); return null; } catch (e) { return e;
                 H.v('Brevo refuse l\'adresse (400) : 202 comme une adresse invalide, marque rendue', [c.r.statut, c.r.texte, await vivante('p8@exemple.fr')], [202, '{"success":true}', false]);
                 c = await cas('Brevo adresse', () => A.registre.fournir('courrier', pilote(erreurDe('BrevoAdresse'))), 'p9@exemple.fr');
                 H.v('le pilote refuse l\'adresse avant toute requête (BrevoAdresse) : 202, marque rendue', [c.r.statut, await vivante('p9@exemple.fr')], [202, false]);
-                for (const [st, rendue] of [['BrevoStatut502', false], ['BrevoStatut503', false], ['BrevoStatut504', false], ['BrevoStatut599', false], ['BrevoStatut403', true], ['BrevoStatut429', true], ['BrevoStatut422', true]]) {
+                for (const [st, rendue] of [['BrevoStatut502', false], ['BrevoStatut503', false], ['BrevoStatut504', false], ['BrevoStatut599', false], ['BrevoStatut408', false], ['BrevoStatut403', true], ['BrevoStatut429', true], ['BrevoStatut422', true]]) {
                     const adr = `st${st.slice(-3)}@exemple.fr`;
                     c = await cas(st, () => A.registre.fournir('courrier', pilote(erreurDe(st))), adr);
                     H.v(`${st} : 202 neutre ; marque ${rendue ? 'RENDUE (refus franc 4xx : rien n\'est parti)' : 'GARDÉE (5xx ambigu : le courriel a pu partir)'}`, [c.r.statut, await vivante(adr)], [202, !rendue]);
                 }
+                c = await cas('4xx après tentative ambiguë', () => A.registre.fournir('courrier', pilote(async () => { throw Object.assign(new Error('x'), { name: 'BrevoStatut401', apresTentativeAmbigue: true }); })), 'amb@exemple.fr');
+                H.v('un 4xx REÇU AU RÉESSAI d\'une première tentative ambiguë (marqueur apresTentativeAmbigue) : 202 neutre, marque GARDÉE (la première a pu partir)', [c.r.statut, await vivante('amb@exemple.fr')], [202, true]);
                 c = await cas('Brevo 401', () => A.registre.fournir('courrier', pilote(erreurDe('BrevoStatut401'))), 'p10@exemple.fr');
                 H.v('Brevo refuse notre clé (401) : 202 neutre, marque rendue (rien n\'est parti)', [c.r.statut, await vivante('p10@exemple.fr')], [202, false]);
             }
@@ -418,6 +420,38 @@ const lever = async f => { try { await f(); return null; } catch (e) { return e;
         let acceptes = 0; for (let i = 0; i < 10; i++) if (await plein.reserver('avertissement')) acceptes++;
         H.v('(témoin) la classe avertissement s\'arrête à max − réserve : 6 sur 10, 4 places restent à la sécurité', acceptes, 6);
         await new Promise(r => faux.close(r));
+        // E1 (relecture T2-B) : DEUX tentatives RÉELLES du pilote contre un faux serveur à réponses en séquence — la première part en 5xx / réseau, le réessai reçoit un 4xx : l'erreur porte `apresTentativeAmbigue`, le service garde la marque
+        {
+            const serveurEnSequence = async suite => {
+                let n = 0; const s = http.createServer((req, res) => { req.on('data', () => { }); req.on('end', () => { const st = suite[Math.min(n++, suite.length - 1)]; if (st === 'coupure') return req.socket.destroy(); res.writeHead(st, { 'content-type': 'application/json' }); res.end('{}'); }); });
+                await new Promise(r => s.listen(0, '127.0.0.1', r));
+                return { url: `http://127.0.0.1:${s.address().port}/v3/smtp/email`, appels: () => n, fermer: () => new Promise(r => { s.closeAllConnections?.(); s.close(r); }) };
+            };
+            const { creerService, empreinteBoite, PREFIXE } = require('../lien-ordinateur/service');
+            const cfgE = lireConfig(BASE);
+            const vivante = async adresse => (await MARQUES()).some(d => d.cle === `${PREFIXE}${empreinteBoite(cfgE.empreinte.secret, adresse)}|reservation` && d.expireLe.getTime() > Date.now() + 1000);
+            const cas = async (suite, adresse) => {
+                const s = await serveurEnSequence(suite);
+                const p = creerCourrierBrevo({ cle: 'xkeysib-CLE-DE-BANC-E1', url: s.url, reessaiMs: 0 });
+                const e = await lever(() => creerService({ cfg: cfgE, courrier: p }).demander(adresse));
+                const appels = s.appels(); await s.fermer();
+                return { e, appels, marque: await vivante(adresse) };
+            };
+            let r = await cas([503, 401], 'e1a@exemple.fr');
+            H.v('1re tentative 503, réessai 401 : DEUX appels réels, erreur BrevoStatut401 MARQUÉE apresTentativeAmbigue, marque GARDÉE', [r.appels, r.e && r.e.name, r.e && r.e.apresTentativeAmbigue === true, r.marque], [2, 'BrevoStatut401', true, true]);
+            r = await cas(['coupure', 403], 'e1c@exemple.fr');
+            H.v('1re tentative coupée (réseau), réessai 403 : marqueur posé, marque GARDÉE', [r.appels, r.e && r.e.apresTentativeAmbigue === true, r.marque], [2, true, true]);
+            r = await cas([408, 401], 'e1g@exemple.fr');
+            H.v('1re tentative 408 (un délai : non réessayée), erreur BrevoStatut408 sans marqueur, marque GARDÉE', [r.appels, r.e && r.e.name, r.marque], [1, 'BrevoStatut408', true]);
+            r = await cas([503, 400], 'e1h@exemple.fr');
+            H.v('1re tentative 503, réessai 400 : le 400 ne rend PAS la marque (la première a pu partir)', [r.e && r.e.name, r.marque], ['BrevoStatut400', true]);
+            r = await cas([401], 'e1d@exemple.fr');
+            H.v('4xx dès la 1re tentative (aucun réessai) : UN appel, pas de marqueur, marque RENDUE', [r.appels, r.e && r.e.name, r.e && r.e.apresTentativeAmbigue, r.marque], [1, 'BrevoStatut401', undefined, false]);
+            r = await cas([503, 503], 'e1e@exemple.fr');
+            H.v('5xx puis 5xx : BrevoStatut503, marque GARDÉE', [r.e && r.e.name, r.marque], ['BrevoStatut503', true]);
+            r = await cas([503, 201], 'e1f@exemple.fr');
+            H.v('5xx puis succès : aucune erreur (le réessai a réussi), marque posée', [r.e, r.marque], [null, true]);
+        }
     }
 
     await srv.fermer().catch(() => { });
