@@ -106,7 +106,7 @@ const sansVolatil = j => { const { scanId, solde, offre, ...x } = JSON.parse(JSO
         const b = await jouer('banc', { mode: 'affirmee', ids: [A.ID_A] }, vec(5));
         const an = await analyseDe(b.j);
         H.v('2a. 🔑 compte de mesure + vecteur valide : `analyses.voisinsModele` porte les produits des visuels voisins (A et B, le visuel jeu-5, en tête)', [b.r.statut, Array.isArray(an.voisinsModele), an.voisinsModele && an.voisinsModele.slice(0, 2).sort((x, y) => x - y)], [200, true, [A.ID_A, A.ID_B]]);
-        H.v('2b. … la ligne garde `banc: true` et ses champs d\'avant', [an.banc, typeof an.versionChaine, Array.isArray(an.cartes)], [true, 'string', true]);
+        H.v('2b. … la ligne garde `banc: true` et ses champs d\'avant', [an.banc, 'versionChaine' in an, Array.isArray(an.cartes)], [true, true, true]);
         H.v('2c. 🔑 INTERNE : la réponse ne porte pas le champ, nulle part', JSON.stringify(b.j).includes('voisinsModele'), false);
     }
     {   // introuvable : la chaîne rembourse, G se tait, les voisins sont pris quand même

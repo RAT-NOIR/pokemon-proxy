@@ -7,6 +7,7 @@
 //   POST /mesures?scanId=&seau=  (JSON, Content-Type application/octet-stream, 512 Kio au plus)  → { etat }
 //   GET  /a-etiqueter[?seau=]  → { scans:[{scanId,rang,photos,cartes,etiquetees}], prochain }    GET /photo?scanId=&photo=  → les octets d'origine
 //   POST /candidats { scanId, carte? }  → { candidats }  (à la demande ; la vue est enregistrée)     POST /verite { scanId, carte?, idProduct | aucune, via, photoSuffisante?, mode? }  → { rev, candidatsVus }
+//   POST /candidats-modele { scanId, ids:[idProduct…1 à 20] }  → { etat:'pose'|'identique', n }  (RÉTRO du juge à cinq : les candidats du modèle calculés hors ligne ; posés une fois, 409 deja-pose si différents)
 //   POST /candidats-5 { scanId, carte? }  → { mode, candidats }  (JUGE RAPIDE : les 5 meilleurs du modèle, ordre ALÉATOIRE, ni rang ni score ni prix ; via 'candidat5' + mode 'candidats-5' sur /verite, le clic doit tomber dans ces 5)
 const { repondreErreur } = require('../erreurs');
 const { resoudrePorteur, exigerInstallation } = require('../porteur');
@@ -79,6 +80,12 @@ function monter(router, cfg, seaux) {
         const b = req.body;
         if (!cleStr(b, ['scanId', 'carte']) || typeof b.scanId !== 'string' || !FORME_ID.test(b.scanId)) return refuse(res, 'corps');
         try { return res.status(200).json({ success: true, ...await seaux.candidats5({ scanId: b.scanId, carte: b.carte === undefined ? 0 : b.carte, porteur: porteurDe(req) }) }); } catch (e) { return repondre(res, e, 'candidats-5'); }
+    });
+    // RÉTRO du juge à cinq : la liste des candidats du modèle (calculée hors ligne) d'un scan déjà fait ; posée une fois (409 `deja-pose` si différente, 200 si identique)
+    router.post('/api/banc/seau/candidats-modele', ...base, async (req, res) => {
+        const b = req.body;
+        if (!cleStr(b, ['scanId', 'ids']) || typeof b.scanId !== 'string' || !FORME_ID.test(b.scanId)) return refuse(res, 'corps');
+        try { return res.status(200).json({ success: true, ...await seaux.poserCandidatsModele({ scanId: b.scanId, ids: b.ids, porteur: porteurDe(req) }) }); } catch (e) { return repondre(res, e, 'candidats-modele'); }
     });
     router.post('/api/banc/seau/verite', ...base, async (req, res) => {
         const b = req.body;

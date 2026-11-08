@@ -3,6 +3,7 @@
 // `validerEntree` n'écrit nulle part : un refus ici ne touche ni `mouvements` ni aucune autre collection.
 const { repondreErreur } = require('../erreurs');
 const { HOTES_PHOTO_AUTORISES } = require('../../departage-image');   // la liste blanche de la production, pas une copie
+const { voisinsDuModele } = require('./voisins-modele');
 const { lireEnveloppe } = require('./voisins-empreinte');             // MODELE-VISUEL-API : la forme des empreintes de l'extension
 
 const TITRE_MAX = 300, DESCRIPTION_MAX = 4000;
@@ -812,9 +813,13 @@ function traiterIdentifier(cfg, deps = {}) {
             // ETAT-FOURCHETTE (M1) : la ligne `analyses` range les produits TELS QUE LE CATALOGUE LES A RENDUS (resultat.analyse, avant le repli et la mention d'état non estimable) : la mention est une décision de CE scan,
             // elle se recalcule à la demande (retour en direct, réponse à une question) depuis l'état retenu de la ligne, jamais depuis un guide déjà marqué.
             const cartes = sortie.cartesEntree || resultat.analyse.cartes;
+            // JUGE À CINQ : pour le seul compte de MESURE, avec un vecteur d'extension valide, les produits des visuels voisins (UNE carte : le vecteur est celui de la photo, pas d'une carte d'un lot) — INTERNE, jamais servi,
+            // sans effet sur la décision ni l'argent (écrit après eux) ; même quand la chaîne rend « introuvable » (la règle G n'a pas été consultée). Ne lève jamais.
+            const voisinsBanc = porteur.compte && porteur.compte.banc === true && cartes.length === 1 ? voisinsDuModele({ cfg, entree, version: etatChargeur.version(), memo: te.voisinsUneFois === true }) : null;
             await col('analyses').insertOne({
                 _id: scanId, porteur: `${porteur.type}:${porteur.id}`, surface: porteur.surface, statut: analyse.statut,
                 ...(porteur.compte && porteur.compte.banc === true ? { banc: true } : {}),           // le compte de MESURE : exclu des statistiques d'usage (journal-hors-banc.js)
+                ...(voisinsBanc ? { voisinsModele: voisinsBanc } : {}),                                // JUGE À CINQ : les candidats du modèle (produits des visuels voisins), compte de mesure seulement — interne, jamais servi
                 // B1b.5 : de quoi servir /reponse sans relire le catalogue — l'état, la question, la zone (aucune donnée de l'annonce) et la lecture de la langue
                 cartes: cartes.map((c, i) => ({ idProduct: c.carte ? c.carte.idProduct : null, statut: c.statut, raison: c.raison, etat: c.etat ?? null, question: c.question ?? null, zone: c.zone ?? null,
                     ...(i === 0 && sortie.probable ? { probable: { idProduct: sortie.probable.idProduct, signal: sortie.probable.signal, ...(sortie.probable.levier ? { levier: sortie.probable.levier } : {}) } } : {}),     // PROBABLE : la surveillance, interne, jamais servie telle quelle

@@ -401,7 +401,7 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
     }
 
     async function carteDe(scanId, carte) {
-        const an = await analyses().findOne({ _id: oid(scanId) }, { projection: { cartes: 1, produits: 1 } });
+        const an = await analyses().findOne({ _id: oid(scanId) }, { projection: { cartes: 1, produits: 1, voisinsModele: 1 } });
         const c = an && Array.isArray(an.cartes) ? an.cartes[carte] : null;
         if (!c || typeof c !== 'object') throw erreur('CODE_INVALIDE', 'carte-introuvable', 404);
         return { an, c };
@@ -428,11 +428,28 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
      * JUGE RAPIDE — les 5 MEILLEURS candidats du modèle pour ce scan (l'ordre du modèle : la carte retenue, puis les choix de sa question, puis les produits de l'analyse), servis dans un ORDRE ALÉATOIRE.
      * Aucun indice : ni rang, ni score, ni prix, ni statut ; mêmes champs pour chacun. L'ordre SERVI est enregistré (vue de mode `candidats-5`) : c'est lui que la vérité reprend, et c'est la liste fermée où le clic doit tomber.
      */
+    /**
+     * RÉTRO — la liste des candidats du MODÈLE calculée hors ligne pour un scan déjà fait : posée UNE fois sur la ligne du scan (`candidatsModele`, `candidatsModeleLe`), hors de l'empreinte de la maille (la chaîne ne change pas).
+     * 1 à 20 identifiants entiers, distincts. Déjà posée : identique ⇒ rien ne bouge (idempotent) ; différente ⇒ 409 `deja-pose`.
+     */
+    async function poserCandidatsModele({ scanId, ids, porteur }) {
+        await ligneDe(scanId, porteur);
+        if (!Array.isArray(ids) || ids.length < 1 || ids.length > 20 || !ids.every(idOk) || new Set(ids).size !== ids.length) throw erreur('ENTREE', 'ids');
+        const r = await col('scans').updateOne({ scanId, porteur, candidatsModele: { $exists: false } }, { $set: { candidatsModele: ids.slice(), candidatsModeleLe: horloge() } });
+        if (r && r.modifiedCount === 1) return { etat: 'pose', n: ids.length };
+        const l = await ligneDe(scanId, porteur);
+        if (Array.isArray(l.candidatsModele) && l.candidatsModele.length === ids.length && l.candidatsModele.every((x, i) => x === ids[i])) return { etat: 'identique', n: ids.length };
+        throw erreur('CONFLIT', 'deja-pose');
+    }
+
     async function candidats5({ scanId, carte = 0, porteur }) {
         const ligne = await ligneDe(scanId, porteur);
         if (!Number.isSafeInteger(carte) || carte < 0) throw erreur('ENTREE', 'carte');
         const { an, c } = await carteDe(scanId, carte);
-        const pool = [...new Set([c.idProduct, ...((c.question && Array.isArray(c.question.choix)) ? c.question.choix.map(x => x && x.idProduct) : []), ...((Array.isArray(an.cartes) && an.cartes.length === 1 && Array.isArray(an.produits)) ? an.produits.map(p => p && p.idProduct) : [])].filter(idOk))].slice(0, 20);
+        // l'ordre du pool : la DÉCISION enregistrée, puis les voisins du modèle capturés à l'identification (`analyses.voisinsModele`), puis la liste posée après coup (`banc_seau_scans.candidatsModele`) ; jamais rien d'inventé
+        const listeDe = l => (Array.isArray(l) ? l : []);
+        const pool = [...new Set([c.idProduct, ...((c.question && Array.isArray(c.question.choix)) ? c.question.choix.map(x => x && x.idProduct) : []), ...((Array.isArray(an.cartes) && an.cartes.length === 1 && Array.isArray(an.produits)) ? an.produits.map(p => p && p.idProduct) : []),
+            ...listeDe(an.voisinsModele), ...listeDe(ligne.candidatsModele)].filter(idOk))].slice(0, 20);
         let table; try { table = await catalogueDe().lire(pool); } catch (e) { console.error(`❌ [v2 banc-seau] catalogue (${(e && (e.code || e.name)) || 'erreur'})`); throw erreur('INDISPONIBLE', 'catalogue', 503); }
         const cinq = pool.filter(id => table.has(id)).slice(0, NB_CINQ);
         let ordre = melanger(cinq.slice());
@@ -530,7 +547,7 @@ function creerSeaux({ cfg, colFn = n => db.col(n), stockage = null, env = proces
         return verifierChaineSeau(colFn, seauId, { ancre: id => require('./ancre').lireAncre(id, ancresDir), ...(relireR2 ? { relireR2: true, stockage: await stock() } : {}) });
     }
 
-    return { preparer, courant, declarer, sceller, enregistrerPhoto, enregistrerMesures, aEtiqueter, lirePhoto, candidats, candidats5, saisirVerite, ajouterErratum, verifierChaine, cadre };
+    return { preparer, courant, declarer, sceller, enregistrerPhoto, enregistrerMesures, aEtiqueter, lirePhoto, candidats, candidats5, poserCandidatsModele, saisirVerite, ajouterErratum, verifierChaine, cadre };
 }
 
 module.exports = { VUES_MAX_PAR_SEAU, creerSeaux, verifierChaineSeau, empreintePhotos, empreinteVerites, empreinteScellee, cibleParDefaut, INDEX_SEAU, COLLECTIONS, TYPES, AUCUNE, VIA, CIBLE_JUGE, CIBLE_MAX, SCAN_FRAIS_MS, PHOTOS_MAX, MESURES_OCTETS_MAX, FORME_ID, FORME_SEAU, FORME_SHA, erreur };
