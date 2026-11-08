@@ -3,7 +3,8 @@
 // L'ORDRE (chaque étape ne se joue que si la précédente a laissé passer) :
 //   1. l'adresse est lue : une forme qu'on ne sait pas normaliser, un domaine jetable, une adresse que Brevo refuserait => « ignoree » (la route répond 202 comme pour une adresse servie ; RIEN n'est écrit) ;
 //   2. LA MARQUE (une par boîte et par 24 h) est écrite AVANT l'envoi, par une insertion à clé unique (transport/limites.js::reserver) : deux demandes simultanées pour la même boîte, une seule gagne => « deja » ;
-//   3. le plafond global du jour de Paris (un compteur à lui, pas celui des courriels de comptes) ; plein => la marque est RENDUE (rien n'est parti) et « plafond » ;
+//   3. le plafond global du jour de Paris (un compteur à lui, pas celui des courriels de comptes) : LU (`plein()`) par la route avant tout le reste, CONSOMMÉ ici, atomiquement ; plein à ce moment (course) => la marque est RENDUE (rien n'est parti) ;
+//      TOUT ce qui suit la lecture de l'adresse est DÉTACHÉ de la réponse (`lancer`) : la route répond 202 sans attendre ni la base ni Brevo ;
 //   4. l'envoi. Un échec DÉFINI (Brevo a répondu non : rien n'est parti) rend la marque ; un échec AMBIGU (réseau, délai, erreur inconnue : le message a pu partir) la GARDE — jamais un doublon.
 // DONNÉES : l'adresse n'est écrite NULLE PART (ni base, ni journal, ni message d'erreur : seul le NOM d'une erreur est journalisé). La marque est { cle: 'lien-ordinateur:<HMAC-SHA256 hex>|reservation', n, expireLe = +24 h } dans `limites`
 // (index unique sur `cle` et TTL sur `expireLe` existants). L'HMAC porte sur la BOÎTE (cleBoite : minuscules, points de Gmail et +étiquette retirés) avec le secret serveur V2_SECRET_EMPREINTE et le domaine « lien-ordinateur ».
@@ -12,7 +13,10 @@ const L = require('../transport/limites');
 const { col } = require('../db');
 const { emailCle, cleBoite, estJetable } = require('../comptes/email-cle');
 const { adresseValide } = require('../comptes/courrier-brevo');
-const { creerPlafondJour } = require('../comptes/plafond-courriels');
+const { creerPlafondJour, jourDeParis } = require('../comptes/plafond-courriels');
+const PENDANTS = new Set();
+/** Les envois détachés encore en vol (les bancs, et l'arrêt propre, les attendent). */
+const attendre = async () => { while (PENDANTS.size) await Promise.allSettled([...PENDANTS]); };
 
 const JOUR_MS = 24 * 3600e3;
 const nomErreur = e => (e && e.name) || 'Error';   // jamais e.message : un pilote peut y mettre une adresse
@@ -35,6 +39,16 @@ function creerService({ cfg, courrier, maintenant = () => new Date(), plafond = 
     const secret = cfg.empreinte && cfg.empreinte.secret;
     const plafondJour = plafond || creerPlafondJour({ max: cfg.lienOrdinateur.jour, reserveSecurite: 0, maintenant, colonne: () => col('courriels_lien_jour') });
     return {
+        /** Lecture SEULE du plafond du jour de Paris : vrai quand il est atteint. Appelée par la route AVANT toute étape liée à l'adresse (un plafond plein refuse tout le monde, adresse neuve ou non : pas d'oracle). */
+        async plein() {
+            const d = await col('courriels_lien_jour').findOne({ _id: jourDeParis(maintenant()) }, { projection: { n: 1 } });
+            return Boolean(d) && d.n >= cfg.lienOrdinateur.jour;
+        },
+        /** LE TRAVAIL EST DÉTACHÉ de la réponse (comme L1) : la route répond 202 sans l'attendre, ni la base ni Brevo ne dictent la durée. Ne lève jamais ; le NOM d'une erreur inattendue est journalisé, jamais son message. */
+        lancer(brut) {
+            const p = this.demander(brut).catch(e => { console.error(`❌ [v2 lien-ordinateur] envoi (${nomErreur(e)})`); });
+            PENDANTS.add(p); p.finally(() => PENDANTS.delete(p));
+        },
         /** @returns {Promise<{issue: 'envoye'|'deja'|'ignoree'|'plafond'}>} ; lève (nom d'erreur seul) quand le service est indisponible. */
         async demander(brut) {
             const cle = typeof brut === 'string' ? emailCle(brut) : null;
@@ -60,4 +74,4 @@ function creerService({ cfg, courrier, maintenant = () => new Date(), plafond = 
         }
     };
 }
-module.exports = { creerService, empreinteBoite, secondesAvantMinuitParis, PREFIXE, JOUR_MS };
+module.exports = { creerService, attendre, empreinteBoite, secondesAvantMinuitParis, PREFIXE, JOUR_MS };
