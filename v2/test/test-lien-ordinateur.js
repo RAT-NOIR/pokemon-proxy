@@ -18,6 +18,7 @@ async function demarrer(cfg) {
 }
 const reel = c => Object.assign(c, { reel: true });          // le pilote mémoire ne part nulle part : la route exige un pilote qui envoie pour de vrai (sinon 503), le banc le déclare
 const MARQUES = async () => db.col('limites').find({ cle: /^lien-ordinateur:/ }).toArray();
+const L_empreinteIp = ip => require('../transport/limites').empreinteIp(ip);
 const lever = async f => { try { await f(); return null; } catch (e) { return e; } };
 
 (async () => {
@@ -35,9 +36,9 @@ const lever = async f => { try { await f(); return null; } catch (e) { return e;
         let autres; try { autres = ['true', 'on', 'oui', ' 1', '1 ', '2', 'TRUE', '0', ''].map(v => L({ V2_LIEN_ORDINATEUR: v }).actif); } finally { console.warn = w; }
         H.v('toute autre valeur (true, on, « 1 » espacé, 2, 0, vide) : éteinte, la configuration ne devient pas invalide', autres, autres.map(() => false));
         H.vrai('une valeur étrangère est DITE (avertissement qui nomme la variable, jamais sa valeur)', avertis.some(l => l.includes('V2_LIEN_ORDINATEUR') && !l.includes('oui')));
-        H.v('limites par défaut : 3 par IP et par jour, 200 envois par jour de Paris', [L({}).parIpJour, L({}).jour], [3, 200]);
-        H.v('limites réglables et bornées (IP 1 à 100, jour 1 à 300)', [L({ V2_LIEN_ORDINATEUR_IP_JOUR: '5', V2_LIEN_ORDINATEUR_JOUR: '50' }).parIpJour, L({ V2_LIEN_ORDINATEUR_IP_JOUR: '5', V2_LIEN_ORDINATEUR_JOUR: '50' }).jour], [5, 50]);
-        for (const env of [{ V2_LIEN_ORDINATEUR_IP_JOUR: '0' }, { V2_LIEN_ORDINATEUR_IP_JOUR: '101' }, { V2_LIEN_ORDINATEUR_JOUR: '0' }, { V2_LIEN_ORDINATEUR_JOUR: '301' }, { V2_LIEN_ORDINATEUR_JOUR: 'beaucoup' }])
+        H.v('limites par défaut : 3 par IP et par jour, 100 envois par jour de Paris', [L({}).parIpJour, L({}).jour], [3, 100]);
+        H.v('limites réglables et bornées (IP 1 à 100, jour 1 à 150)', [L({ V2_LIEN_ORDINATEUR_IP_JOUR: '5', V2_LIEN_ORDINATEUR_JOUR: '50' }).parIpJour, L({ V2_LIEN_ORDINATEUR_IP_JOUR: '5', V2_LIEN_ORDINATEUR_JOUR: '50' }).jour], [5, 50]);
+        for (const env of [{ V2_LIEN_ORDINATEUR_IP_JOUR: '0' }, { V2_LIEN_ORDINATEUR_IP_JOUR: '101' }, { V2_LIEN_ORDINATEUR_JOUR: '0' }, { V2_LIEN_ORDINATEUR_JOUR: '151' },{ V2_LIEN_ORDINATEUR_JOUR: 'beaucoup' }])
             H.vrai(`${Object.keys(env)[0]}=${Object.values(env)[0]} : configuration invalide`, (await lever(() => L(env))) !== null);
     }
 
@@ -59,7 +60,9 @@ const lever = async f => { try { await f(); return null; } catch (e) { return e;
     const turnstile = { verifier: async (jeton, adresseIp, action) => { vus.push([jeton, adresseIp, action]); return jeton === 'ok'; } };
     A.registre.vider(); A.registre.fournir('courrier', courrier); A.registre.fournir('turnstile', turnstile);
     const srv = await demarrer(cfg);
-    const post = (corps, entetes = {}) => H.appel(srv.url, '/api/lien-ordinateur', { methode: 'POST', corps, sansDefi: true, entetes: { ...A.SITE, ...ip(), ...entetes } });
+    // L'envoi est DÉTACHÉ de la réponse : le banc attend la fin du travail avant de regarder la base ou le courrier (`attendre`, comme les bancs de L1).
+    const attendre = () => require('../lien-ordinateur/service').attendre();
+    const post = async (corps, entetes = {}) => { const r = await H.appel(srv.url, '/api/lien-ordinateur', { methode: 'POST', corps, sansDefi: true, entetes: { ...A.SITE, ...ip(), ...entetes } }); await attendre(); return r; };
     const ok = (email, plus = {}, entetes = {}) => post({ email, turnstile: 'ok', ...plus }, entetes);
     const detail = r => [r.statut, r.json && r.json.erreur && r.json.erreur.code, r.json && r.json.erreur && r.json.erreur.detail];
 
@@ -167,6 +170,11 @@ const lever = async f => { try { await f(); return null; } catch (e) { return e;
         H.v('   un autre bloc /56 n\'est pas touché', autreBloc.statut, 422);
         const cle = (await db.col('limites').find({ cle: /^lien-ordinateur-ip:/ }).toArray()).map(d => d.cle);
         H.vrai('la clé du compteur IP est l\'empreinte (pas l\'IP en clair)', cle.length > 0 && cle.every(c => !c.includes('198.51.100.77')));
+        // l'empreinte de l'IP est un HMAC À CLÉ (secret serveur, domaine « lien-ordinateur-ip »), pas le SHA-256 sans secret de transport/limites.js (une IPv4 s'y retrouve par dictionnaire)
+        const { ipKeyGenerator } = require('express-rate-limit');
+        const hmacIp = (secret, ip, domaine = 'lien-ordinateur-ip') => crypto.createHmac('sha256', secret).update(`${domaine}|${ipKeyGenerator(ip)}`).digest('hex').slice(0, 32);
+        H.vrai('la clé du compteur de 198.51.100.77 est le HMAC-SHA256 à clé de l\'IP regroupée (domaine « lien-ordinateur-ip »)', cle.some(c => c.startsWith(`lien-ordinateur-ip:${hmacIp(cfg.empreinte.secret, '198.51.100.77')}|`)));
+        H.vrai('   ce n\'est ni l\'empreinte sans secret de transport/limites.js, ni un HMAC d\'un autre secret ou d\'un autre domaine (témoins)', !cle.some(c => c.includes(L_empreinteIp('198.51.100.77')) || c.includes(hmacIp(cfg.empreinte.secret + 'x', '198.51.100.77')) || c.includes(hmacIp(cfg.empreinte.secret, '198.51.100.77', 'lien-ordinateur'))));
     }
 
     // — une adresse par 24 h : atomique (courses) —
@@ -216,11 +224,24 @@ const lever = async f => { try { await f(); return null; } catch (e) { return e;
         A.registre.vider(); const c2 = reel(creerCourrierMemoire()); A.registre.fournir('courrier', c2); A.registre.fournir('turnstile', turnstile);
         const cfg2 = lireConfig({ ...BASE, V2_LIEN_ORDINATEUR_JOUR: '2', V2_LIEN_ORDINATEUR_IP_JOUR: '50' });
         const s2 = await demarrer(cfg2);
-        const p2 = (email) => H.appel(s2.url, '/api/lien-ordinateur', { methode: 'POST', corps: { email, turnstile: 'ok' }, sansDefi: true, entetes: { ...A.SITE, ...ip() } });
+        const p2 = async (email, url = s2.url) => { const x = await H.appel(url, '/api/lien-ordinateur', { methode: 'POST', corps: { email, turnstile: 'ok' }, sansDefi: true, entetes: { ...A.SITE, ...ip() } }); await attendre(); return x; };
         const r = [await p2('plafond-1@exemple.fr'), await p2('plafond-2@exemple.fr'), await p2('plafond-3@exemple.fr')];
         H.v('plafond 2 par jour : les deux premiers passent, le 3e => 429 LIMITE_DEBIT', [r[0].statut, r[1].statut, r[2].statut, r[2].json.erreur.code], [202, 202, 429, 'LIMITE_DEBIT']);
         H.vrai('   le 429 du plafond porte Retry-After (secondes jusqu\'à minuit à Paris, au plus 24 h), no-store', Number(r[2].entetes['retry-after']) >= 1 && Number(r[2].entetes['retry-after']) <= 86400 && r[2].entetes['cache-control'] === 'no-store');
         H.v('   le courriel du 3e n\'est pas parti', c2.envoyes.length, 2);
+        // ORACLE : le plafond plein refuse TOUT LE MONDE — adresse neuve, déjà servie, invalide, jetable : la même réponse 429, octet pour octet (il ne dit plus quelle adresse est « valide et non servie »)
+        const pleins = [await p2('plafond-4@exemple.fr'), await p2('plafond-1@exemple.fr'), await p2('pas une adresse'), await p2('x@mailinator.com')];
+        H.v('plafond plein : adresse neuve / déjà servie / invalide / jetable => le MÊME 429 pour toutes', [pleins.map(x => x.statut), pleins.every(x => x.json.erreur.code === 'LIMITE_DEBIT' && x.json.erreur.reessayerDans === pleins[0].json.erreur.reessayerDans)], [[429, 429, 429, 429], true]);
+        H.v('   aucun courriel de plus', c2.envoyes.length, 2);
+        // consommation ATOMIQUE : 4 adresses neuves SIMULTANÉES sous un plafond de 2 qui ont toutes LU « pas plein » (le service est appelé directement, sans la lecture de la route) : 2 courriels, 2 marques rendues
+        await db.col('courriels_lien_jour').deleteMany({}); c2.envoyes.length = 0;
+        const vivantes = async () => (await MARQUES()).filter(d => d.cle.endsWith('|reservation') && d.expireLe.getTime() > Date.now() + 1000).length;
+        const avant4 = await vivantes();
+        const sv4 = require('../lien-ordinateur/service').creerService({ cfg: cfg2, courrier: c2 });
+        const rs4 = await Promise.all(['course-1', 'course-2', 'course-3', 'course-4'].map(a => sv4.demander(`${a}@exemple.fr`)));
+        H.v('4 adresses neuves simultanées, plafond 2 : exactement 2 courriels, 2 « plafond » (la consommation est atomique)', [rs4.map(x => x.issue).sort(), c2.envoyes.length], [['envoye', 'envoye', 'plafond', 'plafond'], 2]);
+        H.v('   les marques des 2 adresses non servies sont RENDUES (elles pourront réessayer)', (await vivantes()) - avant4, 2);
+        await db.col('courriels_lien_jour').deleteMany({}); await db.col('courriels_lien_jour').insertOne({ _id: require('../comptes/plafond-courriels').jourDeParis(), n: 2 }); c2.envoyes.length = 0;
         const { empreinteBoite, PREFIXE } = require('../lien-ordinateur/service');
         const marque = adresse => `${PREFIXE}${empreinteBoite(cfg2.empreinte.secret, adresse)}|reservation`;
         const vivante = async adresse => (await MARQUES()).some(d => d.cle === marque(adresse) && d.expireLe.getTime() > Date.now() + 1000);
@@ -249,7 +270,7 @@ const lever = async f => { try { await f(); return null; } catch (e) { return e;
                 A.registre.vider(); A.registre.fournir('turnstile', turnstile); miseEnPlace();
                 const s = await demarrer(cfg);
                 const r = await H.appel(s.url, '/api/lien-ordinateur', { methode: 'POST', corps: { email: adresse, turnstile: 'ok' }, sansDefi: true, entetes: { ...A.SITE, ...ip() } });
-                await s.fermer();
+                await attendre(); await s.fermer();
                 const marque = (await MARQUES()).filter(d => d.cle.endsWith('|reservation') && d.expireLe.getTime() > Date.now() + 1000).length;
                 return { r, marque, ...attendu && {} };
             };
@@ -261,14 +282,15 @@ const lever = async f => { try { await f(); return null; } catch (e) { return e;
             c = await cas('courrier qui ne part nulle part', () => { A.registre.fournir('courrier', creerCourrierMemoire()); }, 'p3@exemple.fr');
             H.v('pilote de courrier qui n\'envoie pas pour de vrai (mémoire, reel false) : 503, jamais un faux 202', c.r.statut, 503);
             const pilote = f => ({ reel: true, envoyes: [], envoyerLienOrdinateur: f });
-            c = await cas('Brevo 500', () => A.registre.fournir('courrier', pilote(erreurDe('BrevoStatut500'))), 'p4@exemple.fr');
+            const marquesAvant500 = (await MARQUES()).filter(d => d.cle.endsWith('|reservation') && d.expireLe.getTime() > Date.now() + 1000).length;
+            c = await cas('Brevo 500',() => A.registre.fournir('courrier', pilote(erreurDe('BrevoStatut500'))), 'p4@exemple.fr');
             const marquesApres500 = (await MARQUES()).filter(d => d.cle.endsWith('|reservation') && d.expireLe.getTime() > Date.now() + 1000).length;
-            H.v('Brevo répond 500 (rien n\'est parti) : 503 et la marque est RENDUE', [c.r.statut, c.r.json.erreur.code], [503, 'INDISPONIBLE']);
+            H.v('Brevo répond 500 (rien n\'est parti) : la réponse est le 202 NEUTRE (aucun 503 lié à Brevo : il dirait quelle adresse est neuve) et la marque est RENDUE', [c.r.statut, c.r.texte, marquesApres500 - marquesAvant500], [202, '{"success":true}', 0]);
             c = await cas('réseau', () => A.registre.fournir('courrier', pilote(erreurDe('BrevoReseau'))), 'p5@exemple.fr');
             const marquesApresReseau = (await MARQUES()).filter(d => d.cle.endsWith('|reservation') && d.expireLe.getTime() > Date.now() + 1000).length;
-            H.v('Brevo injoignable (réseau, peut-être parti) : 503 et la marque est GARDÉE (jamais un doublon)', [c.r.statut, marquesApresReseau - marquesApres500], [503, 1]);
+            H.v('Brevo injoignable (réseau, peut-être parti) : 202 neutre et la marque est GARDÉE (un doublon est pire qu\'un manque)', [c.r.statut, c.r.texte, marquesApresReseau - marquesApres500], [202, '{"success":true}', 1]);
             c = await cas('plafond Brevo', () => A.registre.fournir('courrier', pilote(erreurDe('BrevoPlafond'))), 'p6@exemple.fr');
-            H.v('le plafond propre de Brevo atteint : 429 LIMITE_DEBIT, marque rendue', [c.r.statut, c.r.json.erreur.code, (await MARQUES()).filter(d => d.cle.endsWith('|reservation') && d.expireLe.getTime() > Date.now() + 1000).length - marquesApresReseau], [429, 'LIMITE_DEBIT', 0]);
+            H.v('le plafond propre de Brevo atteint : 202 neutre (le 429 dirait que l\'adresse est neuve), marque rendue', [c.r.statut, c.r.texte, (await MARQUES()).filter(d => d.cle.endsWith('|reservation') && d.expireLe.getTime() > Date.now() + 1000).length - marquesApresReseau], [202, '{"success":true}', 0]);
             {
                 const { empreinteBoite, PREFIXE } = require('../lien-ordinateur/service');
                 const vivante = async adresse => (await MARQUES()).some(d => d.cle === `${PREFIXE}${empreinteBoite(cfg.empreinte.secret, adresse)}|reservation` && d.expireLe.getTime() > Date.now() + 1000);
@@ -277,10 +299,24 @@ const lever = async f => { try { await f(); return null; } catch (e) { return e;
                 c = await cas('Brevo adresse', () => A.registre.fournir('courrier', pilote(erreurDe('BrevoAdresse'))), 'p9@exemple.fr');
                 H.v('le pilote refuse l\'adresse avant toute requête (BrevoAdresse) : 202, marque rendue', [c.r.statut, await vivante('p9@exemple.fr')], [202, false]);
                 c = await cas('Brevo 401', () => A.registre.fournir('courrier', pilote(erreurDe('BrevoStatut401'))), 'p10@exemple.fr');
-                H.v('Brevo refuse notre clé (401) : 503, marque rendue (rien n\'est parti)', [c.r.statut, await vivante('p10@exemple.fr')], [503, false]);
+                H.v('Brevo refuse notre clé (401) : 202 neutre, marque rendue (rien n\'est parti)', [c.r.statut, await vivante('p10@exemple.fr')], [202, false]);
             }
             c = await cas('erreur inconnue', () => A.registre.fournir('courrier', pilote(async () => { throw new TypeError('inattendu ' + secret); })), 'p7@exemple.fr');
-            H.v('erreur inattendue du pilote : 503, marque gardée (on ne sait pas)', [c.r.statut, (await MARQUES()).filter(d => d.cle.endsWith('|reservation') && d.expireLe.getTime() > Date.now() + 1000).length - marquesApresReseau], [503, 1]);
+            H.v('erreur inattendue du pilote : 202 neutre, marque gardée (on ne sait pas)', [c.r.statut, (await MARQUES()).filter(d => d.cle.endsWith('|reservation') && d.expireLe.getTime() > Date.now() + 1000).length - marquesApresReseau], [202, 1]);
+            // DÉTACHEMENT : la réponse part AVANT la fin de l'envoi (un pilote bloqué jusqu'à ce que le banc le libère) — la durée ne dit rien de l'adresse
+            {
+                let liberer; const bloque = new Promise(f => { liberer = f; }); let appele = false;
+                A.registre.vider(); A.registre.fournir('turnstile', turnstile); A.registre.fournir('courrier', pilote(async () => { appele = true; await bloque; }));
+                const sd = await demarrer(cfg);
+                const t0 = Date.now();
+                const rd = await Promise.race([H.appel(sd.url, '/api/lien-ordinateur', { methode: 'POST', corps: { email: 'detache@exemple.fr', turnstile: 'ok' }, sansDefi: true, entetes: { ...A.SITE, ...ip() } }), new Promise(f => setTimeout(() => f({ statut: 'toujours en attente après 1,5 s' }), 1500))]);
+                const rapide = Date.now() - t0;
+                await new Promise(f => setTimeout(f, 200));
+                H.v('envoi bloqué en cours : la réponse 202 est DÉJÀ partie, le pilote est en vol', [rd.statut, appele], [202, true]);
+                H.vrai('   (témoin) la réponse n\'a pas attendu la libération du pilote', rapide < 2000);
+                liberer(); await attendre(); await sd.fermer();
+            }
+            void avantMarques;
             void avantMarques;
         } finally { rendre(); }
         const tout = journaux.join('\n');
@@ -295,6 +331,7 @@ const lever = async f => { try { await f(); return null; } catch (e) { return e;
         for (const o of ['https://rat-market.fr', 'https://www.rat-market.fr']) {
             const pre = await H.appel(s.url, '/api/lien-ordinateur', { methode: 'OPTIONS', entetes: { origin: o, 'access-control-request-method': 'POST' } });
             H.v(`préflight ${o} : 204, origine exacte, méthode POST seulement, en-têtes du site`, [pre.statut, pre.entetes['access-control-allow-origin'], pre.entetes['access-control-allow-methods'], /X-Rat-Market/.test(pre.entetes['access-control-allow-headers'] || '')], [204, o, 'POST', true]);
+            H.v(`   SANS credentials (la route n'utilise aucun cookie) : ni Allow-Credentials au préflight ni sur la réponse réelle`, [pre.entetes['access-control-allow-credentials'], (await H.appel(s.url, '/api/lien-ordinateur', { methode: 'POST', corps: { email: 'c@exemple.fr', turnstile: 'mauvais' }, sansDefi: true, entetes: { ...A.SITE, origin: o, ...ip() } })).entetes['access-control-allow-credentials']], [undefined, undefined]);
             const rep = await H.appel(s.url, '/api/lien-ordinateur', { methode: 'POST', corps: { email: 'cors@exemple.fr', turnstile: 'mauvais' }, sansDefi: true, entetes: { ...A.SITE, origin: o, ...ip() } });
             H.v(`réponse réelle depuis ${o} (même un refus) : porte l'origine exacte`, [rep.statut, rep.entetes['access-control-allow-origin']], [422, o]);
         }
@@ -316,6 +353,7 @@ const lever = async f => { try { await f(); return null; } catch (e) { return e;
         H.vrai('ni script, ni formulaire, ni image distante dans le HTML', !/<script|<form|<img|<iframe|url\(/i.test(c.html));
         H.vrai('le HTML est un document complet en français', /^<!doctype html>/i.test(c.html) && /lang="fr"/.test(c.html));
         H.vrai('le texte dit l\'origine de la demande et que l\'adresse n\'est pas conservée au-delà de 24 h', /rat-market\.fr/.test(c.texte) && /24\s*heures/.test(c.texte.replace(/ /g, ' ')) && /ignorez/i.test(c.texte));
+        H.vrai('le texte ne dit plus « votre adresse n\'est pas conservée » sans nuance : l\'adresse elle-même, une empreinte à clé 24 h, le prestataire d\'envoi et sa propre politique', !/n.est pas conservée/.test(c.texte) && /adresse elle-même/.test(c.texte) && /empreinte à clé/.test(c.texte) && /24\s*heures/.test(c.texte) && /prestataire d.envoi/.test(c.texte) && /propre politique/.test(c.texte));
         H.v('le message est mis en cache : la même instance à chaque appel', (await G.lienOrdinateur()) === c, true);
     }
 

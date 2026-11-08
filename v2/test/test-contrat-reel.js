@@ -552,16 +552,17 @@ const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empr
             courrier.reel = true;
             try {
                 const RL = 'POST /api/lien-ordinateur', CH = '/api/lien-ordinateur';
-                const l1 = await postS(RL, 'adresse neuve (un courriel)', 202, CH, { email: 'lien1@exemple.fr', turnstile: 't' });
-                const l2 = await postS(RL, 'même adresse déjà servie (202 identique, aucun courriel)', 202, CH, { email: 'lien1@exemple.fr', turnstile: 't' });
-                const l3 = await postS(RL, 'adresse invalide (202 identique)', 202, CH, { email: 'pas-une-adresse', turnstile: 't' });
+                const postL = async (...a) => { const r = await postS(...a); await require('../lien-ordinateur/service').attendre(); return r; };   // l'envoi est détaché de la réponse : on attend sa fin avant la requête suivante
+                const l1 = await postL(RL, 'adresse neuve (un courriel)', 202, CH, { email: 'lien1@exemple.fr', turnstile: 't' });
+                const l2 = await postL(RL, 'même adresse déjà servie (202 identique, aucun courriel)', 202, CH, { email: 'lien1@exemple.fr', turnstile: 't' });
+                const l3 = await postL(RL, 'adresse invalide (202 identique)', 202, CH, { email: 'pas-une-adresse', turnstile: 't' });
                 H.v('lien-ordinateur : adresse neuve / déjà servie / invalide — 202 identiques à l\'octet', [l2.texte === l1.texte, l3.texte === l1.texte], [true, true]);
-                await postS(RL, 'corps qui n\'est pas un objet (400 ENTREE)', 400, CH, [1]);
-                await postS(RL, 'jeton valide, adresse absente (400 ENTREE)', 400, CH, { turnstile: 't' });
-                await postS(RL, 'jeton Turnstile vide (defi-anti-robot)', 422, CH, { email: 'lien2@exemple.fr', turnstile: '' });
-                await postS(RL, 'sans Origin du site', 403, CH, { email: 'lien2@exemple.fr', turnstile: 't' }, ip());
-                const memL = ip(); for (let k = 0; k < 3; k++) await postS(RL, 'sous le plafond', 202, CH, { email: `lienip${k}@exemple.fr`, turnstile: 't' }, { ...siteH(null), ...memL });
-                await postS(RL, 'plafond par IP atteint', 429, CH, { email: 'lienip9@exemple.fr', turnstile: 't' }, { ...siteH(null), ...memL });
+                await postL(RL, 'corps qui n\'est pas un objet (400 ENTREE)', 400, CH, [1]);
+                await postL(RL, 'jeton valide, adresse absente (400 ENTREE)', 400, CH, { turnstile: 't' });
+                await postL(RL, 'jeton Turnstile vide (defi-anti-robot)', 422, CH, { email: 'lien2@exemple.fr', turnstile: '' });
+                await postL(RL, 'sans Origin du site', 403, CH, { email: 'lien2@exemple.fr', turnstile: 't' }, ip());
+                const memL = ip(); for (let k = 0; k < 3; k++) await postL(RL, 'sous le plafond', 202, CH, { email: `lienip${k}@exemple.fr`, turnstile: 't' }, { ...siteH(null), ...memL });
+                await postL(RL, 'plafond par IP atteint', 429, CH, { email: 'lienip9@exemple.fr', turnstile: 't' }, { ...siteH(null), ...memL });
                 H.v('lien-ordinateur : 1 + 3 courriels partis (adresse neuve et trois sous le plafond), rien pour les autres', courrier.envoyes.filter(e => e.type === 'lien-ordinateur').length, 4);
             } finally { courrier.reel = false; }
         }
