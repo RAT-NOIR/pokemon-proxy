@@ -1375,7 +1375,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
     });
     // ───────── B : Dresseur / Énergie au nom traduit : numéro + code + langue + illustration relue, liste fermée ─────────
     await test('B : règle illustration relue (fichier VALIDATIONS, hors manifeste) — acceptée complète, chaque condition manquante refuse', () => {
-        assert.deepStrictEqual([...PV.REGLES_NOM_TRADUIT_DRESSEUR], ['M-P/ID', 'SV-P/ID', 'S-P/ID', 'SM-P/ID', 'M-P/TH', 'SV-P/TH', 'S-P/TH']);
+        assert.deepStrictEqual([...PV.REGLES_NOM_TRADUIT_DRESSEUR].slice(0, 7), ['M-P/ID', 'SV-P/ID', 'S-P/ID', 'SM-P/ID', 'M-P/TH', 'SV-P/TH', 'S-P/TH']);   // (08/11) suivies des six lignes zh-hans, testées à part
         assert.ok(Object.isFrozen(PV.REGLES_NOM_TRADUIT_DRESSEUR));
         const ill = (o = {}) => ({ idProduct: 1001, sha256: H1, reference: 'cartes/77/swtich-id.webp', par: 'coordinateur', le: '2026-11-08', ...o });
         const eid = (o = {}) => trad({ langue: 'id', nom: 'Tukar Pokémon', dex: null, pv: null, codeSet: 'SV-P/ID', ...o });
@@ -1436,6 +1436,39 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.throws(() => PV.lireIllustrations({}), /tableau/, 'non tableau');
         for (const [nom, v] of [['idProduct', ill({ idProduct: 0 })], ['sha256', ill({ sha256: 'zz' })], ['reference', ill({ reference: '' })], ['par', ill({ par: 'chasseur' })], ['date', ill({ le: 'hier' })]])
             assert.throws(() => PV.lireIllustrations([v]), undefined, nom);
+    });
+    // ───────── B (08/11, décision du propriétaire) : chinois simplifié — six lignes MESURÉES sur le manifeste N8S5 (84 Dresseurs/Énergies zh-hans, hors Gem Packs) ─────────
+    await test('B zh-hans : SV-P/CS, CSVE2C, CSVH1C, CSVH2C, CSVH3C, CSVH5C ouvrent la voie ; toute autre ligne zh, un Pokémon, un nom hors écriture, une langue ou une relecture fausse la referment', () => {
+        const LIGNES_ZH = [['SV-P/CS', 'SV-P', 'Scarlet-Violet-Simplified-Chinese-Promos'], ['CSVE2C', 'csvE2C', 'Battle-Party-Shining-Dream'], ['CSVH1C', 'csvH1C', 'Happy-Set-Pikachu-Clefairy-Turtwig-Gimmighoul'],
+            ['CSVH2C', 'csvH2C', 'Happy-Set-Lucario-Greninja-Zamazenta-Mabosstiff'], ['CSVH3C', 'csvH3C', 'Happy-Set-Altaria-Latios-Infernape-Maushold'], ['CSVH5C', 'csvH5C', 'Happy-Set-Mewtwo-Dragonite-Camerupt-Sinistcha']];
+        for (const [l] of LIGNES_ZH) assert.ok(PV.REGLES_NOM_TRADUIT_DRESSEUR.includes(l), `${l} dans la liste fermée`);
+        assert.strictEqual(PV.REGLES_NOM_TRADUIT_DRESSEUR.length, 13, 'sept lignes id/th + six lignes zh, ni plus ni moins');
+        const ill = (o = {}) => ({ idProduct: 1001, sha256: H1, reference: 'cartes/77/ultra-zh.webp', par: 'coordinateur', le: '2026-11-08', ...o });
+        const ezh = (imp, o = {}) => { const e = trad({ langue: 'zh-hans', nom: '高级球', dex: null, pv: null, codeSet: imp, numero: '154', total: '207', ...o }); return { ...e, attendu: { ...e.attendu, numero: '154' } }; };
+        const pzh = (ligne, slugSet, o = {}) => ptrad({ tirage: 'zh-hans', numero: '154', slug: 'Ultra-Ball-V1', slugSet, codeSet: ligne, nomEn: 'Ultra Ball', categorie: 'dresseur', cleR2Carte: ['cartes/77/ultra-zh.webp'], illustrationsRelues: [ill()], ...o });
+        for (const [ligne, imp, slugSet] of LIGNES_ZH) {
+            assert.deepStrictEqual(lue(ezh(imp), pzh(ligne, slugSet)), { ok: true, motifs: [] }, `${ligne} : Dresseur + relecture valide accepté`);
+            assert.ok(drap(ezh(imp), pzh(ligne, slugSet)).includes(`temoin-illustration-relue:${ligne}`), `${ligne} : drapeau écrit`);
+            assert.strictEqual(lue(ezh(imp, { nom: '基本火能量' }), pzh(ligne, slugSet, { categorie: 'energie', nomEn: 'Basic Fire Energy' })).ok, true, `${ligne} : Énergie acceptée`);
+            assert.ok(!lue(ezh(imp), pzh(ligne, slugSet, { categorie: 'pokemon', nomEn: 'Mareep', nomEnCarte: 'Mareep' })).ok, `${ligne} : un Pokémon n'emprunte jamais cette voie`);
+            assert.ok(!drap(ezh(imp), pzh(ligne, slugSet, { categorie: 'pokemon', nomEn: 'Mareep' })).some(d => d.startsWith('temoin-illustration-relue')), `${ligne} : Pokémon, drapeau jamais posé`);
+            assert.match(mt(ezh(imp, { nom: 'Ultra Ball' }), pzh(ligne, slugSet)), /nom-lu-hors-langue/, `${ligne} : nom latin refusé`);
+            assert.match(mt(ezh(imp, { nom: 'ウルトラボール' }), pzh(ligne, slugSet)), /nom-lu-hors-langue/, `${ligne} : kana refusé sur zh-hans`);
+            assert.match(mt(ezh(imp, { nom: 'ฮันนี่' }), pzh(ligne, slugSet)), /nom-lu-hors-langue/, `${ligne} : thaï refusé sur zh-hans`);
+            assert.match(mt(ezh(imp, { nom: '高级球ボール' }), pzh(ligne, slugSet)), /nom-lu-hors-langue/, `${ligne} : un seul kana parmi des han refuse`);
+            assert.match(mt(ezh(imp, { langue: 'zh-hant' }), pzh(ligne, slugSet)), /langue-differente/, `${ligne} : langue lue ≠ tirage`);
+            assert.match(mt(ezh(imp), pzh(ligne, slugSet, { illustrationsRelues: [] })), /nom-traduit-sans-temoin/, `${ligne} : relecture absente, refus d'avant`);
+            assert.match(mt(ezh(imp), pzh(ligne, slugSet, { illustrationsRelues: [ill({ sha256: H2 })] })), /illustration-non-relue/, `${ligne} : sha256 différent`);
+            assert.match(mt(ezh(imp), pzh(ligne, slugSet, { illustrationsRelues: [ill({ reference: 'cartes/77/inconnue.webp' })] })), /illustration-non-relue/, `${ligne} : référence absente de la carte`);
+            assert.match(mt(ezh(imp), pzh(ligne, slugSet, { illustrationsRelues: [ill({ reference: undefined })] })), /illustration-non-relue/, `${ligne} : référence manquante`);
+            assert.ok(!lue(ezh(imp, { numero: '155' }), pzh(ligne, slugSet)).ok, `${ligne} : numéro faux, la comparaison reste`);
+            assert.ok(!lue(ezh('csvZ9C'), pzh(ligne, slugSet)).ok, `${ligne} : code faux, la comparaison reste`);
+        }
+        // lignes zh hors liste : la voie reste fermée (CSVH4C n'a que des Pokémon dans la mesure, SV-P/CT, S-P/CS, M-P/CS non mesurées)
+        for (const [ligne, imp] of [['CSVH4C', 'csvH4C'], ['CSVH6C', 'csvH6C'], ['CSV8C', 'csv8C'], ['SV-P/CT', 'SV-P'], ['S-P/CS', 'S-P'], ['M-P/CS', 'M-P']]) {
+            assert.ok(!lue(ezh(imp), pzh(ligne, 'Autre-Set-ZH')).ok, `${ligne} : hors liste, refusé`);
+            assert.ok(!drap(ezh(imp), pzh(ligne, 'Autre-Set-ZH')).some(d => d.startsWith('temoin-illustration-relue')), `${ligne} : voie jamais ouverte`);
+        }
     });
     await test('A (tour de correction) : TOUTES les lettres du nom dans l\'écriture de la langue, hors marques latines imprimées (liste fermée) ; au moins une lettre de l\'écriture', () => {
         const refus = (langue, nom, tirage = langue === 'ja' ? 'jp' : langue) => /nom-lu-hors-langue/.test(mt(trad({ langue, nom, dex: null, pv: null }), ptrad({ tirage, nomEn: 'Energy Search', categorie: 'energie' })));
