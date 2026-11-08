@@ -170,32 +170,32 @@ const F = f => fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'tpc-fixt
     const transport = reponses => { const appels = []; return { appels, async get(url) { appels.push(url); const r = reponses(url, appels.length); if (r instanceof Error) throw r; return r; } }; };
     const ok200 = (texte, type = 'text/html') => ({ status: 200, texte, type });
     let tr = transport(u => u.endsWith('/robots.txt') ? ok200('') : ok200('<p>page</p>'));
-    let C = T.fabriquerClientTpc({ site: 'tpc-asie', transport: tr, cadenceMs: 0, reessaiMs: 0 });
+    let C = T.fabriquerClientTpc({ site: 'tpc-asie', transportDeBanc: tr, cadenceMs: 0, reessaiMs: 0 });
     let e = null; try { await C.page('/id/card-search/list/'); } catch (x) { e = x.message; }
     verifier('sans verrou lié : aucune requête, et ça le dit', [/verrou/.test(e), tr.appels.length], [true, 0]);
-    C = T.fabriquerClientTpc({ site: 'tpc-asie', transport: tr, cadenceMs: 0, reessaiMs: 0, verrou });
+    C = T.fabriquerClientTpc({ site: 'tpc-asie', transportDeBanc: tr, cadenceMs: 0, reessaiMs: 0, verrou });
     await C.page('/id/card-search/list/'); await C.page('/id/card-search/detail/7125/');
     verifier('robots.txt lu UNE fois, avant la première page', tr.appels, ['https://asia.pokemon-card.com/robots.txt', 'https://asia.pokemon-card.com/id/card-search/list/', 'https://asia.pokemon-card.com/id/card-search/detail/7125/']);
     tr = transport(u => u.endsWith('/robots.txt') ? ok200('User-agent: *\nDisallow: /id/\n') : ok200('x'));
-    C = T.fabriquerClientTpc({ site: 'tpc-asie', transport: tr, cadenceMs: 0, reessaiMs: 0, verrou });
+    C = T.fabriquerClientTpc({ site: 'tpc-asie', transportDeBanc: tr, cadenceMs: 0, reessaiMs: 0, verrou });
     e = null; try { await C.page('/id/card-search/list/'); } catch (x) { e = x; }
     verifier('un chemin interdit par robots.txt : aucune requête, erreur « robots »', [e?.robots === true, tr.appels.length], [true, 1]);
     for (const [cas, rep] of [['403', { status: 403, texte: 'Forbidden' }], ['429', { status: 429, texte: '' }], ['défi Cloudflare', ok200('<title>Just a moment...</title>')], ['captcha', ok200('<div class="g-recaptcha">')]]) {
         tr = transport(u => u.endsWith('/robots.txt') ? ok200('') : rep);
-        C = T.fabriquerClientTpc({ site: 'tpc-asie', transport: tr, cadenceMs: 0, reessaiMs: 0, verrou });
+        C = T.fabriquerClientTpc({ site: 'tpc-asie', transportDeBanc: tr, cadenceMs: 0, reessaiMs: 0, verrou });
         e = null; try { await C.page('/id/card-search/list/'); } catch (x) { e = x; }
         let e2 = null; try { await C.page('/id/card-search/detail/1/'); } catch (x) { e2 = x; }
         verifier(`${cas} → BLOQUÉ, et plus aucune requête ensuite (« si une source bloque, on s'arrête »)`, [e?.bloque === true, e2?.bloque === true, tr.appels.length], [true, true, 2]);
     }
     tr = transport(u => u.endsWith('/robots.txt') ? ok200('') : { status: 404, texte: 'non' });
-    C = T.fabriquerClientTpc({ site: 'tpc-asie', transport: tr, cadenceMs: 0, reessaiMs: 0, verrou });
+    C = T.fabriquerClientTpc({ site: 'tpc-asie', transportDeBanc: tr, cadenceMs: 0, reessaiMs: 0, verrou });
     verifier('404 → null, sans réessai', [await C.page('/id/card-search/detail/9/'), tr.appels.length], [null, 2]);
     // ── REPONSE-HOTE (2026-10-18) : la règle commune de réponse, pour une IMAGE ─────────────────────────────────────────────
     {
         const RH = require('./collecte-cartes/reponse-hote');
         const PNG_T = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.alloc(24)]);
         const dp = () => require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'tpc-pauses-'));
-        const clientI = (rep, o = {}) => { if (!o.processus) require('./collecte-cartes/reponse-hote').reinitialiserSuiviProcessus(); const t = transport(u => u.endsWith('/robots.txt') ? ok200('') : rep(u)); return { t, c: T.fabriquerClientTpc({ site: 'tpc-asie', transport: t, cadenceMs: 0, reessaiMs: 0, verrou, dossierPauses: dp(), ...o }) }; };
+        const clientI = (rep, o = {}) => { if (!o.processus) require('./collecte-cartes/reponse-hote').reinitialiserSuiviProcessus(); const t = transport(u => u.endsWith('/robots.txt') ? ok200('') : rep(u)); return { t, c: T.fabriquerClientTpc({ site: 'tpc-asie', transportDeBanc: t, cadenceMs: 0, reessaiMs: 0, verrou, dossierPauses: dp(), ...o }) }; };
         const FAUSSE = ok200('<html>Page introuvable</html>');
         let x = clientI(() => FAUSSE);
         verifier('REPONSE-HOTE : 200 text/html pour une image = fausse page introuvable → null, ni bloqué ni en pause, comptée', [await x.c.image('/id/card-img/a.png'), !!x.c.bloque(), !!x.c.pause(), x.c.suivi().rapport('asia.pokemon-card.com').fausses], [null, false, false, 1]);
@@ -237,34 +237,34 @@ const F = f => fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'tpc-fixt
     }
     let n5 = 0;
     tr = transport(u => u.endsWith('/robots.txt') ? ok200('') : (++n5 === 1 ? { status: 503, texte: '' } : ok200('enfin')));
-    C = T.fabriquerClientTpc({ site: 'tpc-asie', transport: tr, cadenceMs: 0, reessaiMs: 0, verrou });
+    C = T.fabriquerClientTpc({ site: 'tpc-asie', transportDeBanc: tr, cadenceMs: 0, reessaiMs: 0, verrou });
     verifier('503 puis 200 → un réessai, le texte', [await C.page('/id/x/'), tr.appels.length], ['enfin', 3]);
     tr = transport(u => u.endsWith('/robots.txt') ? ok200('') : { status: 503, texte: '' });
-    C = T.fabriquerClientTpc({ site: 'tpc-asie', transport: tr, cadenceMs: 0, reessaiMs: 0, verrou });
+    C = T.fabriquerClientTpc({ site: 'tpc-asie', transportDeBanc: tr, cadenceMs: 0, reessaiMs: 0, verrou });
     e = null; try { await C.page('/id/x/'); } catch (x) { e = x; }
     verifier('503 deux fois → lève (une panne reste une panne), sans boucle', [e?.status, tr.appels.length], [503, 3]);
     tr = transport(u => u.endsWith('/robots.txt') ? { status: 500, texte: '' } : ok200('x'));
-    C = T.fabriquerClientTpc({ site: 'tpc-asie', transport: tr, cadenceMs: 0, reessaiMs: 0, verrou });
+    C = T.fabriquerClientTpc({ site: 'tpc-asie', transportDeBanc: tr, cadenceMs: 0, reessaiMs: 0, verrou });
     e = null; try { await C.page('/id/x/'); } catch (x) { e = x; }
     verifier('robots.txt illisible (500) : on ne peut pas conclure → aucune page', [e?.robots === true, tr.appels.filter(u => !u.endsWith('robots.txt')).length], [true, 0]);
     // seconde relecture : une panne de robots.txt n'est pas un BLOCAGE de la source (l'alerte ne se lève qu'à la main) — une erreur passagère
     verifier('   … mais pas un blocage durable : erreur passagère (5xx), le client n\'est pas bloqué', [e?.bloque === true, C.bloque(), e?.status], [false, null, 500]);
     tr = transport(u => u.endsWith('/robots.txt') && !u.includes('www2') ? { status: 301, location: 'https://asia.pokemon-card.com/www2/robots.txt' } : u.endsWith('/robots.txt') ? ok200('User-agent: *\nDisallow: /id/\n') : ok200('x'));
-    C = T.fabriquerClientTpc({ site: 'tpc-asie', transport: tr, cadenceMs: 0, reessaiMs: 0, verrou });
+    C = T.fabriquerClientTpc({ site: 'tpc-asie', transportDeBanc: tr, cadenceMs: 0, reessaiMs: 0, verrou });
     e = null; try { await C.page('/id/x/'); } catch (x) { e = x; }
     verifier('robots.txt redirigé sur le même site → suivi, et ses règles s\'appliquent', [e?.robots === true, tr.appels.filter(u => !u.endsWith('robots.txt')).length], [true, 0]);
     tr = transport(u => u.endsWith('/robots.txt') ? ok200('User-agent: *\nCrawl-delay: 3600\n') : ok200('x'));
-    C = T.fabriquerClientTpc({ site: 'tpc-asie', transport: tr, cadenceMs: 0, reessaiMs: 0, verrou });
+    C = T.fabriquerClientTpc({ site: 'tpc-asie', transportDeBanc: tr, cadenceMs: 0, reessaiMs: 0, verrou });
     e = null; try { await C.page('/id/x/'); } catch (x) { e = x; }
     verifier('Crawl-delay au-delà de 60 s : le site demande qu\'on n\'y vienne pas → on s\'arrête (bloqué), aucune page', [e?.bloque === true, tr.appels.length], [true, 1]);
-    C = T.fabriquerClientTpc({ site: 'tpc-asie', transport: transport(() => ok200('')), cadenceMs: 0, reessaiMs: 0, verrou: { tenu: true, perdu: true } });
+    C = T.fabriquerClientTpc({ site: 'tpc-asie', transportDeBanc: transport(() => ok200('')), cadenceMs: 0, reessaiMs: 0, verrou: { tenu: true, perdu: true } });
     e = null; try { await C.page('/id/x/'); } catch (x) { e = x.message; }
     verifier('verrou PERDU → aucune requête', /PERDU/.test(e), true);
-    e = null; try { T.fabriquerClientTpc({ site: 'pokecardex', transport: tr, verrou }); } catch (x) { e = x.message; }
+    e = null; try { T.fabriquerClientTpc({ site: 'pokecardex', transportDeBanc: tr, verrou }); } catch (x) { e = x.message; }
     verifier('un site hors de la liste (Pokécardex) : refusé à la construction', /site/.test(e || ''), true);
     // 🔴 relecture : une REDIRECTION n'est suivie que sur le même site, robots.txt relu pour le chemin d'arrivée, trois sauts au plus
     tr = transport(u => u.endsWith('/robots.txt') ? ok200('User-agent: *\nDisallow: /interdit/\n') : u.endsWith('/a/') ? { status: 301, location: '/b/' } : u.endsWith('/b/') ? ok200('arrivé') : u.endsWith('/c/') ? { status: 302, location: 'https://ailleurs.example/x' } : u.endsWith('/d/') ? { status: 302, location: '/interdit/x' } : u.endsWith('/e/') ? { status: 302, location: '/e/' } : ok200('?'));
-    C = T.fabriquerClientTpc({ site: 'tpc-asie', transport: tr, cadenceMs: 0, reessaiMs: 0, verrou });
+    C = T.fabriquerClientTpc({ site: 'tpc-asie', transportDeBanc: tr, cadenceMs: 0, reessaiMs: 0, verrou });
     verifier('301 vers le même site → suivie', await C.page('/a/'), 'arrivé');
     e = null; try { await C.page('/c/'); } catch (x) { e = x.message; }
     verifier('302 vers un AUTRE hôte → refusée, jamais suivie', [/hors du site/.test(e || ''), tr.appels.some(u => u.includes('ailleurs.example'))], [true, false]);
@@ -274,13 +274,13 @@ const F = f => fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'tpc-fixt
     verifier('une boucle de redirections → s\'arrête au 3e saut', [/redirection/.test(e || ''), tr.appels.filter(u => u.endsWith('/e/')).length], [true, 4]);
     // Crawl-delay : la cadence du site s'il en demande une plus lente
     tr = transport(u => u.endsWith('/robots.txt') ? ok200('User-agent: *\nCrawl-delay: 25\n') : ok200('x'));
-    C = T.fabriquerClientTpc({ site: 'tpc-asie', transport: tr, cadenceMs: 0, reessaiMs: 0, verrou });
+    C = T.fabriquerClientTpc({ site: 'tpc-asie', transportDeBanc: tr, cadenceMs: 0, reessaiMs: 0, verrou });
     await C.page('/x/');
     verifier('Crawl-delay: 25 → la cadence passe à 25 s', C.cadence(), 25000);
     verifier('Crawl-delay lu dans robots.txt (pur)', [T.delaiDesRobots('User-agent: *\nCrawl-delay: 25\n'), T.delaiDesRobots(''), T.delaiDesRobots(null)], [25, null, null]);
     // la cadence : deux pages se suivent d'au moins cadenceMs
     const t0 = []; tr = { appels: [], async get(u) { t0.push(Date.now()); return ok200(''); } };
-    C = T.fabriquerClientTpc({ site: 'tpc-asie', transport: tr, cadenceMs: 120, reessaiMs: 0, verrou });
+    C = T.fabriquerClientTpc({ site: 'tpc-asie', transportDeBanc: tr, cadenceMs: 120, reessaiMs: 0, verrou });
     await Promise.all([C.page('/a/'), C.page('/b/')]);
     verifier('cadence tenue dans la FILE : deux appels concurrents espacés d\'au moins 120 ms', t0.length === 3 && t0[2] - t0[1] >= 115 && t0[1] - t0[0] >= 115, true);
 
@@ -291,6 +291,93 @@ const F = f => fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'tpc-fixt
     verifier('retrait en un lot : les seules entrées TPC, carte par carte', [R.cartes, R.entrees, R.cles], [[1, 2], 2, ['a', 'c']]);
     const Rv = T.planRetrait([{ _id: 1, images: [{ set: 'S', source: 'tpc-asie', cleR2: 'a', vignette: { cleR2: 'vignettes/a.webp', w: 200, h: 279 } }] }]);
     verifier('retrait : la VIGNETTE de l\'entrée part avec elle (relecture)', Rv.cles, ['a', 'vignettes/a.webp']);
+
+    // ── 8. LA PORTE RÉSEAU : toute requête de TPC passe par elle (2026-11-08) — aucun fetch brut, et la porte S'AJOUTE aux gardes du client ───
+    {
+        const os = require('os');
+        const src = f => fs.readFileSync(path.join(__dirname, f), 'utf8').split('\n').filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+        const appelBrut = new RegExp('\\bfet' + 'ch\\s*\\(');
+        verifier('aucun appel réseau brut (l\'API fetch) dans collecte-cartes/tpc.js ni collecteur-images-tpc.js', [appelBrut.test(src('collecte-cartes/tpc.js')), appelBrut.test(src('collecteur-images-tpc.js'))], [false, false]);
+        const dirS = fs.mkdtempSync(path.join(os.tmpdir(), 'tpc-sorties-'));
+        const faussePorte = (rep) => { const vus = []; return { vus, DOSSIER_PORTE_FIXE: dirS, async lire(url, o) { vus.push({ url, mode: o.mode, sortie: o.sortie, existait: fs.existsSync(o.sortie) }); const r = rep(url, o); if (r instanceof Error) throw r; if (r.redirige) return { ok: true, status: 302, redirige: r.redirige }; fs.mkdirSync(path.dirname(o.sortie), { recursive: true }); fs.writeFileSync(o.sortie, r.corps, { flag: 'wx' }); return { ok: true, status: 200, octets: r.corps.length, sortie: o.sortie, urlFinale: 'urlFinale' in r ? r.urlFinale : url }; } }; };
+        const refus = m => Object.assign(new Error(m), { refus: true });
+        const PNG = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.alloc(24)]);
+        const dp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'tpc-pauses-'));
+        require('./collecte-cartes/reponse-hote').reinitialiserSuiviProcessus();
+
+        verifier('le client par défaut n\'utilise PAS un fetch brut : son transport passe par la porte', [T.fabriquerClientTpc({ site: 'tpc-asie', verrou }).transport.parLaPorte, T.transportFetch.parLaPorte], [true, true]);
+        let fp = faussePorte(u => ({ corps: Buffer.from(u.endsWith('/robots.txt') ? '' : '<p>page</p>') }));
+        let C8 = T.fabriquerClientTpc({ site: 'tpc-asie', transport: T.fabriquerTransportPorte({ porte: fp }), cadenceMs: 0, reessaiMs: 0, verrou, dossierPauses: dp() });
+        const pg = await C8.page('/id/card-search/list/');
+        verifier('page : robots.txt PUIS la page, chacune par la porte (mode page, sortie neuve sous le dossier de la porte), lue puis effacée', [pg, fp.vus.map(v => v.url), fp.vus.map(v => v.mode), fp.vus.every(v => !v.existait && v.sortie.startsWith(path.join(dirS, 'sorties'))), fs.readdirSync(path.join(dirS, 'sorties')).length],
+            ['<p>page</p>', ['https://asia.pokemon-card.com/robots.txt', 'https://asia.pokemon-card.com/id/card-search/list/'], ['page', 'page'], true, 0]);
+        fp = faussePorte(u => ({ corps: u.endsWith('/robots.txt') ? Buffer.from('') : PNG }));
+        C8 = T.fabriquerClientTpc({ site: 'tpc-asie', transport: T.fabriquerTransportPorte({ porte: fp }), cadenceMs: 0, reessaiMs: 0, verrou, dossierPauses: dp() });
+        const im = await C8.image('/id/card-img/a.png');
+        verifier('image : mode image, octets rendus', [fp.vus[1].mode, Buffer.isBuffer(im) && im.equals(PNG)], ['image', true]);
+        // la porte refuse (hôte fermé, robots, exclusion) ou ferme l'hôte (défi) : le client s'ARRÊTE, le dit, et n'envoie plus rien
+        for (const [cas, err] of [['hôte fermé', refus('hôte fermé (ARRET-HOTE-pokemon-card.com.json) : arrêt définitif')], ['défi (arrêt écrit par la porte)', Object.assign(new Error('pokemon-card.com BLOQUÉ (défi)'), { arret: true, refus: true })]]) {
+            fp = faussePorte(u => (u.endsWith('/robots.txt') ? { corps: Buffer.from('') } : err));
+            C8 = T.fabriquerClientTpc({ site: 'tpc-asie', transport: T.fabriquerTransportPorte({ porte: fp }), cadenceMs: 0, reessaiMs: 0, verrou, dossierPauses: dp() });
+            let e1 = null, e2 = null; try { await C8.page('/id/card-search/list/'); } catch (x) { e1 = x; }
+            try { await C8.page('/id/card-search/detail/1/'); } catch (x) { e2 = x; }
+            verifier(`porte : ${cas} → BLOQUÉ (bloque + porte), message de la porte repris, plus aucune requête`, [e1?.bloque === true, e1?.porte === true, /porte/.test(e1?.message || ''), e2?.bloque === true, fp.vus.length, !!C8.bloque()], [true, true, true, true, 2, true]);
+        }
+        // un refus de la porte sur robots.txt lui-même
+        fp = faussePorte(() => refus('robots.txt interdit'));
+        C8 = T.fabriquerClientTpc({ site: 'tpc-asie', transport: T.fabriquerTransportPorte({ porte: fp }), cadenceMs: 0, reessaiMs: 0, verrou, dossierPauses: dp() });
+        { let x = null; try { await C8.page('/id/card-search/list/'); } catch (y) { x = y; } verifier('porte : refus dès robots.txt → bloqué, une seule requête tentée', [x?.bloque === true, fp.vus.length], [true, 1]); }
+        // les gardes du client restent : robots.txt du client (Disallow), 404, 5xx, redirection hors site
+        fp = faussePorte(u => ({ corps: Buffer.from(u.endsWith('/robots.txt') ? 'User-agent: *\nDisallow: /id/\n' : 'x') }));
+        C8 = T.fabriquerClientTpc({ site: 'tpc-asie', transport: T.fabriquerTransportPorte({ porte: fp }), cadenceMs: 0, reessaiMs: 0, verrou, dossierPauses: dp() });
+        { let x = null; try { await C8.page('/id/card-search/list/'); } catch (y) { x = y; } verifier('la porte s\'ajoute : le robots.txt du client interdit encore (aucune page demandée à la porte)', [x?.robots === true, fp.vus.length], [true, 1]); }
+        fp = faussePorte(u => (u.endsWith('/robots.txt') ? { corps: Buffer.from('') } : Object.assign(new Error('HTTP 404 sur x — rien n\'est écrit'), { status: 404 })));
+        C8 = T.fabriquerClientTpc({ site: 'tpc-asie', transport: T.fabriquerTransportPorte({ porte: fp }), cadenceMs: 0, reessaiMs: 0, verrou, dossierPauses: dp() });
+        verifier('404 de la porte → null, sans réessai', [await C8.page('/id/card-search/detail/9/'), fp.vus.length], [null, 2]);
+        fp = faussePorte(u => (u.endsWith('/robots.txt') ? { corps: Buffer.from('') } : Object.assign(new Error('HTTP 503'), { status: 503 })));
+        C8 = T.fabriquerClientTpc({ site: 'tpc-asie', transport: T.fabriquerTransportPorte({ porte: fp }), cadenceMs: 0, reessaiMs: 0, verrou, dossierPauses: dp() });
+        { let x = null; try { await C8.page('/id/card-search/detail/9/'); } catch (y) { x = y; } verifier('503 de la porte → un réessai puis erreur (pas un blocage)', [x?.status, !!x?.bloque, fp.vus.length], [503, false, 3]); }
+        fp = faussePorte(u => (u.endsWith('/robots.txt') ? { corps: Buffer.from('') } : { redirige: 'https://ailleurs.example/x' }));
+        C8 = T.fabriquerClientTpc({ site: 'tpc-asie', transport: T.fabriquerTransportPorte({ porte: fp }), cadenceMs: 0, reessaiMs: 0, verrou, dossierPauses: dp() });
+        { let x = null; try { await C8.page('/id/card-search/detail/9/'); } catch (y) { x = y.message; } verifier('redirection hors site rendue par la porte → refusée par le client', /hors du site/.test(x || ''), true); }
+        // image : 404 de la porte (issue « absente ») → null ; cadence du client inchangée (Crawl-delay relevé, jamais abaissé)
+        fp = faussePorte(u => (u.endsWith('/robots.txt') ? { corps: Buffer.from('User-agent: *\nCrawl-delay: 1\n') } : Object.assign(new Error('absente'), { issue: 'absente', status: 404 })));
+        C8 = T.fabriquerClientTpc({ site: 'tpc-asie', transport: T.fabriquerTransportPorte({ porte: fp }), cadenceMs: 0, reessaiMs: 0, verrou, dossierPauses: dp() });
+        verifier('image absente chez la porte → null ; Crawl-delay 1 s relève la cadence du client', [await C8.image('/id/card-img/z.png'), C8.cadence()], [null, 1000]);
+        // CORRECTIONS tour 1 : (1) une redirection ne change JAMAIS d'hôte exact, même dans la même racine (asia. → www.) ; (2) une erreur technique de la porte n'est pas un réessai ; (3) injection réservée aux bancs
+        const mkC = f => T.fabriquerClientTpc({ site: 'tpc-asie', transportDeBanc: T.fabriquerTransportPorte({ porte: f }), cadenceMs: 0, reessaiMs: 0, verrou, dossierPauses: dp() });
+        const estRobots = u => u.endsWith('/robots.txt');
+        for (const [cas, urlF] of [['asia. → www. (même racine, autre hôte)', 'https://www.pokemon-card.com/card-search/'], ['hôte voisin', 'https://asia2.pokemon-card.com/x']]) {
+            fp = faussePorte(u => ({ corps: Buffer.from(estRobots(u) ? '' : 'x'), ...(estRobots(u) ? {} : { urlFinale: urlF }) }));
+            C8 = mkC(fp);
+            let x = null, x2 = null; try { await C8.page('/id/card-search/list/'); } catch (y) { x = y; }
+            try { await C8.page('/id/card-search/detail/1/'); } catch (y) { x2 = y; }
+            verifier(`redirection suivie par la porte, ${cas} → BLOQUÉ, dit, plus aucune requête`, [x?.bloque === true, /hors du site/.test(x?.message || ''), x2?.bloque === true, fp.vus.length], [true, true, true, 2]);
+        }
+        fp = faussePorte(u => ({ corps: Buffer.from(estRobots(u) ? '' : 'x'), ...(estRobots(u) ? {} : { urlFinale: 'https://asia.pokemon-card.com/id/card-search/list/?p=2' }) }));
+        verifier('même hôte exact (autre chemin) → accepté', await mkC(fp).page('/id/card-search/list/'), 'x');
+        fp = faussePorte(u => ({ corps: Buffer.from(''), ...(estRobots(u) ? {} : { urlFinale: null }) }));
+        { let x = null; try { await mkC(fp).page('/id/card-search/list/'); } catch (y) { x = y; } verifier('la porte ne rend pas l\'adresse finale → on ne peut pas conclure → BLOQUÉ', x?.bloque === true, true); }
+        for (const [cas, err] of [['réponse trop grande', Object.assign(new Error('réponse trop grande'), { tropGrande: true })], ['verrou de cadence tenu', new Error('verrou de cadence de pokemon-card.com tenu trop longtemps : on ne peut pas conclure')], ['écriture', Object.assign(new Error('EEXIST'), { code: 'EEXIST' })]]) {
+            fp = faussePorte(u => (estRobots(u) ? { corps: Buffer.from('') } : err));
+            C8 = mkC(fp);
+            let x = null; try { await C8.image('/id/card-img/a.png'); } catch (y) { x = y; }
+            verifier(`erreur technique de la porte (${cas}) → BLOQUÉ (porte), jamais un réessai`, [x?.bloque === true, x?.porte === true, x?.reseau === true, fp.vus.length], [true, true, false, 2]);
+        }
+        fp = faussePorte(u => (estRobots(u) ? { corps: Buffer.from('') } : Object.assign(new Error('ETIMEDOUT x'), { reseau: true, transitoire: true })));
+        { let x = null; C8 = mkC(fp); try { await C8.page('/id/card-search/list/'); } catch (y) { x = y; } verifier('coupure TRANSITOIRE de la porte → un réessai, puis erreur non bloquante', [!!x?.bloque, fp.vus.length], [false, 3]); }
+        // (3) injection : `transport` n'accepte que celui de la porte ; `transportDeBanc` ne s'accepte que dans un banc (test-*.js)
+        const faux = { async get() { return { status: 200, texte: '' }; } };
+        const essai = o => { try { T.fabriquerClientTpc({ site: 'tpc-asie', verrou, ...o }); return 'accepté'; } catch (y) { return /transport/.test(y.message) ? 'refusé' : y.message; } };
+        verifier('transport quelconque (non porte) → refusé', essai({ transport: faux }), 'refusé');
+        verifier('transport = celui de la porte → accepté', essai({ transport: T.fabriquerTransportPorte({ porte: fp }) }), 'accepté');
+        verifier('transportDeBanc dans un banc (test-*.js) → accepté', essai({ transportDeBanc: faux }), 'accepté');
+        { const f0 = require.main.filename; require.main.filename = path.join(__dirname, 'collecteur-images-tpc.js');
+          try { verifier('transportDeBanc hors banc (processus de production) → refusé', essai({ transportDeBanc: faux }), 'refusé'); } finally { require.main.filename = f0; } }
+        // la cadence du client (10 s par défaut) n'est pas réduite par la porte
+        verifier('cadence par défaut du client inchangée', T.fabriquerClientTpc({ site: 'tpc-asie', verrou }).cadence(), 10000);
+        fs.rmSync(dirS, { recursive: true, force: true });
+    }
 
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);

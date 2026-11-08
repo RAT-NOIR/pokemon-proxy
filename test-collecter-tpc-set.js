@@ -116,12 +116,12 @@ const ligneBanc = (site, slug) => { const x = ligneTpc(site, slug); return x && 
     // ── 2. le client : la requête n° plafond+1 n'est JAMAIS envoyée ──
     {
         const t = reseau();
-        const cl = T.fabriquerClientTpc({ site: 'tpc-asie', transport: t, cadenceMs: 0, reessaiMs: 0, verrou: { tenu: true, perdu: false }, plafond: 3, dossierPauses: dossierPauses() });
+        const cl = T.fabriquerClientTpc({ site: 'tpc-asie', transportDeBanc: t, cadenceMs: 0, reessaiMs: 0, verrou: { tenu: true, perdu: false }, plafond: 3, dossierPauses: dossierPauses() });
         await cl.page('/tw/card-search/detail/7125/'); await cl.page('/tw/card-search/detail/7125/');          // robots + 2 pages = 3 requêtes
         const e = await essayer(() => cl.page('/tw/card-search/detail/7126/'));
         verifier('client : plafond 3 → robots + 2 pages passent, la 4e est refusée AVANT d\'être envoyée (transport : 3 appels)', [t.appels.length, cl.compteRequetes(), /plafond de 3/.test(e.e || '')], [3, 3, true]);
         const t2 = reseau();
-        const cl2 = T.fabriquerClientTpc({ site: 'tpc-asie', transport: t2, cadenceMs: 0, reessaiMs: 0, verrou: { tenu: true, perdu: false }, plafond: 10, compteInitial: 10, dossierPauses: dossierPauses() });
+        const cl2 = T.fabriquerClientTpc({ site: 'tpc-asie', transportDeBanc: t2, cadenceMs: 0, reessaiMs: 0, verrou: { tenu: true, perdu: false }, plafond: 10, compteInitial: 10, dossierPauses: dossierPauses() });
         const e2 = await essayer(() => cl2.page('/tw/card-search/detail/7125/'));
         verifier('client : un cumul déjà au plafond (compteInitial = plafond) → aucune requête, pas même robots.txt', [t2.appels.length, /plafond de 10/.test(e2.e || '')], [0, true]);
         verifier('client : sans plafond, rien ne change', (() => { try { T.fabriquerClientTpc({ site: 'tpc-asie', verrou: { tenu: true }, plafond: 0 }); return 'accepté'; } catch (er) { return /plafond/.test(er.message) ? 'refusé' : er.message; } })(), 'refusé');

@@ -48,7 +48,7 @@ function monde({ alerte = false, tenu = null, statutListe = 200 } = {}) {
             const sorties = [], erreurs = [];
             const code = await executer({ argv, jour, log: s => sorties.push(s), err: s => erreurs.push(s),
                 ouvrir: async () => { ouvertures++; return { db, fermer: async () => { } }; }, verrouDe: () => verrou,
-                clientDe: o => T.fabriquerClientTpc({ ...o, transport, cadenceMs: 0, reessaiMs: 0, dossierPauses: pauses }) }).catch(e => { erreurs.push(`EXCEPTION ${e.message}`); return 99; });
+                clientDe: o => T.fabriquerClientTpc({ ...o, transportDeBanc: transport, cadenceMs: 0, reessaiMs: 0, dossierPauses: pauses }) }).catch(e => { erreurs.push(`EXCEPTION ${e.message}`); return 99; });
             return { code, sorties: sorties.join('\n'), erreurs: erreurs.join('\n') };
         } };
 }

@@ -23,18 +23,15 @@ const sauver = () => fs.writeFileSync(F('compteur.json'), JSON.stringify(etat, n
 if (fs.existsSync(F('arret.json'))) { console.error(`⛔ arrêt définitif déjà écrit : ${fs.readFileSync(F('arret.json'), 'utf8')} — aucune requête`); process.exit(3); }
 const arreter = motif => { fs.writeFileSync(F('arret.json'), JSON.stringify({ motif, le: new Date().toISOString() })); };
 
-const transport = {
-    async get(url, o) {
+// le transport de la porte, avec le plafond et le compte de l'outil (401/403/410/429/défi : la porte écrit l'arrêt de l'hôte et le client remonte `bloque`)
+const transport = T.fabriquerTransportPorte({
+    avant: async url => {
         if (etat.requetes >= PLAFOND) throw new Error(`plafond de ${PLAFOND} requêtes atteint — aucune requête de plus`);
         etat.requetes++;
-        const r = await T.transportFetch.get(url, o);
-        etat.journal.push({ url, status: r.status, le: new Date().toISOString() });
+        etat.journal.push({ url, le: new Date().toISOString() });
         sauver();
-        const login = r.location && /login|signin|connexion|member/i.test(r.location);
-        if (ARRETS.includes(r.status) || login) { arreter(`HTTP ${r.status}${login ? ` (connexion : ${r.location})` : ''} sur ${url}`); throw Object.assign(new Error(`arrêt définitif : HTTP ${r.status} sur ${url}`), { bloque: true }); }
-        return r;
     }
-};
+});
 const verrou = { tenu: true, perdu: false };
 (async () => {
     const client = T.fabriquerClientTpc({ site: 'tpc-asie', transport, verrou });

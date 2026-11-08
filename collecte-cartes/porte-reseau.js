@@ -443,7 +443,7 @@ async function lire(url, o = {}) {
     if (ms2) throw erreurRefus(ms2);
     fs.mkdirSync(path.dirname(path.resolve(o.sortie)), { recursive: true });
     fs.writeFileSync(o.sortie, corps, { flag: 'wx' });
-    return { ok: true, status: r.status, octets: corps.length, sortie: o.sortie };
+    return { ok: true, status: r.status, octets: corps.length, sortie: o.sortie, urlFinale };      // urlFinale : l'adresse d'où vient le corps (après les sauts de la même racine)
 }
 
 // ── I2 : lever un arrêt = le RENOMMER en LEVEE-HOTE-<hôte>-<date>.json (la trace reste) ; la seule voie (le hook refuse Remove-Item sur un ARRET) ──────
