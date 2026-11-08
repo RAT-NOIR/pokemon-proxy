@@ -9,10 +9,12 @@ const R = require('../chargeur/copier-regle-site');
 
 const DOSSIER = path.join(__dirname, 'courriels-site');
 const SITE_LIB = R.SITE_LIB, REPO_SITE = R.REPO_SITE;
-// LE COMMIT NOMMÉ du site dont la copie est tirée (main du site au 2026-11-01 : f17614c ; lib/tarifs.ts a changé depuis 0ae0736, prix inchangés). Le changer est un geste volontaire : relancer l'outil, relire le diff des .mjs.
-const COMMIT = 'f17614c';
+// LE COMMIT NOMMÉ du site dont la copie est tirée (main du site au 2026-11-08 : 67d259e ; avant : f17614c du 2026-11-01). Depuis f17614c, le lot « source unique de l'offre »
+// du site a retiré SCANS_ACCUEIL et ANALYSES_SANS_COMPTE de site.ts et fait lire à tarifs.ts ses quotas dans le nouveau lib/offre.ts (3 et 10, inchangés) ; prix inchangés.
+// Le changer est un geste volontaire : relancer l'outil, relire le diff des .mjs.
+const COMMIT = '67d259e';
 // la fermeture TRANSITIVE des imports de courriels.ts (vérifiée par `fermeture` : tout import relatif hors de cette liste fait lever l'outil)
-const SOURCES = Object.freeze(['courriels.ts', 'courrielsGabarit.ts', 'site.ts', 'extension.ts', 'tarifs.ts', 'montants.ts']);
+const SOURCES = Object.freeze(['courriels.ts', 'courrielsGabarit.ts', 'site.ts', 'extension.ts', 'tarifs.ts', 'montants.ts', 'offre.ts']);
 const sha = b => crypto.createHash('sha256').update(b).digest('hex');
 
 const produire = (src) => R.produire(src || R.lecteurGit(REPO_SITE, COMMIT), SOURCES);

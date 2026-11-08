@@ -7,7 +7,7 @@ const C = require('../comptes/copier-courriels-site');
 const sha = b => crypto.createHash('sha256').update(b).digest('hex');
 (async () => {
     const emp = JSON.parse(fs.readFileSync(path.join(C.DOSSIER, 'empreintes.json'), 'utf8'));
-    H.v('les six sources du site sont empreintées', Object.keys(emp.sources).sort(), ['courriels.ts', 'courrielsGabarit.ts', 'extension.ts', 'montants.ts', 'site.ts', 'tarifs.ts']);
+    H.v('les sept sources du site sont empreintées (offre.ts depuis le commit 67d259e)', Object.keys(emp.sources).sort(), ['courriels.ts', 'courrielsGabarit.ts', 'extension.ts', 'montants.ts', 'offre.ts', 'site.ts', 'tarifs.ts']);
     H.v('le commit NOMMÉ est écrit dans les empreintes (forme complète) et correspond à C.COMMIT', [/^[0-9a-f]{40}$/.test(emp.commit || ''), emp.commit.startsWith(C.COMMIT)], [true, true]);
     for (const [nom, h] of Object.entries(emp.produits)) H.v(`   ${nom} : la copie n'a pas été retouchée à la main`, sha(fs.readFileSync(path.join(C.DOSSIER, nom))), h);
     H.v('   aucune copie ne cite encore un fichier .ts', Object.keys(emp.produits).filter(n => /from\s+["'][^"']+\.ts["']/.test(fs.readFileSync(path.join(C.DOSSIER, n), 'utf8'))), []);
