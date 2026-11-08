@@ -832,14 +832,16 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.strictEqual(sans.unites.length, 0); assert.match(JSON.stringify(sans.resume.refus), /nom-different/);
     });
     await test('plan (08/11, B) : un Dresseur indonésien de la ligne SV-P/ID passe par l\'illustration relue (cleR2 lue sur la CARTE, en base) ; une référence étrangère à la carte refuse', async () => {
-        const monter = async (reference, cleR2 = ['cartes/77/a.webp', 'cartes/77/b.webp']) => {
+        // la relecture vit HORS du manifeste : VALIDATIONS\illustrations-MCD.json ; une signature dans lu.illustrationRelue est ignorée
+        const monter = async (reference, cleR2 = ['cartes/77/a.webp', 'cartes/77/b.webp'], { fichier = true, shaFaux = false, signatureSeule = false } = {}) => {
             const w = await mondeSimple({ etat: [{ idProduct: 1001, idExpansion: 5000, langue: 'id', tamponnee: null, name: 'Switch' }], sets: [{ _id: SLUG, tirage: 'id' }],
                 lignes: [{ idProduct: 1001, carteId: 77, slugSet: SLUG, numeroFiche: '13', slug: 'Switch-SV-PID013', idExpansion: 5000 }],
                 cartes: [{ _id: 77, nomEn: 'Switch', categorie: 'dresseur', images: cleR2.map(c => ({ cleR2: c })) }], codesSet: [{ idExpansion: 5000, codeSet: 'SV-P/ID' }] });
             const man = JSON.parse(fs.readFileSync(path.join(w.racine, 'MCD', 'preuves.json'), 'utf8'));
             man.entrees[0].attendu.langue = 'id';
-            man.entrees[0].lu = { ...man.entrees[0].lu, langue: 'id', nom: 'Tukar Pokémon', total: '21', codeSet: 'SV-P/ID', illustrationRelue: { par: 'coordinateur', reference, le: '2026-11-08' } };
+            man.entrees[0].lu = { ...man.entrees[0].lu, langue: 'id', nom: 'Tukar Pokémon', total: '21', codeSet: 'SV-P/ID', ...(signatureSeule ? { illustrationRelue: { par: 'coordinateur', reference, le: '2026-11-08' } } : {}) };
             fs.writeFileSync(path.join(w.racine, 'MCD', 'preuves.json'), JSON.stringify(man));
+            if (fichier) fs.writeFileSync(path.join(w.racine, 'VALIDATIONS', 'illustrations-MCD.json'), JSON.stringify([{ idProduct: 1001, sha256: shaFaux ? H3 : sha(w.octets), reference, par: 'coordinateur', le: '2026-11-08' }]));
             return K.construirePlanAvec({ dossier: w.racine, cache: w.cache, lire: w.lire, etat: w.etat, lecteur: RC.lecteurNatif(w.db), fichiers: w.F });
         };
         const bon = await monter('cartes/77/b.webp');
@@ -848,6 +850,12 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         for (const [nom, p] of [['référence étrangère', await monter('cartes/99/z.webp')], ['carte sans visuel', await monter('cartes/77/a.webp', [])]]) {
             assert.strictEqual(p.unites.length, 0, nom); assert.match(JSON.stringify(p.resume.refus), /illustration-non-relue/, nom);
         }
+        const autreImage = await monter('cartes/77/b.webp', undefined, { shaFaux: true });
+        assert.strictEqual(autreImage.unites.length, 0); assert.match(JSON.stringify(autreImage.resume.refus), /illustration-non-relue/, 'sha256 de l\'illustration relue ≠ celui de l\'image jugée');
+        const signee = await monter('cartes/77/b.webp', undefined, { fichier: false, signatureSeule: true });
+        assert.strictEqual(signee.unites.length, 0, 'une signature dans le manifeste ne suffit jamais'); assert.match(JSON.stringify(signee.resume.refus), /nom-traduit-sans-temoin/);
+        assert.ok(bon.empreintes.MCD.illustrations && bon.empreintes.MCD.illustrations !== 'absent', 'le fichier d\'illustrations fait partie des empreintes du plan');
+        assert.strictEqual(signee.empreintes.MCD.illustrations, 'absent');
     });
     await test('plan (nom traduit) : fiche simple japonaise sans carte : Pokédex + PV + règle + code lus ; le code vient du slug OU de codes_set ; la table officielle sert un Dresseur ; un désaccord refuse', async () => {
         const base = o => ({ etat: [{ idProduct: 1001, idExpansion: 5000, langue: o.tirage ?? 'jp', tamponnee: null, name: o.name ?? 'Mareep' }], sets: [{ _id: SLUG, tirage: o.tirage ?? 'jp' }], cartes: o.cartes ?? [], luLangue: o.luLangue ?? 'ja',
@@ -1325,20 +1333,19 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.strictEqual(PV.motifNomLuIdentiqueProduit(lu, pd, ['Judge']), 'nom-lu-identique-produit');
     });
     // ───────── B : Dresseur / Énergie au nom traduit : numéro + code + langue + illustration relue, liste fermée ─────────
-    await test('B : règle illustration relue — acceptée complète, chaque condition manquante refuse', () => {
+    await test('B : règle illustration relue (fichier VALIDATIONS, hors manifeste) — acceptée complète, chaque condition manquante refuse', () => {
         assert.deepStrictEqual([...PV.REGLES_NOM_TRADUIT_DRESSEUR], ['M-P/ID', 'SV-P/ID', 'S-P/ID', 'SM-P/ID', 'M-P/TH']);
         assert.ok(Object.isFrozen(PV.REGLES_NOM_TRADUIT_DRESSEUR));
-        const ill = (o = {}) => ({ par: 'coordinateur', reference: 'cartes/77/swtich-id.webp', le: '2026-11-08', ...o });
-        const eid = (o = {}) => trad({ langue: 'id', nom: 'Tukar Pokémon', dex: null, pv: null, codeSet: 'SV-P/ID', illustrationRelue: ill(), ...o });
-        const pid = (o = {}) => ptrad({ tirage: 'id', slug: 'Switch-SV-PID005', slugSet: 'Scarlet-Violet-Indonesian-Promos', codeSet: 'SV-P/ID', nomEn: 'Switch', categorie: 'dresseur', carteId: 77, cleR2Carte: ['cartes/77/autre.webp', 'cartes/77/swtich-id.webp'], ...o });
+        const ill = (o = {}) => ({ idProduct: 1001, sha256: H1, reference: 'cartes/77/swtich-id.webp', par: 'coordinateur', le: '2026-11-08', ...o });
+        const eid = (o = {}) => trad({ langue: 'id', nom: 'Tukar Pokémon', dex: null, pv: null, codeSet: 'SV-P/ID', ...o });
+        const pid = (o = {}) => ptrad({ tirage: 'id', slug: 'Switch-SV-PID005', slugSet: 'Scarlet-Violet-Indonesian-Promos', codeSet: 'SV-P/ID', nomEn: 'Switch', categorie: 'dresseur', carteId: 77, cleR2Carte: ['cartes/77/autre.webp', 'cartes/77/swtich-id.webp'], illustrationsRelues: [ill()], ...o });
         assert.deepStrictEqual(lue(eid(), pid()), { ok: true, motifs: [] }, 'complète : acceptée');
         assert.deepStrictEqual(drap(eid(), pid()), ['temoin-illustration-relue:SV-P/ID'], 'drapeau écrit');
         assert.strictEqual(lue(eid(), pid({ categorie: 'energie', nomEn: 'Basic Fire Energy' })).ok, true, 'Énergie : acceptée');
         // thaï, ligne M-P/TH (alias de code M-P/TH→M-P) et nom thaï
-        const eth = trad({ langue: 'th', nom: 'เปลี่ยน', dex: null, pv: null, codeSet: 'M-P', numero: '069', illustrationRelue: ill() });
-        const pth = ptrad({ tirage: 'th', numero: '069', slug: 'Switch-M-PTH069', slugSet: 'M-P-Thai-Promos', codeSet: 'M-P/TH', nomEn: 'Switch', categorie: 'dresseur', cleR2Carte: ['cartes/77/swtich-id.webp'] });
+        const eth = trad({ langue: 'th', nom: 'เปลี่ยน', dex: null, pv: null, codeSet: 'M-P', numero: '069' });
+        const pth = ptrad({ tirage: 'th', numero: '069', slug: 'Switch-M-PTH069', slugSet: 'M-P-Thai-Promos', codeSet: 'M-P/TH', nomEn: 'Switch', categorie: 'dresseur', cleR2Carte: ['cartes/77/swtich-id.webp'], illustrationsRelues: [ill()] });
         assert.deepStrictEqual(lue({ ...eth, attendu: { ...eth.attendu, numero: '069' } }, pth), { ok: true, motifs: [] }, 'M-P/TH accepté');
-        // chaque ligne de la liste ouvre la règle
         for (const l of ['M-P/ID', 'S-P/ID', 'SM-P/ID']) assert.strictEqual(lue(eid({ codeSet: l }), pid({ codeSet: l })).ok, true, l);
         // conditions manquantes
         assert.match(mt(eid({ codeSet: 'SV-P/TH' }), pid({ codeSet: 'SV-P/TH' })), /nom-traduit-sans-temoin/, 'ligne hors liste (SV-P/TH)');
@@ -1346,25 +1353,67 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.ok(!lue(eid(), pid({ categorie: 'pokemon', nomEn: 'Mareep', nomEnCarte: 'Mareep' })).ok, 'un Pokémon n\'emprunte jamais cette voie');
         assert.ok(!drap(eid(), pid({ categorie: 'pokemon', nomEn: 'Mareep' })).some(d => d.startsWith('temoin-illustration-relue')));
         assert.match(mt(eid(), pid({ categorie: null })), /nom-traduit-sans-temoin/, 'catégorie inconnue : pas la voie');
-        assert.match(mt(eid({ illustrationRelue: undefined }), pid()), /nom-traduit-sans-temoin/, 'aucune illustration relue : comme avant');
-        assert.match(mt(eid({ illustrationRelue: ill({ reference: 'cartes/77/inconnue.webp' }) }), pid()), /illustration-non-relue/, 'référence absente des images de la carte');
-        assert.match(mt(eid({ illustrationRelue: ill({ reference: undefined }) }), pid()), /illustration-non-relue/, 'référence manquante');
-        assert.match(mt(eid({ illustrationRelue: ill({ reference: '' }) }), pid()), /illustration-non-relue/, 'référence vide');
+        assert.match(mt(eid(), pid({ illustrationsRelues: undefined })), /nom-traduit-sans-temoin/, 'aucune relecture au fichier : comme avant');
+        assert.match(mt(eid(), pid({ illustrationsRelues: [] })), /nom-traduit-sans-temoin/, 'fichier sans ce produit : comme avant');
+        assert.match(mt(eid(), pid({ illustrationsRelues: [ill({ idProduct: 1002 })] })), /nom-traduit-sans-temoin/, 'relecture d\'un AUTRE produit : comme avant');
+        // un lu.illustrationRelue dans le MANIFESTE est ignoré : il ne suffit jamais, même complet et à la bonne référence
+        const signe = { par: 'coordinateur', reference: 'cartes/77/swtich-id.webp', le: '2026-11-08' };
+        assert.match(mt(eid({ illustrationRelue: signe }), pid({ illustrationsRelues: undefined })), /nom-traduit-sans-temoin/, 'signature du manifeste : ignorée');
+        assert.ok(!drap(eid({ illustrationRelue: signe }), pid({ illustrationsRelues: [] })).some(d => d.startsWith('temoin-illustration-relue')));
+        assert.match(mt(eid({ illustrationRelue: signe }), pid({ illustrationsRelues: [ill({ reference: 'cartes/77/inconnue.webp' })] })), /illustration-non-relue/, 'le manifeste ne rattrape pas un fichier faux');
+        // le fichier : même idProduct ET même sha256 que l'image jugée, référence = une cleR2 de la carte
+        assert.match(mt(eid(), pid({ illustrationsRelues: [ill({ sha256: H2 })] })), /illustration-non-relue/, 'sha256 d\'une autre image');
+        assert.match(mt(eid(), pid({ illustrationsRelues: [ill({ reference: 'cartes/77/inconnue.webp' })] })), /illustration-non-relue/, 'référence absente des images de la carte');
+        assert.match(mt(eid(), pid({ illustrationsRelues: [ill({ reference: undefined })] })), /illustration-non-relue/, 'référence manquante');
+        assert.match(mt(eid(), pid({ illustrationsRelues: [ill({ reference: '' })] })), /illustration-non-relue/, 'référence vide');
         assert.match(mt(eid(), pid({ cleR2Carte: undefined })), /illustration-non-relue/, 'images de la carte inconnues');
         assert.match(mt(eid(), pid({ cleR2Carte: [] })), /illustration-non-relue/, 'la carte n\'a aucun visuel');
-        assert.match(mt(eid({ illustrationRelue: ill({ par: 'chasseur' }) }), pid()), /illustration-non-relue/, 'par autre que coordinateur');
-        assert.match(mt(eid({ illustrationRelue: ill({ par: undefined }) }), pid()), /illustration-non-relue/, 'par absent');
-        assert.match(mt(eid({ illustrationRelue: ill({ le: 'hier' }) }), pid()), /illustration-non-relue/, 'date illisible');
-        assert.match(mt(eid({ illustrationRelue: ill({ le: undefined }) }), pid()), /illustration-non-relue/, 'date absente');
-        assert.match(mt(eid({ illustrationRelue: 'oui' }), pid()), /illustration-non-relue/, 'forme fausse');
+        assert.match(mt(eid(), pid({ illustrationsRelues: [ill({ par: 'chasseur' })] })), /illustration-non-relue/, 'par autre que coordinateur');
+        assert.match(mt(eid(), pid({ illustrationsRelues: [ill({ le: 'hier' })] })), /illustration-non-relue/, 'date illisible');
+        assert.match(mt(eid(), pid({ illustrationsRelues: [ill({ le: undefined })] })), /illustration-non-relue/, 'date absente');
+        assert.strictEqual(lue(eid(), pid({ illustrationsRelues: [ill({ sha256: H2 }), ill()] })).ok, true, 'une entrée juste parmi d\'autres suffit');
         assert.match(mt(eid({ langue: 'th', nom: 'เปลี่ยน' }), pid()), /langue-differente/, 'langue lue autre que celle du tirage');
-        assert.match(mt(eid({ nom: '' }), pid()), /nom-different|nom-traduit|nom-lu/, 'nom vide');
-        assert.ok(!lue(eid({ nom: '' }), pid()).ok);
+        assert.ok(!lue(eid({ nom: '' }), pid()).ok, 'nom vide');
         assert.match(mt(eid({ codeSet: 'SV-P/ID', numero: '006' }), pid()), /numero-different/, 'numéro faux : la comparaison reste');
         assert.match(mt(eid(), pid({ slug: 'Switch', codeSet: 'S-P/ID' })), /code-set-different/, 'code faux : la comparaison reste');
-        assert.ok(!lue(eid({ codeSet: null }), pid()).ok, 'code non lu : sans témoin de nom la règle traduite ne s\'ouvre pas, refus');
+        assert.ok(!lue(eid({ codeSet: null }), pid()).ok, 'code non lu : refus');
         // l'écriture thaïe doit rester thaïe : le contrôle A passe avant la règle B
         assert.match(mt({ ...eth, lu: { ...eth.lu, nom: 'Switch' }, attendu: { ...eth.attendu, numero: '069' } }, pth), /nom-lu-hors-langue/, 'A avant B');
+        // forme du fichier (lireIllustrations) : comme les validations, il LÈVE sur une entrée mal formée
+        assert.deepStrictEqual(PV.lireIllustrations([ill()]).map(i => [i.idProduct, i.sha256, i.reference, i.par]), [[1001, H1, 'cartes/77/swtich-id.webp', 'coordinateur']]);
+        assert.throws(() => PV.lireIllustrations({}), /tableau/, 'non tableau');
+        for (const [nom, v] of [['idProduct', ill({ idProduct: 0 })], ['sha256', ill({ sha256: 'zz' })], ['reference', ill({ reference: '' })], ['par', ill({ par: 'chasseur' })], ['date', ill({ le: 'hier' })]])
+            assert.throws(() => PV.lireIllustrations([v]), undefined, nom);
+    });
+    await test('A (tour de correction) : TOUTES les lettres du nom dans l\'écriture de la langue, hors marques latines imprimées (liste fermée) ; au moins une lettre de l\'écriture', () => {
+        const refus = (langue, nom, tirage = langue === 'ja' ? 'jp' : langue) => /nom-lu-hors-langue/.test(mt(trad({ langue, nom, dex: null, pv: null }), ptrad({ tirage, nomEn: 'Energy Search', categorie: 'energie' })));
+        assert.ok(refus('th', 'Energy Search ก'), 'un seul glyphe thaï ne sauve pas un nom anglais');
+        assert.ok(refus('zh-hans', 'Energy Search 能'), 'un seul han');
+        assert.ok(refus('ja', 'Energy Search ネ'), 'un seul kana');
+        assert.ok(refus('ko', 'Energy Search 에', 'ko'), 'un seul hangul');
+        assert.ok(refus('th', 'Vivid ก'), 'V à l\'intérieur d\'un mot latin n\'est pas une marque');
+        assert.ok(refus('th', 'ก Pokémon'), 'lettre latine accentuée');
+        assert.ok(refus('th', 'V'), 'une marque seule : aucune lettre de l\'écriture');
+        assert.ok(refus('zh-hans', 'VSTAR'), 'idem');
+        for (const [langue, nom] of [['th', 'โรตอมV'], ['zh-hans', '洛奇亚VSTAR'], ['th', 'กาไบต์ ของซิโรนะ'], ['zh-hans', '洗翠 野蛮鲈鱼'], ['zh-hant', '超級噴火龍Xex'], ['ja', 'ピカチュウVMAX'], ['ja', 'メタグロスV-UNION'],
+            ['zh-hans', '皮卡丘 TAG TEAM GX'], ['ja', 'ポケモンBREAK'], ['ja', 'ミュウツーLV.X'], ['zh-hans', '喷火龙ex'], ['zh-hans', '喷火龙EX'], ['ja', '佐々木ー'], ['ko', '피카츄 V']])
+            assert.ok(!refus(langue, nom), `${langue} « ${nom} » : conforme`);
+    });
+    await test('A (tour de correction) : en deux-sources, le contrôle A juge les DEUX lectures', async () => {
+        const ok = async () => ({ decision: 'ecrire', preuve: { regle: 'strict' } });
+        const o = { a: Buffer.from('A'), b: Buffer.from('B') };
+        const th = (nom, nomSeconde) => E2({ lu: { ...entree().lu, langue: 'th', nom }, seconde: seconde({ lu: { ...entree().lu, langue: 'th', nom: nomSeconde } }) });
+        const p = produit({ tirage: 'th', nomEn: 'Energy Search' });
+        const r1 = await deux(th('Energy Search', 'ก'), o, ok, p);
+        assert.match(r1.motif, /premiere-lecture:nom-lu-hors-langue/, 'première lecture en latin : refus');
+        const r2 = await deux(th('ก', 'Energy Search'), o, ok, p);
+        assert.match(r2.motif, /seconde-lecture:.*nom-lu-hors-langue|seconde-lecture:/, 'seconde lecture en latin : refus');
+        assert.ok(!r2.ok);
+    });
+    await test('A10 : motifNomLuIdentiqueProduit compare aussi le nom de la CARTE (nomEnCarte) du produit', () => {
+        const lu = { langue: 'id', nom: 'Switch' };
+        assert.strictEqual(PV.motifNomLuIdentiqueProduit(lu, { nomEn: 'Switch Cart', nomEnCarte: 'Switch', categorie: 'dresseur' }, []), 'nom-lu-identique-produit', 'identique au nom de la carte seulement');
+        assert.strictEqual(PV.motifNomLuIdentiqueProduit(lu, { nomEn: 'Switch Cart', nomEnCarte: 'Switch Cart', categorie: 'dresseur' }, []), null, 'ni l\'un ni l\'autre');
     });
     await test('jeu fictif (forme de N8R1) : un Dresseur id à nom anglais et un Dresseur th à nom anglais sont refusés', () => {
         const eth = trad({ langue: 'th', nom: 'Energy Search', dex: null, pv: null, codeSet: 'SV-P/TH' }), pth = ptrad({ tirage: 'th', nomEn: 'Energy Search', categorie: 'energie', slug: 'Energy-Search-SV-PTH005', codeSet: 'SV-P/TH' });
