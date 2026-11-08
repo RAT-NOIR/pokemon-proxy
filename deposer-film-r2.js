@@ -26,6 +26,7 @@ const PAUSE_MS = 500;            // 2 requêtes par seconde au plus
 const ATTENTE_429_MS = 30000;    // 30 s, 60 s, 90 s…
 const ESSAIS_MAX = 5;
 const ECHECS_DEBIT_ARRET = 3;
+const DELAI_REQUETE_MS = 60000;  // délai maximal par requête (AbortSignal)
 
 const sha256 = b => crypto.createHash('sha256').update(b).digest('hex');
 const estVideo = ct => ct === 'video/webm' || ct === 'video/mp4';
@@ -111,31 +112,44 @@ async function deposer({ manifeste, attendu, s3, bucket, fs: fsx = fs, dossier =
     const n = preparer(manifeste, attendu, { fs: fsx, dossier });
     // passe 1 : l'état de CHAQUE clé, avant d'écrire quoi que ce soit
     const aEcrire = [];
-    let dejaLa = 0;
-    for (const f of manifeste.fichiers) {
-        let tete = null;
-        try { tete = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: f.cleR2 })); }
-        catch (e) { if (!introuvable(e)) throw e; }
-        if (!tete) { aEcrire.push(f); continue; }
-        const meme = await memeContenu(tete, f, async () => {
-            const r = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: f.cleR2 }));
-            return Buffer.from(await r.Body.transformToByteArray());
-        });
-        if (!meme) throw new Error(`ARRÊT : la clé ${f.cleR2} existe avec un contenu différent du manifeste — jamais d'écrasement (aucune écriture faite)`);
-        dejaLa++;
-        log(`  deja-la  ${f.cleR2}`);
-    }
-    // passe 2 : écritures
-    let deposes = 0;
-    for (const f of aEcrire) {
-        const corps = fsx.readFileSync(path.resolve(dossier, f.chemin));
-        await s3.send(new PutObjectCommand({
-            Bucket: bucket, Key: f.cleR2, Body: corps,
-            ContentType: f.contentType, CacheControl: CACHE_CONTROL,
-            Metadata: { sha256: f.sha256 }, IfNoneMatch: '*'
-        }));
-        deposes++;
-        log(`  depose   ${f.cleR2}`);
+    let dejaLa = 0, deposes = 0;
+    try {
+        for (const f of manifeste.fichiers) {
+            let tete = null;
+            try { tete = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: f.cleR2 })); }
+            catch (e) { if (!introuvable(e)) throw e; }
+            if (!tete) { aEcrire.push(f); continue; }
+            const meme = await memeContenu(tete, f, async () => {
+                const r = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: f.cleR2 }));
+                return Buffer.from(await r.Body.transformToByteArray());
+            });
+            if (!meme) throw new Error(`ARRÊT : la clé ${f.cleR2} existe avec un contenu différent du manifeste — jamais d'écrasement (aucune écriture faite)`);
+            dejaLa++;
+            log(`  deja-la  ${f.cleR2}`);
+        }
+        // passe 2 : écritures
+        for (const f of aEcrire) {
+            // UN SEUL Buffer : celui qu'on hache est celui qu'on envoie
+            const corps = fsx.readFileSync(path.resolve(dossier, f.chemin));
+            const h = sha256(corps);
+            if (h !== f.sha256 || corps.length !== f.taille) throw new Error(`${f.cleR2} : le fichier a changé depuis la vérification (sha256 relue ${h} ≠ manifeste ${f.sha256}) — rien envoyé pour cette clé`);
+            try {
+                await s3.send(new PutObjectCommand({
+                    Bucket: bucket, Key: f.cleR2, Body: corps,
+                    ContentType: f.contentType, CacheControl: CACHE_CONTROL,
+                    Metadata: { sha256: f.sha256 }, IfNoneMatch: '*'
+                }));
+            } catch (e) {
+                if (e && (e.$metadata?.httpStatusCode === 412 || e.name === 'PreconditionFailed'))
+                    throw new Error(`ARRÊT : 412 PreconditionFailed (IfNoneMatch) — la clé ${f.cleR2} a été créée entre-temps ; jamais d'écrasement`);
+                throw e;
+            }
+            deposes++;
+            log(`  depose   ${f.cleR2}`);
+        }
+    } catch (e) {
+        log(`DÉPÔT INTERROMPU : ${deposes} déposés, ${dejaLa} déjà là, ${manifeste.fichiers.length - deposes - dejaLa} restants sur ${n}.`);
+        throw e;
     }
     return { deposes, dejaLa, total: n };
 }
@@ -164,7 +178,7 @@ async function controler({ manifeste, attendu, base, fetch: fetchx, sommeil, log
         for (let essai = 1; essai <= ESSAIS_MAX; essai++) {
             if (!premiere) await sommeil(PAUSE_MS);
             premiere = false;
-            const r = await fetchx(url, headers ? { headers } : {});
+            const r = await fetchx(url, { signal: AbortSignal.timeout(DELAI_REQUETE_MS), ...(headers ? { headers } : {}) });
             if (r.status !== 429) return r;
             log(`  429 ${url} (essai ${essai}/${ESSAIS_MAX})`);
             if (essai < ESSAIS_MAX) await sommeil(ATTENTE_429_MS * essai);
@@ -178,6 +192,7 @@ async function controler({ manifeste, attendu, base, fetch: fetchx, sommeil, log
         const url = `${base}/${f.cleR2}`;
         const res = { cle: f.cleR2, statut: 'ok' };
         const ko = raison => { res.statut = 'ko'; res.raison = raison; };
+        try {   // une exception réseau (rejet, coupure, délai, flux) marque CETTE clé ko ; elle ne perd pas le rapport
         const g = await demander(url);
         if (!g) { res.statut = 'debit'; res.raison = '429 persistant'; }
         else {
@@ -203,6 +218,7 @@ async function controler({ manifeste, attendu, base, fetch: fetchx, sommeil, log
                 }
             }
         }
+        } catch (e) { ko(`erreur réseau : ${e && e.name === 'TimeoutError' ? 'délai dépassé (' + DELAI_REQUETE_MS + ' ms)' : (e && e.message || e)}`); }
         if (res.statut === 'debit') { echecsDebit++; if (echecsDebit >= ECHECS_DEBIT_ARRET) arret = true; }
         else echecsDebit = 0;
         cles.push(res);
@@ -219,8 +235,9 @@ async function controler({ manifeste, attendu, base, fetch: fetchx, sommeil, log
 // ---------- main ----------
 async function main(argv, env = process.env, deps = {}) {
     const log = deps.log || (l => console.log(l));
+    let a = null;
     try {
-        const a = lireArgs(argv);                       // refus avant toute connexion
+        a = lireArgs(argv);                             // refus avant toute connexion
         const mf = path.resolve(a.manifeste);
         let bucket = null, base = null;
         if (a.mode === 'ecrire') {
@@ -253,6 +270,11 @@ async function main(argv, env = process.env, deps = {}) {
         return rap.ok === rap.total ? 0 : 1;
     } catch (e) {
         log(`🔴 ${e.message}`);
+        // le rapport s'écrit dans TOUS les cas du contrôle, y compris quand tout a échoué avant la première requête
+        if (a && a.mode === 'controler' && a.rapport) {
+            try { fs.writeFileSync(path.resolve(a.rapport), JSON.stringify({ base: env.R2_IMAGES_BASE_URL || null, genere: new Date().toISOString(), total: null, ok: 0, arret: false, erreur: e.message, entetesVideo: null, cles: [] }, null, 2)); }
+            catch (e2) { log(`🔴 rapport non écrit : ${e2.message}`); }
+        }
         return 1;
     }
 }
