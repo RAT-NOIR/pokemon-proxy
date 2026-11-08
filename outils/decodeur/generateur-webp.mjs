@@ -38,7 +38,7 @@ export class Encodeur {
 /** L'oracle : même interface que Lecteur ; chaque bit tiré est écrit dans l'encodeur. */
 class Oracle {
     constructor(enc, rnd, biais) { this.enc = enc; this.rnd = rnd; this.biais = biais; this.eof = false; }
-    get(prob) { const bit = this.rnd() < ((256 - prob) / 256) * this.biais ? 1 : 0; this.enc.put(bit, prob); return bit; }
+    get(prob) { const bit = this.rnd() < Math.min(1, ((256 - prob) / 256) * this.biais) ? 1 : 0; this.enc.put(bit, prob); return bit; }
     valeur(n) { let v = 0; while (n-- > 0) v |= this.get(0x80) << n; return v; }
     signee(n) { const v = this.valeur(n); return this.get(0x80) ? -v : v; }
 }
@@ -103,7 +103,7 @@ export function genererWebp(graine, w, h, forces = {}) {
     const brut = { seg, lf, nparts, base, dq, P, utiliseSkip, probaSkip, refresh: pile(0.5) ? 1 : 0, upd };
     const E = W.construireEntetes(brut);
     const enc0 = new Encodeur(); ecrireEntetes(enc0, brut);
-    const biais = 0.35 + rnd() * 0.65;
+    const biais = forces.gros ? 2 + rnd() * 6 : 0.35 + rnd() * 0.65;      // gros : beaucoup plus de bits à 1 -> des catégories 5 et 6, des coefficients de plusieurs milliers
     const encs = Array.from({ length: nparts }, () => new Encodeur());
     const br = new Oracle(enc0, rnd, biais), parts = encs.map(e => new Oracle(e, rnd, biais));
     const plafond = forces.plafond !== undefined ? forces.plafond : 300;      // borne PROUVÉE contre Pillow par défaut ; plus haut : mesure d'extension (RM_PLAFOND_COEFF)

@@ -32,7 +32,9 @@ const MESURE = {
     erreur: ouNul(chaine(200)),
     // lot iOS : WebGPU demandé puis désactivé sur iOS (le moteur déposé est celui qui a servi), forcé par ?webgpu=forcer, options de session demandées (diagnostic mémoire), et le diagnostic des pixels
     moteurDemande: ouNul(parmi('wasm', 'webgpu')), webgpuDesactive: ouNul(booleen), webgpuForce: ouNul(booleen), optionsSession: ouNul(chaine(60)),
-    diagnosticPixels: ouNul(objetSimple)
+    diagnosticPixels: ouNul(objetSimple),
+    // décodeur Rat-Market : le chemin qui a servi d'entrée au modèle (rm / mixte / navigateur), ses refus, le témoin du navigateur, et l'orientation EXIF des WebP/JPEG vue par ce navigateur
+    entree: ouNul(objetSimple), orientationNavigateur: ouNul(objetSimple)
 };
 const STAT = { n: entier(0, 1e8), max: entier(0, 255), somme: entier(0, 1e11), nDiff: entier(0, 1e8), moy: nombre(0, 255), pctDiff: nombre(0, 100) };
 const DIAGNOSTIC = {
@@ -40,6 +42,13 @@ const DIAGNOSTIC = {
     decodage: ouNul(objetSimple), redimensionnement: ouNul(objetSimple), chaine: ouNul(objetSimple), bitmapSansConversion: ouNul(objetSimple), bitmapAvecConversion: ouNul(objetSimple),
     couleurCanvas: ouNul(chaine(20))
 };
+const ENTREE = {
+    chemin: parmi('rm', 'mixte', 'navigateur'), source: chaine(20), cartesRm: entier(0, 100), cartesRepli: entier(0, 100), refus: ouNul(objetSimple), identiqueAuBit: ouNul(booleen),
+    rgbIdentiquesPil: ouNul(entier(0, 100)), cartesComparees: ouNul(entier(0, 100)), rgbIdentiquesNavigateur: ouNul(entier(0, 100)), tenseursIdentiquesNavigateur: ouNul(entier(0, 100)), ecartMaxNavigateur: ouNul(entier(0, 255)), cosMinNavigateur: ouNul(nombre(-1, 1.0001)),
+    msRmMediane: ouNul(nombre(0, 1e6)), msNavigateurMediane: ouNul(nombre(0, 1e6)), cartes640: ouNul(entier(0, 100)), ms640: ouNul(nombre(0, 1e7)), empreinte640: ouNul(hexN(12))
+};
+const REFUS = { FORMAT: entier(0, 100), TROP_GRAND: entier(0, 100), DECODAGE: entier(0, 100), NON_SUPPORTE: entier(0, 100), 'entree-invalide': entier(0, 100), memoire: entier(0, 100), autre: entier(0, 100) };
+const ORIENTATION = { webp: parmi('tourne', 'non-tourne', 'indetermine'), jpeg: parmi('tourne', 'non-tourne', 'indetermine') };
 const GPU = { vendor: chaine(40), architecture: chaine(40) };
 // M9 : le téléchargement du modèle — redirigé (302 vers R2) ou non, l'hôte final, et, en cas de blocage, la cause nommée par une sonde « no-cors »
 const RESEAU = { redirige: ouNul(booleen), hoteFinal: ouNul(chaine(80)), blocage: ouNul(parmi('cors-manquant', 'reseau-ou-csp', 'indetermine-isole')) };
@@ -78,6 +87,13 @@ function valider(corps) {
             if (diag[k] !== null && diag[k] !== undefined) { d = defaut(diag[k], STAT, `mesure.diagnosticPixels.${k}.`); if (d) return { ok: false, detail: d }; }
         }
     }
+    const ent = corps.mesure.entree;
+    if (ent !== null && ent !== undefined) {
+        d = defaut(ent, ENTREE, 'mesure.entree.'); if (d) return { ok: false, detail: d };
+        if (ent.refus !== null && ent.refus !== undefined) { d = defaut(ent.refus, REFUS, 'mesure.entree.refus.'); if (d) return { ok: false, detail: d }; }
+    }
+    const ori = corps.mesure.orientationNavigateur;
+    if (ori !== null && ori !== undefined) { d = defaut(ori, ORIENTATION, 'mesure.orientationNavigateur.'); if (d) return { ok: false, detail: d }; }
     for (const k of ['moteur', 'verdict']) if (!(k in corps.mesure)) return { ok: false, detail: `manque:mesure.${k}` };
     return { ok: true, doc: corps };
 }

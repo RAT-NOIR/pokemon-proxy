@@ -11,13 +11,13 @@ Demande de l'éditeur : entrée du modèle identique au bit sur iPhone, Android 
 
 | fichier servi | octets | sha256 |
 |---|---|---|
-| decodeur.mjs | 13 924 | a08c8d566abe676be0ce1686e9fee85ef33cd675b622ec8b8d8db5a74f387132 |
+| decodeur.mjs | 14 460 | 0186c265131668331b46a1f843f4992922cd34aeaa4b7c4a34230b362650c67b |
 | decodeur-jpeg.mjs | 29 497 | 8338d016d891ae9e4c3fa7e71d4c06d9c914869eebb4a662899ef31e17bc00ca |
 | decodeur-png.mjs | 13 358 | 661bca9829519d3ecba9f5a5c8a3f1f0d8511b1ccb4474ffd88a0fd5e496564c |
-| decodeur-webp.mjs | 34 268 | a0a671744c4e213ae96d733992e7e85c53588df5b3320cb5c6d68810f3148627 |
+| decodeur-webp.mjs | 34 827 | 37620b18fadf0e16a0bc7220259d6ea3b1a50c64fc95a07c96117e26a7948402 |
 | decodeur-webp-tables.mjs | 13 166 | d34d39249a0020c1fdc1815f234514e8285de8dd92fa7ca9a5a4465c80be60b5 |
 
-**Poids ajouté au téléchargement : 104,2 Ko (non compressé, après le tour T1), ~28 Ko compressé. Aucun .wasm.** (sha256 mesurés sur les fichiers du disque, fins de ligne LF.)
+**Poids ajouté au téléchargement : 105,3 Ko (non compressé, après le tour T2), environ 28 Ko compressé. Aucun .wasm.** (sha256 mesurés sur les fichiers du disque, fins de ligne LF.)
 
 ## 2. Contrat (`public/decodeur.mjs`)
 
@@ -57,22 +57,34 @@ Vérité : Pillow 13.0.0, libjpeg-turbo 3.2.0, libwebp 1.6.0, zlib-ng 1.3.1 (Ima
 
 **Ce qui n'est PAS prouvé** : l'iPhone et l'Android eux-mêmes. Le décodeur étant en entiers 32 bits et sans API du navigateur, l'égalité node = Chrome est la preuve disponible ; l'égalité sur l'iPhone se constate en rejouant la page (voir 4). Les JPEG 4:4:0 et 4:1:1 (Pillow 13 ne sait pas en fabriquer) sont refusés plutôt que devinés.
 
-## 4. Intégration (attend le message « `v2-banc-ios` poussée »)
+## 4. Intégration dans la page de banc (faite au tour T3)
 
-Rien n'est branché : `app.js` et `verdict.mjs` intacts. À faire ensuite : `decoderCarte` appelle `decoder()` par défaut (`orientation: 'aucune'` pour le lot), le chemin navigateur reste mesuré à côté pour la ligne « décodeur du navigateur contre décodeur Rat-Market » ; `routes.js` sert déjà les cinq fichiers (liste fermée, `JS`, mêmes en-têtes). `v2/test/test-banc-telephone*.js` n'ont pas pu tourner ici (pas de `node_modules` dans ce worktree, aucune jonction autorisée) : le verrou du coordinateur les jouera ; ils parcourent `routes.FICHIERS` sans liste codée en dur.
+La mesure passe par le décodeur Rat-Market ; le chemin navigateur est gardé comme témoin et comme repli. Ni le verdict (`jugerMesure`), ni ses seuils (`SEUIL_IDENTIQUE` 0,9999, `GARDE_EXTENSION` 0,998), ni `mesurer()` dans sa logique de mesure (30 cartes, 12 « modèle seul », même inférence) n'ont changé.
+- **Quel chemin a servi** : pour chaque carte, `preparerCarte` décode par `decoder(octets, { orientation: 'aucune' })` puis par `decoderCarte` (le navigateur, inchangé : un canvas par carte). Le tenseur du modèle vient de Rat-Market ; le navigateur est comparé octet pour octet. `resumerEntree` rend `chemin` (`rm` / `mixte` / `navigateur`), `cartesRm`, `cartesRepli`, les refus par code et `identiqueAuBit` (vrai seulement si les 30 cartes sont passées par Rat-Market). Tout est AFFICHÉ (ligne 5, tableau « Chiffres ») et DÉPOSÉ (`mesure.entree`, liste fermée dans `stockage.js`, document < 4 000 octets).
+- **Un refus ne laisse jamais un écran vide** : le code du refus (`FORMAT, TROP_GRAND, DECODAGE, NON_SUPPORTE, entree-invalide, memoire, autre`) est compté, la carte est décodée par le navigateur, et la page écrit « entrée NON IDENTIQUE AU BIT : n carte(s) décodée(s) par le navigateur (refus …) ». Éprouvé dans Chrome : une carte remplacée par un WebP sans perte -> chemin `mixte`, `refus {NON_SUPPORTE: 1}`, ligne 5 « NON IDENTIQUE AU BIT ».
+- **Le constat « identique à la référence »** : (1) le verdict de la mesure (cosinus contre la référence native, inchangé) ; (2) les octets décodés par Rat-Market comparés à l'empreinte de PIL de chaque carte (`rgbSha256` ajouté au lot par `outils/decodeur/ajouter-sha-lot.js`, vérité = `pil-lot.json`) : « octets identiques à PIL sur 30/30 » ; (3) le témoin : octets, tenseurs et, si le navigateur diffère, le cosinus min qu'il aurait donné (`cosMinNavigateur`, une inférence de plus seulement pour les cartes où il diffère). La phrase à côté du verdict (`avisEntree`) est honnête dans tous les cas : « identique à la référence, entrée identique au bit » ; « identique, mais l'entrée n'est pas identique au bit (repli) » ; « écart alors que l'entrée est identique au bit : la cause n'est pas le décodage (moteur ou modèle) ». **Sur iPhone et Android on s'attend à IDENTIQUE avec « identique au bit 30/30 » ; si le navigateur diffère, la ligne le chiffre ; si autre chose diffère, elle le dit.**
+- **Orientation EXIF des WebP, Safari compris** : `testerOrientation()` décode, avec `createImageBitmap` par défaut, deux images embarquées (un WebP 17 x 9 et un JPEG 37 x 29, EXIF orientation 6 : les octets sont ceux du jeu de preuve de Pillow, `poser-images-exif.js`) et dépose `orientationNavigateur: { webp, jpeg }` (`tourne` / `non-tourne` / `indetermine`). Léger (deux images de 258 et 1 622 octets, une fois par page). Chrome 157 : WebP `non-tourne`, JPEG `tourne`. À lire sur l'iPhone : c'est la réponse pour fixer la politique unique.
+- **`reduire640`** : mesuré sur les 3 premières cartes (458 x 640, hausse) : temps et empreinte combinée de 12 hex (`empreinte640`), identique d'un appareil à l'autre si le code est déterministe ; Chrome 157 : `1cb8790bae75`, 80 ms pour 3 cartes, la même dans deux exécutions. Elle n'entre dans aucun verdict.
+- **Fichiers servis** : les cinq `decodeur*.mjs` sont dans la liste fermée de `routes.js` (17 routes littérales : la page, 15 fichiers, le dépôt) ; la CSP est inchangée (aucun `.wasm` de plus).
+- Rejeux : `node v2/test/test-decodeur-page.js` (44 assertions, rouge vu : `resumerEntree` absent) ; `v2/test/test-banc-telephone-ios.js` 62/62 (inchangé) ; Chrome : `node outils/decodeur/pilote-page.js` (scénario normal : IDENTIQUE, chemin `rm`, 30/30 identiques à PIL et au navigateur ; `--refus=1` : chemin `mixte`). Les bancs qui ouvrent une base (`test-banc-telephone.js`, `-tour1`, `-cors`) exigent `mongodb-memory-server`, absent de cette copie : non rejoués ici, le verrou du coordinateur les jouera ; seule la ligne « 12 routes » de `test-banc-telephone.js` a été mise à jour (17).
+- Rien dans `C:\Users\Yung\Desktop\extension v2`.
 
-## 5. Ce que l'extension et le site auront à adopter
+## 5. Ce que l'extension et le site auront à adopter (contrat proposé)
 
-1. Copier `decodeur*.mjs` à l'octet (comme `empreinte.js`) ; remplacer `createImageBitmap` + canvas + `getImageData` de `worker.js` (`redresserPhoto`, `decoderReference`) par `decoder(octets)` ; l'entête `verifierDimensions` devient celui du décodeur (mêmes bornes).
-2. Entrée de la détection : `reduire640` à la place du canvas `imageSmoothingQuality = 'high'` — à remesurer sur le banc de détection avant de s'y fier (quadrilatère, taux de redressement).
-3. Fixer UNE politique d'orientation pour tous les appareils (JPEG : EXIF appliqué ; WebP : non, comme Chrome, ou oui partout) — le décodeur la rend identique ; Safari à mesurer.
-4. Les fichiers WebP sans perte et les JPEG exotiques lèvent `NON_SUPPORTE` : prévoir le repli sur le chemin navigateur (marqué « non identique au bit ») ou refuser l'image.
-5. Temps : décoder une photo de 12 Mpx coûte plusieurs centaines de ms ; dans le Worker (comme aujourd'hui).
+1. **Copier `decodeur*.mjs` à l'octet** (comme `empreinte.js`), servir ou embarquer les cinq fichiers ; remplacer `createImageBitmap` + canvas + `getImageData` de `worker.js` (`redresserPhoto`, `decoderReference`) par `decoder(octets, { orientation: 'exif' })` pour une photo et `{ orientation: 'aucune' }` pour une référence. `verifierDimensions` du décodeur remplace `entete.js` (mêmes bornes).
+2. **Codes d'erreur fermés** : `FORMAT, TROP_GRAND, DECODAGE, NON_SUPPORTE, entree-invalide, memoire`. Un refus n'est jamais une image approchée : l'appelant retombe sur le navigateur en le marquant « non identique au bit », ou refuse l'image avec le code.
+3. **Options et plafonds** : `pixelsMax` 12 Mpx (séquentiel), `pixelsMaxProgressif` 4 Mpx et `balayagesMax` 64 (JPEG progressif ; maximum réel observé sur 9 069 progressifs : 14 balayages, 146 700 px), `coteMax` 4 096, `coeffMaxWebp` 0 (désactivé : voir § 8). Un progressif de plus de 4 Mpx suit le repli.
+4. **Orientation** : JPEG : EXIF appliqué par défaut (le navigateur le fait aussi) ; WebP : lu mais non appliqué par défaut (Chrome ne le tourne pas), `{ orientationWebp: true }` pour l'appliquer. La page de banc enregistre ce que fait Safari : fixer UNE politique d'après `orientationNavigateur` de l'iPhone ; le décodeur la rend identique partout.
+5. **Segments WebP sans données** : valeurs absolues nulles, comme libwebp (référence : Pillow), pas relatives comme la RFC (§ 8, T1-3).
+6. **Réduction 640** : `reduire640` (bilinéaire à support élargi de Pillow, entiers, passe horizontale puis verticale) à la place du canvas `imageSmoothingQuality = 'high'` — à remesurer sur le banc de détection avant de s'y fier (quadrilatère, taux de redressement) ; rien n'est modifié dans l'extension.
+7. **Coût** : décoder 12 Mpx prend plusieurs centaines de ms sous node (JPEG 366 ms, WebP 1,2 s), 3 à 5 fois plus sur un téléphone (non mesuré) ; à faire dans le Worker comme aujourd'hui. Pic mémoire : environ 150 Mo pour un séquentiel de 12 Mpx.
+8. **Licences** : code Rat-Market, crédits IJG / BSD-3 libwebp / zlib dans les en-têtes ; aucune dépendance, aucun binaire.
 
 ## 6. Fichiers
 
 - `v2/banc-telephone/public/decodeur.mjs`, `decodeur-jpeg.mjs`, `decodeur-png.mjs`, `decodeur-webp.mjs`, `decodeur-webp-tables.mjs` ; `v2/banc-telephone/routes.js` (5 entrées).
 - `v2/test/test-decodeur.js` (304 assertions, node pur, rouge vu avant le WebP : 49 échecs sans lui) ; `v2/test/fixtures-decodeur/pil-synthetique.json` (1,7 Mo), `pil-lot.json`.
+- Tour T3 : `v2/test/test-decodeur-page.js`, `outils/decodeur/pilote-page.js`, `ajouter-sha-lot.js`, `poser-images-exif.js`, `pil-webp-differentiel-gros.json`.
 - `outils/decodeur/` : `fabriquer-fixtures.py`, `references-lot.py`, `references-catalogue.py`, `comparer-catalogue.mjs`, `extraire-tables-vp8.js`, `pilote-decodeur.js`, `preuve-page.js`.
 - Texte de la RFC 6386 lu : `C:\Users\Yung\rat-market-travail\catalogue\decodeur-rfc6386.txt` (hors dépôt).
 
@@ -119,3 +131,7 @@ Règle qui tranche tout : **ce que le décodeur accepte est comparé à Pillow a
 **T1-5 — les mutations se rejouent à la main.** Aucun test du banc ne lance `mutations.mjs` (plusieurs minutes de calcul) ; le résultat « 50 mutations, 50 tuées, 0 vivante » est celui du dernier rejeu manuel (`node outils/decodeur/mutations.mjs`, code de sortie 1 s'il reste une vivante). À rejouer avant toute fusion.
 
 **Rejeu sur le code final** : `node v2/test/test-decodeur.js` -> **1 146 réussis, 0 échoué** ; `node outils/decodeur/mutations.mjs` -> **50 mutations, 50 tuées, 0 vivante** (témoin non muté vert sur 1 008 épreuves).
+
+## 9. TOUR T3 : arbitrage de T1-1 et intégration (2026-11-08)
+
+**Arbitrage de l'éditeur sur T1-1 : `coeffMaxWebp` reste désactivé par défaut.** Une borne à 300 refuserait 100 % du catalogue ; l'objectif premier, l'identité entre appareils, tient au JavaScript déterministe, pas à l'accord avec le SIMD de libwebp sur des valeurs extrêmes. **Limite restante, écrite** : l'accord avec Pillow n'est établi que (a) par les visuels réels : sur les **1 500 visuels prouvés identiques**, le plus grand |coefficient déquantifié| atteint est **13 240** (446 de ces 1 500 dépassent 2 048) ; le maximum du catalogue entier est 15 288 ; (b) par le générateur différentiel, étendu au tour T3 (`RM_PLAFOND_COEFF=40000 RM_GROS=1 node outils/decodeur/fabriquer-differentiel-webp.mjs 300 <dossier>`, biais de tirage vers les grosses catégories) : **300 flux, coefficient maximal 39 198 (76 au-dessus de 2 048, 88 au-dessus de 1 000), 300/300 identiques à Pillow**, rejoués par le banc (§ 13b). La preuve couvre donc désormais le maximum réel du catalogue (15 288) ; au-delà de 39 198, ou pour des combinaisons que ni le catalogue ni le générateur ne tirent, rien n'est prouvé.

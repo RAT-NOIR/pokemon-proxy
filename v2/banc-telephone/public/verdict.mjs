@@ -158,3 +158,48 @@ export function classerBlocage(sondeNoCorsAboutie, isole = false) {
 export function hoteFinal(url) {
     try { return new URL(url).host.slice(0, 80); } catch { return null; }
 }
+
+// ── L'ENTRÉE DU MODÈLE : quel chemin a décodé les cartes ? Le décodeur Rat-Market (decodeur.mjs : entiers, identique au bit d'un appareil à l'autre) est le chemin de la mesure ; le navigateur reste TÉMOIN et REPLI.
+// Aucun seuil ici : le verdict de la mesure est toujours celui de jugerMesure, inchangé. Ces fonctions disent seulement, honnêtement, de QUOI le verdict est le verdict.
+export const CODES_REFUS = Object.freeze(['FORMAT', 'TROP_GRAND', 'DECODAGE', 'NON_SUPPORTE', 'entree-invalide', 'memoire', 'autre']);
+/** `cartes` : [{ via: 'rm' | 'repli', code? }] une entrée par carte. -> { chemin: 'rm' | 'mixte' | 'navigateur', cartesRm, cartesRepli, refus: { code: n }, identiqueAuBit: true | false | null }.
+ *  « identique au bit » n'est dit que si TOUTES les cartes attendues sont passées par Rat-Market ; une liste vide ou incomplète n'est jamais « identique ». */
+export function resumerEntree(cartes, attendu = N_CARTES) {
+    const l = Array.isArray(cartes) ? cartes : [];
+    const refus = {}; let rm = 0, repli = 0;
+    for (const c of l) {
+        if (c && c.via === 'rm') rm++;
+        else { repli++; const k = CODES_REFUS.includes(c && c.code) ? c.code : 'autre'; refus[k] = (refus[k] || 0) + 1; }
+    }
+    return { chemin: repli === 0 && rm > 0 ? 'rm' : rm === 0 ? 'navigateur' : 'mixte', cartesRm: rm, cartesRepli: repli, refus, identiqueAuBit: l.length === 0 ? null : repli === 0 && rm >= attendu };
+}
+/** Le témoin du navigateur : `liste` = [{ octetsDiff, ecartMax, tenseurIdentique, cosNavigateur }] par carte comparée -> comptes ; null si aucune comparaison. */
+export function resumerTemoin(liste) {
+    if (!Array.isArray(liste) || liste.length === 0) return null;
+    const cos = liste.map(x => x.cosNavigateur).filter(Number.isFinite);
+    return { cartes: liste.length, rgbIdentiquesNavigateur: liste.filter(x => x.octetsDiff === 0).length, tenseursIdentiquesNavigateur: liste.filter(x => x.tenseurIdentique === true).length,
+        ecartMaxNavigateur: Math.max(...liste.map(x => x.ecartMax || 0)), cosMinNavigateur: cos.length === liste.length ? Math.min(...cos) : null };
+}
+const listeRefus = r => Object.entries(r || {}).map(([k, n]) => `${k}×${n}`).join(', ');
+/** La ligne 5 de l'écran. */
+export function texteEntree(e, t) {
+    if (!e) return 'entrée : non mesurée';
+    const nav = t ? ` · navigateur : octets identiques aux nôtres sur ${t.rgbIdentiquesNavigateur}/${t.cartes} cartes, tenseurs ${t.tenseursIdentiquesNavigateur}/${t.cartes}, écart max ${t.ecartMaxNavigateur}` : '';
+    if (e.identiqueAuBit) return `entrée : décodage Rat-Market ${e.cartesRm}/${e.cartesRm} cartes, identique au bit (mêmes octets sur tout appareil)${nav}`;
+    return `entrée NON IDENTIQUE AU BIT : ${e.cartesRepli} carte(s) décodée(s) par le navigateur (refus ${listeRefus(e.refus) || 'aucun code'}), ${e.cartesRm} par Rat-Market${nav}`;
+}
+/** Une phrase à côté du verdict (jamais à sa place) : ce que le verdict établit sur l'ENTRÉE. '' pour une erreur ou sans résumé. */
+export function avisEntree(verdict, e) {
+    if (!e || (verdict !== 'IDENTIQUE' && verdict !== 'ECART')) return '';
+    if (verdict === 'IDENTIQUE') return e.identiqueAuBit ? 'identique à la référence, entrée identique au bit' : 'identique à la référence, mais l\'entrée n\'est pas identique au bit (repli sur le navigateur)';
+    return e.identiqueAuBit ? 'écart alors que l\'entrée est identique au bit : la cause n\'est pas le décodage (moteur ou modèle)' : 'écart, et l\'entrée n\'est pas identique au bit (repli sur le navigateur) : le décodage peut y contribuer';
+}
+/** L'orientation EXIF d'une image embarquée, vue par ce navigateur : (largeur, hauteur) obtenues contre (l0, h0) de l'image brute. 'tourne' | 'non-tourne' | 'indetermine' (carré, mesure absente ou absurde). */
+export function etatOrientation(largeur, hauteur, l0, h0) {
+    const e = x => Number.isInteger(x) && x >= 1 && x <= 4096;
+    if (![largeur, hauteur, l0, h0].every(e) || l0 === h0) return 'indetermine';
+    if (largeur === l0 && hauteur === h0) return 'non-tourne';
+    if (largeur === h0 && hauteur === l0) return 'tourne';
+    return 'indetermine';
+}
+export const texteOrientation = o => (o ? `orientation EXIF dans ce navigateur : WebP ${o.webp || 'indetermine'}, JPEG ${o.jpeg || 'indetermine'}` : 'orientation EXIF : non mesurée');

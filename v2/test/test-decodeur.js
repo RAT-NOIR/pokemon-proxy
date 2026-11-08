@@ -257,6 +257,20 @@ const code = f => { try { f(); return null; } catch (e) { return e && e.name ===
         console.log('   13. flux aléatoires identiques à Pillow : ' + JSON.stringify(n));
     }
 
+    // ═══ 13b. WebP : 300 flux à GROS coefficients (jusqu'à 39 198, au-delà du maximum réel du catalogue : 15 288) lus par Pillow ═══
+    {
+        const gros = JSON.parse(fs.readFileSync(path.join(FIX, 'pil-webp-differentiel-gros.json'), 'utf8'));
+        let bons = 0, max = 0, plus1000 = 0;
+        for (const c of gros.cas) {
+            let r = null; try { r = D.decoder(Buffer.from(c.b64, 'base64'), { orientation: 'aucune' }); } catch (e) { /* compté */ }
+            const bon = c.pil && r && sha(r.rgb) === c.pil.sha256;
+            vrai(`13b. ${c.nom} == Pillow au bit`, bon);
+            if (bon) { bons++; if (c.maxCoeff > max) max = c.maxCoeff; if (c.maxCoeff > 1000) plus1000++; }
+        }
+        vrai('13b. 300 flux identiques, dont le plus grand coefficient dépasse 15 288 (maximum réel du catalogue)', bons === 300 && max > 15288, JSON.stringify({ bons, max, plus1000 }));
+        console.log(`   13b. flux à gros coefficients identiques à Pillow : ${bons}/300, coefficient maximal ${max}, ${plus1000} flux au-dessus de 1000`);
+    }
+
     // ═══ 14. T1-1 : coefficients WebP au-delà de la zone prouvée (300) — option de refus, désactivée par défaut (les visuels réels la dépassent tous) ═══
     {
         const bruit = Buffer.from(fx.cas.find(x => x.nom === 'webp-q95-100x75').b64, 'base64');

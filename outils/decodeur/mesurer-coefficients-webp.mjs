@@ -11,7 +11,8 @@ const [, , reste = '0', modulo = '1', limite = '0'] = process.argv;
 const dir = process.argv[5] || 'C:/Users/Yung/rat-market-travail/api/p8000-quant/images';
 let maxFichier = 0;
 W.definirCrochetCoeff(v => { const a = v < 0 ? -v : v; if (a > maxFichier) maxFichier = a; });
-const noms = fs.readdirSync(dir).filter(x => x.endsWith('.webp')).sort();
+// RM_MANIFESTE=<manifeste de references-catalogue.py> : ne mesure QUE les visuels de ce manifeste (les 1 500 prouvés contre Pillow)
+const noms = process.env.RM_MANIFESTE ? JSON.parse(fs.readFileSync(process.env.RM_MANIFESTE, 'utf8')).cartes.map(c => c.fichier).sort() : fs.readdirSync(dir).filter(x => x.endsWith('.webp')).sort();
 const seuils = [100, 200, 300, 400, 600, 1000, 2048];
 const comptes = Object.fromEntries(seuils.map(s => [`>${s}`, 0]));
 const depassent = [];

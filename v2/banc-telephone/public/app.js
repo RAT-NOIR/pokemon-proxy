@@ -6,7 +6,11 @@
 // Aucun innerHTML : tout passe par textContent.
 import { versTenseur, normaliserL2, vecteurDepuisSortie, nombreDeFils, COTE_MODELE, rgbVersRgba, redimPIL } from './empreinte.js';
 import { cosinus, course, sonderAdaptateur, creerSessionGpu } from './moteur-ort.js';
-import { jugerLot, jugerMesure, gardeExtension, texteGarde, ecartChaine, moteurRealise, texteErreur, classerBlocage, hoteFinal, detecterIOS, choisirMoteur, webgpuForce, optionsSession, statsPixels, assemblerDiagnostic, texteDiagnostic, TEXTE_WEBGPU_IOS, libererOctets } from './verdict.mjs';
+import { jugerLot, jugerMesure, gardeExtension, texteGarde, ecartChaine, moteurRealise, texteErreur, classerBlocage, hoteFinal, detecterIOS, choisirMoteur, webgpuForce, optionsSession, statsPixels, assemblerDiagnostic, texteDiagnostic, TEXTE_WEBGPU_IOS, libererOctets,
+    resumerEntree, resumerTemoin, texteEntree, avisEntree, etatOrientation, texteOrientation } from './verdict.mjs';
+import { decoder, reduire640, VERSION_DECODEUR } from './decodeur.mjs';
+// LOT DÉCODEUR : l'ENTRÉE du modèle est décodée par NOTRE code (decodeur.mjs : JavaScript entier, identique au bit sur tout appareil), pas par le navigateur ; le navigateur reste TÉMOIN (mêmes cartes, comparées octet à octet)
+// et REPLI (un refus du décodeur, avec son code, retombe sur le navigateur : la carte est comptée « NON IDENTIQUE AU BIT », jamais un écran vide). Le verdict (jugerMesure), ses seuils et mesurer() sont ceux d'avant.
 // NOTE (tour 1) : la page infère sur le FIL PRINCIPAL (l'extension le fait dans un Worker) : les temps et le p95 s'en lisent comme tels (le fil principal gèle l'affichage pendant l'inférence).
 // LOT iOS : (1) WebGPU est désactivé sur iOS/iPadOS (l'onglet y est tué par manque de mémoire : RAPPORT-BANC-IOS.md), `?webgpu=forcer` le rouvre pour un diagnostic ;
 // (2) le modèle (113 Mo) n'est plus GARDÉ après la création de la session : un seul exemplaire côté JS, jeté dès que la session existe ; (3) une ligne de diagnostic des pixels dit si l'écart de la chaîne vient du décodeur du navigateur.
@@ -16,7 +20,7 @@ const meta = n => (document.querySelector(`meta[name="${n}"]`) || {}).content ||
 const SHA = meta('modele-sha256'), OCTETS = Number(meta('modele-octets')) || 0;
 const aleaHex = n => Array.from(crypto.getRandomValues(new Uint8Array(n)), b => b.toString(16).padStart(2, '0')).join('');
 const RECHERCHE = (() => { try { return String(location.search || ''); } catch { return ''; } })();
-const E = { shaVerifie: null, modeleOctets: null, telechargementMs: null, verifShaMs: null, lot: null, vecWasm: null, runId: aleaHex(8), gpu: null, reseau: null, infoModeleDeposee: false, mesures: {}, etapes: [],
+const E = { shaVerifie: null, modeleOctets: null, telechargementMs: null, verifShaMs: null, lot: null, vecWasm: null, runId: aleaHex(8), gpu: null, reseau: null, infoModeleDeposee: false, mesures: {}, etapes: [], orientation: undefined,
     ios: detecterIOS({ ua: navigator.userAgent, platform: navigator.platform, maxTouchPoints: navigator.maxTouchPoints }), forcer: webgpuForce(RECHERCHE), session: optionsSession(RECHERCHE), diagnostic: undefined };
 
 // ── affichage
@@ -133,6 +137,33 @@ async function decoderCarte(c, variante = 'pipeline') {
     if (bmp.close) bmp.close();
     return { rgb: rgbaVersRgb(d.data, w * h), w, h };
 }
+// ── l'entrée du modèle : Rat-Market d'abord, le navigateur comme témoin et comme repli
+const hexSha = async o => { if (!(self.crypto && crypto.subtle)) return null; try { return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', o)), b => b.toString(16).padStart(2, '0')).join(''); } catch { return null; } };
+async function preparerCarte(c) {
+    const octets = b64vers(c.jpg);
+    let rm = null, code = null;
+    const ta = performance.now();
+    try { const r = decoder(octets, { orientation: 'aucune' }); rm = { rgb: r.rgb, w: r.largeur, h: r.hauteur }; }
+    catch (e) { code = e && typeof e.code === 'string' ? e.code : 'autre'; }        // jamais le texte d'une exception : seulement le code fermé du décodeur
+    const msRm = performance.now() - ta, tb = performance.now();
+    let nav = null; try { nav = await decoderCarte(c); } catch { nav = null; }
+    return { rm, nav, code, msRm, msNav: performance.now() - tb };
+}
+/** Le témoin d'une carte : octets du navigateur contre octets de Rat-Market. */
+function comparerOctets(rm, nav) {
+    if (rm.w !== nav.w || rm.h !== nav.h) return { octetsDiff: rm.rgb.length, ecartMax: 255 };
+    let n = 0, max = 0;
+    for (let i = 0; i < rm.rgb.length; i++) { const d = Math.abs(rm.rgb[i] - nav.rgb[i]); if (d) { n++; if (d > max) max = d; } }
+    return { octetsDiff: n, ecartMax: max };
+}
+const egalFlottants = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+// L'orientation EXIF vue par CE navigateur : deux petites images embarquées (un WebP 17 x 9 et un JPEG 37 x 29, EXIF « tourné d'un quart de tour ») ; createImageBitmap les tourne-t-il ?
+const IMG_EXIF_WEBP = 'UklGRvoAAABXRUJQVlA4WAoAAAAIAAAAEAAACAAAVlA4ILoAAABQBACdASoRAAkAPm0skkWkIqGYBABABsS2AE6ZQjwM51qAuboNDYaReNkAAP76oQkOlERtNUfgbIOUmWYNTtzBW4uvD9A6DlnklalSNC4dT6nkos1MRPUQAwaYuNM79Cei99e/DF69U5tKJvU/Jf2f95vQnGTCN559ubgF9GNqb1/e9f2E8Odz2f+nsJXY2e78NUoLHY4yF7nueaOlTX6tF561/NQe+kbDb54CB6+nGZhR3nSla4lSeABFWElGGgAAAE1NACoAAAAIAAEBEgADAAAAAQAGAAAAAAAA';
+const IMG_EXIF_JPEG = '/9j/4AAQSkZJRgABAQAAAQABAAD/4QAiRXhpZgAATU0AKgAAAAgAAQESAAMAAAABAAYAAAAAAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBT/wAARCAAdACUDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD4X0jwWkCKjrFI00at5lxK26XOASCeAvXJwSew449R8MeBWW3gv5Y44llRkS23AoMMysdrDKsDvXkjGW5Pf03w18LtPe5aS8t0uLGaMSLK8LZdhgcYG0ZOT3AI9MgX9V8E6hpshht43bT4FXYssp/dE4LA78HO5uevOcnsMcBV+sTULNO+t3+C+f6+Rtw5i8PXzilhc1xccPQnzXlKXLytQlJOXM1FJuNvi15lYZ4Q8I3l8sd3HD5ltDOZpNo25znG0BctyATuyfmOTwTXrPhPwedRtS+TEd7JzhV80b2bcAxO8/3hwOOmTt6T4D+Am1PwaJL+13vb3EirCwcDa2D+8IcDbxngfnmvW4PBtto1vZvpNhDapMJIpIg0kizc4AMjDIIDtggj/WdDzXrQrL2zpQWqdvJbvv8Ap5Nn11XOqOV1KlSjWVWhGco3Tu5xUpRjKNrpxlpK8dGtVe2vIQ+FrM2kPkW0kf3t6RtL8jZOQQqcH/eAPOBwBRXrOl6C/wBjb5rSXEzKpuwi/KAuMBgfp26DI6UV7cVSguWTV/8AFL/I8T/XurVvOFayfr+mh5Fo/wAJrS+Q7raSzjKlBslDEAbdoUH5SCh55A6EcHJ7Dw58BdM1WOG7kW8iRAsXmQzYJRWA2IUXDL8u0E84wec8+N/FH9pXXbLxxqvhjw5p1lpL29xc28moXm68kLAlBIikoFIwTtfeuSOOOfE9X+JHi3xsRYeJPEV9q0CvHc+Tv8mAMY5MFYUwiMAuNygZ3Me5z8jw/wAJZpj6KqSrKkrJ/wA0kvKzs/8AwL5bl4LwxxWMgsRnkYU6El7rfvyba5krRdtYpyu5K22+h9JeN/2k/AH7OBj0ax1mLxJBdW0d/Jb2Ra7mdmZogBLHIkO0BWYqWBwpOORXjuv/APBQvxHe2N1p/hbw3Z6RamOZBe6hunuZHdcwSoquqpJgHIIlA2op758Y8Z+FbDUfFjwSwRnygtu7ZfMg80jJG7A4YdOcg8/MRXD6naxeFbkyBBLkv5YhVYRGFQZ6A8lXxkYwRn2H7HnGHyDgnLKU5UfrGMrc3Jz/AA3ilzSaVlZJp8ru27JPe3ydbIsLkuY1aPNKWEpt2UmuWMWla0Fum7KzUrX7bddr/wAdPip451m51P8A4SzW3lbajjTdSaygBCgcRJhAc5yQAxIyRyCSsW+S0sLK3uDa+abmWfjzCpULIRjI+93PPPOKK/nGrglms3jK1OEpT3bhG+mnlZaWSSSSskrJH1C4kw9D91hoxjBbJQ2+635H/9k=';
+async function testerOrientation() {
+    const un = async (b64, mime, l0, h0) => { try { const bmp = await createImageBitmap(new Blob([b64vers(b64)], { type: mime })); const e = etatOrientation(bmp.width, bmp.height, l0, h0); if (bmp.close) bmp.close(); return e; } catch { return 'indetermine'; } };
+    return { webp: await un(IMG_EXIF_WEBP, 'image/webp', 17, 9), jpeg: await un(IMG_EXIF_JPEG, 'image/jpeg', 37, 29) };
+}
 // LE DIAGNOSTIC DES PIXELS (une fois par page) : sépare le décodeur du navigateur du reste de la chaîne. Trois mesures, contre les pixels de PIL du lot :
 //   décodage (2 cartes, pleine taille 420 x 587) : pixels décodés par le navigateur contre `dec` (PIL) · redimensionnement : redimPIL appliqué au décodage de PIL contre les 224 de PIL (`px`), le plancher du redimensionnement JS ·
 //   chaîne (12 cartes) : redimPIL appliqué au décodage du navigateur contre `px`. Les variantes « sans conversion » et « par défaut » du bitmap disent si c'est la couleur. Ne lève jamais : un trou reste null (cause « indetermine »).
@@ -190,16 +221,38 @@ async function mesurer(moteur, ort, session, filsDemandes, creationMs) {
         return { emb, ms };
     };
     const runs = [], pre = [], cos = [], vecs = []; let refuses = 0;
+    const chemins = [], temoins = [], msRm = [], msNav = [], digests640 = []; let ms640 = 0, shaOk = 0, shaTotal = 0;
     for (let i = 0; i < lot.cartes.length; i++) {
         etat('MESURE', `${moteur.toUpperCase()} · carte ${i + 1}/${lot.cartes.length}`, 'attente'); etape(`${moteur}-carte-${i}`);
-        const ta = performance.now();
-        const { rgb, w, h } = await decoderCarte(lot.cartes[i]);
-        const tenseur = versTenseur(rgb, w, h);
-        pre.push(performance.now() - ta);
+        const carte = lot.cartes[i];
+        const p = await preparerCarte(carte);                        // Rat-Market d'abord ; le navigateur est décodé aussi (témoin, et repli si Rat-Market refuse)
+        const choisi = p.rm || p.nav;
+        if (!choisi) throw new ErreurBanc('decodage-impossible');
+        const tt = performance.now();
+        const tenseur = versTenseur(choisi.rgb, choisi.w, choisi.h);
+        pre.push((p.rm ? p.msRm : p.msNav) + (performance.now() - tt));
         const { emb, ms } = await infer(tenseur);
         runs.push(ms);
         const n = normaliserL2(emb);
-        if (!n || !vecteurDepuisSortie(emb)) { refuses++; cos.push(0); vecs.push(null); } else { cos.push(cosinus(n, lot.cartes[i].refV)); vecs.push(Float32Array.from(n)); }
+        let cosCarte = 0;
+        if (!n || !vecteurDepuisSortie(emb)) { refuses++; cos.push(0); vecs.push(null); } else { cosCarte = cosinus(n, carte.refV); cos.push(cosCarte); vecs.push(Float32Array.from(n)); }
+        chemins.push(p.rm ? { via: 'rm' } : { via: 'repli', code: p.code });
+        if (p.nav) msNav.push(p.msNav);
+        if (p.rm) {
+            msRm.push(p.msRm);
+            if (carte.rgbSha256) { const h = await hexSha(p.rm.rgb); if (h) { shaTotal++; if (h === carte.rgbSha256) shaOk++; } }
+            if (i < 3) { const t6 = performance.now(); const red = reduire640(p.rm.rgb, p.rm.w, p.rm.h); ms640 += performance.now() - t6; const h6 = await hexSha(red.rgb); if (h6) digests640.push(h6); }
+        }
+        if (p.rm && p.nav) {                                         // le témoin : mêmes octets ? même tenseur ? sinon, ce que le navigateur aurait donné au modèle
+            const c = comparerOctets(p.rm, p.nav);
+            let tenseurIdentique = c.octetsDiff === 0, cosNavigateur = cosCarte;
+            if (!tenseurIdentique) {
+                const tn = versTenseur(p.nav.rgb, p.nav.w, p.nav.h);
+                tenseurIdentique = egalFlottants(tn, tenseur);
+                if (!tenseurIdentique) { const r = await infer(tn); const nn = normaliserL2(r.emb); cosNavigateur = nn ? cosinus(nn, carte.refV) : 0; }
+            }
+            temoins.push({ octetsDiff: c.octetsDiff, ecartMax: c.ecartMax, tenseurIdentique, cosNavigateur });
+        }
         await pause();
     }
     const cosPx = [];
@@ -218,6 +271,12 @@ async function mesurer(moteur, ort, session, filsDemandes, creationMs) {
     // M5 / M6 : le verdict n'existe que si le modèle est PROUVÉ (sha256 vérifié) et le lot COMPLET ; sinon ERREUR avec sa cause (les chiffres restent affichés)
     const j = jugerMesure({ nEmpreintes: m.nEmpreintes, nVecteursRefuses: refuses, cos, cosModeleSeul: cosPx, shaVerifie: E.shaVerifie });
     m.verdict = j.verdict; if (j.erreur) m.erreur = texteErreur(ETAPE, new ErreurBanc(j.erreur));
+    // l'entrée : quel chemin a servi, ses refus, le témoin du navigateur, l'identité à PIL ; n'entre dans AUCUN seuil du verdict
+    const resume = resumerEntree(chemins), temoin = resumerTemoin(temoins);
+    m.entree = { ...resume, source: VERSION_DECODEUR, rgbIdentiquesPil: shaTotal ? shaOk : null, cartesComparees: temoin ? temoin.cartes : null, rgbIdentiquesNavigateur: temoin ? temoin.rgbIdentiquesNavigateur : null,
+        tenseursIdentiquesNavigateur: temoin ? temoin.tenseursIdentiquesNavigateur : null, ecartMaxNavigateur: temoin ? temoin.ecartMaxNavigateur : null, cosMinNavigateur: temoin && temoin.cosMinNavigateur != null ? arrondi(temoin.cosMinNavigateur, 7) : null,
+        msRmMediane: msRm.length ? arrondi(mediane(msRm), 1) : null, msNavigateurMediane: msNav.length ? arrondi(mediane(msNav), 1) : null, cartes640: digests640.length, ms640: digests640.length ? arrondi(ms640, 1) : null };
+    if (digests640.length && self.crypto && crypto.subtle) { const h = await hexSha(new TextEncoder().encode(digests640.join(''))); m.entree.empreinte640 = h ? h.slice(0, 12) : null; }
     return { m, vecs };
 }
 
@@ -299,11 +358,14 @@ function afficher(m) {
     const mem = m.uaFinMo != null ? `${m.uaFinMo} Mo (navigateur)` : m.jsHeapFinMo != null ? `${m.jsHeapFinMo} Mo (tas JS)` : 'non disponible';
     const moteur = String(m.moteur || '?').toUpperCase();
     $('ligne4').textContent = `4 · ${texteDiagnostic(m.diagnosticPixels)}`;
+    const ent = m.entree || null, tem = ent && ent.cartesComparees ? { cartes: ent.cartesComparees, rgbIdentiquesNavigateur: ent.rgbIdentiquesNavigateur, tenseursIdentiquesNavigateur: ent.tenseursIdentiquesNavigateur, ecartMaxNavigateur: ent.ecartMaxNavigateur } : null;
+    $('ligne5').textContent = `5 · ${texteEntree(ent, tem)}${ent && ent.rgbIdentiquesPil != null ? ` · octets identiques à PIL sur ${ent.rgbIdentiquesPil}/${ent.cartesRm}` : ''} · ${texteOrientation(m.orientationNavigateur)}`;
+    const avis = avisEntree(m.verdict, ent), suite = avis ? ` · ${avis}` : '';
     if (m.webgpuDesactive) $('avisMoteur').textContent = TEXTE_WEBGPU_IOS;
     if (m.verdict === 'ERREUR') { etat('ERREUR', m.erreur || '', 'ko'); $('ligne1').textContent = `1 · verdict : ERREUR (${moteur}) — ${m.erreur || ''}`; $('ligne2').textContent = `2 · moteur : ${moteur}${m.webgpuUtilise === false ? ' · WebGPU non utilisé (repli WASM)' : ''}`; $('ligne3').textContent = `3 · garde extension 0,998 : ${texteGarde(m.gardeExtension)}`; }
     else {
         const ok = m.verdict === 'IDENTIQUE';
-        etat(ok ? 'IDENTIQUE' : `ÉCART ${f(m.cosMin, 5)}`, `${moteur} · cos min ${f(m.cosMin, 6)} sur ${m.nEmpreintes} cartes${m.cosMinModeleSeul != null ? ` · modèle seul ${f(m.cosMinModeleSeul, 6)}` : ''}`, ok ? 'ok' : 'ecart');
+        etat(ok ? 'IDENTIQUE' : `ÉCART ${f(m.cosMin, 5)}`, `${moteur} · cos min ${f(m.cosMin, 6)} sur ${m.nEmpreintes} cartes${m.cosMinModeleSeul != null ? ` · modèle seul ${f(m.cosMinModeleSeul, 6)}` : ''}${suite}`, ok ? 'ok' : 'ecart');
         $('ligne1').textContent = `1 · verdict : ${ok ? 'IDENTIQUE' : 'ÉCART'} (${moteur}) — cos min ${f(m.cosMin, 6)}`;
         $('ligne2').textContent = `2 · moteur : ${moteur} · ${m.fils == null ? '?' : m.fils} fil(s) · isolé ${self.crossOriginIsolated === true ? 'oui' : 'non'} · ${navigator.hardwareConcurrency || '?'} cœurs`;
         $('ligne3').textContent = `3 · médiane ${f(m.medianeMs, 0)} ms (1re ${f(m.premiereMs, 0)}, p95 ${f(m.p95Ms, 0)}) · mémoire ${mem} · garde extension 0,998 : ${texteGarde(m.gardeExtension)}`;
@@ -318,6 +380,10 @@ function afficher(m) {
         ['mémoire navigateur après création / fin (Mo)', `${m.uaApresCreationMo == null ? 'non disponible' : m.uaApresCreationMo} / ${m.uaFinMo == null ? 'non disponible' : m.uaFinMo}`],
         ['écart modèle seul − chaîne complète (décodeur + redimensionnement du navigateur)', m.ecartChaineModele == null ? '—' : f(m.ecartChaineModele, 7)], ['WebGPU réellement utilisé (périphérique présent)', m.webgpuUtilise == null ? '—' : m.webgpuUtilise ? 'oui' : 'NON (repli WASM)'],
         ['garde de l\'extension (cosinus ≥ 0,998)', texteGarde(m.gardeExtension)], ['modèle reçu : redirigé / hôte final', E.reseau ? `${E.reseau.redirige === null ? '—' : E.reseau.redirige ? 'oui' : 'non'} / ${E.reseau.hoteFinal || '—'}` : '—'], ['blocage réseau', E.reseau && E.reseau.blocage ? E.reseau.blocage : '—']];
+    if (ent) dico.push(['entrée : chemin qui a servi', `${ent.chemin} (${ent.cartesRm} Rat-Market / ${ent.cartesRepli} navigateur)${Object.keys(ent.refus || {}).length ? ' · refus ' + JSON.stringify(ent.refus) : ''}`],
+        ['entrée : décodage Rat-Market, médiane (ms) / navigateur (ms)', `${f(ent.msRmMediane, 1)} / ${f(ent.msNavigateurMediane, 1)}`],
+        ['entrée : cos min si le navigateur avait décodé', ent.cosMinNavigateur == null ? '—' : f(ent.cosMinNavigateur, 7)],
+        ['réduction 640 déterministe : cartes / ms / empreinte', ent.cartes640 ? `${ent.cartes640} / ${f(ent.ms640, 1)} / ${ent.empreinte640 || '—'}` : '—']);
     for (const [k, v] of dico) ligne('chiffres', k, v);
 }
 async function lancer(demande) {
@@ -334,6 +400,8 @@ async function lancer(demande) {
         try { E.diagnostic = await diagnostiquerPixels(await chargerLot()); } catch { E.diagnostic = null; }
         journal(texteDiagnostic(E.diagnostic));
     }
+    if (E.orientation === undefined) { try { E.orientation = await testerOrientation(); } catch { E.orientation = null; } journal(texteOrientation(E.orientation)); }
+    m.orientationNavigateur = E.orientation || null;
     m.moteurDemande = demande === 'webgpu' ? 'webgpu' : 'wasm'; m.webgpuDesactive = choix.desactive; m.webgpuForce = choix.forcee;
     if (E.session.retenues.length) m.optionsSession = E.session.retenues.join(',');
     m.diagnosticPixels = E.diagnostic || null;
