@@ -43,6 +43,9 @@ t('tampon différent (entrée avec noteVariante) → rien', () => assert.deepStr
 t('tampon différent (candidate tamponnée, entrée non) → rien', () => assert.deepStrictEqual(rem([ancienne()], nouvelle({ tampon: 'Staff' })), []));
 t('marqueur de variante porté seulement par le DOCUMENT de l\'entrée → rien', () => { const e = ancienne(); assert.deepStrictEqual(rem([e], nouvelle(), { [cleDoc(e)]: { noteVariante: 'x' } }), []); });
 t('document de l\'entrée INTROUVABLE → rien', () => assert.deepStrictEqual(B.entreesARemplacer([ancienne()], nouvelle(), { documents: new Map() }).length, 0));
+t('entrée sans cleR2 (absente, null, vide, non chaîne) → rien : le $pull partirait sans clé', () => {
+    for (const c of [undefined, null, '', 5]) { const e = ancienne({ cleR2: c }); assert.strictEqual(B.entreesARemplacer([e], nouvelle(), { documents: docs([e]) }).length, 0); }
+});
 t('documents omis → rien', () => assert.deepStrictEqual(B.entreesARemplacer([ancienne()], nouvelle()).length, 0));
 t('document CONTRADICTOIRE avec l\'entrée → rien', () => { const e = ancienne({ noteVariante: 'a' }); assert.deepStrictEqual(rem([e], nouvelle(), { [cleDoc(e)]: { noteVariante: 'b' } }), []); });
 t('candidate basse définition (marquée) → rien', () => assert.deepStrictEqual(rem([ancienne()], nouvelle({ basseDefinition: true })), []));
