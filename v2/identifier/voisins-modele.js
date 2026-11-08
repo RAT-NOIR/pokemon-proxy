@@ -12,6 +12,7 @@ const VOISINS = 10, MAX = 20;
  */
 function voisinsDuModele({ cfg, entree, version, etat = require('./etat-empreintes'), memo = false } = {}) {
     try {
+        if (version === undefined) version = require('../chargeur/etat').version();           // la version en place (la route ne la lit qu'une fois : m-1, test-langue-decisive-charge.js)
         if (!(cfg && cfg.empreinteExtension === true) || !entree || !entree.empreintes) return null;
         const voulu = cfg.modeleEmpreinte && cfg.modeleEmpreinte.id && cfg.modeleEmpreinte.sha256 ? { id: cfg.modeleEmpreinte.id, sha256: cfg.modeleEmpreinte.sha256 } : null;
         if (!voulu) return null;

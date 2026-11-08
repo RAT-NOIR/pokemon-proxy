@@ -815,7 +815,7 @@ function traiterIdentifier(cfg, deps = {}) {
             const cartes = sortie.cartesEntree || resultat.analyse.cartes;
             // JUGE À CINQ : pour le seul compte de MESURE, avec un vecteur d'extension valide, les produits des visuels voisins (UNE carte : le vecteur est celui de la photo, pas d'une carte d'un lot) — INTERNE, jamais servi,
             // sans effet sur la décision ni l'argent (écrit après eux) ; même quand la chaîne rend « introuvable » (la règle G n'a pas été consultée). Ne lève jamais.
-            const voisinsBanc = porteur.compte && porteur.compte.banc === true && cartes.length === 1 ? voisinsDuModele({ cfg, entree, version: etatChargeur.version(), memo: te.voisinsUneFois === true }) : null;
+            const voisinsBanc = porteur.compte && porteur.compte.banc === true && cartes.length === 1 ? voisinsDuModele({ cfg, entree, memo: te.voisinsUneFois === true }) : null;
             await col('analyses').insertOne({
                 _id: scanId, porteur: `${porteur.type}:${porteur.id}`, surface: porteur.surface, statut: analyse.statut,
                 ...(porteur.compte && porteur.compte.banc === true ? { banc: true } : {}),           // le compte de MESURE : exclu des statistiques d'usage (journal-hors-banc.js)
