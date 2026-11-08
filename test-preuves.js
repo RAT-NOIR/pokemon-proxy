@@ -184,9 +184,9 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.deepStrictEqual(lue({ ...ja, lu: { ...ja.lu, nom: 'ハイパーボール' } }, pj).motifs, ['nom-different'], 'autre nom japonais');
         assert.deepStrictEqual(lue(ja, produit({ tirage: 'jp', numero: '018', nomEn: 'Super Rod' })).motifs, ['nom-different'], 'carte sans nom japonais : rien à comparer = refus');
         assert.deepStrictEqual(lue(ja, produit({ tirage: 'jp', numero: '018', nomEn: 'すごいつりざお', nomJa: null })).motifs, ['nom-different'], 'un nom japonais ne se compare JAMAIS au nom anglais');
-        assert.deepStrictEqual(lue({ ...ja, lu: { ...ja.lu, nom: '' } }, pj).motifs, ['nom-different'], 'nom lu vide');
-        assert.deepStrictEqual(lue({ ...ja, lu: { ...ja.lu, nom: '' } }, produit({ tirage: 'jp', numero: '018', nomEn: 'Super Rod', nomJa: null })).motifs, ['nom-different'], 'vide contre vide : rien à comparer n\'est jamais une concordance');
-        assert.deepStrictEqual(lue({ ...ja, lu: { ...ja.lu, nom: '・ ' } }, produit({ tirage: 'jp', numero: '018', nomEn: 'Super Rod', nomJa: ' ' })).motifs, ['nom-different'], 'nom réduit à rien après normalisation : refus');
+        assert.deepStrictEqual(lue({ ...ja, lu: { ...ja.lu, nom: '' } }, pj).motifs, ['nom-lu-hors-langue'], 'nom lu vide : aucun caractère de l\'écriture (contrôle A, 08/11)');
+        assert.deepStrictEqual(lue({ ...ja, lu: { ...ja.lu, nom: '' } }, produit({ tirage: 'jp', numero: '018', nomEn: 'Super Rod', nomJa: null })).motifs, ['nom-lu-hors-langue'], 'vide contre vide : rien à comparer n\'est jamais une concordance');
+        assert.deepStrictEqual(lue({ ...ja, lu: { ...ja.lu, nom: '・ ' } }, produit({ tirage: 'jp', numero: '018', nomEn: 'Super Rod', nomJa: ' ' })).motifs, ['nom-lu-hors-langue'], 'nom réduit à une ponctuation (point médian) : refus');
         const surIntl = lue(ja, produit({ tirage: 'intl', numero: '018', nomEn: 'Super Rod', nomJa: 'すごいつりざお' })).motifs.join();
         assert.match(surIntl, /langue-differente/); assert.match(surIntl, /nom-langue-non-anglaise/, 'produit NON japonais : le nom japonais n\'est jamais comparé, même si nomJa existe');
     });
@@ -1140,7 +1140,8 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
     await test('nom traduit : fiche simple japonaise (sans carte, sans nomJa) : passe par Pokédex + PV + règle + code + numéro', () => {
         assert.deepStrictEqual(lue(trad(), ptrad()), { ok: true, motifs: [] });
         assert.deepStrictEqual(lue(trad({ nomEn: 'Mareep' }), ptrad()), { ok: true, motifs: [] }, 'un nom anglais lu à côté du japonais (lu.nomEn) n\'est ni témoin ni obstacle');
-        assert.strictEqual(lue(trad({ nom: 'Mareep' }), ptrad()).ok, true, 'la comparaison ne lit pas le nom : le nom ne sert qu\'à la règle');
+        assert.strictEqual(lue(trad({ nom: 'Mareep' }), ptrad()).ok, false, 'un nom LATIN lu sur un scan japonais est le nom du produit recopié : refus nom-lu-hors-langue (08/11)');
+        assert.strictEqual(lue(trad({ nom: 'メリープ' }), ptrad()).ok, true, 'le nom imprimé en japonais ne sert qu\'à la règle');
         assert.strictEqual(lue(trad({ codeSet: 'SVAL', numero: '5' }), ptrad()).ok, true, 'code insensible à la casse, zéros du numéro ignorés');
         assert.strictEqual(lue(trad({ nom: 'モルペコV-UNION', dex: 877, pv: 160 }), ptrad({ nomEn: 'Morpeko V-UNION [Hunger Burst]', slug: 'Morpeko-V-UNION-svAL005' })).ok, true, 'V-UNION : règle lue dans le nom (et crochets du produit retirés)');
         assert.strictEqual(lue(trad({ nom: 'ネモ', dex: 778, pv: 170 }), ptrad({ nomEn: 'Nemona' })).ok, false, 'un nom absent de la table (Dresseur) n\'a pas de Pokédex possible');
@@ -1180,7 +1181,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.ok(!drap(trad(), ptrad()).some(d => d.startsWith('codeAlias')), 'aucun alias hors des deux paires : pas de drapeau');
     });
     await test('alias de code thaï : M-P/TH→M-P seul (sens unique, ligne exacte, indépendant de l\'ordre des clés)', () => {
-        const th = (code, o = {}) => { const t = trad({ langue: 'th', codeSet: code, numero: '069', ...o }); return { ...t, attendu: { ...t.attendu, numero: '069' } }; };
+        const th = (code, o = {}) => { const t = trad({ langue: 'th', nom: 'เมรีป', codeSet: code, numero: '069', ...o }); return { ...t, attendu: { ...t.attendu, numero: '069' } }; };
         const pth = (ligne, o = {}) => ptrad({ tirage: 'th', numero: '069', slug: 'Mareep-M-PTH069', codeSet: ligne, ...o });
         const e = th('M-P'), p = pth('M-P/TH');
         assert.deepStrictEqual(lue(e, p), { ok: true, motifs: [] }, '(a) M-P imprimé contre la ligne M-P/TH');
@@ -1335,7 +1336,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.ok(!lue(eid({ nom: '' }), pid()).ok);
         assert.match(mt(eid({ codeSet: 'SV-P/ID', numero: '006' }), pid()), /numero-different/, 'numéro faux : la comparaison reste');
         assert.match(mt(eid(), pid({ slug: 'Switch', codeSet: 'S-P/ID' })), /code-set-different/, 'code faux : la comparaison reste');
-        assert.match(mt(eid({ codeSet: null }), pid()), /code-set-non-lu/, 'code non lu');
+        assert.ok(!lue(eid({ codeSet: null }), pid()).ok, 'code non lu : sans témoin de nom la règle traduite ne s\'ouvre pas, refus');
         // l'écriture thaïe doit rester thaïe : le contrôle A passe avant la règle B
         assert.match(mt({ ...eth, lu: { ...eth.lu, nom: 'Switch' }, attendu: { ...eth.attendu, numero: '069' } }, pth), /nom-lu-hors-langue/, 'A avant B');
     });
@@ -1386,7 +1387,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.match(mt(trad({ regle: 'ex' }), ptrad()), /regle-incoherente|regle-differente/, 'règle saisie ≠ nom lu');
         assert.match(mt(trad({ regle: 'V', dex: 25 }), ptrad({ nomEn: 'Pikachu V' })), /regle-incoherente/, 'règle saisie (V) et nom lu (sans règle) en désaccord');
         assert.strictEqual(lue(trad({ regle: 'V', nom: 'ピカチュウV', dex: 25 }), ptrad({ nomEn: 'Pikachu V' })).ok, true, 'règle saisie et nom lu d\'accord');
-        assert.match(mt(trad({ nom: '' }), ptrad()), /nom-different/, 'nom lu vide');
+        assert.match(mt(trad({ nom: '' }), ptrad()), /nom-lu-hors-langue/, 'nom lu vide (contrôle A)');
         assert.match(mt(trad({ langue: 'zh-hans' }), ptrad()), /langue-differente/);
         assert.match(mt(trad(), ptrad({ numero: null, slug: 'Mareep-svAL' })), /nom-traduit-numero-absent/, 'produit sans numéro : le numéro est une des deux clés');
         assert.match(mt(trad({ nom: 'ガラルファイヤーV', dex: 146, pv: 220 }), ptrad({ nomEn: 'Galarian Moltres V', slug: 'Galarian-Moltres-V-svAL005' })), /forme-regionale/, 'forme régionale : le Pokédex ne la distingue pas');
@@ -1476,7 +1477,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.deepStrictEqual(lue(idn({ dex: 179, pv: 60 }), pid), { ok: true, motifs: [] }, 'des témoins en plus ne gênent pas');
         assert.match(mt(idn({ nom: 'Flaaffy' }), pid), /nom-langue-non-anglaise/, 'un autre nom sans témoin : refus comme avant (la règle traduite ne s\'ouvre qu\'avec un témoin)');
         assert.match(mt(idn({ nom: 'Flaaffy', codeSet: 'svAL' }), pid), /nom-traduit-sans-temoin|pokedex|nom-different/, 'un autre nom avec témoin : la règle traduite juge, elle n\'accepte pas');
-        assert.match(mt(idn({ langue: 'th' }), ptrad({ tirage: 'th', nomEn: 'Mareep' })), /nom-langue-non-anglaise/, 'thaï : une carte thaïe n\'imprime pas le nom anglais, la règle ne s\'ouvre pas');
+        assert.match(mt(idn({ langue: 'th' }), ptrad({ tirage: 'th', nomEn: 'Mareep' })), /nom-lu-hors-langue/, 'thaï : une carte thaïe n\'imprime pas le nom anglais, refus (contrôle A avant tout, 08/11)');
         assert.match(mt(idn(), ptrad({ tirage: 'jp', nomEn: 'Mareep' })), /langue-differente/, 'indonésien sur un set japonais : langue refusée');
         assert.match(mt(idn(), ptrad({ tirage: 'jp', nomEn: 'Mareep' })), /nom-langue-non-anglaise/, '… et le nom ne témoigne pas pour un autre tirage');
     });

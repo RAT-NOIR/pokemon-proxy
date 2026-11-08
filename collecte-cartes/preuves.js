@@ -169,7 +169,7 @@ const ECRITURES_PAR_LANGUE = Object.freeze({
     th: /[฀-๿]/u,
     'zh-hans': new RegExp(`[${HAN}]`, 'u'),
     'zh-hant': new RegExp(`[${HAN}]`, 'u'),
-    ja: new RegExp(`[\\u3040-\\u30FF\\u31F0-\\u31FF\\uFF66-\\uFF9F${HAN}]`, 'u'),   // kana (hira, kata, demi-chasse) et han
+    ja: new RegExp(`[\\u3041-\\u3096\\u309D-\\u309F\\u30A1-\\u30FA\\u30FC-\\u30FF\\u31F0-\\u31FF\\uFF66-\\uFF9F${HAN}]`, 'u'),   // hira, kata (sans le point médian U+30FB, ponctuation), demi-chasse et han
     ko: /[ᄀ-ᇿ㄰-㆏가-힯]/u
 });
 /**
