@@ -113,7 +113,7 @@ async function lireBase() {
     for (const x of A.suspectsExpansion(audit)) console.log(`  ${x.set} ${x.n} · déclarée ${JSON.stringify(x.expansionsDeclarees)} · ` + x.exemples.map(e => `${e.nom} → ${e.plusProche ? `${e.plusProche.tirage}/« ${e.plusProche.expansion} »/${e.plusProche.numero}` : 'aucune'}`).join(' ; '));
     for (const id of args.filter(a => a.startsWith('--set=')).map(a => a.slice(6))) {   // détail par set demandé : trous, causes, exclusions
         const s = audit.sets.find(x => x.set === id);
-        console.log(s ? `  [${id}] trous ${s.trous} · causes ${JSON.stringify(s.causes)} · exclus ${JSON.stringify(s.exclusParCause || {})}` : `  [${id}] absent des sets publiés`);
+        console.log(s ? `  [${id}] trous ${s.trous} · causes ${JSON.stringify(s.causes)} · exclus ${JSON.stringify(Object.fromEntries(Object.entries(s.exclusParCause || {}).map(([k, v]) => [k, v.length])))}` : `  [${id}] absent des sets publiés`);
     }
     if (ec) console.log(`écart contre ${ec.avantLe} : ${JSON.stringify(ec.totaux)} · passés à 100 % ${ec.setsPassesA100.length}${ec.memeDenominateur ? '' : ' ⚠️ dénominateur différent'}`);
     console.log(sansEcriture ? `--sans-ecriture : rien d'écrit · ${Math.round((Date.now() - t0) / 1000)} s` : `écrit ${jsonSortie} et ${mdSortie} · ${Math.round((Date.now() - t0) / 1000)} s`);

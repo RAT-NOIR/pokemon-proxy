@@ -33,7 +33,7 @@ const CAUSES = Object.freeze({
 //  · sansNumero/numero-non-imprime:<famille> : la carte n'imprime aucun numéro de collection ; le set est dans la table fermée SANS_NUMERO_IMPRIME (preuve sur scans), et seule une entrée
 //    « impression-sans-numero » y entre (jamais « expansion-declaree-sans-impression »).
 //  · sansProduit/impression-hors-additionals : set Additionals (règle du SITE `estAdditionals`, injectée) dont l'expansion n'a AUCUN produit à ce numéro (cleNumero de la production) : l'impression
-//    est celle du set de base, pas un produit manquant. Un produit sans numéro lisible dans l'expansion empêche l'exclusion (on ne sait pas s'il porte ce numéro).
+//    est celle du set de base, pas un produit manquant. Un produit de l'expansion sans numéro lisible empêche l'exclusion des entrées qui portent son nom (on ne sait pas à quel numéro il est).
 const EXCLUSIONS = Object.freeze({
     sansNumero: ['numero-non-imprime'],
     sansProduit: ['impression-hors-additionals'],
@@ -123,7 +123,9 @@ function auditer(lecture, regles) {
         const exclure1 = (type, cause, c, numero) => { const k = `${type}/${verifierExclusion(type, cause)}`; (exclusParCause[k] = exclusParCause[k] || []).push({ carteId: c._id, nom: c.nomEn, numero }); };
         const familleNumero = familleSansNumero(s._id, sansNumeroImprime);
         const numerosDeLExpansion = estAdditionals && estAdditionals(s._id) ? new Set(prods.map(p => numProd.get(p.idProduct)).filter(n => n != null && n !== '').map(cleNumero)) : null;
-        const produitSansNumero = estAdditionals && estAdditionals(s._id) ? prods.some(p => !nonVide(numProd.get(p.idProduct))) : false;
+        // un produit de l'expansion SANS numéro lisible ne dit pas à quel numéro il est : il bloque l'exclusion des seules entrées qui portent SON nom (Air Balloon sans numéro ne protège pas Tynamo)
+        const nomBase = n => String(n ?? '').replace(/\s*\[.*$/, '').trim().toLowerCase();
+        const nomsSansNumero = numerosDeLExpansion ? new Set(prods.filter(p => !nonVide(numProd.get(p.idProduct))).map(p => nomBase(p.name))) : null;
         for (const e of entrees) {
             const { c } = e;
             const memeNumero = x => x == null ? (e.nEntreesCarte === 1 || e.numero === null) : (e.numero === null || normaliserNumero(x) === e.numero);
@@ -159,7 +161,7 @@ function auditer(lecture, regles) {
                 if (!prods.length) cause = 'expansion-sans-produit-cardmarket';
                 else if (e.numero !== null && sansLigne.some(p => numProd.get(p.idProduct) === e.numero)) cause = 'produit-sans-ligne-meme-numero';
                 else if (e.numero !== null && suffixeLettre(e.numero) && baseOk) cause = 'jumelle-suffixe-sans-produit';
-                else if (numerosDeLExpansion && !produitSansNumero && e.numero !== null && !numerosDeLExpansion.has(cleNumero(e.numero))) cause = 'impression-hors-additionals';
+                else if (numerosDeLExpansion && e.numero !== null && !numerosDeLExpansion.has(cleNumero(e.numero)) && !nomsSansNumero.has(nomBase(c.nomEn))) cause = 'impression-hors-additionals';
                 else if (sansLigne.length) cause = 'produits-sans-ligne-dans-l-expansion';
                 else cause = 'tous-les-produits-deja-rattaches';
                 if (cause === 'impression-hors-additionals') exclure1('sansProduit', cause, c, e.numero);

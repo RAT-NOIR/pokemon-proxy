@@ -342,6 +342,12 @@ test('Additionals : un produit de l\'expansion porte ce numéro (par cleNumero :
     const a = auditer(lecAdd([carte('c1', 'A', '5')], [prodSL(900)], [{ idProduct: 900, numero: '005' }]), { ...regles, estAdditionals });
     assert.strictEqual(unAdd(a).sansProduit.n, 1); assert.strictEqual(a.exclus.total, 0);
 });
+test('Additionals : un produit SANS numéro au nom de la carte l\'empêche d\'être exclue ; un produit sans numéro d\'un autre nom non', () => {
+    const memeNom = auditer(lecAdd([carte('c1', 'Tynamo', '5')], [prodSL(900, { name: 'Tynamo [Charge]' })], [{ idProduct: 900, numero: null }]), { ...regles, estAdditionals });
+    assert.strictEqual(unAdd(memeNom).sansProduit.n, 1); assert.strictEqual(memeNom.exclus.total, 0);
+    const autre = auditer(lecAdd([carte('c1', 'Tynamo', '5')], [prodSL(900, { name: 'Air Balloon' })], [{ idProduct: 900, numero: null }]), { ...regles, estAdditionals });
+    assert.strictEqual(unAdd(autre).sansProduit.n, 0); assert.strictEqual(autre.exclus.total, 1);
+});
 test('Additionals : un set NON Additionals garde son trou (refus)', () => {
     const l = lecture({ cartes: [carte('c1', 'A', '5', { images: [img('S1', '5')] })], produits: [prodSL(900)], numerosProduits: [{ idProduct: 900, numero: '7' }] });
     const a = auditer(l, { ...regles, estAdditionals });
