@@ -231,7 +231,7 @@ const lever = async f => { try { await f(); return null; } catch (e) { return e;
         H.v('   le courriel du 3e n\'est pas parti', c2.envoyes.length, 2);
         // ORACLE : le plafond plein refuse TOUT LE MONDE — adresse neuve, déjà servie, invalide, jetable : la même réponse 429, octet pour octet (il ne dit plus quelle adresse est « valide et non servie »)
         const pleins = [await p2('plafond-4@exemple.fr'), await p2('plafond-1@exemple.fr'), await p2('pas une adresse'), await p2('x@mailinator.com')];
-        H.v('plafond plein : adresse neuve / déjà servie / invalide / jetable => le MÊME 429 pour toutes', [pleins.map(x => x.statut), pleins.every(x => x.json.erreur.code === 'LIMITE_DEBIT' && x.json.erreur.reessayerDans === pleins[0].json.erreur.reessayerDans)], [[429, 429, 429, 429], true]);
+        H.v('plafond plein : adresse neuve / déjà servie / invalide / jetable => le MÊME 429 pour toutes', [pleins.map(x => x.statut), pleins.every(x => x.json.erreur.code === 'LIMITE_DEBIT' && Math.abs(x.json.erreur.reessayerDans - pleins[0].json.erreur.reessayerDans) <= 5)], [[429, 429, 429, 429], true]); // le délai est un compte à rebours : il peut perdre une seconde entre deux appels
         H.v('   aucun courriel de plus', c2.envoyes.length, 2);
         // consommation ATOMIQUE : 4 adresses neuves SIMULTANÉES sous un plafond de 2 qui ont toutes LU « pas plein » (le service est appelé directement, sans la lecture de la route) : 2 courriels, 2 marques rendues
         await db.col('courriels_lien_jour').deleteMany({}); c2.envoyes.length = 0;
