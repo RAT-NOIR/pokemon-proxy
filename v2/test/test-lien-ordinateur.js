@@ -251,7 +251,37 @@ const lever = async f => { try { await f(); return null; } catch (e) { return e;
         H.v('jourDeParis : 2026-06-30 22:30 UTC est déjà le 1er juillet à Paris ; 2026-12-31 22:30 UTC est le 31 (heure d\'hiver)', [jour(new Date('2026-06-30T22:30:00Z')), jour(new Date('2026-12-31T22:30:00Z'))], ['2026-07-01', '2026-12-31']);
         const { secondesAvantMinuitParis } = require('../lien-ordinateur/service');
         H.v('secondesAvantMinuitParis : 23 h 59 min 30 s à Paris (été puis hiver) => 30 ; minuit passé d\'une seconde => 86 399', [secondesAvantMinuitParis(new Date('2026-06-30T21:59:30Z')), secondesAvantMinuitParis(new Date('2026-12-31T22:59:30Z')), secondesAvantMinuitParis(new Date('2026-12-31T23:00:01Z'))], [30, 30, 86399]);
+        // jourDeParis dans le service : `plein()` lit le compteur du JOUR DE PARIS (horloge injectée : 22 h 30 UTC le 30 juin = déjà le 1er juillet à Paris)
+        {
+            const horloge = () => new Date('2026-06-30T22:30:00Z');
+            await db.col('courriels_lien_jour').insertOne({ _id: '2026-07-01', n: 2 });
+            const sh = require('../lien-ordinateur/service').creerService({ cfg: cfg2, courrier: c2, maintenant: horloge });
+            H.v('plein() lit le compteur du jour de PARIS (2026-07-01), pas celui du jour UTC (2026-06-30)', await sh.plein(), true);
+            await db.col('courriels_lien_jour').deleteOne({ _id: '2026-07-01' });
+            await db.col('courriels_lien_jour').insertOne({ _id: '2026-06-30', n: 2 });
+            H.v('   et un compteur plein du jour UTC seul ne remplit pas le jour de Paris', await sh.plein(), false);
+            await db.col('courriels_lien_jour').deleteOne({ _id: '2026-06-30' });
+        }
+        // ORDRE : le plafond plein est lu APRÈS le défi (un robot sans jeton ne lit pas l'état du plafond) et AVANT le test de type d'`email` (un corps sans texte ne dit pas autrement que le plafond est plein)
+        await db.col('courriels_lien_jour').deleteMany({}); await db.col('courriels_lien_jour').insertOne({ _id: require('../comptes/plafond-courriels').jourDeParis(), n: 2 });
+        {
+            const brut = corps => H.appel(s2.url, '/api/lien-ordinateur', { methode: 'POST', corps, sansDefi: true, entetes: { ...A.SITE, ...ip() } });
+            const sansJeton = await brut({ email: 'ordre@exemple.fr' }), mauvais = await brut({ email: 'ordre@exemple.fr', turnstile: 'mauvais' }), sansEmail = await brut({ turnstile: 'ok' }), emailNombre = await brut({ email: 42, turnstile: 'ok' });
+            H.v('plafond PLEIN : sans jeton / jeton refusé => 422 (le défi précède la lecture du plafond)', [sansJeton.statut, mauvais.statut], [422, 422]);
+            H.v('plafond PLEIN : jeton bon et email absent / non texte => 429, pas 400 (la lecture du plafond précède le test de type)', [sansEmail.statut, emailNombre.statut], [429, 429]);
+        }
+        await db.col('courriels_lien_jour').deleteMany({}); await db.col('courriels_lien_jour').insertOne({ _id: require('../comptes/plafond-courriels').jourDeParis(), n: 2 });
         await s2.fermer();
+        // GARDE DU MONTAGE : la route refuse de se monter sans secret d'empreinte (≥ 16 caractères) — fail-closed, jamais une route qui répond 503 à chaque requête
+        {
+            const { routesLien } = require('../lien-ordinateur/routes');
+            const monte = secret => lever(() => routesLien({ post() { } }, { ...cfg2, empreinte: { secret } }));
+            const e = await Promise.all([monte(''), monte(undefined), monte(null), monte('court'), monte('x'.repeat(15))]);
+            H.v('routesLien lève au montage : secret vide, absent, nul, de 5 ou de 15 caractères', e.map(x => Boolean(x)), [true, true, true, true, true]);
+            H.v('   et ne lève pas avec un secret de 16 caractères', await monte('x'.repeat(16)), null);
+            const mont = require('../lien-ordinateur/monter');
+            H.vrai('   monter.routes (drapeau allumé) propage la levée : l\'application ne démarre pas', (await lever(() => mont.routes({ post() { } }, { ...cfg2, empreinte: { secret: '' } }))) !== null);
+        }
         // le compteur du lien est le SIEN : il ne consomme pas celui des courriels de comptes (courriels_jour)
         const comptesJour = await db.col('courriels_jour').find({}).toArray();
         H.v('le compteur des courriels de comptes (courriels_jour) n\'a pas bougé : la route a son propre compteur', comptesJour.length, 0);
@@ -285,7 +315,7 @@ const lever = async f => { try { await f(); return null; } catch (e) { return e;
             const marquesAvant500 = (await MARQUES()).filter(d => d.cle.endsWith('|reservation') && d.expireLe.getTime() > Date.now() + 1000).length;
             c = await cas('Brevo 500',() => A.registre.fournir('courrier', pilote(erreurDe('BrevoStatut500'))), 'p4@exemple.fr');
             const marquesApres500 = (await MARQUES()).filter(d => d.cle.endsWith('|reservation') && d.expireLe.getTime() > Date.now() + 1000).length;
-            H.v('Brevo répond 500 (rien n\'est parti) : la réponse est le 202 NEUTRE (aucun 503 lié à Brevo : il dirait quelle adresse est neuve) et la marque est RENDUE', [c.r.statut, c.r.texte, marquesApres500 - marquesAvant500], [202, '{"success":true}', 0]);
+            H.v('Brevo répond 500 (le courriel a PU partir : un 5xx est ambigu) : 202 NEUTRE (aucun 503 lié à Brevo) et la marque est GARDÉE (un envoi par adresse et par 24 h)', [c.r.statut, c.r.texte, marquesApres500 - marquesAvant500], [202, '{"success":true}', 1]);
             c = await cas('réseau', () => A.registre.fournir('courrier', pilote(erreurDe('BrevoReseau'))), 'p5@exemple.fr');
             const marquesApresReseau = (await MARQUES()).filter(d => d.cle.endsWith('|reservation') && d.expireLe.getTime() > Date.now() + 1000).length;
             H.v('Brevo injoignable (réseau, peut-être parti) : 202 neutre et la marque est GARDÉE (un doublon est pire qu\'un manque)', [c.r.statut, c.r.texte, marquesApresReseau - marquesApres500], [202, '{"success":true}', 1]);
@@ -298,11 +328,17 @@ const lever = async f => { try { await f(); return null; } catch (e) { return e;
                 H.v('Brevo refuse l\'adresse (400) : 202 comme une adresse invalide, marque rendue', [c.r.statut, c.r.texte, await vivante('p8@exemple.fr')], [202, '{"success":true}', false]);
                 c = await cas('Brevo adresse', () => A.registre.fournir('courrier', pilote(erreurDe('BrevoAdresse'))), 'p9@exemple.fr');
                 H.v('le pilote refuse l\'adresse avant toute requête (BrevoAdresse) : 202, marque rendue', [c.r.statut, await vivante('p9@exemple.fr')], [202, false]);
+                for (const [st, rendue] of [['BrevoStatut502', false], ['BrevoStatut503', false], ['BrevoStatut504', false], ['BrevoStatut599', false], ['BrevoStatut403', true], ['BrevoStatut429', true], ['BrevoStatut422', true]]) {
+                    const adr = `st${st.slice(-3)}@exemple.fr`;
+                    c = await cas(st, () => A.registre.fournir('courrier', pilote(erreurDe(st))), adr);
+                    H.v(`${st} : 202 neutre ; marque ${rendue ? 'RENDUE (refus franc 4xx : rien n\'est parti)' : 'GARDÉE (5xx ambigu : le courriel a pu partir)'}`, [c.r.statut, await vivante(adr)], [202, !rendue]);
+                }
                 c = await cas('Brevo 401', () => A.registre.fournir('courrier', pilote(erreurDe('BrevoStatut401'))), 'p10@exemple.fr');
                 H.v('Brevo refuse notre clé (401) : 202 neutre, marque rendue (rien n\'est parti)', [c.r.statut, await vivante('p10@exemple.fr')], [202, false]);
             }
+            const marquesAvantInconnue = (await MARQUES()).filter(d => d.cle.endsWith('|reservation') && d.expireLe.getTime() > Date.now() + 1000).length;
             c = await cas('erreur inconnue', () => A.registre.fournir('courrier', pilote(async () => { throw new TypeError('inattendu ' + secret); })), 'p7@exemple.fr');
-            H.v('erreur inattendue du pilote : 202 neutre, marque gardée (on ne sait pas)', [c.r.statut, (await MARQUES()).filter(d => d.cle.endsWith('|reservation') && d.expireLe.getTime() > Date.now() + 1000).length - marquesApresReseau], [202, 1]);
+            H.v('erreur inattendue du pilote : 202 neutre, marque gardée (on ne sait pas)', [c.r.statut, (await MARQUES()).filter(d => d.cle.endsWith('|reservation') && d.expireLe.getTime() > Date.now() + 1000).length - marquesAvantInconnue], [202, 1]);
             // DÉTACHEMENT : la réponse part AVANT la fin de l'envoi (un pilote bloqué jusqu'à ce que le banc le libère) — la durée ne dit rien de l'adresse
             {
                 let liberer; const bloque = new Promise(f => { liberer = f; }); let appele = false;
@@ -319,7 +355,9 @@ const lever = async f => { try { await f(); return null; } catch (e) { return e;
             void avantMarques;
             void avantMarques;
         } finally { rendre(); }
-        const tout = journaux.join('\n');
+        const estAssertion = j => /^✅/.test(j) || (/^❌/.test(j) && !/^❌ \[v2/.test(j));
+        for (const j of journaux) if (estAssertion(j)) console.log(j);      // les assertions jouées pendant la capture des journaux sont rejouées à l'écran (sinon un échec y serait muet)
+        const tout = journaux.filter(j => !estAssertion(j)).join('\n');
         H.v('aucun journal ne contient l\'adresse (ni la partie locale), même sur une panne dont le message la contient', [tout.includes('panne.secrete'), tout.includes('p4@exemple'), tout.includes('exemple.fr')], [false, false, false]);
         H.vrai('(témoin) les pannes ont bien été journalisées par leur NOM', /BrevoStatut500|turnstile|Error/.test(tout) || tout.length > 0);
     }
@@ -354,6 +392,7 @@ const lever = async f => { try { await f(); return null; } catch (e) { return e;
         H.vrai('le HTML est un document complet en français', /^<!doctype html>/i.test(c.html) && /lang="fr"/.test(c.html));
         H.vrai('le texte dit l\'origine de la demande et que l\'adresse n\'est pas conservée au-delà de 24 h', /rat-market\.fr/.test(c.texte) && /24\s*heures/.test(c.texte.replace(/ /g, ' ')) && /ignorez/i.test(c.texte));
         H.vrai('le texte ne dit plus « votre adresse n\'est pas conservée » sans nuance : l\'adresse elle-même, une empreinte à clé 24 h, le prestataire d\'envoi et sa propre politique', !/n.est pas conservée/.test(c.texte) && /adresse elle-même/.test(c.texte) && /empreinte à clé/.test(c.texte) && /24\s*heures/.test(c.texte) && /prestataire d.envoi/.test(c.texte) && /propre politique/.test(c.texte));
+        H.vrai('le texte dit « supprimée de notre base après 24 heures » et ne promet rien sur les sauvegardes (ni « supprimée automatiquement », ni « effacée partout »)', /supprimée de notre base après 24\s*heures/.test(c.texte.replace(/\s+/g, ' ')) && !/sauvegarde|partout|définitiv|automatiquement/i.test(c.texte));
         H.v('le message est mis en cache : la même instance à chaque appel', (await G.lienOrdinateur()) === c, true);
     }
 
