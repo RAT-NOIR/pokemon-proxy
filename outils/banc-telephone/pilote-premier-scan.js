@@ -33,7 +33,8 @@ const router = express.Router(); routes.monter(router, cfg, { envBancTelephone: 
 const srv = http.createServer(app);
 const attente = ms => new Promise(r => setTimeout(r, ms));
 (async () => {
-    await new Promise(r => srv.listen(0, '127.0.0.1', r));
+    // --port : un port FIXE (le cache d'un navigateur est rangé par ORIGINE : « au retour » sur le même profil exige la même origine) ; sans lui, un port libre au hasard
+    await new Promise(r => srv.listen(Number(arg('port', '0')), '127.0.0.1', r));
     const port = srv.address().port, dbg = 19500 + Math.floor(Math.random() * 90);
     const profil = PROFIL || fs.mkdtempSync(path.join(os.tmpdir(), 'rm-banc-ps-'));
     fs.mkdirSync(profil, { recursive: true });

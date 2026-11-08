@@ -78,7 +78,7 @@ export async function chargerOctets({ cle, reseau, caches, nomCache = NOM_CACHE,
         try {
             const [pourNous, pourLeCache] = rep.body.tee(); corps = pourNous;
             const entetes = { 'content-length': String(total), 'content-type': 'application/octet-stream' }; const etiquette = rep.headers.get('etag'); if (etiquette) entetes['x-rm-etag'] = etiquette;
-            ecriture = cache.put(cle, new Response(pourLeCache, { status: 200, headers: entetes })).then(() => 'ok', e => { erreurEcriture = String((e && e.name) || 'erreur').slice(0, 40); return 'echec'; });
+            ecriture = cache.put(cle, new Response(pourLeCache, { status: 200, headers: entetes })).then(() => 'ok', e => { erreurEcriture = `${(e && e.name) || 'erreur'}:${(e && e.message) || ''}`.replace(/[^\x20-\x7E]/g, '?').slice(0, 100); return 'echec'; });
         } catch { corps = rep.body; ecriture = null; }
     }
     const octets = await lireCorps(corps, total, surProgres);
