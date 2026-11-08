@@ -21,6 +21,16 @@ const shaModele = crypto.createHash('sha256').update(fs.readFileSync(MODELE)).di
 const cfg = { modeleEmpreinte: { id: 'p8000-poids8s-1', sha256: shaModele, octets: fs.statSync(MODELE).size } };
 const deposes = [];
 const app = express(); app.use(require(path.join(racine, 'corps')).analyseur()); app.use(express.json());
+// --debit-api / --debit-modele (Mo/s) : le débit de CHAQUE hôte, côté serveur, sur les octets réellement envoyés (compressés ou non). Le modèle vient de R2 (rapide) et le reste de l'API (Render, mesuré ~1 Mo/s sur iPhone) :
+// deux hôtes, deux débits ; Network.emulateNetworkConditions (--debit) ne sait donner qu'un débit unique, partagé.
+const limiter = (res, Mo) => {
+    const octetsParS = Mo * 1048576, ow = res.write.bind(res), oe = res.end.bind(res); let chaine = Promise.resolve();
+    const envoyer = async c => { const b = Buffer.isBuffer(c) ? c : Buffer.from(c); for (let i = 0; i < b.length; i += 65536) { const s = b.subarray(i, i + 65536); ow(s); await new Promise(r => setTimeout(r, (s.length / octetsParS) * 1000)); } };
+    res.write = (c, ...r) => { if (c) chaine = chaine.then(() => envoyer(c)); const cb = r.find(x => typeof x === 'function'); if (cb) cb(); return true; };
+    res.end = (c, ...r) => { chaine = chaine.then(async () => { if (c && typeof c !== 'function') await envoyer(c); oe(); }); return res; };
+};
+const DEBIT_API = Number(arg('debit-api', '0')), DEBIT_MODELE = Number(arg('debit-modele', '0'));
+app.use((req, res, next) => { const Mo = req.path.startsWith('/api/modele-empreinte/') ? DEBIT_MODELE : req.path.startsWith('/api/banc/telephone/') && req.method === 'GET' ? DEBIT_API : 0; if (Mo > 0) limiter(res, Mo); next(); });
 // un autre modèle que celui du lot : le lot est réécrit à la volée avec le sha du modèle servi (expérience seulement ; l'égalité au bit se juge ensuite contre les empreintes de référence)
 if (shaModele !== lot.modeleSha256) app.get('/api/banc/telephone/lot.json', (req, res) => { res.setHeader('Content-Type', 'application/json; charset=utf-8'); res.send(JSON.stringify({ ...lot, modeleSha256: shaModele })); });
 app.get(`/api/modele-empreinte/${shaModele}`, (req, res) => {
