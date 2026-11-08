@@ -128,7 +128,7 @@ canvas `srgb` ⇒ cause « aucune », cos min 0,9999999. Sur l'iPhone, un `decod
 
 * `v2/test/test-banc-telephone-ios.js` : **51 assertions**, rouge vu avant l'écriture du code (`V.detecterIOS is not a function`), verte ensuite.
 * Bancs existants du banc téléphone : `test-banc-telephone.js` 110/110, `test-banc-telephone-tour1.js` 79/79, `test-banc-telephone-cors.js` 44/44.
-* Verrou complet `node v2/test/lancer-tout.js` (aucun `.env` dans le worktree) sur les commits 77f295b1, dabeab99, a72cd98c : **321 fichier(s), 0 en échec** (323 fichiers `test-*.js`, 2 exclus par le lanceur lui-même). Aucune suite instable n'a eu besoin d'être rejouée.
+* Verrou complet `node v2/test/lancer-tout.js` (aucun `.env` dans le worktree) au tour 1 (commits jusqu'à 973ed40e/77eb2771) : **321 fichier(s), 1 en échec = `test-photos-multiples.js` (N-1, délai de 30 ms sensible à la charge, sans rapport avec le lot), rejoué seul 2 fois : 175/0** ; au tour initial : **321 fichier(s), 0 en échec** (323 fichiers `test-*.js`, 2 exclus par le lanceur lui-même). Aucune suite instable n'a eu besoin d'être rejouée.
 * Pilote réel Chrome headless : IDENTIQUE en WASM (cos min 0,9999999, « modèle seul » 1) et en WebGPU (IDENTIQUE) après les changements.
 
 ## 6. À faire sur l'iPhone (ordre conseillé)
