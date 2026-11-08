@@ -64,7 +64,7 @@ async function lienOrdinateur() {
     const titre = typo('Installez Rat-Market sur votre ordinateur');
     const intro = typo('Voici le lien de l’extension Rat-Market. Ouvrez-le avec Chrome sur votre ordinateur, puis cliquez sur « Ajouter à Chrome ».');
     const origine = typo('Ce message vous est envoyé parce que cette adresse a été saisie sur rat-market.fr pour recevoir ce lien. Si ce n’est pas vous, ignorez-le : aucun compte n’a été créé.');
-    const adresse = typo('Nous ne gardons pas votre adresse elle-même : seule une empreinte à clé en est conservée 24 heures, pour éviter les envois répétés. Elle a été transmise à notre prestataire d’envoi, qui en garde la trace selon sa propre politique.');
+    const adresse = typo('Nous ne gardons pas votre adresse elle-même : seule une empreinte à clé en est conservée, supprimée de notre base après 24 heures, pour éviter les envois répétés. Elle a été transmise à notre prestataire d’envoi, qui en garde la trace selon sa propre politique.');
     const question = typo(`Une question ? Écrivez à ${SITE.contactEmail}.`);
     const texte = [titre, intro, lien, origine, adresse, question, '--\nRat-Market · rat-market.fr'].join('\n\n') + '\n';
     const style = (px, ligne, couleur, plus = '') => `font-family:${POLICE};font-size:${px}px;line-height:${ligne}px;color:${couleur}${plus}`;
