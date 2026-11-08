@@ -221,7 +221,8 @@ function entreeDeCarte(SRC, u, meta, le = new Date(), collecteLe = le) {
 /** Le document `images` d'une unité. */
 function documentImage(SRC, u, meta, le = new Date(), collecteLe = le) {
     const tampon = tamponDe(SRC, u);
-    return { ...champsDe(SRC, u, 'champsDocument'), _id: SRC.idImage(u.slugSet, u.carteId, u.numero, langueDe(SRC, u)), source: SRC.SOURCE, lot: SRC.LOT, set: u.slugSet, carteId: u.carteId, numero: u.numero ?? null, idProduct: u.produits[0], produits: u.produits, idSource: u.idSource ?? null,
+    const { [MARQUEUR_REMPLACEMENT_LANGUE]: _jamaisSurUnDoc, [MARQUEUR_REMPLACEMENT_DECIDE]: _jamaisNonPlusDoc, ...champsDoc } = champsDe(SRC, u, 'champsDocument');   // les marqueurs de remplacement ne vivent que sur la candidate
+    return { ...champsDoc, _id: SRC.idImage(u.slugSet, u.carteId, u.numero, langueDe(SRC, u)), source: SRC.SOURCE, lot: SRC.LOT, set: u.slugSet, carteId: u.carteId, numero: u.numero ?? null, idProduct: u.produits[0], produits: u.produits, idSource: u.idSource ?? null,
         cleR2: meta.cleR2, sha256: meta.sha256, w: meta.w, h: meta.h, fmt: meta.fmt, wOriginal: meta.wOriginal, hOriginal: meta.hOriginal, ...marqueDe({ wOriginal: meta.wOriginal }),
         langueSource: langueDe(SRC, u), langue: langueDe(SRC, u), languePreuve: languePreuveDe(SRC, u), attribution: SRC.MENTION, mention: SRC.MENTION, ...(tampon ? { tampon } : {}),
         ...(u.preuveNeutre ? { preuve: u.preuveNeutre } : {}), telechargeLe: new Date(collecteLe), etat: 'ok', ...champsTracabilite({ urlOriginal: u.url, collecteLe }) };

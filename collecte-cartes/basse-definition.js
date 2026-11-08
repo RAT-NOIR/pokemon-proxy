@@ -117,7 +117,7 @@ const autorisationDeFamille = f => (typeof f === 'string' && Object.hasOwn(REMPL
 // ratio 1,22 < 1,5). Table FERMÉE famille PHASE4 → LISTE des idProduct autorisés (pas la famille entière). Le marqueur vit sur la CANDIDATE, posé par `candidatDe` (recolte-commun.js) seulement si la
 // famille est dans la table ET que TOUS les produits de l'unité sont listés. La branche (entreesARemplacer) exige en plus : même impression (set, numéro, marqueurs), langues connues et égales, largeur de l'ORIGINAL
 // de la candidate connue et STRICTEMENT supérieure à celle de l'entrée. Tout le reste : la règle ordinaire.
-const REMPLACEMENTS_DECIDES = Object.freeze({ N8P3: Object.freeze({ produits: Object.freeze([907757]), decision: 'testeur 2026-11-08', motif: 'définition supérieure' }) });
+const REMPLACEMENTS_DECIDES = Object.freeze({ N8P3: Object.freeze({ produits: Object.freeze([907757]), set: '30th-Celebration', numero: '150', langue: 'en', decision: 'testeur 2026-11-08', motif: 'définition supérieure' }) });
 const MARQUEUR_REMPLACEMENT_DECIDE = 'remplacementDecide';
 const autorisationDecidee = f => (typeof f === 'string' && Object.hasOwn(REMPLACEMENTS_DECIDES, f) ? REMPLACEMENTS_DECIDES[f] : null);
 /** La famille et les produits d'une unité sont-ils dans la table fermée ? (tous les produits de l'unité doivent être listés, et il en faut au moins un) */
@@ -138,7 +138,9 @@ function entreesARemplacer(images, candidat, { fausses = FAUSSES, champsTampon =
     // la branche « langue non prouvée » : la famille nommée par la candidate est dans la table ET la langue de la candidate est celle de la table (sinon la branche est fermée)
     const autorisation = autorisationDeFamille(candidat[MARQUEUR_REMPLACEMENT_LANGUE]);
     const brancheLangue = autorisation && candidat.langue === autorisation.langue ? autorisation : null;
-    const decidee = !!autorisationDecidee(candidat[MARQUEUR_REMPLACEMENT_DECIDE]);
+    // la branche décidée est épinglée sur l'IMPRESSION de la table (set, numéro par cleNumero, langue) : la candidate ET l'entrée remplacée doivent en être
+    const aDec = autorisationDecidee(candidat[MARQUEUR_REMPLACEMENT_DECIDE]);
+    const decidee = !!aDec && candidat.set === aDec.set && cleNumero(candidat.numero) === cleNumero(aDec.numero) && candidat.langue === aDec.langue;
     const wOrigC = typeof candidat.wOriginal === 'number' && Number.isFinite(candidat.wOriginal) && candidat.wOriginal > 0 ? candidat.wOriginal : null;
     return images.filter(e => {
         if (!e || e.set !== candidat.set || cleNumero(e.numero) !== numero) return false;
@@ -160,7 +162,7 @@ function entreesARemplacer(images, candidat, { fausses = FAUSSES, champsTampon =
         if (e.imageEmprunteeTirage === true || eff.imageEmprunteeTirage) return tamponPositifEgal(eff, candidat, champsTampon) && memeVarianteHors(eff, candidat, ['imageEmprunteeTirage', 'tamponNonRepresente', ...champsTampon]);
         const wE = largeurOriginaleDe(e);
         // la branche DÉCIDÉE (table fermée) : largeur de l'ORIGINAL de la candidate connue et STRICTEMENT supérieure ; langues déjà connues et égales (test plus haut) ; mêmes marqueurs de variante
-        if (decidee && wE != null && wOrigC != null && wOrigC > wE && memeVariante(eff, candidat)) return true;
+        if (decidee && e.set === aDec.set && cleNumero(e.numero) === cleNumero(aDec.numero) && e.langue === aDec.langue && wE != null && wOrigC != null && wOrigC > wE && memeVariante(eff, candidat)) return true;
         return wE != null && wC != null && wC >= RATIO_NETTEMENT_PLUS_GRANDE * wE && memeVariante(eff, candidat);
     });
 }
@@ -242,6 +244,8 @@ function remplacementsDecides(unites) {
     const sortie = [];
     for (const u of Array.isArray(unites) ? unites : []) {
         if (u?.decision?.action !== 'ajouter' || !unitePermiseDecidee(u.groupe, u.produits)) continue;
+        const a = autorisationDecidee(u.groupe);
+        if (u.slugSet !== a.set || cleNumero(u.numero) !== cleNumero(a.numero)) continue;
         for (const e of u.decision.remplace ?? []) {
             if (e.basseDefinition === true || e.imageEmprunteeTirage === true || FAUSSES.has(`${e.source}|${e.cleR2}`) || langueNonProuvee(e)) continue;
             sortie.push({ carteId: u.carteId, set: e.set, numero: e.numero ?? null, source: e.source, cleR2: e.cleR2, remplacePar: u.cleR2 ?? null, famille: u.groupe ?? null, produits: [...u.produits] });

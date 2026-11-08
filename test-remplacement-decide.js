@@ -42,6 +42,19 @@ t('langue de la candidate inconnue → rien ne sort', () => {
 });
 t('marqueur de variante différent (entrée avec noteVariante) → cède', () => assert.strictEqual(decision([actuelle({ noteVariante: 'x' })], unite()).action, 'cede'));
 t('marqueur de variante différent (candidate tamponnée) → cède', () => assert.strictEqual(decision([actuelle()], unite({ tampon: 'Staff' })).action, 'cede'));
+t('la table épingle l\'impression : set, numéro, langue', () => {
+    const a = B.REMPLACEMENTS_DECIDES.N8P3;
+    assert.strictEqual(a.set, '30th-Celebration'); assert.strictEqual(a.numero, '150'); assert.strictEqual(a.langue, 'en');
+});
+t('même produit/famille mais candidate ja (entrée ja aussi) → cède', () => assert.deepStrictEqual(sorties(decision([actuelle({ langue: 'ja' })], unite({ langue: 'ja' }))), []));
+t('même produit/famille mais autre numéro (entrée et candidate au 151) → cède', () => assert.deepStrictEqual(sorties(decision([actuelle({ numero: '151' })], unite({ numero: '151' }))), []));
+t('même produit/famille mais autre set (entrée et candidate) → cède', () => assert.deepStrictEqual(sorties(decision([actuelle({ set: 'Crown-Zenith' })], unite({ slugSet: 'Crown-Zenith' }))), []));
+t('le numéro s\'écrit « 150 » ou « 0150 » (cleNumero) → remplace', () => assert.deepStrictEqual(sorties(decision([actuelle({ numero: '0150' })], unite({ numero: '0150' }))), ['tcgdex/30th-Celebration/150-357180.webp']));
+t('le marqueur ne vit pas non plus sur le document (champsDocument)', () => {
+    const M = B.MARQUEUR_REMPLACEMENT_DECIDE;
+    const d = RC.documentImage(SRC, unite({ url: 'https://x/y.png', carteId: 5, languePreuve: 'lue', champsDocument: { [M]: 'N8P3' } }), { cleR2: 'k', sha256: 'a', w: 700, h: 980, fmt: 'webp', wOriginal: 733, hOriginal: 1024 });
+    assert.strictEqual(d[M], undefined);
+});
 t('autre numéro → rien ne sort', () => assert.deepStrictEqual(sorties(decision([actuelle({ numero: '151' })], unite())), []));
 t('document de l\'entrée introuvable → cède', () => {
     const d = CT.decisionEcriture([actuelle()], RC.candidatDe(SRC, unite(), { cleR2: 'k', wOriginal: 733 }), { documents: new Map() });
