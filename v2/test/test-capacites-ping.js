@@ -108,6 +108,7 @@ if (C) {
         V2_TE_VOISINS_UNE_FOIS: BOOL, V2_TE_EMPREINTE_TOT: BOOL, V2_TE_FIN_PARALLELE: BOOL, V2_TE_ORB_UTILE: BOOL, V2_MESURES_CLIENT: BOOL, V2_ORB_SERVEUR: BOOL, V2_G_GROUPE: BOOL, V2_G_GROUPE_ECART: '50',
         V2_COLLECTION_COTES: '0',      // aucune valeur Cardmarket dans la collection (31/10) : « 1 » est refusé hors banc, le cas ici est l'extinction
         V2_CONFIRMATION_NOMBREUX: BOOL, V2_TAUX_BCE: BOOL, V2_RESOLUTION_CARDMARKET: BOOL, V2_BANC_SEAU: BOOL, V2_PHOTOS_MULTIPLES: BOOL, V2_PHOTO_COMPTES_BANC: BOOL, V2_ABONNEMENTS: BOOL, V2_GALERIE: BOOL,
+        V2_LIEN_ORDINATEUR: BOOL, V2_LIEN_ORDINATEUR_IP_JOUR: ENT, V2_LIEN_ORDINATEUR_JOUR: ENT,      // LIEN-ORDINATEUR : une route du site, aucune capacité annoncée à l'extension
         // abonnements/config.js (lu par config.js) : des valeurs fictives, jamais une forme de clé
         V2_STRIPE_MODE: 'test', V2_STRIPE_CLE: 'valeur-fictive', V2_STRIPE_WEBHOOK_SECRET: 'valeur-fictive', V2_STRIPE_PRIX_PRO_MOIS: 'prix-fictif-1', V2_STRIPE_PRIX_PRO_AN: 'prix-fictif-2',
         V2_STRIPE_PRIX_FONDATEURS_MOIS: 'prix-fictif-3', V2_STRIPE_PRIX_FONDATEURS_AN: 'prix-fictif-4', V2_STRIPE_PORTAIL_CONFIG_PRO: 'portail-fictif-1', V2_STRIPE_PORTAIL_CONFIG_FONDATEURS: 'portail-fictif-2',
