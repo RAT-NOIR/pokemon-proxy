@@ -8,8 +8,8 @@ const DOSSIER = path.join(__dirname, 'courriels-site');
 let chargement = null;
 /** Charge (une fois) les modules .mjs embarqués : le serveur est en CommonJS, d'où l'import dynamique. */
 function charger() {
-    if (!chargement) chargement = Promise.all(['courriels.mjs', 'courrielsGabarit.mjs', 'site.mjs'].map(f => import(pathToFileURL(path.join(DOSSIER, f)).href)))
-        .then(([c, g, s]) => ({ COURRIELS: c.COURRIELS, lienAutorise: c.lienAutorise, typo: g.typo, rendreHtml: g.rendreHtml, rendreTexte: g.rendreTexte, SITE: s.SITE }))
+    if (!chargement) chargement = Promise.all(['courriels.mjs', 'courrielsGabarit.mjs', 'site.mjs', 'extension.mjs'].map(f => import(pathToFileURL(path.join(DOSSIER, f)).href)))
+        .then(([c, g, s, e]) => ({ COURRIELS: c.COURRIELS, lienAutorise: c.lienAutorise, typo: g.typo, rendreHtml: g.rendreHtml, rendreTexte: g.rendreTexte, echapper: g.echapper, COULEURS: g.COULEURS, POLICE: g.POLICE, SITE: s.SITE, CHROME_STORE_URL: s.CHROME_STORE_URL, lienStoreValide: e.lienStoreValide }))
         .catch(e => { chargement = null; throw e; });
     return chargement;
 }
@@ -47,4 +47,54 @@ async function avertissementSuppression(adresse, { derniereConnexionLe, suppress
     return { objet: G.typo(contenu.objet), texte: G.rendreTexte(contenu), html: G.rendreHtml(contenu) };
 }
 async function contactSite() { const { SITE } = await charger(); return SITE.contactEmail; }
-module.exports = { charger, verification, reinitialisation, avertissementSuppression, contactSite, LIEN_CONNEXION };
+
+/**
+ * LIEN-ORDINATEUR (D1 du site) — le courriel « le lien de l'extension pour votre ordinateur » : un message CONSTANT. Cette fonction n'a AUCUN paramètre (elle ne lit ni l'adresse du destinataire, ni un champ de la requête) :
+ * l'objet, le texte et le HTML sont les mêmes pour tout le monde, et le SEUL lien est la fiche du Chrome Web Store, `CHROME_STORE_URL` du site (une seule adresse du Store dans tout le code du site, copiée ici avec les autres textes).
+ * Elle ne passe pas par `rendreHtml` / `rendreTexte` du site : leur pied de page écrit l'adresse du destinataire (« un compte est associé à l'adresse … »), faux ici (aucun compte) et contraire à « aucun texte venant de l'utilisateur ».
+ * L'instance est gardée : le même objet à chaque appel (un test le vérifie).
+ */
+let messageLien = null;
+async function lienOrdinateur() {
+    if (messageLien) return messageLien;
+    const { typo, echapper, COULEURS: k, POLICE, SITE, CHROME_STORE_URL, lienStoreValide } = await charger();
+    if (!lienStoreValide(CHROME_STORE_URL)) { const e = new Error('Lien du Chrome Web Store refusé'); e.name = 'LienStoreInvalide'; throw e; }   // fail-closed : un identifiant de remplissage n'est jamais envoyé
+    const lien = new URL(CHROME_STORE_URL).href;
+    const objet = typo('Le lien de l’extension Rat-Market pour votre ordinateur');
+    const titre = typo('Installez Rat-Market sur votre ordinateur');
+    const intro = typo('Voici le lien de l’extension Rat-Market. Ouvrez-le avec Chrome sur votre ordinateur, puis cliquez sur « Ajouter à Chrome ».');
+    const origine = typo('Ce message vous est envoyé parce que cette adresse a été saisie sur rat-market.fr pour recevoir ce lien. Si ce n’est pas vous, ignorez-le : aucun compte n’a été créé.');
+    const adresse = typo('Votre adresse n’est pas conservée : seule une empreinte illisible en est gardée 24 heures, pour limiter les envois répétés.');
+    const question = typo(`Une question ? Écrivez à ${SITE.contactEmail}.`);
+    const texte = [titre, intro, lien, origine, adresse, question, '--\nRat-Market · rat-market.fr'].join('\n\n') + '\n';
+    const style = (px, ligne, couleur, plus = '') => `font-family:${POLICE};font-size:${px}px;line-height:${ligne}px;color:${couleur}${plus}`;
+    const href = echapper(lien);
+    const html = `<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="format-detection" content="telephone=no,date=no,address=no,email=no">
+<title>${echapper(objet)}</title>
+</head>
+<body style="margin:0;padding:0;background-color:${k.fondClair}" bgcolor="${k.fondClair}">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="${k.fondClair}" style="background-color:${k.fondClair}"><tr><td align="center" style="padding:24px 12px">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" bgcolor="${k.carteClair}" style="width:100%;max-width:600px;background-color:${k.carteClair};border-radius:12px">
+<tr><td style="padding:28px 32px 12px;${style(22, 28, k.texteClair, ';font-weight:700')}">${echapper(titre)}</td></tr>
+<tr><td style="padding:0 32px 16px;${style(16, 24, k.texteClair)}">${echapper(intro)}</td></tr>
+<tr><td style="padding:4px 32px 20px"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" bgcolor="${k.or}" style="background-color:${k.or};border-radius:999px"><a href="${href}" style="display:inline-block;padding:14px 28px;${style(16, 20, k.noir, ';font-weight:700;text-decoration:none;border-radius:999px')}">${echapper(typo('Ouvrir la fiche sur le Chrome Web Store'))}</a></td></tr></table></td></tr>
+<tr><td style="padding:0 32px 16px;${style(13, 19, k.doucClair)}">${echapper(typo('Le bouton ne s’affiche pas ? Copiez ce lien dans votre navigateur :'))}<br><a href="${href}" style="color:${k.orSurBlanc};word-break:break-all">${href}</a></td></tr>
+<tr><td style="padding:0 32px 16px;${style(14, 21, k.doucClair)}">${echapper(origine)}</td></tr>
+<tr><td style="padding:0 32px 16px;${style(14, 21, k.doucClair)}">${echapper(adresse)}</td></tr>
+<tr><td style="padding:8px 32px 28px;${style(13, 19, k.doucClair)}">${echapper(question)}<br>Rat-Market · rat-market.fr</td></tr>
+</table>
+</td></tr></table>
+</body>
+</html>
+`;
+    messageLien = Object.freeze({ objet, texte, html });
+    return messageLien;
+}
+module.exports = { charger, verification, reinitialisation, avertissementSuppression, contactSite, lienOrdinateur, LIEN_CONNEXION };

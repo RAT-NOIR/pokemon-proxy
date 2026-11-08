@@ -17,7 +17,9 @@ function creerCourrierMemoire() {
         envoyes,
         async envoyerVerification(email, lien, options) { garder({ type: 'verification', email, lien, texte: texteVerification(lien, options) }); },
         async envoyerReinitialisation(email, lien) { garder({ type: 'reinit', email, lien }); },
-        async envoyerAvertissement(email, donnees) { garder({ type: 'avertissement', email, ...donnees }); }
+        async envoyerAvertissement(email, donnees) { garder({ type: 'avertissement', email, ...donnees }); },
+        // LIEN-ORDINATEUR : le message est CONSTANT (gabarits-courriel.js, aucun paramètre) ; le destinataire est la seule donnée de l'appel.
+        async envoyerLienOrdinateur(email) { garder({ type: 'lien-ordinateur', email, ...(await require('./gabarits-courriel').lienOrdinateur()) }); }
     };
 }
 // Le pilote Brevo vit dans courrier-brevo.js (chargé à la demande : un banc du pilote mémoire n'en a pas besoin).

@@ -1,6 +1,6 @@
 'use strict';
 // BREVO — le pilote d'envoi des courriels, en API HTTP transactionnelle (POST /v3/smtp/email, en-tête `api-key`). Même interface que le pilote mémoire (courrier.js) :
-//   envoyerVerification(email, lien, { purgeHeures }) · envoyerReinitialisation(email, lien, { validiteHeures }) · envoyerAvertissement(email, { derniereConnexionLe, suppressionLe })
+//   envoyerVerification(email, lien, { purgeHeures }) · envoyerReinitialisation(email, lien, { validiteHeures }) · envoyerAvertissement(email, { derniereConnexionLe, suppressionLe }) · envoyerLienOrdinateur(email)
 // Règles (BREVO, 27/10) :
 //  · la clé est lue UNE fois, à la construction (BREVO_API_KEY), jamais relue, jamais écrite nulle part ; absente : la construction LÈVE (BrevoCleAbsente) ;
 //  · un délai borné par requête ; UN réessai au plus, sur 5xx, réseau ou délai — JAMAIS sur 4xx (429 compris : insister auprès d'un serveur qui dit « trop » aggrave) ; une redirection est une erreur (la clé ne suit personne) ;
@@ -68,7 +68,9 @@ function creerCourrierBrevo({ cle, env = process.env, url = URL_BREVO, delaiMs =
         reel: true,       // ce pilote envoie pour de vrai : seule garantie sur laquelle la passe d'avertissement (inactifs.js) accepte de marquer un compte
         async envoyerVerification(email, lien) { if (!adresseValide(email)) throw erreur('BrevoAdresse'); await poster('securite', email, await G.verification(email, lien)); },
         async envoyerReinitialisation(email, lien, options) { if (!adresseValide(email)) throw erreur('BrevoAdresse'); await poster('securite', email, await G.reinitialisation(email, lien, options || {})); },
-        async envoyerAvertissement(email, donnees) { if (!adresseValide(email)) throw erreur('BrevoAdresse'); await poster('avertissement', email, await G.avertissementSuppression(email, donnees || {})); }
+        async envoyerAvertissement(email, donnees) { if (!adresseValide(email)) throw erreur('BrevoAdresse'); await poster('avertissement', email, await G.avertissementSuppression(email, donnees || {})); },
+        // LIEN-ORDINATEUR : le message CONSTANT du lien de l'extension (aucun paramètre autre que le destinataire). Classe « avertissement » : le courriel n'est pas de sécurité, la réserve de la vérification et du mot de passe oublié reste intacte.
+        async envoyerLienOrdinateur(email) { if (!adresseValide(email)) throw erreur('BrevoAdresse'); await poster('avertissement', email, await G.lienOrdinateur()); }
     };
 }
 module.exports = { creerCourrierBrevo, adresseValide, URL_BREVO, EXPEDITEUR };
