@@ -24,8 +24,5 @@
     "mongoose": "^8.4.1",
     "sharp": "^0.35.5",
     "stripe": "^22.3.2"
-  },
-  "optionalDependencies": {
-    "puppeteer": "^22.0.0"
   }
 }

@@ -10,9 +10,16 @@
 // Ce module est autonome et testable seul (voir le bloc de test en bas).
 // Il sera ensuite require() par index.js.
 //
-// Dépendances : puppeteer (npm install puppeteer)
+// Dépendances : puppeteer, NON déclaré dans package.json (le build de déploiement ne le télécharge pas : ni lui ni Chromium).
+// Outils locaux seulement (apprendre-*.js) : `npm install --no-save puppeteer@^22` à la main, sur ton PC.
 
-const puppeteer = require('puppeteer');
+let puppeteer;
+try { puppeteer = require('puppeteer'); } catch (e) {
+    if (e && e.code === 'MODULE_NOT_FOUND' && /puppeteer/.test(String(e.message))) {
+        throw new Error('live-cardmarket.js : puppeteer n\'est pas installé. Il ne sert qu\'aux outils locaux apprendre-*.js et n\'est volontairement pas dans package.json (le déploiement ne le télécharge pas). Installe-le à la main, sans toucher au lock : npm install --no-save puppeteer@^22');
+    }
+    throw e;
+}
 const path = require('path');
 // Règle d'extraction du numéro depuis le slug — définie UNE fois, dans le module pur
 // et testé, et partagée avec nettoyer-slugs.js. Voir numeroDepuisSlug.
