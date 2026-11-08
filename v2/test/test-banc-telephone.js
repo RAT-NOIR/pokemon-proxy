@@ -18,7 +18,8 @@ const SHA = 'a'.repeat(64);
 const ENV_BON = { V2_BANC_TELEPHONE: '1', V2_CIBLE: 'essai', RENDER_SERVICE_ID: 'srv-db7ticgm7kps73crjibg', V2_VISUELS_R2_COMPTE: 'moncompte123' };
 const cfg = { ...lireConfig({ MONGODB_BASE: 'test_scratch' }), modeleEmpreinte: { id: 'p8000-poids8s-1', sha256: SHA, octets: 118202501 } };
 const aleaHex = i => String(i).padStart(16, '0');
-const sha12 = p => crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex').slice(0, 12);
+// les fichiers TEXTE sont empreints sans leurs fins de ligne CRLF (une extraction git sous Windows avec autocrlf les réécrit : le contenu est le même) ; les .wasm, binaires, tels quels
+const sha12 = p => crypto.createHash('sha256').update(/\.(?:m?js)$/.test(p) ? Buffer.from(fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n'), 'utf8') : fs.readFileSync(p)).digest('hex').slice(0, 12);
 
 const doc = (o = {}) => ({ v: 1, runId: '0123456789abcdef', modeleSha: SHA, ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Safari/604.1', isole: true, coeurs: 6, memoireAppareilGo: null, gpuDispo: true, gpu: { vendor: 'apple', architecture: 'common-3' },
     decodeurOptions: true, modeleOctets: 118202501, telechargementMs: 12000, verifShaMs: 900, shaVerifie: true,
