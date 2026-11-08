@@ -60,6 +60,8 @@ function signalerVariablesSansObjet(env) {
 }
 function lireConfig(env = process.env) {
     signalerVariablesSansObjet(env);
+    // LIEN-ORDINATEUR : le drapeau ne s'allume que par « 1 » ; une autre valeur non vide, sauf « 0 », est DITE (le nom de la variable, jamais sa valeur) : la route reste fermée.
+    if (env.V2_LIEN_ORDINATEUR !== undefined && !['', '0', '1'].includes(env.V2_LIEN_ORDINATEUR)) console.warn('⚠️ [v2 config] V2_LIEN_ORDINATEUR : seule la valeur 1 allume la route /api/lien-ordinateur, elle reste fermée');
     const ordre = env.V2_ORDRE_POCHES ? env.V2_ORDRE_POCHES.split(',').map(s => s.trim()) : ['jour'];
     for (const p of ordre) {
         if (p === 'achete') throw new Error('configuration invalide : la poche "achete" n\'est pas configurable : elle est débitée AVANT "jour", dans le code (ACHETE-AVANT-JOUR) ; V2_ORDRE_POCHES ne nomme que "jour"');
@@ -218,6 +220,10 @@ function lireConfig(env = process.env) {
         // Expéditeur (décision de l'éditeur du 31/10) : From « Rat-Market <no-reply@rat-market.fr> », Reply-To la boîte de contact du projet. L'éditeur crée l'expéditeur chez Brevo ; le code ne crée rien là-bas.
         courriels: { de: adresseCourriel('V2_COURRIEL_DE', env.V2_COURRIEL_DE, 'no-reply@rat-market.fr'), repondreA: adresseCourriel('V2_COURRIEL_REPONSE', env.V2_COURRIEL_REPONSE, 'ratmarket.contact@gmail.com'),
                      jour: entier('V2_COURRIELS_JOUR', env.V2_COURRIELS_JOUR, 250, 1, 300), avertissementsInactifs: booleen('V2_AVERTISSEMENTS_INACTIFS', env.V2_AVERTISSEMENTS_INACTIFS, false) },
+        // LIEN-ORDINATEUR (D1 du site, accordée par l'éditeur le 2026-11-08) : POST /api/lien-ordinateur, éteinte par défaut ; allumée par la valeur « 1 » EXACTEMENT, toute autre valeur l'éteint (et est dite, voir plus bas) sans
+        // jamais rendre la configuration invalide (une faute de frappe sur ce drapeau ne doit pas fermer toutes les routes v2). `parIpJour` : les demandes par IP et par jour UTC (3 : un visiteur légitime en fait une, deux avec
+        // une faute de frappe) ; `jour` : le plafond d'envois par jour civil de Paris (200 = la place que la classe « avertissement » du plafond de Brevo laisse par défaut, 250 − 20 %, courriels de sécurité préservés).
+        lienOrdinateur: { actif: env.V2_LIEN_ORDINATEUR === '1', parIpJour: entier('V2_LIEN_ORDINATEUR_IP_JOUR', env.V2_LIEN_ORDINATEUR_IP_JOUR, 3, 1, 100), jour: entier('V2_LIEN_ORDINATEUR_JOUR', env.V2_LIEN_ORDINATEUR_JOUR, 200, 1, 300) },
         urls: { verification: url('V2_URL_VERIFICATION', env.V2_URL_VERIFICATION, 'https://rat-market.fr/fr/verification'), reinit: url('V2_URL_REINIT', env.V2_URL_REINIT, 'https://rat-market.fr/fr/reinitialisation') },
         empreinte: { secret: secretEmpreinte, jours: entier('V2_EMPREINTE_JOURS', env.V2_EMPREINTE_JOURS, 365, 1) },
         origines: { extension: 'chrome-extension://fgibgdgmadfejkaapeohbhaoolhgpkhb',
