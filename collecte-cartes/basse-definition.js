@@ -104,6 +104,16 @@ const largeurDeCandidate = c => {
     return w;
 };
 
+// ➕ 2026-11-08, DÉCISION DU TESTEUR : « OUI pour les 255 scans anglais prouvés (Shining Fates, Crown Zenith, Trainer Gallery), à la place des scans de langue non prouvée, sous la garde de lot,
+// anciennes images journalisées. » La règle ci-dessus ne remplace qu'entre langues CONNUES et égales : une entrée de langue absente reste, et la candidate cède. Cette branche est FERMÉE, écrite par
+// ce qu'elle AUTORISE : la table ci-dessous est la SEULE définition (la famille de preuves autorise, rien d'autre) ; le marqueur vit sur la CANDIDATE, posé par la chaîne prv à partir de la famille de
+// l'unité (recolte-commun.js `candidatDe`), jamais par un manifeste ; il doit nommer une famille de la table.
+const REMPLACEMENTS_LANGUE_NON_PROUVEE = Object.freeze({ N8O1: Object.freeze({ langue: 'en', sources: Object.freeze(['bulbapedia']), decision: 'testeur 2026-11-08' }) });
+const MARQUEUR_REMPLACEMENT_LANGUE = 'remplacementLangueNonProuvee';
+/** L'autorisation d'une famille (propriété propre de la table seulement), ou null. */
+const autorisationDeFamille = f => (typeof f === 'string' && Object.hasOwn(REMPLACEMENTS_LANGUE_NON_PROUVEE, f) ? REMPLACEMENTS_LANGUE_NON_PROUVEE[f] : null);
+const langueNonProuvee = e => !(typeof e?.langue === 'string' && e.langue !== '');
+
 /**
  * Les entrées de `images` (celles d'une carte) qu'une candidate non marquée remplace. Pure. Une entrée de MÊME impression (set, numéro, langue connue et égale) sort si elle est : de basse
  * définition (`basseDefinition`), empruntée à un autre tirage (`imageEmprunteeTirage`), déclarée fausse (table fermée), ou nettement plus petite que la candidate (RATIO_NETTEMENT_PLUS_GRANDE).
@@ -115,8 +125,18 @@ function entreesARemplacer(images, candidat, { fausses = FAUSSES, champsTampon =
     if (typeof candidat.langue !== 'string' || !candidat.langue) return [];                                     // langue inconnue : on ne remplace pas
     const numero = cleNumero(candidat.numero);
     const wC = largeurDeCandidate(candidat);
+    // la branche « langue non prouvée » : la famille nommée par la candidate est dans la table ET la langue de la candidate est celle de la table (sinon la branche est fermée)
+    const autorisation = autorisationDeFamille(candidat[MARQUEUR_REMPLACEMENT_LANGUE]);
+    const brancheLangue = autorisation && candidat.langue === autorisation.langue ? autorisation : null;
     return images.filter(e => {
         if (!e || e.set !== candidat.set || cleNumero(e.numero) !== numero) return false;
+        if (brancheLangue && langueNonProuvee(e)) {
+            // entrée de langue absente d'une source de la table : remplacée seulement à IMPRESSION identique (mêmes marqueurs, document lisible) et largeur de la candidate connue
+            if (typeof e.cleR2 !== 'string' || e.cleR2 === '') return false;   // le $pull de remplacerBasseDefinition porte cleR2 : sans clé, on ne sort rien
+            if (!brancheLangue.sources.includes(e.source) || (e.source === candidat.source && e.cleR2 === candidat.cleR2)) return false;
+            const effL = marqueursEffectifs(e, documents);
+            return !!effL && wC != null && memeVariante(effL, candidat);
+        }
         if (!(typeof e.langue === 'string' && e.langue === candidat.langue)) return false;
         if (e.source === candidat.source && e.cleR2 === candidat.cleR2) return false;
         // l'identité de l'entrée se lit sur l'entrée ET sur son document (correction 5) : introuvable, illisible ou contradictoire → on ne remplace pas, quelle que soit la branche
@@ -187,4 +207,17 @@ function arbitrer(autres, candidat, servi, { documents } = {}) {
     return { sortantes, servie: !!servi(liste.filter(e => !sortantes.includes(e))) };
 }
 
-module.exports = { marqueDe, entreesARemplacer, remplacerBasseDefinition, empreinteEntree, sansRemplacables, arbitrer, RATIO_NETTEMENT_PLUS_GRANDE, MARQUEURS_DE_VARIANTE, CHAMPS_TAMPON_POSITIFS, normaliserTampon, documentsDesEntrees, documentsDeLaListe };
+/**
+ * Pour le plan prv : parmi les unités à ajouter, les entrées sortantes DE LANGUE NON PROUVÉE (une entrée de langue connue sort par la règle ordinaire), avec de quoi les journaliser
+ * avant le lot : carteId, set, numéro, source, cleR2, la remplaçante (`remplacePar`) et la famille de l'unité.
+ */
+function remplacementsLangueNonProuvee(unites) {
+    const sortie = [];
+    for (const u of Array.isArray(unites) ? unites : []) {
+        if (u?.decision?.action !== 'ajouter') continue;
+        for (const e of u.decision.remplace ?? []) if (langueNonProuvee(e)) sortie.push({ carteId: u.carteId, set: e.set, numero: e.numero ?? null, source: e.source, cleR2: e.cleR2, remplacePar: u.cleR2 ?? null, famille: u.groupe ?? null });
+    }
+    return sortie;
+}
+
+module.exports = { REMPLACEMENTS_LANGUE_NON_PROUVEE, MARQUEUR_REMPLACEMENT_LANGUE, autorisationDeFamille, remplacementsLangueNonProuvee, marqueDe, entreesARemplacer, remplacerBasseDefinition, empreinteEntree, sansRemplacables, arbitrer, RATIO_NETTEMENT_PLUS_GRANDE, MARQUEURS_DE_VARIANTE, CHAMPS_TAMPON_POSITIFS, normaliserTampon, documentsDesEntrees, documentsDeLaListe };
