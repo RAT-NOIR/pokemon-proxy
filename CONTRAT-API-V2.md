@@ -751,6 +751,8 @@ Un prix lu à plus de 100 fois sous le guide du même produit (le défaut des mi
 
 **`installationId`** (facultatif, 32 hex minuscules, demande de l'extension du 26/10) : l'identifiant TECHNIQUE de l'installation qui porte le jeton, le même que `POST /api/installation` rend à sa création. Il sert aux installations créées avant le build qui le garde. Ce n'est jamais le jeton, et il n'est servi qu'au porteur de cette installation. Absent : l'extension n'affiche rien.
 
+**Ce que l'offre réserve (décision de l'éditeur du 2026-11-08, définitive).** L'ÉTAT ESTIMÉ, sans prix (le champ `etat` de l'analyse : état, confiance, défauts relevés), reste GRATUIT pour tous, définitivement : essai sans compte, compte gratuit et Pro, à l'ouverture de Pro comme après. Aucune offre ne le retire ni ne le réduit. Pro ajoute le PRIX selon l'état et selon la langue, et la fourchette quand l'état n'est pas estimable. État du code au 2026-11-08 : aucune réservation n'est encore écrite, l'offre n'agit que sur les quotas, et `prixRepli` (`etat-proche`, `fourchette`) est rendu à tous ; la réservation de ces prix à Pro reste à écrire avant l'ouverture de Pro, et elle ne touche jamais `etat`.
+
 ### 1.6 Les comptes (site)
 
 ```json schema=RequeteInscription
