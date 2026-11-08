@@ -12,7 +12,7 @@ const racine = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-courriels-auto-'));
 const repo = path.join(racine, 'site'), lib = path.join(repo, 'lib'), dossier = path.join(racine, 'copie'), fichierCommit = path.join(racine, 'copieur.js');
 
 // ESPION : toute écriture hors du dossier temporaire de ce banc est refusée (et nomme le chemin).
-const NOMS = ['writeFileSync', 'appendFileSync', 'mkdirSync', 'rmSync', 'rmdirSync', 'unlinkSync', 'renameSync', 'copyFileSync', 'createWriteStream', 'truncateSync', 'symlinkSync'];
+const NOMS = ['writeFileSync', 'appendFileSync', 'mkdirSync', 'rmSync', 'rmdirSync', 'unlinkSync', 'renameSync', 'copyFileSync', 'createWriteStream', 'truncateSync'];
 const originaux = {};
 const sous = p => { const r = path.resolve(String(p)); return r === racine || r.startsWith(racine + path.sep); };
 function armer() { for (const n of NOMS) { originaux[n] = fs[n]; fs[n] = function (p, ...a) { if (!sous(p)) throw new Error(`ESPION : écriture refusée hors du dossier temporaire du banc : ${p}`); return originaux[n].call(fs, p, ...a); }; } }

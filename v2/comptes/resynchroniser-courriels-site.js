@@ -90,8 +90,8 @@ if (require.main === module) {
         const p = spawnSync(process.execPath, [path.join(__dirname, '..', 'test', 'test-courriels-site.js')], { encoding: 'utf8' });
         return { ok: p.status === 0, texte: (p.stdout || '').split('\n').filter(l => /❌|échoué/.test(l)).join('\n') + (p.stderr || '') };
     };
-    try {
-        const r = resynchroniser({ verifierSeulement, lancerTest });
-        process.exit(verifierSeulement ? (r.etat === 'a-jour' ? 0 : 1) : 0);
-    } catch (e) { console.error(`🔴 ${e.message}`); process.exit(verifierSeulement ? 2 : 1); }
+    // une erreur (site absent, arbre sale, banc rouge) n'est pas attrapée ici : Node l'imprime en entier et sort en code 1 (jamais un message d'erreur retaillé)
+    if (verifierSeulement && C.deriveDuSite().etat === 'indetermine') { console.log(C.avertissement(C.deriveDuSite())); process.exit(2); }
+    const r = resynchroniser({ verifierSeulement, lancerTest });
+    process.exit(verifierSeulement ? (r.etat === 'a-jour' ? 0 : 1) : 0);
 }
