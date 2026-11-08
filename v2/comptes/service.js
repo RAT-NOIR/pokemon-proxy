@@ -116,12 +116,6 @@ async function lienVivant(jeton, type, maintenant) {
 async function bruler(lien, maintenant) {
     return Boolean(await col('liens_email').findOneAndUpdate({ _id: lien._id, utiliseLe: null, expireLe: { $gt: maintenant } }, { $set: { utiliseLe: maintenant } }, { returnDocument: 'after' }));
 }
-/** Consomme un lien d'un coup (vérifie puis brûle) : sert à la réinitialisation. */
-async function consommerLien(jeton, type, maintenant) {
-    const v = await lienVivant(jeton, type, maintenant);
-    if (v.echec) return v;
-    return (await bruler(v.lien, maintenant)) ? { lien: v.lien } : { echec: 'inconnu' };
-}
 const refus = echec => (echec === 'expire' ? { statut: 410, code: 'CODE_EXPIRE' } : { statut: 404, code: 'CODE_INVALIDE' });
 
 // ---- 25 offertes : une fois par COMPTE et une fois par ADRESSE (I1) -----------------------------------------------------------------
@@ -278,4 +272,4 @@ async function supprimerCompte({ compte, motDePasse, renonciation, cfg, maintena
     await col('comptes').deleteOne({ _id: id });                                       // en dernier : une panne en cours de route se rejoue
     return { statut: 200 };
 }
-module.exports = { inscrire, renvoyerVerification, demanderReinit, attendre, consommerLien, verifierAdresse, accorderOffertes, empreinteAdresse, connecter, deconnecter, reinitialiser, installationsDuCompte, supprimerCompte };
+module.exports = { inscrire, renvoyerVerification, demanderReinit, attendre, verifierAdresse, accorderOffertes, empreinteAdresse, connecter, deconnecter, reinitialiser, installationsDuCompte, supprimerCompte };
