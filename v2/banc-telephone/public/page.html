@@ -35,6 +35,16 @@
   <p id="avisMoteur" class="envoi"></p>
   <p id="envoi" class="envoi">Rien n'est envoyé avant la fin d'une mesure.</p>
 
+  <section id="detection">
+    <h2>Test de détection</h2>
+    <p class="sous">La détection de la carte (décodage, réduction à 640 px, OpenCV, redressement) sans canvas ni décodeur du navigateur, sur 12 images composées de visuels publics du catalogue. « IDENTIQUE » : cet appareil rend les mêmes octets que l'ordinateur.</p>
+    <div class="boutons"><button id="btnDetection" type="button">Tester la détection</button></div>
+    <p id="detectionVerdict" aria-live="polite">—</p>
+    <p id="detectionDetail"></p>
+    <p id="detectionTemps"></p>
+    <p id="detectionEnvoi" class="envoi"></p>
+    <pre id="detectionBrut"></pre>
+  </section>
   <section>
     <h2>Appareil</h2>
     <table id="appareil"></table>
@@ -53,5 +63,6 @@
   </section>
 </main>
 <script type="module" src="/api/banc/telephone/app.js"></script>
+<script type="module" src="/api/banc/telephone/detection-page.mjs"></script>
 </body>
 </html>

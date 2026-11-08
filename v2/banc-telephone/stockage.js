@@ -34,7 +34,14 @@ const MESURE = {
     moteurDemande: ouNul(parmi('wasm', 'webgpu')), webgpuDesactive: ouNul(booleen), webgpuForce: ouNul(booleen), optionsSession: ouNul(chaine(60)),
     diagnosticPixels: ouNul(objetSimple),
     // décodeur Rat-Market : le chemin qui a servi d'entrée au modèle (rm / mixte / navigateur), ses refus, le témoin du navigateur, et l'orientation EXIF des WebP/JPEG vue par ce navigateur
-    entree: ouNul(objetSimple), orientationNavigateur: ouNul(objetSimple)
+    entree: ouNul(objetSimple), orientationNavigateur: ouNul(objetSimple),
+    // test de detection deterministe (detection-page.mjs) : liste fermee, comptes et durees
+    detection: ouNul(objetSimple)
+};
+const DETECTION = {
+    version: chaine(30), nImages: entier(0, 100), nIdentiques: entier(0, 100), nRgb640: entier(0, 100), nQuads: entier(0, 100), nCartes: entier(0, 100), voieCanvas: entier(0, 100), voiePillow: entier(0, 100),
+    ecarts: chaine(200), empreinteLot: ouNul(hexN(64)), msOpencv: ouNul(nombre(0, 1e7)), msMediane: ouNul(nombre(0, 1e7)), msTotal: ouNul(nombre(0, 1e7)),
+    jsHeapMo: ouNul(nombre(0, 1e5)), jsHeapApresMo: ouNul(nombre(0, 1e5)), wasmHeapMo: ouNul(nombre(0, 1e5)), erreur: ouNul(chaine(200))
 };
 const STAT = { n: entier(0, 1e8), max: entier(0, 255), somme: entier(0, 1e11), nDiff: entier(0, 1e8), moy: nombre(0, 255), pctDiff: nombre(0, 100) };
 const DIAGNOSTIC = {
@@ -94,6 +101,8 @@ function valider(corps) {
     }
     const ori = corps.mesure.orientationNavigateur;
     if (ori !== null && ori !== undefined) { d = defaut(ori, ORIENTATION, 'mesure.orientationNavigateur.'); if (d) return { ok: false, detail: d }; }
+    const det = corps.mesure.detection;
+    if (det !== null && det !== undefined) { d = defaut(det, DETECTION, 'mesure.detection.'); if (d) return { ok: false, detail: d }; }
     for (const k of ['moteur', 'verdict']) if (!(k in corps.mesure)) return { ok: false, detail: `manque:mesure.${k}` };
     return { ok: true, doc: corps };
 }

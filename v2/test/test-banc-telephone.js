@@ -189,7 +189,7 @@ const doc = (o = {}) => ({ v: 1, runId: '0123456789abcdef', modeleSha: SHA, ua: 
         H.v('10. assembler() accepte les routes du lot (liste blanche des chemins, routes seulement)', erreur, null);
         const r = express.Router(); routes.monter(r, cfg, { envBancTelephone: ENV_BON, nomBaseBancTelephone: 'test_scratch', baseAttendueBancTelephone: 'test_scratch' });
         const chemins = r.stack.map(c => `${Object.keys(c.route.methods).join()} ${c.route.path}`);
-        H.v('10. 17 routes : la page, 15 fichiers (dont les 5 du décodeur Rat-Market), le dépôt — toutes littérales', [chemins.length, chemins.filter(c => /[*?(]|:[a-z]/i.test(c.split(' ')[1])).length], [17, 0]);
+        H.v('10. 22 routes : la page, 20 fichiers (dont les 5 du décodeur Rat-Market et les 5 de la détection : detection.mjs, detection-page.mjs, lot-detection.json, opencv.js, opencv_js.wasm), le dépôt — toutes littérales', [chemins.length, chemins.filter(c => /[*?(]|:[a-z]/i.test(c.split(' ')[1])).length], [22, 0]);
         const rOff = express.Router(); H.v('10. éteint : monter() ne monte rien et le dit', [routes.monter(rOff, cfg, { envBancTelephone: {} }), rOff.stack.length], [false, 0]);
     }
 

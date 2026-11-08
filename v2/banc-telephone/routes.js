@@ -28,6 +28,12 @@ const FICHIERS = Object.freeze({
     '/api/banc/telephone/decodeur-png.mjs': { f: 'decodeur-png.mjs', t: JS },
     '/api/banc/telephone/decodeur-webp.mjs': { f: 'decodeur-webp.mjs', t: JS },
     '/api/banc/telephone/decodeur-webp-tables.mjs': { f: 'decodeur-webp-tables.mjs', t: JS },
+    // la detection deterministe (detection.mjs : JavaScript pur + OpenCV.js de l'extension, sa licence Apache-2.0) et son test (page, lot compose de visuels publics sur fonds synthetiques)
+    '/api/banc/telephone/detection.mjs': { f: 'detection.mjs', t: JS },
+    '/api/banc/telephone/detection-page.mjs': { f: 'detection-page.mjs', t: JS },
+    '/api/banc/telephone/lot-detection.json': { f: 'lot-detection.json', t: 'application/json; charset=utf-8' },
+    '/api/banc/telephone/opencv/opencv.js': { f: 'opencv/opencv.js', t: JS },
+    '/api/banc/telephone/opencv/opencv_js.wasm': { f: 'opencv/opencv_js.wasm', t: 'application/wasm' },
     '/api/banc/telephone/ort/ort.wasm.bundle.min.mjs': { f: 'ort/ort.wasm.bundle.min.mjs', t: JS },
     '/api/banc/telephone/ort/ort.webgpu.bundle.min.mjs': { f: 'ort/ort.webgpu.bundle.min.mjs', t: JS },
     '/api/banc/telephone/ort/ort-wasm-simd-threaded.wasm': { f: 'ort/ort-wasm-simd-threaded.wasm', t: 'application/wasm' },
