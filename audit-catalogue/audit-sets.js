@@ -21,7 +21,7 @@ const { SANS_NUMERO_IMPRIME, familleSansNumero } = require('./sans-numero-imprim
 const { cleNumero } = require('../collecte-cartes/jointure');   // LA clé de numéro de la production (préfixe et suffixe gardés, zéros retirés) — jamais une copie
 // 🔑 DÉFINITION de l'audit (2026-11-08). Un changement de définition n'est PAS un progrès : deux audits de définitions différentes ne se comparent pas sur les types touchés.
 //  1 = définition d'origine ; 2 = doublons (plusieurs carteId, même numéro normalisé lettre comprise, sans produit propre par membre) et manquants (Additionals : numéros de leurs produits ;
-//      numéros de queue sans produit numéroté absorbés par des produits sans numéro en nombre égal). Types touchés : doublons, manquants.
+//      numéros de queue sans produit numéroté absorbés SEULEMENT pour les sets de la liste fermée QUEUE_SANS_PRODUIT, avec leur preuve ; aucune égalité de comptes). Types touchés : doublons, manquants.
 const DEFINITION = 2;
 // Liste FERMÉE (un set, sa preuve) des numéros de queue qui n'ont ni produit numéroté ni fiche à attendre. Tout autre set garde ses manquants.
 const QUEUE_SANS_PRODUIT = Object.freeze({
@@ -222,7 +222,7 @@ function auditer(lecture, regles) {
         const clesPresentes = new Set([...nums].map(cleNumero));
         const absorbes = [];   // { cause, numeros, ... } : sortis du compte des manquants par la définition 2, comptés par cause et imprimés À PART (jamais mêlés aux exclus)
         let produitsNumerotesLus = null;
-        if (numerosDeLExpansion) {
+        if (numerosDeLExpansion && numerosDeLExpansion.size > 0) {   // aucun produit numéroté lu : rien à attendre depuis les produits, les manquants de la définition 1 restent comptés
             const cles = [...numerosDeLExpansion].sort((a, b) => (parseInt(a.replace(/\D/g, ''), 10) || 0) - (parseInt(b.replace(/\D/g, ''), 10) || 0) || (a < b ? -1 : 1));
             produitsNumerotesLus = cles.length;
             const horsProduits = attenduDetail.manquants.filter(n => !numerosDeLExpansion.has(cleNumero(n)));   // manquants de la définition 1 (total du set principal) qu'aucun produit de l'expansion ne porte
@@ -234,7 +234,7 @@ function auditer(lecture, regles) {
             let liste = attenduDetail.manquants;
             // DÉFINITION 2 (b) : LISTE FERMÉE (table QUEUE_SANS_PRODUIT, preuve par set) — jamais une égalité de comptes, qui peut être un hasard. Un numéro n'est absorbé que s'il est listé pour CE set ET n'a aucun produit numéroté.
             const entreeQueue = queueSansProduit[s._id];
-            if (entreeQueue && !numerosDeLExpansion) {
+            if (entreeQueue) {   // pas de garde « non Additionals » : les manquants d'un Additionals sont des numéros de produits, jamais absorbables ici (test dédié) ; sans produit numéroté, la liste seule fait la règle
                 const clesProd = new Set(prods.filter(p => nonVide(numProd.get(p.idProduct))).map(p => cleNumero(numProd.get(p.idProduct))));
                 const listes = new Set(entreeQueue.numeros.map(String));
                 const pris = liste.filter(n => listes.has(String(n)) && !clesProd.has(cleNumero(n)));
@@ -319,7 +319,11 @@ function ecart(avant, apres) {
         // 🔑 deux définitions : AUCUN set « passé à 100 % par une collecte », AUCUN « nouvellement troué » ; les totaux qui mêlent les types redéfinis sont NON COMPARÉS
         // (trous = recalculé sur les 4 types inchangés seulement ; setsTroues / sets100 = null)
         setsChangementDefinition.push(...setsPassesA100ParCollecte, ...setsPassesA100ParExclusions); setsPassesA100ParCollecte.length = 0; setsPassesA100ParExclusions.length = 0;
-        setsNouvellementTrouesChangementDefinition.push(...setsNouvellementTroues); setsNouvellementTroues.length = 0;
+        // un set qui n'avait aucun trou sur les 4 types INCHANGÉS et en a maintenant est une vraie régression, jamais rangée sous le changement de définition
+        const inchanges = s => TYPES.filter(t => !TYPES_DEFINITION.includes(t)).reduce((a, t) => a + ((s[t] || {}).n || 0), 0);
+        const regressions = (apres.sets || []).filter(s => { const x = av.get(s.set); return x && inchanges(x) === 0 && inchanges(s) > 0; }).map(s => s.set);
+        for (const id of setsNouvellementTroues) if (!regressions.includes(id)) setsNouvellementTrouesChangementDefinition.push(id);
+        setsNouvellementTroues.length = 0; setsNouvellementTroues.push(...regressions);
         setsPassesA100.length = 0;
         for (const k of Object.keys(parCause)) if (TYPES_DEFINITION.some(t => k.startsWith(t + '/'))) delete parCause[k];
         delete totaux.absorbes; delete totaux.doublonsEcartes;
@@ -331,7 +335,7 @@ function ecart(avant, apres) {
 
 // ── LE MARKDOWN
 const descriptionDefinition = d => d >= 2
-    ? 'doublons = plusieurs documents au même numéro normalisé (lettre comprise) sans produit propre à chaque membre ; manquants = Additionals : numéros de leurs produits, queue sans produit numéroté absorbée par des produits sans numéro en nombre égal. Les doublons et manquants d\'une définition 1 ne se comparent pas à ceux-ci.'
+    ? 'doublons = plusieurs documents au même numéro normalisé (lettre comprise) sans produit propre à chaque membre ; manquants = Additionals : numéros de leurs produits, numéros de queue absorbés seulement pour les sets de la liste fermée QUEUE_SANS_PRODUIT (preuve par set, jamais une égalité de comptes). Les doublons et manquants d\'une définition 1 ne se comparent pas à ceux-ci.'
     : 'définition d\'origine (doublons par faits sans condition de numéro ni de produit ; manquants sur le total du set).';
 /** Les totaux de l'écart, en texte ; deux définitions : les totaux qui mêlent les types redéfinis sont « non comparés ». Même texte en console et en Markdown. */
 function ecartTotauxTexte(ec) {

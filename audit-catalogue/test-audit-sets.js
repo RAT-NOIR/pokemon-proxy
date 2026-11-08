@@ -301,6 +301,51 @@ test('écart entre deux définitions : aucun set « passé à 100 % par une coll
     const md = A.formaterMd(apres, ec); assert.ok(md.includes('PAR LE CHANGEMENT DE DÉFINITION') && md.includes('sets troués non comparé'));
     assert.ok(!/PAR UNE VRAIE COLLECTE \(1\)/.test(md));
 });
+
+// ── tour de correction 2
+test('Additionals SANS aucun produit numéroté : rien n\'est absorbé, les manquants de la définition 1 restent comptés', () => {
+    const l = avecProduits([pn(1, null), pn(2, null)], { sets: [set({ totalImprime: 5 })], cartes: [carte('c1', 'A', '1'), carte('c2', 'B', '2')] });
+    const a = auditer(l, additionals), s = un(a);
+    assert.strictEqual(a.absorbes.total, 0);
+    assert.deepStrictEqual(s.manquants.items.map(x => x.numero), ['3', '5']);     // le 4 est exclu par la règle de test
+    assert.strictEqual(s.attendu, 5);
+});
+// set dont le code ≠ l'_id : une mutation `s._id` → `s.code` doit être vue
+const setX = (o = {}) => set({ _id: 'SX', code: 'cx', ...o });
+const carteX = (id, nom, n) => carte(id, nom, n, { sets: ['SX'] });
+const prodX = id => prod(id, { setId: 'SX' });
+test('identité : la règle Additionals se lit sur _id, pas sur code', () => {
+    const l = lecture({ sets: [setX({ totalImprime: 6 })], cartes: [carteX('c1', 'A', '1'), carteX('c2', 'B', '2')], produits: [prodX(1), prodX(2)], numerosProduits: [{ idProduct: 1, numero: '1' }, { idProduct: 2, numero: '2' }] });
+    const a = auditer(l, { ...regles, estAdditionals: id => id === 'SX' });
+    assert.deepStrictEqual(a.sets[0].absorbes.map(x => [x.cause, x.numeros]), [['additionals-numero-sans-produit', ['3', '4', '5', '6']]]); assert.strictEqual(a.sets[0].manquants.n, 0);
+});
+test('identité : la liste fermée de queue se lit sur _id, pas sur code', () => {
+    const l = lecture({ sets: [setX({ totalImprime: 5 })], cartes: [carteX('c1', 'A', '1'), carteX('c2', 'B', '2'), carteX('c3', 'C', '3')], produits: [prodX(1), prodX(2), prodX(3)], numerosProduits: [1, 2, 3].map(i => ({ idProduct: i, numero: String(i) })) });
+    const a = auditer(l, { ...regles, queueSansProduit: { SX: { numeros: ['4', '5'], preuve: 'p' }, cx: { numeros: [], preuve: 'p' } } });
+    assert.deepStrictEqual(a.sets[0].absorbes.map(x => [x.cause, x.numeros]), [['queue-liste-fermee:SX', ['4', '5']]]); assert.strictEqual(a.sets[0].manquants.n, 0);
+});
+test('un set Additionals de la liste de queue : la règle Additionals gouverne, la liste de queue n\'ajoute rien', () => {
+    const l = avecProduits([pn(1, '1'), pn(2, '2'), pn(5, '5')], { sets: [set({ totalImprime: 5 })], cartes: [carte('c1', 'A', '1'), carte('c2', 'B', '2')] });
+    const a = auditer(l, { ...additionals, queueSansProduit: { S1: { numeros: ['3', '4', '5'], preuve: 'p' } } });
+    assert.deepStrictEqual(un(a).manquants.items.map(x => x.numero), ['5']);     // 5 a un produit numéroté : jamais absorbé
+    assert.deepStrictEqual(un(a).absorbes.map(x => x.cause), ['additionals-numero-sans-produit']);     // 3 et 4 : par l'attendu Additionals, pas par la liste
+});
+const sain = (total, avecImages = true) => lecture({ cartes: ['1', '2', '3'].map((n, i) => carte('c' + (i + 1), 'N' + n, n, { images: avecImages ? [img('S1', n)] : [] })),
+    lignes: [lig('c1', 1, '1'), lig('c2', 2, '2'), lig('c3', 3, '3')], produits: [prod(1), prod(2), prod(3)], sets: [set({ totalImprime: total })] });
+const defAnterieure = a => { const j = JSON.parse(JSON.stringify(a)); j.definition = 1; return j; };
+test('changement de définition : un set qui n\'avait aucun trou et en a sur un type INCHANGÉ est une vraie régression (« nouvellement troué » normal)', () => {
+    const avant = defAnterieure(auditer(sain(3))), apres = auditer(sain(3, false));
+    assert.strictEqual(avant.sets[0].trous, 0); assert.ok(apres.sets[0].sansVisuel.n > 0);
+    const ec = A.ecart(avant, apres);
+    assert.strictEqual(ec.memeDefinition, false);
+    assert.deepStrictEqual(ec.setsNouvellementTroues, ['S1']); assert.deepStrictEqual(ec.setsNouvellementTrouesChangementDefinition, []);
+});
+test('changement de définition : un set troué SEULEMENT par un type redéfini reste « changement de définition », pas une régression', () => {
+    const avant = defAnterieure(auditer(sain(3))), apres = auditer(sain(5));
+    assert.ok(apres.sets[0].manquants.n > 0); assert.strictEqual(apres.sets[0].sansVisuel.n, 0);
+    const ec = A.ecart(avant, apres);
+    assert.deepStrictEqual(ec.setsNouvellementTroues, []); assert.deepStrictEqual(ec.setsNouvellementTrouesChangementDefinition, ['S1']);
+});
 test('un numéro du MILIEU sans produit n\'est jamais absorbé par les produits sans numéro', () => {
     const l = avecProduits([pn(1, '1'), pn(3, '3'), pn(4, '4'), pn(7, null)], { sets: [set({ totalImprime: 4 })], cartes: [carte('c1', 'A', '1'), carte('c3', 'C', '3'), carte('c4', 'D', '4')] });
     assert.deepStrictEqual(un(auditer(l)).manquants.items.map(x => x.numero), ['2']);
