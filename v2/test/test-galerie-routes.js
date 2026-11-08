@@ -59,7 +59,7 @@ const { lireGalerie } = require('../galerie/config');
         return artDePage;
     }
     async function publier(auteur, o = {}) {
-        return svc.publierPourExploitation({ auteurId: auteur.id, titre: 'Page Michi', categories: ['methode-michi', 'couleur'], n: 3, pages: 2, arts: [{ art: await artPourPages(), col: 0, row: 0, fmt: '2h' }],
+        return svc.publierPourExploitation({ auteurId: auteur.id, titre: 'Page Michi', categories: ['methode-michi', 'couleur'], nb: 9, pages: 2, arts: [{ art: await artPourPages(), col: 0, row: 0, fmt: '2h' }],
             cartes: [{ cle: '1234|001', nom: 'Pikachu' }, null, { cle: '-5|12', nom: 'Dresseur' }], pagesSuite: [{ n: 2, arts: [], cartes: [{ cle: '1234|002', nom: 'Raichu' }] }],
             attributs: { couleur: ['jaune'], type: ['electrique'], illustrateur: ['Mitsuhiro Arita'], set: ['Base-Set'] }, certification: { cgu: '2026-10' }, etat: 'public', ...o });
     }
@@ -100,9 +100,10 @@ const { lireGalerie } = require('../galerie/config');
         const routeur2 = express.Router(); let ouverte = 0;
         monterGalerie.routes(routeur2, cfg, { env: A.ENV_VALIDE, stockage, ouvrirBase: async () => { ouverte++; return { db: dbG, fermer: async () => { } }; } });
         await monterGalerie.pret();
-        H.v('   allumé et prêt : les routes sont montées (22) et la base dédiée s\'ouvre une fois', [routeur2.stack.length, ouverte, monterGalerie.etat()], [22, 1, 'monte']);
+        H.v('   allumé et prêt : les routes sont montées (29 : la liste du 01/11 et les classeurs de l\'Atelier) et la base dédiée s\'ouvre une fois', [routeur2.stack.length, ouverte, monterGalerie.etat()], [29, 1, 'monte']);
         const chemins = routeur2.stack.map(l => `${Object.keys(l.route.methods)[0].toUpperCase()} ${l.route.path}`).sort();
-        H.v('   la liste des routes est EXACTEMENT la liste fermée du site (A à E)', chemins, [
+        H.v('   la liste des routes est EXACTEMENT la liste fermée (A à E, plus les classeurs privés)', chemins, [
+            'DELETE /api/classeurs/:id', 'DELETE /api/classeurs/:id/publication', 'GET /api/classeurs', 'GET /api/classeurs/:id', 'POST /api/classeurs', 'POST /api/classeurs/:id/publication', 'PUT /api/classeurs/:id',
             'DELETE /api/classeurs/:id/enregistre', 'DELETE /api/classeurs/:id/jaime', 'DELETE /api/illustrations/:id/enregistre', 'DELETE /api/illustrations/:id/jaime',
             'GET /api/admin/moderation', 'GET /api/banque', 'GET /api/banque/formats', 'GET /api/enregistres', 'GET /api/galerie', 'GET /api/galerie/:id/pages/:n', 'GET /api/galerie/filtres', 'GET /api/illustrations/bornes',
             'POST /api/admin/moderation/:id/decision', 'POST /api/galerie/:id/remix', 'POST /api/illustrations/depot', 'POST /api/illustrations/depot/:depot/finaliser', 'POST /api/signalements',
@@ -143,8 +144,8 @@ const { lireGalerie } = require('../galerie/config');
         const r = await lire(sv, '/api/galerie');
         const p = r.json.publications[0];
         H.v('2. GET /api/galerie : 200, Cache-Control public max-age=60, { success, publications, suite }', [r.statut, r.entetes['cache-control'], Object.keys(r.json)], [200, 'public, max-age=60', ['success', 'publications', 'suite']]);
-        H.v('   Publication : exactement les clés du site, dans l\'ordre', Object.keys(p), ['id', 'pseudo', 'publieLe', 'titre', 'categories', 'n', 'pages', 'jaime', 'petitCompteur', 'arts', 'cartes']);
-        H.v('   sous 5 j\'aime : jaime null et petitCompteur true ; un art posé { art, col, row, fmt, url, largeur, hauteur } ; une pochette vide est null', [p.jaime, p.petitCompteur, Object.keys(p.arts[0]), p.cartes[1], p.n, p.pages], [null, true, ['art', 'col', 'row', 'fmt', 'url', 'largeur', 'hauteur'], null, 3, 2]);
+        H.v('   Publication : exactement les clés du site, dans l\'ordre', Object.keys(p), ['id', 'pseudo', 'publieLe', 'titre', 'categories', 'nb', 'pages', 'jaime', 'petitCompteur', 'arts', 'cartes']);
+        H.v('   sous 5 j\'aime : jaime null et petitCompteur true ; un art posé { art, col, row, fmt, url, largeur, hauteur } ; une pochette vide est null ; nb (la grille) remplace n', [p.jaime, p.petitCompteur, Object.keys(p.arts[0]), p.cartes[1], p.nb, p.cartes.length, p.pages], [null, true, ['art', 'col', 'row', 'fmt', 'url', 'largeur', 'hauteur'], null, 9, 9, 2]);
         H.vrai('   aucune donnée du lecteur ni de l\'auteur : ni identifiant de compte, ni adresse, ni cookie posé', !JSON.stringify(r.json).includes(luma.id) && !/@/.test(JSON.stringify(r.json)) && r.entetes['set-cookie'] === undefined);
         const avecCookie = await lire(sv, '/api/galerie', noa);
         H.vrai('   la réponse est la MÊME pour un lecteur connecté (aucune personnalisation)', JSON.stringify(avecCookie.json) === JSON.stringify(r.json));
@@ -160,7 +161,7 @@ const { lireGalerie } = require('../galerie/config');
         const fl = await lire(sv, '/api/galerie/filtres');
         H.v('   GET /api/galerie/filtres : { success, carte, couleur, type, illustrateur, set } de { valeur, n }, comptés sur le public', [Object.keys(fl.json), fl.json.set[0], fl.json.carte.find(x => x.valeur === '1234|001').n, fl.entetes['cache-control']], [['success', 'carte', 'couleur', 'type', 'illustrateur', 'set'], { valeur: 'Base-Set', n: 26 + 0 }, 26, 'public, max-age=60']);
         const pg = await lire(sv, `/api/galerie/${idsPub[0]}/pages/2`);
-        H.v('   GET /api/galerie/{id}/pages/{n} : { success, page: { n, arts, cartes } }', [pg.statut, pg.json.page.n, pg.json.page.cartes, Object.keys(pg.json.page)], [200, 2, [{ cle: '1234|002', nom: 'Raichu' }], ['n', 'arts', 'cartes']]);
+        H.v('   GET /api/galerie/{id}/pages/{n} : { success, page: { n, nb, arts, cartes } } (la pochette porte la clé et le set ; le nom se lit au catalogue)', [pg.statut, pg.json.page.n, pg.json.page.nb, pg.json.page.cartes[0], Object.keys(pg.json.page)], [200, 2, 9, { cle: '1234|002', setSlug: null }, ['n', 'nb', 'arts', 'cartes']]);
         const absentR = await lire(sv, `/api/galerie/${nouvelleId()}/pages/2`);
         const autres = await Promise.all([attente, pubPrivee, pubRetiree].map(i => lire(sv, `/api/galerie/${i}/pages/2`)));
         H.v('   404 UNIFORME : une page absente, en attente, refusée ou retirée répond le MÊME corps INTROUVABLE', [absentR.statut, code(absentR), autres.every(x => x.texte === absentR.texte && x.statut === 404)], [404, 'INTROUVABLE', true]);
@@ -242,7 +243,7 @@ const { lireGalerie } = require('../galerie/config');
         // remix
         const rx = await appel(sv, 'POST', `/api/galerie/${idsPub[0]}/remix`, { c: v1 });
         const copie = await brut('classeurs').findOne({ _id: rx.json.classeurId });
-        H.v('   POST /api/galerie/{id}/remix : 201 { success, classeurId } ; copie PRIVÉE, structure et arts gardés, pochettes de cartes vides', [rx.statut, Object.keys(rx.json), copie.visibilite, copie.auteurId === v1.id, copie.pages.length, copie.pages[0].arts.length, copie.pages[0].poches.every(p => p === null), copie.pages[0].poches.length, copie.repriseDe.id], [201, ['success', 'classeurId'], 'prive', true, 2, 1, true, 9, idsPub[0]]);
+        H.v('   POST /api/galerie/{id}/remix : 201 { success, classeurId } ; copie PRIVÉE, structure et arts gardés, pochettes de cartes vides', [rx.statut, Object.keys(rx.json), (await appel(sv, 'GET', `/api/classeurs/${rx.json.classeurId}`, { c: v1, sansSite: true })).json.classeur.visibilite, copie.auteurId === v1.id, copie.pages.length, copie.pages[0].blocs.filter(b => b.genre === 'art').length, copie.pages.flatMap(p => p.blocs).filter(b => b.genre === 'carte').every(b => b.contenu === null), copie.pages[0].nb, copie.repriseDe.id], [201, ['success', 'classeurId'], 'prive', true, 2, 1, true, 9, idsPub[0]]);
         H.v('   remix d\'une cible non publique : 404 ; sans pseudo : 403 pseudo-requis', [(await appel(sv, 'POST', `/api/galerie/${attente}/remix`, { c: v1 })).statut, detail(await appel(sv, 'POST', `/api/galerie/${idsPub[0]}/remix`, { c: sansPseudo }))], [404, 'pseudo-requis']);
         const bc = await serveur(variante({ V2_CLASSEURS_MAX: '1' })); const L5 = await compte({}, 'remixeur');
         const r1 = await appel(bc, 'POST', `/api/galerie/${idsPub[0]}/remix`, { c: L5 }), r2 = await appel(bc, 'POST', `/api/galerie/${idsPub[0]}/remix`, { c: L5 });

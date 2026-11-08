@@ -30,6 +30,7 @@ function lireGalerie(env = process.env) {
                    illustrationsMax: entier('V2_ILLUSTRATIONS_MAX', env.V2_ILLUSTRATIONS_MAX, 30, 1, 1000) };
         limites = { lectureIpHeure: 600, votesCompteHeure: 600, votesIpHeure: 1200, ecrituresCompteHeure: 120, ecrituresIpHeure: 300, depotsCompteHeure: 20, depotsIpHeure: 40,
                     signalementsIpHeure: entier('V2_SIGNALEMENTS_IP_HEURE', env.V2_SIGNALEMENTS_IP_HEURE, 10, 1, 1000), signalementsCompteJour: 30, pseudoCompteJour: 5, pseudoIpJour: 20, moderationCompteHeure: 600,
+                    publicationsCompteJour: entier('V2_PUBLICATIONS_JOUR', env.V2_PUBLICATIONS_JOUR, 5, 1, 1000),
                     jaimeMax: entier('V2_JAIME_MAX', env.V2_JAIME_MAX, 5000, 1, 100000), classeursMax: entier('V2_CLASSEURS_MAX', env.V2_CLASSEURS_MAX, 20, 1, 1000) };
         balayageMs = entier('V2_GALERIE_BALAYAGE_MIN', env.V2_GALERIE_BALAYAGE_MIN, 30, 0, 1440) * 60e3;      // 0 coupe le balayeur
     } catch (e) { return gele({ ...vide, raison: e instanceof ErreurBorne ? e.raison : 'une borne de la Communauté est illisible' }); }

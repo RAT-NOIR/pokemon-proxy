@@ -14,7 +14,7 @@ const fs = require('fs'), os = require('os'), path = require('path');
     // ═══ 1. (C-I1) un art POSÉ porte de quoi s'afficher ═══
     const art = await artPublic(luma, { largeur: 400, hauteur: 279, fmt: '2h' }), art2 = await artPublic(luma, { largeur: 300, hauteur: 419 });
     const pose = (id, fmt = '2h') => ({ art: id, col: 0, row: 1, fmt });
-    const idPub = await svc.publierPourExploitation({ auteurId: luma.id, titre: 'Page avec arts', categories: ['couleur'], n: 3, pages: 2, arts: [pose(art), pose(art2, '1')], cartes: [{ cle: '1234|001', nom: 'Pikachu' }],
+    const idPub = await svc.publierPourExploitation({ auteurId: luma.id, titre: 'Page avec arts', categories: ['couleur'], nb: 9, pages: 2, arts: [pose(art), pose(art2, '1')], cartes: [{ cle: '1234|001', nom: 'Pikachu' }],
         pagesSuite: [{ n: 2, arts: [pose(art)], cartes: [] }], etat: 'public' });
     const attendu = { art, col: 0, row: 1, fmt: '2h', url: `${stockage.urlPublique}/galerie/pub/${art}.webp`, largeur: 400, hauteur: 279 };
     const fil = (await lire(sv, '/api/galerie')).json.publications.find(p => p.id === idPub);
@@ -24,8 +24,8 @@ const fs = require('fs'), os = require('os'), path = require('path');
     H.v('   la page 1 demandée par /pages/1 aussi', (await lire(sv, `/api/galerie/${idPub}/pages/1`)).json.page.arts.map(a => a.largeur), [400, 300]);
     await brut('arts').updateOne({ _id: art2 }, { $set: { etat: 'retire' } });
     H.v('   un art retiré plus tard est OMIS de la page (jamais une URL qui ne sert plus)', (await lire(sv, '/api/galerie')).json.publications.find(p => p.id === idPub).arts.map(a => a.art), [art]);
-    H.v('   poser une page dont un art n\'existe pas, ou n\'est pas public, est refusé', await Promise.all([F.nouvelId(), art2].map(id => svc.publierPourExploitation({ auteurId: luma.id, titre: 'x', categories: ['couleur'], n: 3, pages: 1, arts: [pose(id)], cartes: [], etat: 'public' }).then(() => 'posée', () => 'refusée'))), ['refusée', 'refusée']);
-    const mArts = A.charger('service.js', [["publications: r.docs.map(d => versPublication(d, poser(d.arts)))", "publications: r.docs.map(d => versPublication(d))"]]);
+    H.v('   poser une page dont un art n\'existe pas, ou n\'est pas public, est refusé', await Promise.all([F.nouvelId(), art2].map(id => svc.publierPourExploitation({ auteurId: luma.id, titre: 'x', categories: ['couleur'], nb: 9, pages: 1, arts: [pose(id)], cartes: [], etat: 'public' }).then(() => 'posée', () => 'refusée'))), ['refusée', 'refusée']);
+    const mArts = A.charger('service.js', [["versPublication(d, poser(pages[i].arts))", "versPublication(d, pages[i].arts)"]]);
     const brutsMut = await mArts.listerPublications({ urlPublique: stockage.urlPublique });
     H.v('   MUTANT « les arts posés ne sont plus enrichis » : la liste rend les quatre champs d\'avant', [Object.keys(brutsMut.publications.find(p => p.id === idPub).arts[0])], [['art', 'col', 'row', 'fmt']]);
 
@@ -34,8 +34,8 @@ const fs = require('fs'), os = require('os'), path = require('path');
         const dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'galerie-essai-'));
         const fichier = path.join(dossier, 'essai.json');
         const donnees = { pages: [
-            { titre: 'Essai Pikachu', categories: ['couleur', 'vintage'], n: 3, cartes: [{ cle: '1234|001', nom: 'Pikachu' }, { cle: '1234|002', nom: 'Raichu' }], attributs: { set: ['Base-Set'], couleur: ['jaune'] } },
-            { titre: 'Essai à deux pages', categories: ['methode-michi'], n: 4, pages: 2, cartes: [{ cle: '77|9', nom: 'Dresseur' }], pagesSuite: [{ n: 2, arts: [], cartes: [{ cle: '77|10', nom: 'Énergie' }] }] }] };
+            { titre: 'Essai Pikachu', categories: ['couleur', 'vintage'], nb: 9, cartes: [{ cle: '1234|001', nom: 'Pikachu' }, { cle: '1234|002', nom: 'Raichu' }], attributs: { set: ['Base-Set'], couleur: ['jaune'] } },
+            { titre: 'Essai à deux pages', categories: ['methode-michi'], nb: 16, pages: 2, cartes: [{ cle: '77|9', nom: 'Dresseur' }], pagesSuite: [{ n: 2, arts: [], cartes: [{ cle: '77|10', nom: 'Énergie' }] }] }] };
         fs.writeFileSync(fichier, JSON.stringify(donnees));
         const ENV = { NODE_ENV: 'test' };
         await B.dbG.collection('galerie_meta').deleteMany({});
@@ -50,7 +50,7 @@ const fs = require('fs'), os = require('os'), path = require('path');
         H.v('   plus de 50 pages : refusé', (await outil.poserPages({ donnees: { pages: Array(51).fill(donnees.pages[0]) }, pseudo: 'luma', env: ENV })).cause, 'donnees-invalides');
         const ok = await outil.poserPages({ donnees, pseudo: 'luma', env: ENV });
         H.v('   sous garde, avec des données d\'essai : les pages sont posées (publiques, certification « essai ») et le fil n\'est plus vide', [ok.ok, ok.ids.length, (await lire(sv, '/api/galerie')).json.publications.filter(p => /^Essai/.test(p.titre)).length], [true, 2, 2]);
-        H.v('   le fil les sert avec leur forme complète (jaime null, cartes, pages)', (p => [p.pseudo, p.petitCompteur, p.cartes.length, p.pages])((await lire(sv, '/api/galerie')).json.publications.find(p => p.titre === 'Essai à deux pages')), ['luma', true, 1, 2]);
+        H.v('   le fil les sert avec leur forme complète (jaime null, cartes, pages)', (p => [p.pseudo, p.petitCompteur, p.cartes.length, p.pages])((await lire(sv, '/api/galerie')).json.publications.find(p => p.titre === 'Essai à deux pages')), ['luma', true, 16, 2]);
         const lues = outil.lireDonnees(fichier);
         H.v('   lireDonnees lit un fichier JSON borné (le fichier de l\'opérateur) et refuse un fichier trop gros ou illisible', [lues.pages.length, (() => { fs.writeFileSync(path.join(dossier, 'mauvais.json'), '{pas du json'); try { outil.lireDonnees(path.join(dossier, 'mauvais.json')); return 'lu'; } catch { return 'refus'; } })()], [2, 'refus']);
         H.v('   le CLI exige --confirmer-essai, --donnees et --auteur, et rien d\'autre', await Promise.all([[], ['--confirmer-essai'], ['--confirmer-essai', `--donnees=${fichier}`, '--auteur=luma', '--force']].map(a => outil.main(a, {}))), [1, 1, 1]);

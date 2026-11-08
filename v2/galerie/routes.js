@@ -154,6 +154,11 @@ function routesGalerie(router, cfg, deps = {}) {
         return res.status(200).json({ success: true, pseudo: r.pseudo });
     }));
 
+    // ═══ B bis. les CLASSEURS privés de l'Atelier (L9) et les ILLUSTRATIONS privées (L10) : le même compteur de publications (5 par jour, classeur ou illustration) ═══
+    const limitePublications = lim('publication-compte', li.publicationsCompteJour, JOUR, compteDe);
+    const contexte = { cfg, li, dispo, SESSION, ECRITURE, exigerPseudo, lim, HEURE, JOUR, compteDe, ipSalee, protege, entree, introuvable, privee, maintenant, limitePublications };
+    require('./routes-classeurs').routesClasseurs(router, contexte);
+
     // ═══ C. le dépôt d'un art, en deux temps ═══
     const reponseRefus = (res, r) => repondreErreur(res, r.refus.code, r.refus.code === 'FICHIER' ? 'Fichier refusé' : r.refus.code === 'INDISPONIBLE' ? 'Service momentanément indisponible' : 'Requête invalide',
         { detail: r.refus.detail, ...(r.refus.reessayerDans !== undefined ? { reessayerDans: r.refus.reessayerDans } : {}) }, r.refus.statut);

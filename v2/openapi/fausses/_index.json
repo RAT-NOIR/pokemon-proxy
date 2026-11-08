@@ -1,4 +1,52 @@
 {
+  "classeur.json": {
+    "route": "GET /api/classeurs/{id}",
+    "statut": 200,
+    "schema": "ReponseClasseur",
+    "description": "Lot L9 (Atelier) : un classeur privé de l'auteur, deux pages (3×3 avec une carte, une pochette vide et un art 2×1 ; 2×2 vide), version 3. Valeurs fictives (clé 9000001|025, identifiants fausse…)."
+  },
+  "classeur-liste.json": {
+    "route": "GET /api/classeurs",
+    "statut": 200,
+    "schema": "ReponseClasseurs",
+    "description": "Lot L9 : la liste de mes classeurs (un public avec ses compteurs exacts, un privé sans compteur)."
+  },
+  "classeur-publie-en-attente.json": {
+    "route": "POST /api/classeurs/{id}/publication",
+    "statut": 200,
+    "schema": "ReponseClasseur",
+    "description": "Lot L9 : le classeur juste publié se lit « en-attente » chez son auteur (rien n'est public avant la décision de la modération)."
+  },
+  "classeur-conflit-version.json": {
+    "route": "PUT /api/classeurs/{id}",
+    "statut": 409,
+    "schema": "ReponseErreur",
+    "description": "Lot L9 : une autre fenêtre a écrit — CONFLIT, detail version, avec versionActuelle (le site relit, fusionne, réécrit)."
+  },
+  "classeur-introuvable.json": {
+    "route": "GET /api/classeurs/{id}",
+    "statut": 404,
+    "schema": "ReponseErreur",
+    "description": "Lot L9 : le classeur d'un autre compte, un classeur privé lu par un autre, un identifiant absent ou mal formé : le MÊME corps INTROUVABLE (jamais un 403)."
+  },
+  "classeur-auteur-non-certifie.json": {
+    "route": "POST /api/classeurs/{id}/publication",
+    "statut": 400,
+    "schema": "ReponseErreur",
+    "description": "Lot L9 : publier sans certifier être l'auteur (certifieAuteur doit être true)."
+  },
+  "classeur-trop-gros.json": {
+    "route": "PUT /api/classeurs/{id}",
+    "statut": 413,
+    "schema": "ReponseErreur",
+    "description": "Lot L9 : un classeur de plus de 64 Ko est refusé avant toute écriture."
+  },
+  "classeur-borne.json": {
+    "route": "POST /api/classeurs",
+    "statut": 409,
+    "schema": "ReponseErreur",
+    "description": "Lot L9 : la borne de 20 classeurs par compte (le message nomme la borne ; le client ne réessaie pas)."
+  },
   "identifiee.json": {
     "route": "POST /api/identifier",
     "statut": 200,

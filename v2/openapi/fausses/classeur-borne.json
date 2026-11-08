@@ -1,0 +1,9 @@
+{
+  "success": false,
+  "erreur": {
+    "code": "CONFLIT",
+    "message": "Au plus 20 classeurs par compte",
+    "detail": "borne-classeurs"
+  },
+  "facturation": null
+}

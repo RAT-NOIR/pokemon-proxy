@@ -21,6 +21,7 @@ function corpsErreur(code, message, extra = {}) {
     const erreur = { code, message: typeof message === 'string' && message ? message : (MESSAGES[code] ?? code) };
     if (extra.detail !== undefined) erreur.detail = extra.detail;
     if (extra.reessayerDans !== undefined) erreur.reessayerDans = extra.reessayerDans;
+    if (extra.versionActuelle !== undefined) erreur.versionActuelle = extra.versionActuelle;   // GALERIE : `409 CONFLIT detail "version"` — la version que l'autre fenêtre a écrite
     const corps = { success: false, erreur, facturation: extra.facturation ?? null };
     if (extra.solde !== undefined) corps.solde = extra.solde;
     // OFFRE-QUOTA : `achat` n'existe plus (la vente est arrêtée) — un appelant qui en passerait un est ignoré, aucun lien de vente ne sort jamais d'un corps d'erreur

@@ -1,0 +1,63 @@
+{
+  "success": true,
+  "classeur": {
+    "id": "fausseClasseur0001AbCdEf",
+    "titre": "Mon classeur Pikachu",
+    "etiquettes": [
+      "michi",
+      "jaune"
+    ],
+    "couleur": "jaune",
+    "couverture": {
+      "carte": "9000001|025"
+    },
+    "pages": [
+      {
+        "nb": 9,
+        "blocs": [
+          {
+            "c": 0,
+            "r": 0,
+            "l": 1,
+            "h": 1,
+            "genre": "carte",
+            "contenu": {
+              "type": "carte",
+              "cle": "9000001|025",
+              "setSlug": "Set-Fictif"
+            }
+          },
+          {
+            "c": 1,
+            "r": 0,
+            "l": 1,
+            "h": 1,
+            "genre": "carte",
+            "contenu": null
+          },
+          {
+            "c": 0,
+            "r": 1,
+            "l": 2,
+            "h": 1,
+            "genre": "art",
+            "contenu": {
+              "type": "art",
+              "artId": "fausseArt0000000001AbCd"
+            }
+          }
+        ]
+      },
+      {
+        "nb": 4,
+        "blocs": []
+      }
+    ],
+    "visibilite": "prive",
+    "motif": null,
+    "repriseDe": null,
+    "version": 3,
+    "creeLe": "2026-11-08T09:00:00.000Z",
+    "majLe": "2026-11-08T09:30:00.000Z"
+  }
+}

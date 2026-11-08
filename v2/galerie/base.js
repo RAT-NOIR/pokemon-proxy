@@ -29,6 +29,8 @@ async function creerIndex(d = null) {
         c('publications').createIndex({ 'attributs.illustrateur': 1 }, { ...pub, name: 'attr_illustrateur' }),
         c('publications').createIndex({ 'attributs.set': 1 }, { ...pub, name: 'attr_set' }),
         c('publications').createIndex({ auteurId: 1 }, { name: 'auteur' }),
+        // une SEULE mise à jour en attente par classeur public (classeurs.js, deposerMiseAJour) ; les autres documents n'ont pas ce champ
+        c('publications').createIndex({ remplace: 1 }, { unique: true, partialFilterExpression: { remplace: { $type: 'string' } }, name: 'une_mise_a_jour_par_classeur' }),
         c('arts').createIndex({ etat: 1, fmt: 1, publieLe: -1 }, { name: 'etat_format_date' }),
         c('arts').createIndex({ etat: 1, nbJaime: -1, publieLe: -1 }, { name: 'etat_aimes' }),
         c('arts').createIndex({ mots: 1, etat: 1 }, { name: 'mots_1_etat_1' }),

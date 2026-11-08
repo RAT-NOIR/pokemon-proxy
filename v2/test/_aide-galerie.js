@@ -141,7 +141,7 @@ async function outillerBanc(nomScript, opts = {}) {
     }
     async function publier(auteur, o = {}) {
         const art = await artPublic(auteur);
-        return svc.publierPourExploitation({ auteurId: auteur.id, titre: 'Page Michi', categories: ['methode-michi', 'couleur'], n: 3, pages: 2, arts: [{ art, col: 0, row: 0, fmt: '1' }],
+        return svc.publierPourExploitation({ auteurId: auteur.id, titre: 'Page Michi', categories: ['methode-michi', 'couleur'], nb: 9, pages: 2, arts: [{ art, col: 0, row: 0, fmt: '1' }],
             cartes: [{ cle: '1234|001', nom: 'Pikachu' }, null, { cle: '-5|12', nom: 'Dresseur' }], pagesSuite: [{ n: 2, arts: [], cartes: [{ cle: '1234|002', nom: 'Raichu' }] }],
             attributs: { couleur: ['jaune'], type: ['electrique'], illustrateur: ['Mitsuhiro Arita'], set: ['Base-Set'] }, certification: { cgu: '2026-10' }, etat: 'public', ...o });
     }

@@ -1,0 +1,9 @@
+{
+  "success": false,
+  "erreur": {
+    "code": "ENTREE",
+    "message": "Corps trop volumineux (64 Ko au plus)",
+    "detail": "corps-trop-gros"
+  },
+  "facturation": null
+}

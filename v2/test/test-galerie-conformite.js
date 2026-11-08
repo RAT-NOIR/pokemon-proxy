@@ -40,9 +40,9 @@ const OPENAPI = require('../openapi/openapi.v2.json'); const { valider } = requi
     const luma = await compte('luma'), noa = await compte('noa'), modo = await compte('modo-conf', { role: 'moderateur' }), sansPseudo = await compte(null);
     const artPose = F.nouvelId();      // un art public RÉEL : la pose d'une page exige qu'il existe
     await dbG.collection('arts').insertOne({ _id: artPose, etat: 'public', auteurId: luma.id, pseudo: 'luma', nom: 'Art posé', mots: ['art', 'pose', 'luma'], fmt: '2h', clePublique: `galerie/pub/${artPose}`, largeur: 400, hauteur: 279, nbJaime: 0, nbEnregistre: 0, publieLe: new Date() });
-    const idPub = await svc.publierPourExploitation({ auteurId: luma.id, titre: 'Page Michi', categories: ['methode-michi'], n: 3, pages: 2, arts: [{ art: artPose, col: 0, row: 0, fmt: '2h' }], cartes: [{ cle: '1234|001', nom: 'Pikachu' }, null],
+    const idPub = await svc.publierPourExploitation({ auteurId: luma.id, titre: 'Page Michi', categories: ['methode-michi'], nb: 9, pages: 2, arts: [{ art: artPose, col: 0, row: 0, fmt: '2h' }], cartes: [{ cle: '1234|001', nom: 'Pikachu' }, null],
         pagesSuite: [{ n: 2, arts: [], cartes: [{ cle: '1234|002', nom: 'Raichu' }] }], attributs: { couleur: ['jaune'], type: ['electrique'], illustrateur: ['Arita'], set: ['Base-Set'] }, certification: { cgu: '2026-10' }, etat: 'public' });
-    const attenteId = await svc.publierPourExploitation({ auteurId: luma.id, titre: 'Attente', categories: ['couleur'], n: 3, pages: 1, arts: [], cartes: [], etat: 'en-attente' });
+    const attenteId = await svc.publierPourExploitation({ auteurId: luma.id, titre: 'Attente', categories: ['couleur'], nb: 9, pages: 1, arts: [], cartes: [], etat: 'en-attente' });
 
     // ═══ A. lecture ═══
     verifier('A1 GET /api/galerie', '/api/galerie', 'GET', await H.appel(sv.url, '/api/galerie', { entetes: { 'x-forwarded-for': IP() } }));
@@ -90,6 +90,36 @@ const OPENAPI = require('../openapi/openapi.v2.json'); const { valider } = requi
     verifier('B  sur sa propre création (403 INTERDIT pas-l-auteur)', '/api/classeurs/{id}/jaime', 'PUT', propre);
     H.v('   B : { erreur: { code: INTERDIT, detail: pas-l-auteur }, facturation: null }', [propre.json.erreur.code, propre.json.erreur.detail, propre.json.facturation], ['INTERDIT', 'pas-l-auteur', null]);
 
+    // ═══ L9. les classeurs privés de l'Atelier : chaque réponse validée contre le schéma publié ═══
+    const page9 = (cle = '1234|001') => ({ nb: 9, blocs: [{ c: 0, r: 0, l: 1, h: 1, genre: 'carte', contenu: { type: 'carte', cle, setSlug: 'Base-Set' } }, { c: 0, r: 1, l: 2, h: 1, genre: 'art', contenu: { type: 'art', artId: artPose } }] });
+    const cc = await appel('POST', '/api/classeurs', { c: luma, corps: { titre: 'Conformité', etiquettes: ['michi'], couleur: 'jaune', pages: [page9(), { nb: 4, blocs: [] }] } });
+    verifier('L9 POST /api/classeurs', '/api/classeurs', 'POST', cc);
+    const idJeu = cc.json.classeur.id;
+    verifier('L9 GET /api/classeurs', '/api/classeurs', 'GET', await appel('GET', '/api/classeurs', { c: luma, sansSite: true }));
+    verifier('L9 GET /api/classeurs/{id} (l\'auteur)', '/api/classeurs/{id}', 'GET', await appel('GET', `/api/classeurs/${idJeu}`, { c: luma, sansSite: true }));
+    H.v('   L9 : les clés du Classeur au caractère près', Object.keys(cc.json.classeur), ['id', 'titre', 'etiquettes', 'couleur', 'couverture', 'pages', 'visibilite', 'motif', 'repriseDe', 'version', 'creeLe', 'majLe']);
+    const maj9 = await appel('PUT', `/api/classeurs/${idJeu}`, { c: luma, corps: { version: 1, titre: 'Conformité 2', pages: [page9('1234|002')] } });
+    verifier('L9 PUT /api/classeurs/{id}', '/api/classeurs/{id}', 'PUT', maj9);
+    const perime = await appel('PUT', `/api/classeurs/${idJeu}`, { c: luma, corps: { version: 1, titre: 'Périmé', pages: [page9()] } });
+    verifier('L9 PUT version périmée (409)', '/api/classeurs/{id}', 'PUT', perime);
+    H.v('   L9 : 409 CONFLIT version avec versionActuelle', [perime.json.erreur.code, perime.json.erreur.detail, perime.json.erreur.versionActuelle], ['CONFLIT', 'version', 2]);
+    {
+        const gros = { version: 2, titre: 'Gros', pages: Array.from({ length: 45 }, (_, k) => ({ nb: 16, blocs: Array.from({ length: 16 }, (_, i) => ({ c: i % 4, r: Math.floor(i / 4), l: 1, h: 1, genre: 'carte', contenu: { type: 'carte', cle: `1234|${100 + k}`, setSlug: 'Base-Set' } })) })) };
+        verifier('L9 PUT corps de plus de 64 Ko (413)', '/api/classeurs/{id}', 'PUT', await appel('PUT', `/api/classeurs/${idJeu}`, { c: luma, corps: gros }));
+        verifier('L9 POST corps de plus de 64 Ko (413)', '/api/classeurs', 'POST', await appel('POST', '/api/classeurs', { c: luma, corps: gros }));
+    }
+    const pub9 = await appel('POST', `/api/classeurs/${idJeu}/publication`, { c: luma, corps: { certifieAuteur: true, cgu: '2026-10', categories: ['couleur'] } });
+    verifier('L9 POST …/publication', '/api/classeurs/{id}/publication', 'POST', pub9);
+    H.v('   L9 : la publication rend le classeur « en-attente » ; un autre lecteur n\'y lit rien (404)', [pub9.json.classeur.visibilite, (await H.appel(sv.url, `/api/classeurs/${idJeu}`, { entetes: { 'x-forwarded-for': IP(), origin: SITE } })).statut], ['en-attente', 404]);
+    await appel('POST', `/api/admin/moderation/pub.${idJeu}/decision`, { c: modo, corps: { decision: 'accepter' } });
+    const lecturePublique = await H.appel(sv.url, `/api/classeurs/${idJeu}`, { entetes: { 'x-forwarded-for': IP(), origin: SITE } });
+    verifier('L9 GET /api/classeurs/{id} (le public, après acceptation)', '/api/classeurs/{id}', 'GET', lecturePublique);
+    H.v('   L9 : la lecture publique porte l\'auteur (pseudo) et se met en cache', [lecturePublique.json.classeur.auteur, lecturePublique.entetes['cache-control']], [{ pseudo: 'luma' }, 'public, max-age=60']);
+    verifier('L9 POST …/publication sans certification (400)', '/api/classeurs/{id}/publication', 'POST', await appel('POST', `/api/classeurs/${idJeu}/publication`, { c: luma, corps: { cgu: '2026-10' } }));
+    verifier('L9 DELETE …/publication', '/api/classeurs/{id}/publication', 'DELETE', await appel('DELETE', `/api/classeurs/${idJeu}/publication`, { c: luma }));
+    verifier('L9 DELETE /api/classeurs/{id}', '/api/classeurs/{id}', 'DELETE', await appel('DELETE', `/api/classeurs/${idJeu}`, { c: luma }));
+    const idCl = (await appel('POST', '/api/classeurs', { c: luma, corps: { titre: 'Pour les refus', pages: [page9()] } })).json.classeur.id;     // jamais modifié par luma : les refus des autres comptes le visent
+
     // ═══ D. signalement ═══
     const sig = (corps, c) => H.appel(sv.url, '/api/signalements', { methode: 'POST', corps, entetes: { origin: SITE, 'x-rat-market': '1', 'x-forwarded-for': IP(), ...(c ? { cookie: c.cookie } : {}) } });
     const s1 = await sig({ cible: `galerie:${idPub}`, motif: 'droits', turnstile: 'jeton-valide' });
@@ -124,10 +154,11 @@ const OPENAPI = require('../openapi/openapi.v2.json'); const { valider } = requi
 
     // ═══ le contrat publié lui-même ═══
     const galerie = Object.entries(OPENAPI.paths).flatMap(([chemin, ops]) => Object.entries(ops).filter(([, op]) => op && op.tags && op.tags.includes('galerie')).map(([m, op]) => ({ chemin, m, op })));
-    H.v('le contrat publie 22 opérations de la Communauté, chacune conditionnelle à V2_GALERIE=1, avec sa sécurité déclarée', [galerie.length, galerie.every(o => /V2_GALERIE=1/.test(o.op['x-conditionnel'])), galerie.every(o => Array.isArray(o.op.security))], [22, true, true]);
-    H.v('   les écritures déclarent X-Rat-Market ; les lectures publiques ne déclarent aucune sécurité', [galerie.filter(o => ['put', 'post', 'delete'].includes(o.m)).every(o => (o.op.parameters || []).some(p => p.$ref === '#/components/parameters/XRatMarket')), galerie.filter(o => o.m === 'get' && !/enregistres|moderation/.test(o.chemin)).every(o => o.op.security.length === 0)], [true, true]);
+    H.v('le contrat publie 29 opérations de la Communauté, chacune conditionnelle à V2_GALERIE=1, avec sa sécurité déclarée', [galerie.length, galerie.every(o => /V2_GALERIE=1/.test(o.op['x-conditionnel'])), galerie.every(o => Array.isArray(o.op.security))], [29, true, true]);
+    H.v('   les écritures déclarent X-Rat-Market ; les lectures publiques ne déclarent aucune sécurité (hors celles du compte)', [galerie.filter(o => ['put', 'post', 'delete'].includes(o.m)).every(o => (o.op.parameters || []).some(p => p.$ref === '#/components/parameters/XRatMarket')), galerie.filter(o => o.m === 'get' && !/enregistres|moderation|^\/api\/classeurs/.test(o.chemin)).every(o => o.op.security.length === 0)], [true, true]);
+    H.v('   les classeurs : la liste exige la session ; la lecture d\'un classeur l\'admet sans la demander (auteur ou public)', [OPENAPI.paths['/api/classeurs'].get.security, OPENAPI.paths['/api/classeurs/{id}'].get.security], [[{ session: [] }], [{ session: [] }, {}]]);
     H.v('   les quatre codes nouveaux sont dans la liste fermée des codes d\'erreur', ['INTERDIT', 'INTROUVABLE', 'FICHIER', 'LIMITE_DEBIT'].filter(c => !OPENAPI.components.schemas.ReponseErreur.properties.erreur.properties.code.enum.includes(c)), []);
-    H.vrai('   les exemples du contrat valident (Publication)', valider({ id: 'k3J9x0Qw2m8LzTfA1bC4dE', pseudo: 'luma', publieLe: '2026-11-01T10:00:00.000Z', titre: 'Page Michi', categories: ['methode-michi', 'couleur'], n: 3, pages: 2, jaime: null, petitCompteur: true, arts: [{ art: 'Zy9x8W7v6U5t4S3r2Q1pOn', col: 0, row: 0, fmt: '2h', url: 'https://pub.exemple.test/galerie/pub/Zy9x8W7v6U5t4S3r2Q1pOn.webp', largeur: 400, hauteur: 279 }], cartes: [{ cle: '1234|001', nom: 'Pikachu' }, null] }, OPENAPI.components.schemas.Publication, OPENAPI).ok);
+    H.vrai('   les exemples du contrat valident (Publication)', valider({ id: 'k3J9x0Qw2m8LzTfA1bC4dE', pseudo: 'luma', publieLe: '2026-11-01T10:00:00.000Z', titre: 'Page Michi', categories: ['methode-michi', 'couleur'], nb: 9, pages: 2, jaime: null, petitCompteur: true, arts: [{ art: 'Zy9x8W7v6U5t4S3r2Q1pOn', col: 0, row: 0, fmt: '2h', url: 'https://pub.exemple.test/galerie/pub/Zy9x8W7v6U5t4S3r2Q1pOn.webp', largeur: 400, hauteur: 279 }], cartes: [{ cle: '1234|001', setSlug: 'Base-Set' }, null] }, OPENAPI.components.schemas.Publication, OPENAPI).ok);
     // le validateur sait dire NON sur ces schémas (une clé en trop, un type faux, un nombre à la place du null arrondi)
     H.v('   le validateur dit NON : clé en trop, type faux, champ manquant', [
         valider({ ...s1.json, extra: 1 }, OPENAPI.components.schemas.ReponseSignalement, OPENAPI).ok,
@@ -147,6 +178,13 @@ const OPENAPI = require('../openapi/openapi.v2.json'); const { valider } = requi
             { m, modele: `/api/illustrations/{id}/${v}`, url: `/api/illustrations/${idArt}/${v}`, session: true, ecriture: true, absent: `/api/illustrations/${inconnu()}/${v}`, mauvais: `/api/illustrations/!!/${v}` }])),
         { m: 'GET', modele: '/api/enregistres', url: '/api/enregistres', session: true, mauvais: '/api/enregistres?zzz=1' },
         { m: 'POST', modele: '/api/galerie/{id}/remix', url: `/api/galerie/${idPub}/remix`, session: true, ecriture: true, absent: `/api/galerie/${inconnu()}/remix`, mauvais: '/api/galerie/!!/remix' },
+        { m: 'GET', modele: '/api/classeurs', url: '/api/classeurs', session: true, mauvais: '/api/classeurs?zzz=1' },
+        { m: 'POST', modele: '/api/classeurs', url: '/api/classeurs', session: true, ecriture: true, corps: { titre: 'Pilote', pages: [page9()] }, mauvaisCorps: { titre: '' } },
+        { m: 'GET', modele: '/api/classeurs/{id}', url: `/api/classeurs/${idCl}`, session: false, absent: `/api/classeurs/${inconnu()}`, mauvais: `/api/classeurs/${idCl}?zzz=1` },
+        { m: 'PUT', modele: '/api/classeurs/{id}', url: `/api/classeurs/${idCl}`, session: true, ecriture: true, corps: { version: 1, titre: 'Pilote', pages: [page9()] }, mauvaisCorps: { titre: 'Pilote' }, absent: `/api/classeurs/${inconnu()}` },
+        { m: 'DELETE', modele: '/api/classeurs/{id}', url: `/api/classeurs/${idCl}`, session: true, ecriture: true, absent: `/api/classeurs/${inconnu()}` },
+        { m: 'POST', modele: '/api/classeurs/{id}/publication', url: `/api/classeurs/${idCl}/publication`, session: true, ecriture: true, corps: { certifieAuteur: true, cgu: 'c' }, mauvaisCorps: { cgu: 'c', zzz: 1 }, absent: `/api/classeurs/${inconnu()}/publication` },
+        { m: 'DELETE', modele: '/api/classeurs/{id}/publication', url: `/api/classeurs/${idCl}/publication`, session: true, ecriture: true, absent: `/api/classeurs/${inconnu()}/publication` },
         { m: 'PUT', modele: '/api/compte/pseudo', url: '/api/compte/pseudo', session: true, ecriture: true, corps: { pseudo: 'pilote-pseudo' }, mauvaisCorps: { pseudo: 'a' } },
         { m: 'POST', modele: '/api/illustrations/depot', url: '/api/illustrations/depot', session: true, ecriture: true, corps: { type: 'image/png', octets: 1000 }, mauvaisCorps: { type: 'image/png' } },
         { m: 'POST', modele: '/api/illustrations/depot/{depot}/finaliser', url: `/api/illustrations/depot/${inconnu()}/finaliser`, session: true, ecriture: true, corps: { nom: 'x', format: '1', certifieDroits: true, certifieNonOfficielle: true }, mauvaisCorps: { nom: 1 }, absent: `/api/illustrations/depot/${inconnu()}/finaliser` },
@@ -187,6 +225,8 @@ const OPENAPI = require('../openapi/openapi.v2.json'); const { valider } = requi
         }
         const cr = await compte('rx-' + (++n)); await appelB('POST', `/api/galerie/${idPub}/remix`, cr, {});
         verifier('409 — remix (borne-classeurs)', '/api/galerie/{id}/remix', 'POST', await appelB('POST', `/api/galerie/${idPub}/remix`, cr, {}));
+        const cb = await compte('cb-' + (++n)); await appelB('POST', '/api/classeurs', cb, { titre: 'un', pages: [page9()] });
+        verifier('409 — POST /api/classeurs (borne-classeurs)', '/api/classeurs', 'POST', await appelB('POST', '/api/classeurs', cb, { titre: 'deux', pages: [page9()] }));
         verifier('409 — decision (déjà décidé : etat)', '/api/admin/moderation/{id}/decision', 'POST', await appel('POST', `/api/admin/moderation/art.${fin.json.id}/decision`, { c: modo, corps: { decision: 'accepter' } }));
         await svBornes.fermer();
     }
@@ -202,7 +242,7 @@ const OPENAPI = require('../openapi/openapi.v2.json'); const { valider } = requi
             const r429 = deux.find(x => x.statut === 429); obtenus.push([o.m + ' ' + o.modele, Boolean(r429)]);
             if (r429) verifier(`429 — ${o.m} ${o.modele.replace('/api/', '')}`.slice(0, 50), o.modele, o.m, r429);
         }
-        H.v('   429 : chacune des 22 opérations de la Communauté rend LIMITE_DEBIT quand sa limite est atteinte', obtenus.filter(x => !x[1]).map(x => x[0]), []);
+        H.v('   429 : chacune des opérations de la Communauté rend LIMITE_DEBIT quand sa limite est atteinte', obtenus.filter(x => !x[1]).map(x => x[0]), []);
         await sv3.fermer();
     }
 
@@ -212,7 +252,7 @@ const OPENAPI = require('../openapi/openapi.v2.json'); const { valider } = requi
     const modeles = Object.fromEntries(OPS.map(o => [o.url, o.modele]));
     const r503 = [];
     for (const [m, ch] of sansBase) { const r = await appel(m, ch, { c: modo, corps: m === 'GET' ? undefined : { pseudo: 'x-y-z', type: 'image/png', octets: 5, cible: `galerie:${idPub}`, motif: 'autre', turnstile: 'jeton-valide' } }); r503.push([m, r.statut, r.json && r.json.erreur && r.json.erreur.code]); verifier(`503 sans base — ${m} ${ch.split('?')[0].slice(0, 28)}`, modeles[ch] || ch, m, r); }
-    H.v('   sans base dédiée branchée : 503 INDISPONIBLE pour chacune des 22 opérations (un seul code, aucune route ne se rabat sur la base de l\'API)', [...new Set(r503.map(x => `${x[1]} ${x[2]}`))], ['503 INDISPONIBLE']);
+    H.v('   sans base dédiée branchée : 503 INDISPONIBLE pour chacune des opérations (un seul code, aucune route ne se rabat sur la base de l\'API)', [...new Set(r503.map(x => `${x[1]} ${x[2]}`))], ['503 INDISPONIBLE']);
     // ═══ C-I4 : chaque statut DOCUMENTÉ d'une opération de la Communauté est JOUÉ ici, ou déclaré « non joué » avec sa raison (comme pour les abonnements) ═══
     const GENERIQUE = 'statut du bloc d\'erreurs commun des lectures publiques ; aucune branche de cette route ne le produit (pas d\'identifiant ni de paramètre à refuser) — à resserrer dans le contrat';
     const NON_JOUES = {

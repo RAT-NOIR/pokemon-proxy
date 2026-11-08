@@ -2,7 +2,7 @@
 // GALERIE — OUTIL D'EXPLOITATION (pas une route : la liste fermée reste fermée) : pose des pages d'essai dans le fil de la Communauté, pour que l'essai ne montre pas un fil vide.
 // Écrit pour l'ADMINISTRATEUR, lancé à la main :
 //     node v2/galerie/outils/poser-pages-essai.js --confirmer-essai --donnees=<fichier.json> --auteur=<pseudo>
-// Le fichier JSON est celui de l'opérateur ({ "pages": [ { titre, categories, n, cartes, attributs?, pages?, pagesSuite?, arts? } ] }) : AUCUNE donnée inventée ne vit dans le dépôt.
+// Le fichier JSON est celui de l'opérateur ({ "pages": [ { titre, categories, nb (4, 9, 12 ou 16), cartes, attributs?, pages?, pagesSuite?, arts? } ] }) : AUCUNE donnée inventée ne vit dans le dépôt.
 // La garde s'écrit par ce qu'elle AUTORISE : la cible n'est pas la production ; la base est la base dédiée (grappe déclarée, marqueur, liste fermée de collections) ; l'auteur a un pseudo ;
 // et toutes les pages sont validées AVANT la première écriture (un fichier à moitié faux ne pose rien). Les arts cités doivent exister et être publics (service.publierPourExploitation).
 const fs = require('fs');
@@ -29,11 +29,11 @@ function preparer(x, auteurId) {
     const pages = x.pages === undefined ? 1 : x.pages;
     if (F.problemeTexte(x.titre, { min: 1, max: 80 })) return { raison: 'titre' };
     if (!Array.isArray(x.categories) || x.categories.some(c => !F.CATEGORIES.includes(c))) return { raison: 'categories' };
-    if (![3, 4].includes(x.n)) return { raison: 'n' };
+    if (!require('../pages').NB.includes(x.nb)) return { raison: 'nb' };
     if (!Number.isInteger(pages) || pages < 1 || pages > 100) return { raison: 'pages' };
     const suite = x.pagesSuite === undefined ? [] : x.pagesSuite;
     if (!Array.isArray(suite) || suite.length !== pages - 1) return { raison: 'pagesSuite' };
-    return { p: { auteurId, titre: x.titre, categories: x.categories, n: x.n, pages, arts: x.arts || [], cartes: x.cartes || [], pagesSuite: suite.map(s => ({ ...s, arts: (s && s.arts) || [], cartes: (s && s.cartes) || [] })),
+    return { p: { auteurId, titre: x.titre, categories: x.categories, nb: x.nb, pages, arts: x.arts || [], cartes: x.cartes || [], pagesSuite: suite.map(s => ({ ...s, arts: (s && s.arts) || [], cartes: (s && s.cartes) || [] })),
         attributs: x.attributs, etat: 'public', certification: { cgu: 'essai' } } };
 }
 

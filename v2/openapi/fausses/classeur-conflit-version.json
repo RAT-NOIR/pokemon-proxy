@@ -1,0 +1,10 @@
+{
+  "success": false,
+  "erreur": {
+    "code": "CONFLIT",
+    "message": "Le classeur a été modifié depuis votre lecture",
+    "detail": "version",
+    "versionActuelle": 4
+  },
+  "facturation": null
+}

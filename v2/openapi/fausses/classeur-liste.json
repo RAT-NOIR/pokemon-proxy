@@ -1,0 +1,39 @@
+{
+  "success": true,
+  "classeurs": [
+    {
+      "id": "fausseClasseur0001AbCdEf",
+      "titre": "Mon classeur Pikachu",
+      "etiquettes": [
+        "michi"
+      ],
+      "couleur": "jaune",
+      "doublesPages": 2,
+      "couverture": null,
+      "apercu": [
+        "9000001|025"
+      ],
+      "visibilite": "public",
+      "motif": null,
+      "majLe": "2026-11-08T09:30:00.000Z",
+      "compteurs": {
+        "jaime": 7,
+        "enregistre": 2
+      }
+    },
+    {
+      "id": "fausseClasseur0002AbCdEf",
+      "titre": "Brouillon",
+      "etiquettes": [],
+      "couleur": null,
+      "doublesPages": 1,
+      "couverture": null,
+      "apercu": [],
+      "visibilite": "prive",
+      "motif": null,
+      "majLe": "2026-11-07T18:00:00.000Z",
+      "compteurs": null
+    }
+  ],
+  "suite": null
+}

@@ -5055,6 +5055,768 @@
         }
       }
     },
+    "/api/classeurs": {
+      "get": {
+        "operationId": "listerClasseurs",
+        "tags": [
+          "galerie"
+        ],
+        "summary": "Communauté (Atelier) : mes classeurs, du plus récent au plus ancien",
+        "x-conditionnel": "V2_GALERIE=1 (et la base dédiée MONGO_URI_GALERIE admise par la garde) : éteint, la route n'existe pas (404 natif)",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "suite",
+            "in": "query",
+            "required": false,
+            "description": "Curseur opaque rendu par la page précédente.",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Mes classeurs (50 par page).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseClasseurs"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ENTREE (`detail` nomme le champ ou la règle refusée).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION (cookie absent, expiré ou révoqué).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "LIMITE_DEBIT : limite de débit qui ne facture rien (`reessayerDans` et en-tête Retry-After). Jamais DEBIT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (base dédiée ou stockage injoignable, Turnstile injoignable, traitement d'image occupé avec `reessayerDans`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "creerClasseur",
+        "tags": [
+          "galerie"
+        ],
+        "summary": "Communauté (Atelier) : créer un classeur privé (20 au plus par compte)",
+        "x-conditionnel": "V2_GALERIE=1 (et la base dédiée MONGO_URI_GALERIE admise par la garde) : éteint, la route n'existe pas (404 natif)",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteClasseur"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Le classeur créé : privé, version 1.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseClasseur"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ENTREE (`detail` nomme le champ ou la règle refusée).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION (cookie absent, expiré ou révoqué).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGINE (Origin exacte du site et X-Rat-Market obligatoires), VERIFICATION, ou INTERDIT (`detail` : `pseudo-requis`, `pas-l-auteur`, `admin`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLIT `borne-classeurs` (20) ou `borne-doubles-pages` (50 doubles pages = 100 pages).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "ENTREE `corps-trop-gros` (le corps dépasse 64 Ko) ou FICHIER `trop-lourde`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "LIMITE_DEBIT : limite de débit qui ne facture rien (`reessayerDans` et en-tête Retry-After). Jamais DEBIT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (base dédiée ou stockage injoignable, Turnstile injoignable, traitement d'image occupé avec `reessayerDans`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/classeurs/{id}": {
+      "get": {
+        "operationId": "lireClasseur",
+        "tags": [
+          "galerie"
+        ],
+        "summary": "Communauté (Atelier) : lire un classeur — l'auteur lit sa copie de travail, tout autre lecteur la version publique acceptée",
+        "x-conditionnel": "V2_GALERIE=1 (et la base dédiée MONGO_URI_GALERIE admise par la garde) : éteint, la route n'existe pas (404 natif)",
+        "security": [
+          {
+            "session": []
+          },
+          {}
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant du classeur.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{16,64}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Le classeur. L'auteur : `no-store`. Un autre lecteur : `public, max-age=60` avec `Vary: Cookie`, et `auteur.pseudo`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseClasseur"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store",
+                    "public, max-age=60"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ENTREE (paramètre de requête inconnu).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "INTROUVABLE — UNIFORME : un objet absent, privé, en attente, refusé ou retiré, ou celui d'un autre compte, répond le même corps ; jamais un 403 qui dirait qu'il existe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "LIMITE_DEBIT : limite de débit qui ne facture rien (`reessayerDans` et en-tête Retry-After). Jamais DEBIT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (base dédiée ou stockage injoignable, Turnstile injoignable, traitement d'image occupé avec `reessayerDans`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "ecrireClasseur",
+        "tags": [
+          "galerie"
+        ],
+        "summary": "Communauté (Atelier) : écrire un classeur (comparer-et-écrire sur `version`, 64 Ko au plus)",
+        "x-conditionnel": "V2_GALERIE=1 (et la base dédiée MONGO_URI_GALERIE admise par la garde) : éteint, la route n'existe pas (404 natif)",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant du classeur.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{16,64}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteClasseurEcriture"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Le classeur écrit (version + 1).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseClasseur"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ENTREE (`detail` nomme le champ ou la règle refusée).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION (cookie absent, expiré ou révoqué).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGINE (Origin exacte du site et X-Rat-Market obligatoires), VERIFICATION, ou INTERDIT (`detail` : `pseudo-requis`, `pas-l-auteur`, `admin`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "INTROUVABLE — UNIFORME : un objet absent, privé, en attente, refusé ou retiré, ou celui d'un autre compte, répond le même corps ; jamais un 403 qui dirait qu'il existe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLIT `version` avec `versionActuelle` (une autre fenêtre a écrit), ou `borne-doubles-pages`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "ENTREE `corps-trop-gros` (le corps dépasse 64 Ko) ou FICHIER `trop-lourde`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "LIMITE_DEBIT : limite de débit qui ne facture rien (`reessayerDans` et en-tête Retry-After). Jamais DEBIT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (base dédiée ou stockage injoignable, Turnstile injoignable, traitement d'image occupé avec `reessayerDans`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "supprimerClasseur",
+        "tags": [
+          "galerie"
+        ],
+        "summary": "Communauté (Atelier) : supprimer un classeur (sa publication et ses votes avec lui)",
+        "x-conditionnel": "V2_GALERIE=1 (et la base dédiée MONGO_URI_GALERIE admise par la garde) : éteint, la route n'existe pas (404 natif)",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant du classeur.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{16,64}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Supprimé.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseSimple"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION (cookie absent, expiré ou révoqué).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGINE (Origin exacte du site et X-Rat-Market obligatoires), VERIFICATION, ou INTERDIT (`detail` : `pseudo-requis`, `pas-l-auteur`, `admin`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "INTROUVABLE — UNIFORME : un objet absent, privé, en attente, refusé ou retiré, ou celui d'un autre compte, répond le même corps ; jamais un 403 qui dirait qu'il existe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "LIMITE_DEBIT : limite de débit qui ne facture rien (`reessayerDans` et en-tête Retry-After). Jamais DEBIT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (base dédiée ou stockage injoignable, Turnstile injoignable, traitement d'image occupé avec `reessayerDans`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/classeurs/{id}/publication": {
+      "post": {
+        "operationId": "publierClasseur",
+        "tags": [
+          "galerie"
+        ],
+        "summary": "Communauté (Atelier) : publier un classeur (modération avant tout affichage ; 5 publications par jour, classeur ou illustration)",
+        "x-conditionnel": "V2_GALERIE=1 (et la base dédiée MONGO_URI_GALERIE admise par la garde) : éteint, la route n'existe pas (404 natif)",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant du classeur.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{16,64}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequetePublicationClasseur"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Le classeur, « en-attente ».",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseClasseur"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ENTREE (`detail` : `auteur-non-certifie`, `classeur-vide`, `illustration-refusee`, `categories`, `pages-publiees`, `cgu`, `corps`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION (cookie absent, expiré ou révoqué).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGINE (Origin exacte du site et X-Rat-Market obligatoires), VERIFICATION, ou INTERDIT (`detail` : `pseudo-requis`, `pas-l-auteur`, `admin`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "INTROUVABLE — UNIFORME : un objet absent, privé, en attente, refusé ou retiré, ou celui d'un autre compte, répond le même corps ; jamais un 403 qui dirait qu'il existe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "LIMITE_DEBIT : limite de débit qui ne facture rien (`reessayerDans` et en-tête Retry-After). Jamais DEBIT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (base dédiée ou stockage injoignable, Turnstile injoignable, traitement d'image occupé avec `reessayerDans`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "depublierClasseur",
+        "tags": [
+          "galerie"
+        ],
+        "summary": "Communauté (Atelier) : retirer la publication (le classeur redevient privé, les votes sur la copie publiée sont effacés)",
+        "x-conditionnel": "V2_GALERIE=1 (et la base dédiée MONGO_URI_GALERIE admise par la garde) : éteint, la route n'existe pas (404 natif)",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant du classeur.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{16,64}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Le classeur, privé.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseClasseur"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION (cookie absent, expiré ou révoqué).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGINE (Origin exacte du site et X-Rat-Market obligatoires), VERIFICATION, ou INTERDIT (`detail` : `pseudo-requis`, `pas-l-auteur`, `admin`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "INTROUVABLE — UNIFORME : un objet absent, privé, en attente, refusé ou retiré, ou celui d'un autre compte, répond le même corps ; jamais un 403 qui dirait qu'il existe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "LIMITE_DEBIT : limite de débit qui ne facture rien (`reessayerDans` et en-tête Retry-After). Jamais DEBIT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (base dédiée ou stockage injoignable, Turnstile injoignable, traitement d'image occupé avec `reessayerDans`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/enregistres": {
       "get": {
         "operationId": "lireEnregistres",
@@ -8720,6 +9482,11 @@
               "reessayerDans": {
                 "type": "integer",
                 "minimum": 0
+              },
+              "versionActuelle": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "GALERIE : avec `CONFLIT` `detail: version` (PUT /api/classeurs/{id}), la version que l'autre fenêtre a écrite."
               }
             },
             "required": [
@@ -10127,13 +10894,17 @@
             "type": "string",
             "description": "`idInterne|numero`, la clé de « Ma collection »."
           },
-          "nom": {
-            "type": "string"
+          "setSlug": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Le set de la fiche (slug de « Ma collection »), ou null pour une page posée par l'exploitation. Le NOM de la carte n'est plus servi : le site le relit au catalogue par la clé."
           }
         },
         "required": [
           "cle",
-          "nom"
+          "setSlug"
         ],
         "additionalProperties": false
       },
@@ -10168,12 +10939,15 @@
               ]
             }
           },
-          "n": {
+          "nb": {
             "type": "integer",
             "enum": [
-              3,
-              4
-            ]
+              4,
+              9,
+              12,
+              16
+            ],
+            "description": "Les pochettes de la page 1 (grille 2×2, 3×3, 4×3, 4×4 : colonnes × rangées). Remplace `n` (3 | 4)."
           },
           "pages": {
             "type": "integer",
@@ -10217,7 +10991,7 @@
           "publieLe",
           "titre",
           "categories",
-          "n",
+          "nb",
           "pages",
           "jaime",
           "petitCompteur",
@@ -10226,6 +11000,667 @@
         ],
         "additionalProperties": false,
         "description": "Une page de la galerie (page 1 seulement ; les suivantes par GET /api/galerie/{id}/pages/{n}). Aucun identifiant de compte, aucune adresse."
+      },
+      "CouleurClasseur": {
+        "type": "string",
+        "enum": [
+          "rouge",
+          "orange",
+          "jaune",
+          "vert",
+          "bleu",
+          "violet",
+          "rose",
+          "brun",
+          "noir",
+          "blanc",
+          "gris",
+          "or"
+        ]
+      },
+      "ContenuCarte": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "const": "carte"
+          },
+          "cle": {
+            "type": "string",
+            "description": "`idInterne|numero`, la clé de « Ma collection »."
+          },
+          "setSlug": {
+            "type": "string",
+            "description": "Le slug du set de la fiche (celui de « Ma collection »)."
+          }
+        },
+        "required": [
+          "type",
+          "cle",
+          "setSlug"
+        ],
+        "additionalProperties": false
+      },
+      "ContenuArt": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "const": "art"
+          },
+          "artId": {
+            "type": "string",
+            "description": "Une illustration de l'auteur ou une illustration PUBLIQUE de la banque."
+          }
+        },
+        "required": [
+          "type",
+          "artId"
+        ],
+        "additionalProperties": false
+      },
+      "BlocPage": {
+        "type": "object",
+        "properties": {
+          "c": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "r": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "l": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4
+          },
+          "h": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4
+          },
+          "genre": {
+            "type": "string",
+            "enum": [
+              "carte",
+              "art"
+            ]
+          },
+          "contenu": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ContenuCarte"
+              },
+              {
+                "$ref": "#/components/schemas/ContenuArt"
+              }
+            ],
+            "description": "null : pochette ou zone vide (cartes vidées par une reprise, illustration disparue)."
+          }
+        },
+        "required": [
+          "c",
+          "r",
+          "l",
+          "h",
+          "genre",
+          "contenu"
+        ],
+        "additionalProperties": false,
+        "description": "Un bloc de la grille d'une page : (c, r) depuis le coin haut gauche, l × h pochettes. Une carte occupe 1×1 ; un art 1×1 (« 1 »), 2×1 (« 2h »), 1×2 (« 2v ») ou 2×2 (« 4 »). Il tient dans la grille de la page."
+      },
+      "PageClasseur": {
+        "type": "object",
+        "properties": {
+          "nb": {
+            "type": "integer",
+            "enum": [
+              4,
+              9,
+              12,
+              16
+            ],
+            "description": "Pochettes de la page : grille 2×2, 3×3, 4×3, 4×4 (colonnes × rangées)."
+          },
+          "blocs": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/components/schemas/BlocPage"
+            }
+          }
+        },
+        "required": [
+          "nb",
+          "blocs"
+        ],
+        "additionalProperties": false
+      },
+      "CouvertureCarte": {
+        "type": "object",
+        "properties": {
+          "carte": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "carte"
+        ],
+        "additionalProperties": false
+      },
+      "CouvertureIllustration": {
+        "type": "object",
+        "properties": {
+          "illustration": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "illustration"
+        ],
+        "additionalProperties": false
+      },
+      "MotifDecision": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "droits",
+              "illustration-officielle",
+              "scan-de-carte",
+              "choquant",
+              "donnees-personnelles",
+              "harcelement",
+              "hors-sujet",
+              "autre"
+            ]
+          },
+          "texte": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "texte"
+        ],
+        "additionalProperties": false
+      },
+      "RepriseDe": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "pseudo": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "pseudo"
+        ],
+        "additionalProperties": false
+      },
+      "Classeur": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "titre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "etiquettes": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 24
+            }
+          },
+          "couleur": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CouleurClasseur"
+              }
+            ]
+          },
+          "couverture": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CouvertureCarte"
+              },
+              {
+                "$ref": "#/components/schemas/CouvertureIllustration"
+              }
+            ]
+          },
+          "pages": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/PageClasseur"
+            }
+          },
+          "visibilite": {
+            "type": "string",
+            "enum": [
+              "prive",
+              "en-attente",
+              "public",
+              "refuse",
+              "retire"
+            ],
+            "description": "L'ÉTAT se lit sur la publication : un classeur public modifié se lit « en-attente » chez son auteur pendant que le public lit encore la dernière version acceptée."
+          },
+          "motif": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MotifDecision"
+              }
+            ]
+          },
+          "repriseDe": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RepriseDe"
+              }
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "+1 à chaque écriture ; le PUT la porte (comparer-et-écrire)."
+          },
+          "creeLe": {
+            "type": "string"
+          },
+          "majLe": {
+            "type": "string"
+          },
+          "auteur": {
+            "type": "object",
+            "properties": {
+              "pseudo": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "pseudo"
+            ],
+            "additionalProperties": false,
+            "description": "Seulement dans la LECTURE PUBLIQUE d'un classeur accepté (un autre lecteur que l'auteur)."
+          }
+        },
+        "required": [
+          "id",
+          "titre",
+          "etiquettes",
+          "couleur",
+          "couverture",
+          "pages",
+          "visibilite",
+          "motif",
+          "repriseDe",
+          "version",
+          "creeLe",
+          "majLe"
+        ],
+        "additionalProperties": false,
+        "description": "Un classeur de l'Atelier. Aucune illustration que le lecteur ne peut plus voir (supprimée, retirée, privée d'autrui) : sa zone se lit `contenu: null`."
+      },
+      "ResumeClasseur": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "titre": {
+            "type": "string"
+          },
+          "etiquettes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "couleur": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CouleurClasseur"
+              }
+            ]
+          },
+          "doublesPages": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "couverture": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CouvertureCarte"
+              },
+              {
+                "$ref": "#/components/schemas/CouvertureIllustration"
+              }
+            ]
+          },
+          "apercu": {
+            "type": "array",
+            "maxItems": 9,
+            "items": {
+              "type": "string"
+            },
+            "description": "Les clés des 9 premières cartes, dans l'ordre de lecture."
+          },
+          "visibilite": {
+            "type": "string",
+            "enum": [
+              "prive",
+              "en-attente",
+              "public",
+              "refuse",
+              "retire"
+            ]
+          },
+          "motif": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MotifDecision"
+              }
+            ]
+          },
+          "majLe": {
+            "type": "string"
+          },
+          "compteurs": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "jaime": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "enregistre": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "jaime",
+                  "enregistre"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "titre",
+          "etiquettes",
+          "couleur",
+          "doublesPages",
+          "couverture",
+          "apercu",
+          "visibilite",
+          "motif",
+          "majLe",
+          "compteurs"
+        ],
+        "additionalProperties": false,
+        "description": "Compteurs exacts pour l'auteur ; null tant que le classeur n'est pas public."
+      },
+      "RequeteClasseur": {
+        "type": "object",
+        "properties": {
+          "titre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "etiquettes": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 24
+            },
+            "description": "Minuscules."
+          },
+          "couleur": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CouleurClasseur"
+              }
+            ]
+          },
+          "couverture": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CouvertureCarte"
+              },
+              {
+                "$ref": "#/components/schemas/CouvertureIllustration"
+              }
+            ]
+          },
+          "pages": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/PageClasseur"
+            },
+            "description": "Absent : une page vide de 9 pochettes. Plus de 100 pages (50 doubles pages) : 409 `borne-doubles-pages`."
+          }
+        },
+        "required": [
+          "titre"
+        ],
+        "additionalProperties": false,
+        "description": "Création d'un classeur. L'état, la version et les dates ne s'écrivent jamais par ce corps (champ inconnu : 400). Le corps entier fait 64 Ko au plus."
+      },
+      "RequeteClasseurEcriture": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "La version lue : le serveur n'écrit que si elle est encore la version courante."
+          },
+          "titre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "etiquettes": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 24
+            }
+          },
+          "couleur": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CouleurClasseur"
+              }
+            ]
+          },
+          "couverture": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CouvertureCarte"
+              },
+              {
+                "$ref": "#/components/schemas/CouvertureIllustration"
+              }
+            ]
+          },
+          "pages": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/PageClasseur"
+            }
+          }
+        },
+        "required": [
+          "version",
+          "titre",
+          "pages"
+        ],
+        "additionalProperties": false,
+        "description": "Remplace le classeur (copie de travail). Un classeur public modifié repasse en attente ; l'ancienne version acceptée reste servie jusqu'à la décision."
+      },
+      "RequetePublicationClasseur": {
+        "type": "object",
+        "properties": {
+          "certifieAuteur": {
+            "const": true,
+            "description": "L'auteur certifie être l'AUTEUR de ce qu'il publie : ni scan de carte, ni illustration officielle."
+          },
+          "cgu": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "La version des CGU acceptée (gardée avec la date)."
+          },
+          "categories": {
+            "type": "array",
+            "maxItems": 7,
+            "items": {
+              "type": "string",
+              "enum": [
+                "methode-michi",
+                "couleur",
+                "master-set",
+                "illustrateur",
+                "saison",
+                "japonais",
+                "vintage"
+              ]
+            }
+          },
+          "pagesPubliees": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 100,
+                "items": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                }
+              }
+            ]
+          }
+        },
+        "required": [
+          "certifieAuteur",
+          "cgu"
+        ],
+        "additionalProperties": false,
+        "description": "Publier : ses illustrations PRIVÉES citées passent en modération avec le classeur, sous la même certification. `pagesPubliees` (numéros de pages du classeur, sans doublon) : seules ces pages sont publiées ; null ou absent : toutes."
+      },
+      "ReponseClasseur": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "classeur": {
+            "$ref": "#/components/schemas/Classeur"
+          }
+        },
+        "required": [
+          "success",
+          "classeur"
+        ],
+        "additionalProperties": false
+      },
+      "ReponseClasseurs": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "classeurs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResumeClasseur"
+            }
+          },
+          "suite": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Curseur opaque de la page suivante, ou null."
+          }
+        },
+        "required": [
+          "success",
+          "classeurs",
+          "suite"
+        ],
+        "additionalProperties": false
       },
       "Art": {
         "type": "object",
@@ -10438,6 +11873,16 @@
             "type": "integer",
             "minimum": 1
           },
+          "nb": {
+            "type": "integer",
+            "enum": [
+              4,
+              9,
+              12,
+              16
+            ],
+            "description": "Les pochettes de CETTE page (une page d'un classeur peut avoir sa grille)."
+          },
           "arts": {
             "type": "array",
             "items": {
@@ -10460,6 +11905,7 @@
         },
         "required": [
           "n",
+          "nb",
           "arts",
           "cartes"
         ],

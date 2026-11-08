@@ -7,6 +7,7 @@
 const crypto = require('crypto');
 const G = require('./base');
 const F = require('./forme');
+const P = require('./pages');
 const { cleValide } = require('../collection/forme');
 
 const PAGE = 24, PAGE_ART = 40, CAP_TENDANCES = 2000, JOURS_TENDANCE = 7, SEUIL_PETIT = 5;
@@ -16,6 +17,8 @@ const estDup = e => Boolean(e) && e.code === 11000;
 const COLL = Object.freeze({ galerie: 'publications', banque: 'arts' });
 const CHAMP = Object.freeze({ jaime: 'nbJaime', enregistre: 'nbEnregistre' });
 
+// ce qu'une mise à jour acceptée emporte de l'instantané du classeur (jamais l'identifiant, l'auteur, les compteurs ni la date de première publication)
+const CHAMPS_INSTANTANE = Object.freeze(['titre', 'categories', 'nb', 'pages', 'pagesBlocs', 'attributs', 'certification', 'pagesPubliees', 'etiquettes', 'couleur', 'couverture', 'repriseDe', 'versionClasseur']);
 const FIN = String.fromCharCode(0xffff);
 /** Les MOTS d'un texte (minuscules, sans accent, lettres et chiffres) : la recherche `q` de la banque compare des PRÉFIXES de mots, sur un index multiclé, jamais une regex non ancrée (relecture 1, S-I4). */
 const motsDe = (...textes) => [...new Set(textes.flatMap(t => String(t || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)))].slice(0, 20);
@@ -85,11 +88,14 @@ async function liensDesArts(listes, urlPublique) {
     const m = new Map(lus.map(a => [a._id, a]));
     return poses => poses.filter(x => m.has(x.art)).map(x => ({ art: x.art, col: x.col, row: x.row, fmt: x.fmt, url: `${urlPublique}/${m.get(x.art).clePublique}.webp`, largeur: m.get(x.art).largeur, hauteur: m.get(x.art).hauteur }));
 }
-function versPublication(d, arts = d.arts) {
+/** La page 1 d'une publication, sous la forme de la lecture publique : les arts POSÉS (à compléter par liensDesArts) et les pochettes de cartes. Le stockage est celui de pages.js (`pagesBlocs`). */
+const premierePage = d => P.versArtsEtCartes((d.pagesBlocs || [])[0] || { nb: d.nb || 9, blocs: [] });
+function versPublication(d, arts) {
     const c = compteur(d.nbJaime || 0);
-    return { id: d._id, pseudo: d.pseudo, publieLe: iso(d.publieLe), titre: d.titre, categories: d.categories, n: d.n, pages: d.pages, jaime: c.valeur, petitCompteur: c.petit, arts, cartes: d.cartes };
+    return { id: d._id, pseudo: d.pseudo, publieLe: iso(d.publieLe), titre: d.titre, categories: d.categories, nb: d.nb, pages: d.pages, jaime: c.valeur, petitCompteur: c.petit, arts, cartes: premierePage(d).cartes };
 }
-const PROJ_PUBLIC = { pagesSuite: 0, attributs: 0, auteurId: 0, certification: 0, motif: 0 };
+// la lecture de la liste ne ramène que la PAGE 1 de chaque publication (les suivantes se lisent par /pages/{n}) ; le reste du document (auteur, certification, motif, attributs, copie de travail) n'en sort jamais
+const PROJ_PUBLIC = { pagesBlocs: { $slice: 1 }, attributs: 0, auteurId: 0, certification: 0, motif: 0, pagesPubliees: 0, etiquettes: 0, couleur: 0, couverture: 0, repriseDe: 0, versionClasseur: 0, remplace: 0 };
 const depuisJours = (maintenant, j) => new Date(maintenant.getTime() - j * 86400e3);
 /** Le tri « tendances » : les j'aime des 7 derniers jours (lignes de vote datées), sur au plus CAP_TENDANCES candidats ; à égalité, le plus récent d'abord. */
 async function ordreTendances(coll, type, filtre, maintenant) {
@@ -120,8 +126,9 @@ async function listerPublications({ categorie, tri = 'nouveautes', carte, couleu
     if (illustrateur) filtre['attributs.illustrateur'] = illustrateur;
     if (set) filtre['attributs.set'] = set;
     const r = await page('publications', 'galerie', filtre, tri, o, PAGE, PROJ_PUBLIC, maintenant);
-    const poser = await liensDesArts(r.docs.map(d => d.arts), urlPublique);
-    return { publications: r.docs.map(d => versPublication(d, poser(d.arts))), suite: r.suite };
+    const pages = r.docs.map(premierePage);
+    const poser = await liensDesArts(pages.map(p => p.arts), urlPublique);
+    return { publications: r.docs.map((d, i) => versPublication(d, poser(pages[i].arts))), suite: r.suite };
 }
 async function filtresDeLaGalerie() {
     const liste = async champ => (await G.col('publications').aggregate([{ $match: { etat: 'public' } }, { $unwind: `$attributs.${champ}` }, { $group: { _id: `$attributs.${champ}`, n: { $sum: 1 } } }, { $sort: { n: -1, _id: 1 } }, { $limit: 100 }]).toArray()).map(r => ({ valeur: r._id, n: r.n }));
@@ -129,12 +136,13 @@ async function filtresDeLaGalerie() {
     return { carte, couleur, type, illustrateur, set };
 }
 async function pageDePublication(id, n, urlPublique) {
-    const d = await G.col('publications').findOne({ _id: id, etat: 'public' }, { projection: { arts: 1, cartes: 1, pagesSuite: 1, pages: 1 } });
+    const d = await G.col('publications').findOne({ _id: id, etat: 'public' }, { projection: { pagesBlocs: 1, pages: 1 } });
     if (!d || !Number.isInteger(n) || n < 1 || n > d.pages) return null;
-    const p = n === 1 ? d : (d.pagesSuite || []).find(x => x.n === n);
-    if (!p) return null;
-    const poser = await liensDesArts([p.arts], urlPublique);
-    return { n, arts: poser(p.arts), cartes: p.cartes };
+    const page = (d.pagesBlocs || [])[n - 1];
+    if (!page) return null;
+    const { arts, cartes } = P.versArtsEtCartes(page);
+    const poser = await liensDesArts([arts], urlPublique);
+    return { n, nb: page.nb, arts: poser(arts), cartes };
 }
 
 // ═══ lectures publiques : la banque d'art ═══
@@ -162,14 +170,16 @@ async function publierPourExploitation(p, maintenant = new Date()) {
     if (!F.objet(p) || typeof p.auteurId !== 'string' || !p.auteurId) mal('auteurId');
     if (F.problemeTexte(p.titre, { min: 1, max: 80 })) mal('titre');
     if (!Array.isArray(p.categories) || p.categories.some(c => !F.CATEGORIES.includes(c))) mal('categories');
-    if (![3, 4].includes(p.n)) mal('n');
+    if (!P.NB.includes(p.nb)) mal('nb');
     if (!Number.isInteger(p.pages) || p.pages < 1 || p.pages > 100) mal('pages');
     const pseudo = await pseudoDe(p.auteurId); if (!pseudo) mal('pseudo-requis');
-    const arts = a => Array.isArray(a) && a.length <= 16 && a.every(x => F.objet(x) && F.idValide(x.art) && Number.isInteger(x.col) && Number.isInteger(x.row) && x.col >= 0 && x.row >= 0 && F.FORMATS_ART.includes(x.fmt));
-    const cartes = c => Array.isArray(c) && c.length <= p.n * p.n && c.every(x => x === null || (F.objet(x) && cleValide(x.cle) && !F.problemeTexte(x.nom, { min: 1, max: 80 })));
-    if (!arts(p.arts) || !cartes(p.cartes)) mal('page 1');
+    const arts = (a, nb) => Array.isArray(a) && a.length <= 16 && a.every(x => F.objet(x) && F.idValide(x.art) && F.FORMATS_ART.includes(x.fmt) && Number.isInteger(x.col) && Number.isInteger(x.row) && x.col >= 0 && x.row >= 0
+        && x.col + P.TAILLE_FORMAT[x.fmt][0] <= P.GRILLES[nb][0] && x.row + P.TAILLE_FORMAT[x.fmt][1] <= P.GRILLES[nb][1]);
+    const cartes = (c, nb) => Array.isArray(c) && c.length <= nb && c.every(x => x === null || (F.objet(x) && cleValide(x.cle) && !F.problemeTexte(x.nom, { min: 1, max: 80 })));
+    if (!arts(p.arts, p.nb) || !cartes(p.cartes, p.nb)) mal('page 1');
     const suite = p.pagesSuite || [];
-    if (suite.length !== p.pages - 1 || suite.some((x, i) => !F.objet(x) || x.n !== i + 2 || !arts(x.arts) || !cartes(x.cartes))) mal('pages suivantes');
+    // une page suivante peut avoir SA grille (`nb`), à défaut celle de la page 1
+    if (suite.length !== p.pages - 1 || suite.some((x, i) => !F.objet(x) || x.n !== i + 2 || !P.NB.includes(x.nb === undefined ? p.nb : x.nb) || !arts(x.arts, x.nb === undefined ? p.nb : x.nb) || !cartes(x.cartes, x.nb === undefined ? p.nb : x.nb))) mal('pages suivantes');
     const etat = p.etat || 'en-attente';
     if (!['en-attente', 'public'].includes(etat)) mal('etat');
     const cites = [...new Set([p.arts, ...suite.map(x => x.arts)].flat().map(x => x.art))];
@@ -177,7 +187,8 @@ async function publierPourExploitation(p, maintenant = new Date()) {
     const toutes = [p.cartes, ...suite.map(x => x.cartes)].flat().filter(Boolean).map(x => x.cle);
     const texte = a => (Array.isArray(a) ? [...new Set(a.filter(x => typeof x === 'string' && x && !F.problemeTexte(x, { max: 80 })))].slice(0, 200) : []);
     const attrs = F.objet(p.attributs) ? p.attributs : {};
-    const doc = { _id: F.nouvelId(), auteurId: p.auteurId, pseudo, titre: p.titre.normalize('NFKC'), categories: [...new Set(p.categories)], n: p.n, pages: p.pages, arts: p.arts, cartes: p.cartes, pagesSuite: suite,
+    const pagesBlocs = [P.depuisArtsEtCartes(p.nb, p.arts, p.cartes), ...suite.map(x => P.depuisArtsEtCartes(x.nb === undefined ? p.nb : x.nb, x.arts, x.cartes))];
+    const doc = { _id: F.nouvelId(), auteurId: p.auteurId, pseudo, titre: p.titre.normalize('NFKC'), categories: [...new Set(p.categories)], nb: p.nb, pages: p.pages, pagesBlocs,
         attributs: { carte: [...new Set(toutes)], carteIds: [...new Set(toutes.map(c => c.split('|')[0]))], couleur: texte(attrs.couleur), type: texte(attrs.type), illustrateur: texte(attrs.illustrateur), set: texte(attrs.set) },
         etat, recuLe: maintenant, publieLe: etat === 'public' ? maintenant : null, nbJaime: 0, nbEnregistre: 0, motif: null,
         certification: F.objet(p.certification) ? { cgu: String(p.certification.cgu || '').slice(0, 40), le: maintenant } : null };
@@ -228,15 +239,19 @@ async function mesVotes(compteId, max = 2000) {
 }
 
 // ═══ la reprise (remix) ═══
-/** Copie la page publique dans un NOUVEAU classeur privé du compte : structure et arts, pochettes de cartes vides. { introuvable } | { borne } | { classeurId }. */
+/**
+ * Copie la page publique dans un NOUVEAU classeur privé du compte (même forme que les classeurs de l'Atelier) : la structure et les arts, les cartes VIDES (`contenu: null`).
+ * Un art qui n'est plus public n'est pas copié (la zone se lit vide). { introuvable } | { borne } | { classeurId }.
+ */
 async function remixer({ compteId, id, max, maintenant = new Date() }) {
-    const source = F.idValide(id) ? await G.col('publications').findOne({ _id: id, etat: 'public' }) : null;
+    const source = F.idValide(id) ? await G.col('publications').findOne({ _id: id, etat: 'public', pagesBlocs: { $exists: true } }) : null;
     if (!source) return { introuvable: true };
     const mien = String(compteId);
     if ((await G.col('classeurs').countDocuments({ auteurId: mien }, { limit: max })) >= max) return { borne: max };
-    const poches = source.n * source.n;
-    const pages = [{ n: 1, arts: source.arts }, ...(source.pagesSuite || []).map(p => ({ n: p.n, arts: p.arts }))].map(p => ({ n: p.n, arts: p.arts, poches: Array(poches).fill(null) }));
-    const classeur = { _id: F.nouvelId(), auteurId: mien, titre: `Remix de ${source.titre}`.slice(0, 80), etiquettes: [], couleur: null, format: poches, pages, visibilite: 'prive', repriseDe: { id: source._id, pseudo: source.pseudo }, version: 1, creeLe: maintenant, majLe: maintenant };
+    const cites = P.artsCites(source.pagesBlocs);
+    const publics = new Set(cites.length ? (await G.col('arts').find({ _id: { $in: cites }, etat: 'public' }, { projection: { _id: 1 } }).toArray()).map(a => a._id) : []);
+    const pages = source.pagesBlocs.map(p => ({ nb: p.nb, blocs: p.blocs.map(b => (b.genre === 'carte' ? { ...b, contenu: null } : (b.contenu && publics.has(b.contenu.artId) ? b : { ...b, contenu: null }))) }));
+    const classeur = { _id: F.nouvelId(), auteurId: mien, titre: `Remix de ${source.titre}`.slice(0, 80), etiquettes: [], couleur: null, couverture: null, pages, repriseDe: { id: source._id, pseudo: source.pseudo }, version: 1, creeLe: maintenant, majLe: maintenant };
     await G.col('classeurs').insertOne(classeur);
     return { classeurId: classeur._id };
 }
@@ -254,7 +269,7 @@ async function signaler({ compteId = null, cibleType, cibleId, motif, precision 
 // ═══ la modération ═══
 const TAILLE_FILE = 50;
 async function elementPublication(d, secret) {
-    return { id: `pub.${d._id}`, file: 'publications', genre: 'classeur', cible: { id: d._id, titre: d.titre, apercu: (d.cartes || []).filter(Boolean).slice(0, 9).map(c => c.cle) },
+    return { id: `pub.${d._id}`, file: 'publications', genre: 'classeur', cible: { id: d._id, titre: d.titre, apercu: P.cartesDans(d.pagesBlocs || []).slice(0, 9).map(c => c.cle) },
         auteur: { pseudo: d.pseudo, ref: refCompte(d.auteurId, secret) }, certification: d.certification ? { cgu: d.certification.cgu, le: iso(d.certification.le) } : null, signalements: [], recuLe: iso(d.recuLe), echeance: null };
 }
 async function elementArt(d, secret, stockage) {
@@ -322,6 +337,22 @@ async function decider({ id, decision, motif = null, precision = null, moderateu
     const attendu = decision === 'retirer' ? 'public' : 'en-attente';
     if (d.etat !== attendu) return { conflit: true };
     await trace({ cible: { type, id: brut } });
+    if (d.remplace) {
+        // une MISE À JOUR d'un classeur déjà public : accepter la met à la place de la version publique (même identifiant : les votes restent) ; refuser la garde pour l'auteur, avec le motif, et la version publique reste servie
+        if (decision === 'accepter') {
+            const cible = await coll.findOne({ _id: d.remplace, etat: 'public' }, { projection: { _id: 1 } });
+            if (!cible) { await resultat('conflit'); return { conflit: true };}       // la version publique a été retirée ou dépubliée entre-temps
+            const champs = Object.fromEntries(CHAMPS_INSTANTANE.filter(k => d[k] !== undefined).map(k => [k, d[k]]));
+            const r = await coll.updateOne({ _id: d.remplace, etat: 'public' }, { $set: { ...champs, motif: null } });
+            if (r.modifiedCount !== 1) { await resultat('conflit'); return { conflit: true }; }
+            await coll.deleteOne({ _id: brut, etat: 'en-attente' });
+        } else {
+            const r = await coll.updateOne({ _id: brut, etat: 'en-attente' }, { $set: { etat: 'refuse', motif: note } });
+            if (r.modifiedCount !== 1) { await resultat('conflit'); return { conflit: true }; }
+        }
+        await resultat('applique');
+        return { ok: true };
+    }
     if (decision === 'accepter') {
         const copies = [];
         if (type === 'banque') {
