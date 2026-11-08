@@ -1179,6 +1179,44 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.match(mt(trad({ codeSet: 's' }), pm), /code-set-different/, '« s » contre sKV refuse');
         assert.ok(!drap(trad(), ptrad()).some(d => d.startsWith('codeAlias')), 'aucun alias hors des deux paires : pas de drapeau');
     });
+    await test('V / VMAX / VSTAR sans Pokédex lu : PV + attaques (dégâts) + code + numéro, liste fermée (08/11)', () => {
+        const attaquesLues = [{ nom: '风暴俯冲', degats: 220 }, { nom: '星耀汇聚', degats: null }];
+        const lugia = (o = {}) => entree({ attendu: { ...entree().attendu, numero: '161' }, lu: { nom: '洛奇亚VSTAR', numero: '161', total: '131', langue: 'zh-hans', tampon: null, finition: 'normale', marques: ['code cs6aC imprimé'], codeSet: 'cs6aC', pv: 280, attaques: attaquesLues, ...o } });
+        const plugia = (o = {}) => ptrad({ tirage: 'zh-hans', numero: '161', slug: 'Lugia-VSTAR-cs6aC-161', codeSet: 'cs6aC', nomEn: 'Lugia VSTAR', nomEnCarte: 'Lugia VSTAR', pv: 280, categorie: 'pokemon', attaquesCarte: [{ nom: 'Tempest Dive', degats: '220' }], ...o });
+        assert.ok(Array.isArray(PV.REGLES_SANS_POKEDEX) && PV.REGLES_SANS_POKEDEX.join() === 'V,VMAX,VSTAR' && Object.isFrozen(PV.REGLES_SANS_POKEDEX), 'liste fermée exportée et gelée');
+        assert.deepStrictEqual(lue(lugia(), plugia()), { ok: true, motifs: [] }, 'Lugia VSTAR accepté');
+        assert.ok(drap(lugia(), plugia()).includes('temoin-regle-sans-pokedex:VSTAR'), 'drapeau écrit');
+        assert.ok(!drap(lugia(), plugia()).includes('pv-non-verifie'), 'pas de drapeau pv-non-verifie dans cette variante');
+        assert.match(mt(lugia({ pv: 270 }), plugia()), /pv-different/, 'PV faux');
+        assert.match(mt(lugia({ pv: null }), plugia()), /pv-non-lu/, 'PV non lu');
+        assert.match(mt(lugia(), plugia({ pv: null })), /pv-de-base-inconnu/, 'PV de base inconnu = refus');
+        assert.match(mt(lugia({ attaques: [{ nom: '风暴俯冲', degats: 210 }, { nom: '星耀汇聚', degats: null }] }), plugia()), /attaques-differentes/, 'dégâts faux');
+        assert.match(mt(lugia({ attaques: [{ nom: '星耀汇聚', degats: null }] }), plugia()), /attaques-differentes/, 'attaque en moins');
+        assert.match(mt(lugia({ attaques: [{ nom: '风暴俯冲', degats: 220 }, { nom: 'X', degats: 30 }] }), plugia()), /attaques-differentes/, 'attaque en plus');
+        assert.match(mt(lugia({ attaques: [] }), plugia()), /attaques-non-lues/, 'aucune attaque lue');
+        assert.match(mt(lugia({ attaques: undefined }), plugia()), /attaques-non-lues/, 'champ absent');
+        assert.match(mt(lugia({ attaques: [{ nom: '', degats: 220 }] }), plugia()), /attaques-non-lues/, 'nom d\'attaque vide');
+        assert.match(mt(lugia({ attaques: [{ nom: '风暴俯冲', degats: '220' }] }), plugia()), /attaques-non-lues/, 'dégâts en texte : illisible');
+        assert.match(mt(lugia(), plugia({ attaquesCarte: null })), /attaques-de-base-inconnues/, 'base sans attaques');
+        assert.match(mt(lugia(), plugia({ attaquesCarte: [{ nom: 'Tempest Dive', degats: null }] })), /attaques-de-base-inconnues|attaques-differentes/, 'base sans dégâts : refus');
+        assert.match(mt(lugia({ codeSet: 'cs6bC' }), plugia()), /code-set-different/, 'code du set faux');
+        assert.match(mt(lugia({ numero: '160' }), plugia()), /numero-different/, 'numéro faux');
+        assert.match(mt(lugia({ nom: '洛奇亚VMAX' }), plugia()), /pokedex-non-lu/, 'règle lue ≠ règle du produit : variante fermée, règle actuelle (refus)');
+        // hors liste : la règle actuelle, inchangée
+        const exSans = (o = {}) => lugia({ nom: '洛奇亚ex', ...o });
+        assert.match(mt(exSans(), plugia({ nomEn: 'Lugia ex', nomEnCarte: 'Lugia ex' })), /pokedex-non-lu/, 'ex sans dex : pokedex-non-lu');
+        assert.match(mt(lugia({ nom: '洛奇亚GX' }), plugia({ nomEn: 'Lugia GX', nomEnCarte: 'Lugia GX' })), /pokedex-non-lu/, 'GX sans dex');
+        assert.match(mt(lugia({ nom: '洛奇亚' }), plugia({ nomEn: 'Lugia', nomEnCarte: 'Lugia' })), /pokedex-non-lu/, 'aucune règle');
+        assert.match(mt(lugia({ nom: '洛奇亚V' }), plugia({ nomEn: 'Lugia VSTAR', nomEnCarte: 'Lugia VSTAR' })), /regle-differente|nom-produit-carte-divergent|pokedex-non-lu/, 'V lu contre VSTAR produit : jamais accepté');
+        assert.notDeepStrictEqual(lue(lugia({ nom: '洛奇亚V' }), plugia({ nomEn: 'Lugia VSTAR', nomEnCarte: 'Lugia VSTAR' })).ok, true);
+        // lu.dex présent : règle actuelle (Pokédex 249 attendu)
+        assert.strictEqual(lue(lugia({ dex: 249 }), plugia()).ok, true, 'avec dex correct : règle actuelle');
+        assert.ok(!drap(lugia({ dex: 249 }), plugia()).includes('temoin-regle-sans-pokedex:VSTAR'), 'avec dex : pas la variante');
+        assert.match(mt(lugia({ dex: 250 }), plugia()), /pokedex-different/, 'dex faux : règle actuelle');
+        assert.match(mt(lugia({ dex: 249.5 }), plugia()), /pokedex-non-lu/, 'dex illisible présent : règle actuelle, pas la variante');
+        // un Dresseur : inchangé
+        assert.match(mt(lugia({ nom: '奇树VSTAR' }), plugia({ nomEn: 'Nemona VSTAR', nomEnCarte: 'Nemona VSTAR', categorie: 'dresseur' })), /nom-traduit-sans-temoin/, 'Dresseur : inchangé');
+    });
     await test('nom traduit : chaque discordance REFUSE, avec son motif', () => {
         assert.match(mt(trad({ pv: null }), ptrad()), /pv-non-lu/, 'PV absent');
         assert.match(mt(trad({ pv: 0 }), ptrad()), /pv-non-lu/);

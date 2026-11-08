@@ -301,6 +301,40 @@ function preuveParTableCroisee(nomLu, nomEn, table, carteIdProduit = null) {
     const carteId = noms.get(ja);
     return carteId === carteIdProduit ? null : { carteId };
 }
+/**
+ * (08/11, décision du testeur) LISTE FERMÉE des règles dont la carte n'imprime pas de n° de Pokédex : valeurs de `TPC.reglesDuNom` (V, VMAX, VSTAR seuls ; « VSTAR+ex », « ex », « GX », « Méga »… n'y sont pas).
+ * Le code du set et le numéro sont déjà exigés par `motifDeNomTraduit` (motifDeCode en tête, numéro comparé par l'appelant) avant d'arriver ici.
+ */
+const REGLES_SANS_POKEDEX = Object.freeze(['V', 'VMAX', 'VSTAR']);
+/** Dégâts de la base (`cartes.attaques[].degats`, texte du wikitext : « 220 », « 30× », « 120+ ») -> entier ; null = pas de dégâts ; NaN = illisible. */
+const degatsDeBase = d => { if (d == null || String(d).trim() === '') return null; const m = /^(\d+)\s*[×x+\-−]?$/i.exec(String(d).trim()); return m ? Number(m[1]) : NaN; };
+/**
+ * La variante : en place du Pokédex, PV (égaux, base connue) + attaques lues (noms non vides, dégâts entiers ou null) dont la SUITE des dégâts non nuls, dans l'ordre, égale celle de la base.
+ * Écrit : un talent / pouvoir VSTAR (sans dégâts) ne compte ni d'un côté ni de l'autre — la base ne range dans `attaques` que les `Cardtext/Attack` (wikitext.js:365), jamais les talents ; seules les attaques à dégâts
+ * témoignent. La base doit porter au moins une attaque à dégâts. Les noms d'attaques lus ne sont comparés à rien (pas de traduction devinée) : ils doivent seulement être PRÉSENTS.
+ * @returns {string|null|undefined} undefined = variante non ouverte ; null = acceptée (drapeau posé) ; sinon le motif de refus.
+ */
+function motifSansPokedex(lu, produit, np, nom, nomCarte, drapeaux) {
+    if (lu.dex != null) return undefined;
+    const regle = TPC.reglesDuNom(lu.nom);
+    if (!REGLES_SANS_POKEDEX.includes(regle) || regle !== TPC.reglesDuNom(nom)) return undefined;
+    if (lu.regle != null && TPC.reglesDuNom(lu.regle) !== regle) return 'regle-incoherente';
+    if (!entierPositif(lu.pv)) return 'pv-non-lu';
+    const pv = Number(produit?.pv);
+    if (!(Number.isFinite(pv) && pv > 0)) return 'pv-de-base-inconnu';
+    if (lu.pv !== pv) return 'pv-different';
+    const lues = lu.attaques;
+    if (!Array.isArray(lues) || !lues.length || !lues.every(a => a && typeof a === 'object' && texte(a.nom) && (a.degats === null || entierPositif(a.degats)))) return 'attaques-non-lues';
+    if (!nomCarte || !Array.isArray(produit?.attaquesCarte)) return 'attaques-de-base-inconnues';
+    const base = produit.attaquesCarte.map(a => degatsDeBase(a?.degats));
+    if (base.some(Number.isNaN)) return 'attaques-de-base-inconnues';
+    const suiteBase = base.filter(d => d !== null), suiteLue = lues.map(a => a.degats).filter(d => d !== null);
+    if (!suiteBase.length) return 'attaques-de-base-inconnues';
+    if (suiteBase.length !== suiteLue.length || suiteBase.some((d, i) => d !== suiteLue[i])) return 'attaques-differentes';
+    drapeaux.push(`temoin-regle-sans-pokedex:${regle}`);
+    if (aUnJumeauDansLeSet(produit, cleDuTemoin(nom), np)) drapeaux.push('jumeau-dans-le-set');
+    return null;
+}
 function motifDeNomTraduit(lu, produit, np, drapeaux = []) {
     if (!texte(lu.nom)) return 'nom-different';
     if (np == null) return 'nom-traduit-numero-absent';
@@ -344,6 +378,9 @@ function motifDeNomTraduit(lu, produit, np, drapeaux = []) {
     else dex = dexNom[0];
     // sans carte, la fiche simple n'a que le nom de son produit : il ne porte que l'espèce et sa règle
     if (!nomCarte && !TPC.nomEstEspeceEtRegle(nomProduit)) return 'fiche-simple-nom-qualifie';
+    // (08/11) variante V / VMAX / VSTAR : ces cartes n'impriment pas de n° de Pokédex. Ouverte SEULEMENT si lu.dex est absent, que la règle lue (lettres latines) est EXACTEMENT l'une de la liste fermée
+    // et qu'elle égale celle du nom du produit ; `undefined` = variante non ouverte, la règle ci-dessous s'applique, inchangée.
+    const v = motifSansPokedex(lu, produit, np, nom, nomCarte, drapeaux); if (v !== undefined) return v;
     if (!entierPositif(lu.dex)) return 'pokedex-non-lu';
     if (lu.dex !== dex) return 'pokedex-different';
     if (!entierPositif(lu.pv)) return 'pv-non-lu';
@@ -810,4 +847,4 @@ function trousDuManifeste({ trous, recus, famille }) {
 }
 
 module.exports = { POSITIONS_RONDES, CODES_IMPRIMES_ADMIS, CODES_SANS_TOTAL, sansTotalAdmis, SOURCE, LOT, SRC, LANGUE_PREUVE, EDITIONS_LOCALES, REGLES, REGLE_MEME_DESSIN, LANGUES_NON_LATINES, MOYENS_DE_LECTURE, MOYENS_DE_LANGUE, SEUIL_PLANCHER, SCORE_PLANCHER, VIDE_PLANCHER, lienAvecLEntree, evaluerRemplacementMemeDessin, langueDuProduit, formeEntree, lireManifeste, lireValidations, rapprocher, evaluerPreuveLue, evaluerDeuxSources, evaluerEntree,
-    verifierCache, setAdmisPourPosition, preuvesDe, motifDeNom, motifDeNomTraduit, construireTableJaCroisee, preuveParTableCroisee, porteUnTemoinTraduit, CHAMPS_TEMOIN_TRADUIT, LANGUES_A_NOM_TRADUIT, TAMPONS_ATTENDUS, tamponAttendu, cleFiche, grouperUnites, MOTIFS_DE_TROU, motifDeTrou, trousDuManifeste, sha256De, racineDe };
+    verifierCache, setAdmisPourPosition, preuvesDe, motifDeNom, motifDeNomTraduit, REGLES_SANS_POKEDEX, construireTableJaCroisee, preuveParTableCroisee, porteUnTemoinTraduit, CHAMPS_TEMOIN_TRADUIT, LANGUES_A_NOM_TRADUIT, TAMPONS_ATTENDUS, tamponAttendu, cleFiche, grouperUnites, MOTIFS_DE_TROU, motifDeTrou, trousDuManifeste, sha256De, racineDe };
