@@ -1215,8 +1215,6 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.match(mt(e, pth('M-P/KR')), /code-set-different/, '(b) ligne non listée');
         assert.match(mt(th('SV-P'), p), /code-set-different/, '(c) SV-P lu sur ligne M-P/TH');
         assert.strictEqual(lue(th('M-P/TH'), p).ok, true, '(d) M-P/TH lu sur M-P/TH comme avant');
-        assert.match(mt(th('SV-P'), pth('SV-P/TH', { slug: 'Mareep-SV-PTH069' })), /code-set-different/, 'SV-P/TH non admis (aucune planche)');
-        assert.match(mt(th('S-P'), pth('S-P/TH', { slug: 'Mareep-S-PTH069' })), /code-set-different/, 'S-P/TH non admis (aucune planche)');
         assert.match(mt(e, pth('', { slug: 'Mareep-M-PTH069' })), /code-set-different/, 'ligne vide + slug M-PTH069 : la branche slug ne sert pas aux clés à « / »');
         assert.match(mt(trad({ nom: 'サンダース', dex: 135, pv: 110, numero: '001', codeSet: 'mEE' }), ptrad({ numero: '001', slug: 'Jolteon-mEEv-001', codeSet: 'mEZ', nomEn: 'Jolteon' })), /code-set-different/, 'ligne mEZ + slug mEEv : la ligne non vide l\'emporte sur le slug');
         // (e) deux clés au même code imprimé : l'ordre des clés ne change rien
@@ -1227,6 +1225,18 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.strictEqual(PV.cleAliasPour(A, 'zz', 'w/3'), undefined);
         // (f) alias existants
         assert.strictEqual(lue(trad({ codeSet: 'sK' }), ptrad({ slug: 'Mareep-sKV005', slugSet: 'Premium-Trainer-Box-VSTAR' })).ok, true, 'sKV');
+    });
+    await test('alias de code des promos régionales (08/11) : chaque alias passe sur SA ligne et échoue sur toute autre', () => {
+        const paires = [['M-P/ID', 'M-P'], ['SV-P/ID', 'SV-P'], ['S-P/ID', 'S-P'], ['SM-P/ID', 'SM-P'], ['SV-P/TH', 'SV-P'], ['S-P/TH', 'S-P'], ['SV-P/CS', 'SV-P'], ['S-P/CS', 'S-P'], ['M-P/TH', 'M-P']];
+        const lignes = ['M-P/ID', 'SV-P/ID', 'S-P/ID', 'SM-P/ID', 'SV-P/TH', 'S-P/TH', 'SV-P/CS', 'S-P/CS', 'M-P/TH', 'SV-P/KR', 'S-P/KR', 'SM-P/CS', 'M-P/CS', 'M-P/CT'];
+        for (const [cm, imp] of paires) {
+            const t = trad({ langue: 'th', codeSet: imp, numero: '069' });
+            const e = { ...t, attendu: { ...t.attendu, numero: '069' } };
+            const pl = ligne => ptrad({ tirage: 'th', numero: '069', slug: 'Mareep-X069', codeSet: ligne });
+            assert.deepStrictEqual(lue(e, pl(cm)), { ok: true, motifs: [] }, `${imp} imprimé contre la ligne ${cm}`);
+            assert.ok(drap(e, pl(cm)).includes(`codeAlias:${cm}→${imp}`), `drapeau codeAlias pour ${cm}`);
+            for (const autre of lignes.filter(l => !paires.some(([c2, i2]) => c2 === l && i2 === imp))) assert.match(mt(e, pl(autre)), /code-set-different/, `${imp} lu sur la ligne ${autre} refuse`);
+        }
     });
     await test('V / VMAX / VSTAR sans Pokédex lu : PV + attaques (dégâts) + code + numéro, liste fermée (08/11)', () => {
         const attaquesLues = [{ nom: '风暴俯冲', degats: 220 }, { nom: '星耀汇聚', degats: null }];
