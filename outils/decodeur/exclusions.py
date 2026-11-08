@@ -61,3 +61,18 @@ def verifier_echantillon(chemins, exclusions):
     communs = [(p, exclusions['empreintes'][s]) for p, s in sha.items() if s in exclusions['empreintes']]
     if communs: raise SystemExit(f'INTERSECTION NON VIDE avec les exclusions ({len(communs)}) : {communs[:3]} — refus')
     return sha, illisibles
+
+def temoin_negatif(exclusions):
+    """Le contrôle doit pouvoir dire NON : un fichier dont l'empreinte est PLANTÉE dans la liste du juge doit faire lever verifier_echantillon, et un fichier propre doit passer.
+    LIMITE ÉCRITE : le contrôle compare des empreintes de CONTENU ; une copie ré-encodée, redimensionnée ou recadrée d'une photo exclue a une autre empreinte et ne serait PAS vue."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, 'temoin.bin')
+        with open(p, 'wb') as f: f.write(b'temoin negatif du controle d\'exclusion')
+        s = sha256_fichier(p)
+        propre = dict(exclusions); propre['empreintes'] = {k: v for k, v in exclusions['empreintes'].items() if k != s}
+        verifier_echantillon([p], propre)                                    # fichier propre : ne lève pas
+        plante = dict(exclusions); plante['empreintes'] = {**propre['empreintes'], s: 'juge (empreinte plantée par le témoin)'}
+        try: verifier_echantillon([p], plante)
+        except SystemExit: return True                                       # lève : le contrôle voit une empreinte du juge dans l'échantillon
+        raise SystemExit('TÉMOIN NÉGATIF RATÉ : une empreinte du juge plantée dans l\'échantillon n\'a pas fait lever le contrôle — refus')

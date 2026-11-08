@@ -33,7 +33,7 @@ if (n === 'cible') {
         const f = manifeste.length < forces.length * 3 ? forces[manifeste.length % forces.length] : {};
         const grand = rnd() < 0.08;
         const w = 1 + Math.floor(rnd() * (grand ? 120 : 70)), h = 1 + Math.floor(rnd() * (grand ? 90 : 70));
-        const r = genererWebp(graine, w, h, f);
+        const r = genererWebp(graine, w, h, { ...f, plafond: Number(process.env.RM_PLAFOND_COEFF || 300) });
         graine++;
         if (!r) { rejets++; continue; }
         ecrire(r);

@@ -60,6 +60,8 @@ const M = [
     ['WebP : segments absolus par défaut', 'decodeur-webp.mjs', 'majMap: 0, majData: 0, abs: 1, q:', 'majMap: 0, majData: 0, abs: 0, q:'],
     ['WebP : contexte de saut (DC non remis à zéro)', 'decodeur-webp.mjs', 'if (!i4) { topDc[mx] = 0; leftDc = 0; }', 'if (false) { topDc[mx] = 0; leftDc = 0; }'],
     ['WebP : partitions (rangée -> partition)', 'decodeur-webp.mjs', 'parts[my & (nparts - 1)]', 'parts[0]'],
+    ['WebP : option coeffMaxWebp neutralisée', 'decodeur-webp.mjs', '(w > plafondRefus || w < -plafondRefus)', '(w > plafondRefus + 100000 || w < -plafondRefus - 100000)'],
+    ['WebP : option coeffMaxWebp non transmise', 'decodeur.mjs', 'coeffMax: coeffMaxWebp', 'coeffMax: 0'],
     // ── réduction
     ['réduction : précision', 'decodeur.mjs', 'const PRECISION_BITS = 32 - 8 - 2;', 'const PRECISION_BITS = 32 - 8 - 3;'],
     ['réduction : forme du filtre (triangle -> parabole)', 'decodeur.mjs', 'return x < 1 ? 1 - x : 0;', 'return x < 1 ? 1 - x * x : 0;']
@@ -76,13 +78,17 @@ for (const c of lot.cartes) EPREUVES.push({ o: Buffer.from(c.jpg, 'base64'), h: 
 for (const c of syn.cas) if (!/lossless/.test(c.nom)) EPREUVES.push({ o: Buffer.from(c.b64, 'base64'), h: c.pil.sha256 });
 for (const c of t1.cas) if (!c.balayages) EPREUVES.push(c.refuse ? { o: Buffer.from(c.b64, 'base64'), refuse: c.refuse } : { o: Buffer.from(c.b64, 'base64'), h: c.pil.sha256 });
 for (const c of [...dif.cas, ...cible.cas]) EPREUVES.push({ o: Buffer.from(c.b64, 'base64'), h: c.pil.sha256 });
+{   // T1-1 : l'option de refus des coefficients hors de la zone prouvée (un WebP bruité de Pillow doit être refusé à 300, accepté sans option)
+    const b = Buffer.from(syn.cas.find(x => x.nom === 'webp-q95-100x75').b64, 'base64');
+    EPREUVES.push({ o: b, refuse: 'NON_SUPPORTE', opts: { coeffMaxWebp: 300 } });
+}
 const EXIFS = syn.cas.filter(c => /exif/.test(c.nom) && c.format === 'jpeg').map(c => ({ o: Buffer.from(c.b64, 'base64'), h: c.pil.exif.sha256 }));
 const REDUC = syn.reductions;
 
 async function rejouer(D) {
     let rouge = 0;
     for (const e of EPREUVES) {
-        try { const r = D.decoder(e.o, { orientation: 'aucune' }); if (e.refuse || sha(r.rgb) !== e.h) rouge++; }
+        try { const r = D.decoder(e.o, { orientation: 'aucune', ...(e.opts || {}) }); if (e.refuse || sha(r.rgb) !== e.h) rouge++; }
         catch (err) { if (!e.refuse || err.code !== e.refuse) rouge++; }
     }
     for (const e of EXIFS) { try { if (sha(D.decoder(e.o).rgb) !== e.h) rouge++; } catch { rouge++; } }

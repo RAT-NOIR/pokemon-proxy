@@ -2,7 +2,7 @@
 // Objectif de l'éditeur : l'entrée du modèle est IDENTIQUE AU BIT sur iPhone, Android et ordinateur. Tout est entier (32 bits) ; le résultat est celui de Pillow (libjpeg-turbo, libwebp, zlib).
 //
 // CONTRAT
-//   decoder(octets, { orientation = 'exif' | 'aucune', orientationWebp = false, coteMax = 4096, pixelsMax = 12000000, pixelsMaxProgressif = 4000000, balayagesMax = 64 })
+//   decoder(octets, { orientation = 'exif' | 'aucune', orientationWebp = false, coteMax = 4096, pixelsMax = 12000000, pixelsMaxProgressif = 4000000, balayagesMax = 64, coeffMaxWebp = 0 })
 //     -> { rgb: Uint8Array (largeur * hauteur * 3, RGBRGB…), largeur, hauteur, format, orientationLue, orientationAppliquee, source }
 //   · RÈGLE QUI TRANCHE TOUT : ce que le décodeur accepte a été comparé à Pillow au bit près ; tout le reste est REFUSÉ par un code d'erreur. Rien d'accepté sans preuve.
 //   · `octets` : Uint8Array, ArrayBuffer ou vue d'ArrayBuffer ; autre chose -> ErreurDecodeur 'entree-invalide'. Aucune exception brute ne sort : un RangeError d'allocation devient 'memoire'.
@@ -10,6 +10,8 @@
 //     plafond plus bas (pixelsMaxProgressif, 4 Mpx) et un nombre de balayages borné (balayagesMax), vérifiés avant d'allouer ;
 //   · l'ORIENTATION EXIF (1 à 8) d'un JPEG est appliquée par défaut (mesuré dans Chrome 157 : createImageBitmap tourne les JPEG) ; celle d'un WebP est LUE mais pas appliquée (Chrome ne la tourne pas),
 //     { orientationWebp: true } l'applique ; { orientation: 'aucune' } rend les pixels tels que décodés (c'est ce que fait Pillow sans exif_transpose : les références du lot) ;
+//   · coeffMaxWebp (0 = désactivé, défaut) : refuse NON_SUPPORTE tout WebP dont un coefficient déquantifié dépasse la borne ; la zone prouvée par le générateur est 300, les visuels réels la dépassent tous : décision de l'éditeur ;
+//   · SEGMENTS WebP sans données : valeurs ABSOLUES nulles, comme libwebp (la référence est Pillow), PAS relatives comme la RFC ; choix écrit dans RAPPORT-DECODEUR.md ;
 //   · AUCUNE gestion de couleur : le profil ICC est ignoré (équivaut à colorSpaceConversion: 'none') ; le canal alpha est ignoré (équivaut à Pillow convert('RGB')) ;
 //   · toute erreur est une ErreurDecodeur à CODE fermé : FORMAT, TROP_GRAND, DECODAGE, NON_SUPPORTE, entree-invalide, memoire. Jamais un résultat approché.
 //   reduire640(rgb, largeur, hauteur) -> { rgb, largeur, hauteur } : la réduction « inside » dans un carré de 640 (dimensions640), bilinéaire à support élargi de Pillow, en entiers.
@@ -112,8 +114,8 @@ export function decoder(octets, options) {
 const entierPositif = v => Number.isInteger(v) && v >= 1 && v <= 2 ** 31;
 function decoderInterne(octets, opts) {
     if (opts !== undefined && (opts === null || typeof opts !== 'object')) throw new ErreurDecodeur('entree-invalide', 'options');
-    const { orientation = 'exif', orientationWebp: orientationWebpAppliquee = false, coteMax = COTE_MAX, pixelsMax = PIXELS_MAX, pixelsMaxProgressif = 4000000, balayagesMax = 64 } = opts || {};
-    if (![coteMax, pixelsMax, pixelsMaxProgressif, balayagesMax].every(entierPositif) || typeof orientationWebpAppliquee !== 'boolean') throw new ErreurDecodeur('entree-invalide', 'options numériques');
+    const { orientation = 'exif', orientationWebp: orientationWebpAppliquee = false, coteMax = COTE_MAX, pixelsMax = PIXELS_MAX, pixelsMaxProgressif = 4000000, balayagesMax = 64, coeffMaxWebp = 0 } = opts || {};
+    if (![coteMax, pixelsMax, pixelsMaxProgressif, balayagesMax].every(entierPositif) || typeof orientationWebpAppliquee !== 'boolean' || !Number.isInteger(coeffMaxWebp) || coeffMaxWebp < 0) throw new ErreurDecodeur('entree-invalide', 'options numériques');
     let b;
     if (octets instanceof Uint8Array) b = octets;
     else if (octets instanceof ArrayBuffer) b = new Uint8Array(octets);
@@ -124,7 +126,7 @@ function decoderInterne(octets, opts) {
     let r;
     if (d.format === 'jpeg') r = decoderJpeg(b, { coteMax, pixelsMax, pixelsMaxProgressif, balayagesMax });
     else if (d.format === 'png') r = decoderPng(b, { coteMax, pixelsMax });
-    else r = decoderWebp(b, { coteMax, pixelsMax });
+    else r = decoderWebp(b, { coteMax, pixelsMax, coeffMax: coeffMaxWebp });
     if (r.largeur !== d.largeur || r.hauteur !== d.hauteur) throw new ErreurDecodeur('DECODAGE', 'dimensions différentes de l\'en-tête');
     const lue = d.format === 'jpeg' ? r.orientationLue : d.format === 'webp' ? orientationWebp(b) : 0;
     // Mesuré dans Chrome 157 (outils/decodeur/pilote-decodeur.js) : createImageBitmap applique l'EXIF d'un JPEG (les 8 orientations), PAS celui d'un WebP. Le défaut reproduit cette chaîne ; { orientationWebp: true } l'applique aussi.

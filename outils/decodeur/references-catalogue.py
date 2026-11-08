@@ -9,6 +9,7 @@ from PIL import Image
 import exclusions as X
 
 ex = X.charger()
+X.temoin_negatif(ex)       # le contrôle d'exclusion sait dire NON (empreinte du juge plantée) avant d'être cru
 print('exclusions :', json.dumps(ex['comptes']))
 fichiers = sorted(x for x in os.listdir(X.IMAGES) if x.endswith('.webp'))
 restants = [x for x in fichiers if x not in ex['noms']]

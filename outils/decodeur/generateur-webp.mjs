@@ -106,7 +106,9 @@ export function genererWebp(graine, w, h, forces = {}) {
     const biais = 0.35 + rnd() * 0.65;
     const encs = Array.from({ length: nparts }, () => new Encodeur());
     const br = new Oracle(enc0, rnd, biais), parts = encs.map(e => new Oracle(e, rnd, biais));
-    W.definirCrochetCoeff(v => { if (v > 300 || v < -300) throw new Rejet(); });
+    const plafond = forces.plafond !== undefined ? forces.plafond : 300;      // borne PROUVÉE contre Pillow par défaut ; plus haut : mesure d'extension (RM_PLAFOND_COEFF)
+    let maxCoeff = 0;
+    W.definirCrochetCoeff(v => { const a = v < 0 ? -v : v; if (a > plafond) throw new Rejet(); if (a > maxCoeff) maxCoeff = a; });
     try { W.decoderTrame(E, br, parts, w, h); } catch (e) { if (e instanceof Rejet) return null; throw e; } finally { W.definirCrochetCoeff(null); }
     const p0 = enc0.finish(), jetons = encs.map(e => e.finish());
     if (p0.length >= (1 << 19)) return null;
@@ -120,5 +122,5 @@ export function genererWebp(graine, w, h, forces = {}) {
     for (const j of jetons) { trame.set(j, o); o += j.length; }
     const pad = tailleTrame & 1, riff = new Uint8Array(12 + 8 + tailleTrame + pad); const dv = new DataView(riff.buffer);
     riff.set([0x52, 0x49, 0x46, 0x46]); dv.setUint32(4, 4 + 8 + tailleTrame + pad, true); riff.set([0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x20], 8); dv.setUint32(16, tailleTrame, true); riff.set(trame, 20);
-    return { octets: riff, params: { w, h, simple: lf.simple, niveau: lf.niveau, nettete: lf.nettete, deltas: lf.deltas && lf.majDeltas ? 1 : 0, nparts, segActif: seg.actif, segAbs: seg.actif && seg.majData ? seg.abs : 0, segCarte: seg.actif ? seg.majMap : 0, skip: utiliseSkip, majProbas: tauxMaj > 0 ? 1 : 0, base } };
+    return { octets: riff, params: { maxCoeff, w, h, simple: lf.simple, niveau: lf.niveau, nettete: lf.nettete, deltas: lf.deltas && lf.majDeltas ? 1 : 0, nparts, segActif: seg.actif, segAbs: seg.actif && seg.majData ? seg.abs : 0, segCarte: seg.actif ? seg.majMap : 0, skip: utiliseSkip, majProbas: tauxMaj > 0 ? 1 : 0, base } };
 }

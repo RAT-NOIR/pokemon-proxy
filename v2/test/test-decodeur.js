@@ -257,6 +257,18 @@ const code = f => { try { f(); return null; } catch (e) { return e && e.name ===
         console.log('   13. flux aléatoires identiques à Pillow : ' + JSON.stringify(n));
     }
 
+    // ═══ 14. T1-1 : coefficients WebP au-delà de la zone prouvée (300) — option de refus, désactivée par défaut (les visuels réels la dépassent tous) ═══
+    {
+        const bruit = Buffer.from(fx.cas.find(x => x.nom === 'webp-q95-100x75').b64, 'base64');
+        vrai('14. par défaut aucun plafond : un WebP à gros coefficients est accepté', code(() => D.decoder(bruit)) === null);
+        vrai('14. { coeffMaxWebp: 300 } : refusé NON_SUPPORTE (coefficient hors de la zone prouvée)', code(() => D.decoder(bruit, { coeffMaxWebp: 300 })) === 'NON_SUPPORTE');
+        vrai('14. { coeffMaxWebp: 100000 } : accepté', code(() => D.decoder(bruit, { coeffMaxWebp: 100000 })) === null);
+        vrai('14. le plafond ne survit pas à l\'appel : l\'appel suivant sans option est accepté', code(() => D.decoder(bruit)) === null);
+        vrai('14. { coeffMaxWebp: -2 } -> entree-invalide', code(() => D.decoder(bruit, { coeffMaxWebp: -2 })) === 'entree-invalide');
+        const dif = JSON.parse(fs.readFileSync(path.join(FIX, 'pil-webp-differentiel.json'), 'utf8'));
+        vrai('14. les flux du générateur (bornés à 300 par construction) passent tous avec { coeffMaxWebp: 300 }', dif.cas.every(c => code(() => D.decoder(Buffer.from(c.b64, 'base64'), { coeffMaxWebp: 300 })) === null));
+    }
+
     console.log(`\n${ok} réussis, ${ko} échoués`);
     process.exitCode = ko ? 1 : 0;
 })().catch(e => { console.error('❌ exception', e); process.exitCode = 1; });

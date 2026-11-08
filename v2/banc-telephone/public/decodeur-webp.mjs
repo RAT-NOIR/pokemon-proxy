@@ -87,6 +87,7 @@ function grandeValeur(br, P, p) {
     }
     return v;
 }
+let plafondRefus = 0;       // option coeffMaxWebp : voir decodeur.mjs (T1-1 : au-delà de 300 le SIMD de libwebp peut différer du C ; la borne n'est pas appliquée par défaut, les visuels réels la dépassent)
 let crochetCoeff = null;
 /** Réservé au banc : un crochet appelé avec chaque coefficient déquantifié (null par défaut : aucun effet en production). */
 export function definirCrochetCoeff(f) { crochetCoeff = f; }
@@ -100,6 +101,7 @@ function lireCoeffs(br, P, t, ctx, dq0, dq1, n, sortie, so) {
         let v;
         if (!br.get(P[p + 2])) { v = 1; p = pn + 11; } else { v = grandeValeur(br, P, p); p = pn + 22; }
         const w = (br.get(0x80) ? -v : v) * (n > 0 ? dq1 : dq0);
+        if (plafondRefus !== 0 && (w > plafondRefus || w < -plafondRefus)) refuser('NON_SUPPORTE', 'coefficient VP8 hors de la zone prouvée contre Pillow');
         if (crochetCoeff !== null) crochetCoeff(w);      // banc seulement (générateur différentiel) : borne les coefficients des flux fabriqués
         sortie[so + ZIGZAG[n]] = w;
     }
@@ -136,7 +138,7 @@ function ajouterTransformee(co, co0, plan, po, stride) {   // TransformOne : ajo
 }
 
 /** Décode un WebP avec perte en RGB. Rend { largeur, hauteur, rgb, orientationLue }. */
-export function decoderWebp(b, { coteMax = 4096, pixelsMax = 12000000 } = {}) {
+export function decoderWebp(b, { coteMax = 4096, pixelsMax = 12000000, coeffMax = 0 } = {}) {
     if (!(b instanceof Uint8Array)) b = new Uint8Array(b);
     const liste = chunks(b);
     let vp8 = null, canvas = null;
@@ -177,7 +179,8 @@ export function decoderWebp(b, { coteMax = 4096, pixelsMax = 12000000 } = {}) {
         parts.push(new Lecteur(f, debutPart, debutPart + sz));
         debutPart += sz;
     }
-    return decoderTrame(E, br, parts, W, H);
+    plafondRefus = coeffMax;      // 0 : aucun refus (défaut) ; sinon tout coefficient déquantifié au-delà est refusé NON_SUPPORTE
+    try { return decoderTrame(E, br, parts, W, H); } finally { plafondRefus = 0; }
 }
 
 /** Les champs BRUTS de l'en-tête de la première partition, dans l'ordre de la RFC 6386 (§9.2 à 9.11, 19.2). Leur écriture, symétrique, est dans outils/decodeur/generateur-webp.mjs (banc seulement). */

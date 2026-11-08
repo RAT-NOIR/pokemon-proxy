@@ -11,6 +11,7 @@ import exclusions as X
 RACINES = [(r'C:\Users\Yung\Desktop\pokemon-proxy-api-v2\verrou\photos', 'verrou/photos'), (r'C:\Users\Yung\Desktop\labo-embedding', 'labo-embedding'), (r'C:\Users\Yung\Desktop\CARDMARKET IMAGE', 'CARDMARKET IMAGE')]
 EXT = ('.jpg', '.jpeg', '.png')
 ex = X.charger()
+X.temoin_negatif(ex)       # le contrôle d'exclusion sait dire NON (empreinte du juge plantée) avant d'être cru
 print('exclusions :', json.dumps(ex['comptes']))
 candidats = []
 for racine, nom in RACINES:
