@@ -831,6 +831,24 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         const sans = await monter(jp(undefined, 'フシギダネ'));
         assert.strictEqual(sans.unites.length, 0); assert.match(JSON.stringify(sans.resume.refus), /nom-different/);
     });
+    await test('plan (08/11, B) : un Dresseur indonésien de la ligne SV-P/ID passe par l\'illustration relue (cleR2 lue sur la CARTE, en base) ; une référence étrangère à la carte refuse', async () => {
+        const monter = async (reference, cleR2 = ['cartes/77/a.webp', 'cartes/77/b.webp']) => {
+            const w = await mondeSimple({ etat: [{ idProduct: 1001, idExpansion: 5000, langue: 'id', tamponnee: null, name: 'Switch' }], sets: [{ _id: SLUG, tirage: 'id' }],
+                lignes: [{ idProduct: 1001, carteId: 77, slugSet: SLUG, numeroFiche: '13', slug: 'Switch-SV-PID013', idExpansion: 5000 }],
+                cartes: [{ _id: 77, nomEn: 'Switch', categorie: 'dresseur', images: cleR2.map(c => ({ cleR2: c })) }], codesSet: [{ idExpansion: 5000, codeSet: 'SV-P/ID' }] });
+            const man = JSON.parse(fs.readFileSync(path.join(w.racine, 'MCD', 'preuves.json'), 'utf8'));
+            man.entrees[0].attendu.langue = 'id';
+            man.entrees[0].lu = { ...man.entrees[0].lu, langue: 'id', nom: 'Tukar Pokémon', total: '', codeSet: 'SV-P/ID', illustrationRelue: { par: 'coordinateur', reference, le: '2026-11-08' } };
+            fs.writeFileSync(path.join(w.racine, 'MCD', 'preuves.json'), JSON.stringify(man));
+            return K.construirePlanAvec({ dossier: w.racine, cache: w.cache, lire: w.lire, etat: w.etat, lecteur: RC.lecteurNatif(w.db), fichiers: w.F });
+        };
+        const bon = await monter('cartes/77/b.webp');
+        assert.deepStrictEqual([bon.resume.refus, bon.unites.length], [[], 1]);
+        assert.ok(bon.unites[0].champsEntree.preuveLue.drapeaux.includes('temoin-illustration-relue:SV-P/ID'));
+        for (const [nom, p] of [['référence étrangère', await monter('cartes/99/z.webp')], ['carte sans visuel', await monter('cartes/77/a.webp', [])]]) {
+            assert.strictEqual(p.unites.length, 0, nom); assert.match(JSON.stringify(p.resume.refus), /illustration-non-relue/, nom);
+        }
+    });
     await test('plan (nom traduit) : fiche simple japonaise sans carte : Pokédex + PV + règle + code lus ; le code vient du slug OU de codes_set ; la table officielle sert un Dresseur ; un désaccord refuse', async () => {
         const base = o => ({ etat: [{ idProduct: 1001, idExpansion: 5000, langue: o.tirage ?? 'jp', tamponnee: null, name: o.name ?? 'Mareep' }], sets: [{ _id: SLUG, tirage: o.tirage ?? 'jp' }], cartes: o.cartes ?? [], luLangue: o.luLangue ?? 'ja',
             lignes: [{ idProduct: 1001, carteId: -1, slugSet: SLUG, numeroFiche: '13', slug: o.slug ?? 'Mareep-svAL013', idExpansion: 5000 }], codesSet: o.codesSet ?? [], luPlus: o.lu ?? {} });
