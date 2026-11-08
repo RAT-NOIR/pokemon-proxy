@@ -6,6 +6,7 @@
 //   basse définition · empruntée à un autre tirage · déclarée fausse · correcte · correcte mais nettement plus petite · de TPC lui-même · posée PENDANT la collecte
 // → en mode `sansRemplacement` : 0 trou, 0 téléchargement, l'entrée et son document intacts ; en mode normal (témoin) : le remplacement a lieu là où la règle commune le permet,
 //   preuve que le banc MORD.
+require('./banc-sans-porte');      // aucun banc ne touche le réseau ni la vraie porte (incident du 2026-11-08)
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');

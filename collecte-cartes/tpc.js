@@ -404,8 +404,15 @@ const PORTE_SORTIES = 'sorties';
 let compteurSorties = 0;
 /** @param {{porte?: object}} [o] — `porte` : le module de la porte (injecté par les bancs ; par défaut le vrai, chargé à la demande : il requiert ce module-ci). */
 const TRANSPORTS_PORTE = new WeakSet();      // les seuls transports que `transport` accepte : ceux qui sortent d'ici
+const MSG_BANC = 'banc : aucun accès réseau — un banc injecte une fausse porte (`porte`) ou un faux transport (`transportDeBanc`), jamais la vraie porte';
 function fabriquerTransportPorte({ porte = null, avant = null } = {}) {
-    const P = () => porte || require('./porte-reseau');
+    // INCIDENT 2026-11-08 : un client de banc retombé sur la vraie porte a émis de vraies requêtes. Dans un processus de banc, la vraie porte ne se construit ni ne se sert, jamais.
+    if (!porte && processusDeBanc()) throw new Error(MSG_BANC);
+    const P = () => {
+        if (porte) { if (processusDeBanc() && porte === require('./porte-reseau')) throw new Error(MSG_BANC); return porte; }
+        if (processusDeBanc()) throw new Error(MSG_BANC);
+        return require('./porte-reseau');
+    };
     const t = {
         parLaPorte: true,
         async get(url, { binaire = false } = {}) {
@@ -459,7 +466,8 @@ function typeImage(b) {
     if (b.length > 3 && b.subarray(0, 3).toString('latin1') === 'GIF') return 'image/gif';
     return 'image/png';
 }
-const transportFetch = fabriquerTransportPorte();      // nom conservé : ce n'est plus un appel direct
+let transportParDefaut = null;      // construit À LA DEMANDE : jamais au chargement du module, et jamais dans un banc (la fabrique lève)
+const transportFetch = () => (transportParDefaut ||= fabriquerTransportPorte());      // le transport par défaut = la porte ; nom conservé
 // 🔑 LA RÈGLE COMMUNE DE RÉPONSE (2026-10-18) : le défi, la fausse page introuvable, la pause et le compteur par hôte vivent dans reponse-hote.js — ce client les APPELLE, il n'en garde aucune copie.
 const RH = require('./reponse-hote');
 
@@ -470,7 +478,7 @@ const RH = require('./reponse-hote');
  */
 // TAIWAN (2026-10-18, lanceur dédié) : `plafond` = le nombre de requêtes qu'AUCUNE relance ne peut dépasser — `compteInitial` est le cumul des passages précédents (lu dans le cache disque du lanceur),
 // `surRequete(compte)` le lui rend après CHAQUE requête. Le client REFUSE la requête n° plafond + 1 (erreur `plafond: true`), avant d'envoyer quoi que ce soit. Sans `plafond`, rien ne change.
-function fabriquerClientTpc({ site, transport: transportDemande = transportFetch, transportDeBanc = undefined, cadenceMs = CADENCE_MS, reessaiMs = REESSAI_MS, verrou = null, agent = UA, suivi = RH.suiviDuProcessus(), dossierPauses = RH.DOSSIER_PAUSES, connues = null, plafond = null, compteInitial = 0, surRequete = null } = {}) {
+function fabriquerClientTpc({ site, transport: transportDemande, transportDeBanc = undefined, cadenceMs = CADENCE_MS, reessaiMs = REESSAI_MS, verrou = null, agent = UA, suivi = RH.suiviDuProcessus(), dossierPauses = RH.DOSSIER_PAUSES, connues = null, plafond = null, compteInitial = 0, surRequete = null } = {}) {
     const S = SITES[site];
     if (!S) throw new Error(`TPC : site « ${site} » hors de la liste (${SOURCES_TPC.join(', ')})`);
     if (plafond !== null && !(Number.isInteger(plafond) && plafond > 0)) throw new Error(`TPC : plafond « ${plafond} » : un entier positif ou rien`);
@@ -479,7 +487,8 @@ function fabriquerClientTpc({ site, transport: transportDemande = transportFetch
     if (transportDeBanc !== undefined) {
         if (!processusDeBanc()) throw new Error('TPC : transportDeBanc refusé hors banc (processus test-*.js) — toute requête de production passe par la porte réseau');
         transport = transportDeBanc;
-    } else if (TRANSPORTS_PORTE.has(transportDemande)) transport = transportDemande;
+    } else if (transportDemande === undefined) transport = transportFetch();      // le défaut : la porte (lève dans un banc)
+    else if (TRANSPORTS_PORTE.has(transportDemande)) transport = transportDemande;
     else throw new Error('TPC : transport refusé — seul le transport de la porte réseau est accepté (un faux transport s\'injecte par `transportDeBanc`, dans un banc)');
     const hoteNom = new URL(S.hote).hostname;
     let lie = verrou, file = Promise.resolve(), dernier = 0, compte = compteInitial, bloque = null, pauseHote = null, robots;   // robots : undefined = pas encore lu

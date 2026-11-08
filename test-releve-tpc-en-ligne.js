@@ -1,5 +1,6 @@
 // node test-releve-tpc-en-ligne.js — releve-tpc-en-ligne.js (D5 du 2026-10-24) avec un FAUX transport et une fausse base : aucun réseau, aucune vraie base, cadence nulle.
 // TOOL_DIR=<dossier> rejoue le banc contre une copie MUTÉE de l'outil (le rouge se voit en cassant le code).
+require('./banc-sans-porte');      // aucun banc ne touche le réseau ni la vraie porte (incident du 2026-11-08)
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
