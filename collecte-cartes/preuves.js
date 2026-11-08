@@ -390,6 +390,13 @@ function preuveParTableCroisee(nomLu, nomEn, table, carteIdProduit = null) {
  * Le code du set et le numéro sont déjà exigés par `motifDeNomTraduit` (motifDeCode en tête, numéro comparé par l'appelant) avant d'arriver ici.
  */
 const REGLES_SANS_POKEDEX = Object.freeze(['V', 'VMAX', 'VSTAR']);
+/**
+ * (08/11, décision de l'utilisateur) LISTE FERMÉE de produits dont la carte, à illustration pleine, n'imprime aucun n° de Pokédex (cartes relues par le coordinateur le 2026-11-08) : 879266 « Iono's Wattrel » (M-P 059,
+ * « Wattrel Mistika », PV 60) et 859859 « Team Rocket's Meowth » (SV-P 253, « Meowth Tim Roket », PV 70), tous deux indonésiens. Même preuve que V / VMAX / VSTAR (PV + suite des dégâts + code + numéro), drapeau distinct.
+ * Ouverte SEULEMENT pour ces idProduct, lu.langue = 'id' et lu.dex absent ; tout autre cas garde sa règle.
+ */
+const ILLUSTRATIONS_PLEINES_SANS_POKEDEX = Object.freeze([879266, 859859]);
+const illustrationPleineListee = (lu, produit) => ILLUSTRATIONS_PLEINES_SANS_POKEDEX.includes(produit?.idProduct) && lu?.langue === 'id' && lu.dex == null && produit.categorie !== 'dresseur' && produit.categorie !== 'energie';
 /** Dégâts de la base (`cartes.attaques[].degats`, texte du wikitext : « 220 », « 30× », « 120+ ») -> entier ; null = pas de dégâts ; NaN = illisible. */
 const degatsDeBase = d => { if (d == null || String(d).trim() === '') return null; const m = /^(\d+)\s*[×x+\-−]?$/i.exec(String(d).trim()); return m ? Number(m[1]) : NaN; };
 /**
@@ -400,9 +407,10 @@ const degatsDeBase = d => { if (d == null || String(d).trim() === '') return nul
  */
 function motifSansPokedex(lu, produit, np, nom, nomCarte, drapeaux) {
     if (lu.dex != null) return undefined;
+    const pleine = illustrationPleineListee(lu, produit);
     const regle = TPC.reglesDuNom(lu.nom);
-    if (!REGLES_SANS_POKEDEX.includes(regle) || regle !== TPC.reglesDuNom(nom)) return undefined;
-    if (lu.regle != null && TPC.reglesDuNom(lu.regle) !== regle) return 'regle-incoherente';
+    if (!pleine && (!REGLES_SANS_POKEDEX.includes(regle) || regle !== TPC.reglesDuNom(nom))) return undefined;
+    if (!pleine && lu.regle != null && TPC.reglesDuNom(lu.regle) !== regle) return 'regle-incoherente';
     if (!entierPositif(lu.pv)) return 'pv-non-lu';
     const pv = Number(produit?.pv);
     if (!(Number.isFinite(pv) && pv > 0)) return 'pv-de-base-inconnu';
@@ -415,7 +423,7 @@ function motifSansPokedex(lu, produit, np, nom, nomCarte, drapeaux) {
     const suiteBase = base.filter(d => d !== null), suiteLue = lues.map(a => a.degats).filter(d => d !== null);
     if (!suiteBase.length) return 'attaques-de-base-inconnues';
     if (suiteBase.length !== suiteLue.length || suiteBase.some((d, i) => d !== suiteLue[i])) return 'attaques-differentes';
-    drapeaux.push(`temoin-regle-sans-pokedex:${regle}`);
+    drapeaux.push(pleine ? 'temoin-illustration-pleine-sans-pokedex' : `temoin-regle-sans-pokedex:${regle}`);
     if (aUnJumeauDansLeSet(produit, cleDuTemoin(nom), np)) drapeaux.push('jumeau-dans-le-set');
     return null;
 }
@@ -469,6 +477,8 @@ function motifDeNomTraduit(lu, produit, np, drapeaux = []) {
         if (p) { drapeaux.push(`nom-ja-par-table-d-un-autre-set:${p.carteId}`); return null; }
     }
     const il = motifIllustrationRelue(lu, produit, drapeaux); if (il !== undefined) return il;   // (08/11) B : Dresseur / Énergie des lignes fermées, illustration relue par le coordinateur
+    // (08/11) illustration pleine sans Pokédex : pour les deux produits de la liste fermée SEULEMENT, évaluée avant les refus liés au nom (Pokédex non résolu, possessif, nom qualifié)
+    if (illustrationPleineListee(lu, produit) && nomCarte) { const ip = motifSansPokedex(lu, produit, np, nom, nomCarte, drapeaux); if (ip !== undefined) return ip; }
     const sansTemoin = tableUtilisable ? 'table-ja-insuffisante' : 'nom-traduit-sans-temoin';
     // sinon seul un Pokémon a de quoi témoigner : un Dresseur ou une Énergie au nom traduit n'a ni Pokédex ni PV
     if (!nom || (produit?.categorie != null && produit.categorie !== 'pokemon')) return sansTemoin;
@@ -976,4 +986,4 @@ function trousDuManifeste({ trous, recus, famille }) {
 }
 
 module.exports = { cleAliasPour, POSITIONS_RONDES, CODES_IMPRIMES_ADMIS, CODES_SANS_TOTAL, sansTotalAdmis, SOURCE, LOT, SRC, LANGUE_PREUVE, EDITIONS_LOCALES, REGLES, REGLE_MEME_DESSIN, LANGUES_NON_LATINES, MOYENS_DE_LECTURE, MOYENS_DE_LANGUE, SEUIL_PLANCHER, SCORE_PLANCHER, VIDE_PLANCHER, lienAvecLEntree, evaluerRemplacementMemeDessin, langueDuProduit, formeEntree, lireManifeste, lireValidations, lireIllustrations, rapprocher, evaluerPreuveLue, evaluerDeuxSources, evaluerEntree,
-    verifierCache, setAdmisPourPosition, preuvesDe, motifDeNom, motifDeNomTraduit, REGLES_SANS_POKEDEX, NOMS_LATINS_IMPRIMES, NOMS_ID_IMPRIMES_IDENTIQUES, motifNomLuHorsLangue, motifNomLuIdentiqueProduit, REGLES_NOM_TRADUIT_DRESSEUR, construireTableJaCroisee, preuveParTableCroisee, porteUnTemoinTraduit, CHAMPS_TEMOIN_TRADUIT, LANGUES_A_NOM_TRADUIT, TAMPONS_ATTENDUS, tamponAttendu, cleFiche, grouperUnites, MOTIFS_DE_TROU, motifDeTrou, trousDuManifeste, sha256De, racineDe };
+    verifierCache, setAdmisPourPosition, preuvesDe, motifDeNom, motifDeNomTraduit, REGLES_SANS_POKEDEX, ILLUSTRATIONS_PLEINES_SANS_POKEDEX, NOMS_LATINS_IMPRIMES, NOMS_ID_IMPRIMES_IDENTIQUES, motifNomLuHorsLangue, motifNomLuIdentiqueProduit, REGLES_NOM_TRADUIT_DRESSEUR, construireTableJaCroisee, preuveParTableCroisee, porteUnTemoinTraduit, CHAMPS_TEMOIN_TRADUIT, LANGUES_A_NOM_TRADUIT, TAMPONS_ATTENDUS, tamponAttendu, cleFiche, grouperUnites, MOTIFS_DE_TROU, motifDeTrou, trousDuManifeste, sha256De, racineDe };
