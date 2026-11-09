@@ -1430,6 +1430,24 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.ok(!/nom-lu-hors-langue/.test(pm()), 'POKEMON MACHINE du produit 549156 : exempté');
         assert.match(pm({ idProduct: 549157 }), /nom-lu-hors-langue/, 'un autre produit : refus');
     });
+    await test('A : series SP japonaises (09/11) : crochet de lecture du nomJa, LV.X, marques G et SP ; refus tenus', () => {
+        const nomOk = (nom, nomJa, nomEn, o = {}) => !/nom-/.test(mt(trad({ nom, dex: null, pv: null, codeSet: 'svAL', ...o }), ptrad({ nomJa, nomEn, categorie: 'dresseur' })));
+        const motif = (nom, nomJa, nomEn) => mt(trad({ nom, dex: null, pv: null, codeSet: 'svAL' }), ptrad({ nomJa, nomEn, categorie: 'dresseur' }));
+        assert.ok(nomOk('ハッサム四', 'ハッサム四[してんのう]', 'Scizor 4'), 'annotation entre crochets de la base retiree');
+        assert.ok(nomOk('エルレイド四 LV.X', 'エルレイド四[してんのう]', 'Gallade 4 LV.X'));
+        assert.ok(nomOk('リザードンG', 'リザードンG[ギンガ]', 'Charizard G'));
+        assert.ok(nomOk('リザードンG LV.X', 'リザードンG[ギンガ]', 'Charizard G LV.X'));
+        assert.ok(nomOk('ディアルガ LV.X', 'ディアルガ', 'Dialga LV.X'));
+        assert.ok(nomOk('SPエネルギー', 'SPエネルギー', 'SP Energy'));
+        assert.ok(nomOk('ギンガ団の発明G-105 ポケターン', 'ギンガ団の発明G-105 ポケターン', 'Galactic Invention G-105 Poketurn'));
+        assert.strictEqual(motif('ハッサム', 'ハッサム四[してんのう]', 'Scizor 4'), 'nom-different');
+        assert.strictEqual(motif('ヒートロトム四', 'ハッサム四[してんのう]', 'Scizor 4'), 'nom-different');
+        assert.ok(/nom-/.test(motif('ハッサム四[してんのう]', 'ハッサム四[してんのう]', 'Scizor 4')), 'crochet dans lu.nom : refuse');
+        assert.strictEqual(motif('ナエトル LV.11', 'ナエトル', 'Turtwig'), 'nom-lu-hors-langue');
+        assert.strictEqual(motif('ディアルガ LV.X', 'ディアルガ', 'Dialga'), 'nom-different', 'LV.X ignore seulement si le nom anglais le porte');
+        assert.strictEqual(motif('Gardevoir', 'サーナイト', 'Gardevoir'), 'nom-lu-hors-langue');
+        assert.strictEqual(motif('SPIDER', 'サーナイト', 'Gardevoir'), 'nom-lu-hors-langue');
+    });
     await test('A : id (latin) — un Dresseur ou une Énergie dont lu.nom est identique au nom du produit est refusé nom-lu-identique-produit ; un Pokémon reste jugé par la règle existante', () => {
         assert.ok(Object.isFrozen(PV.NOMS_ID_IMPRIMES_IDENTIQUES) && Array.isArray(PV.NOMS_ID_IMPRIMES_IDENTIQUES), 'liste exportée et gelée');
         const id = (nom, o = {}) => trad({ langue: 'id', nom, dex: null, pv: null, codeSet: 'SV-P/ID', ...o });
