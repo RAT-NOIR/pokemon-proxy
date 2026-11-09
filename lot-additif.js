@@ -44,6 +44,7 @@ const GS = require('./collecte-cartes/garde-site-lu');   // la liste de ce que l
 // ➕ 2026-10-19 : la garde rejoue aussi le CONTRAT DE L'API (collecte-cartes/garde-contrat-api.js : sa chaîne importée, jamais recopiée). Active sur la base `cartes` ;
 // sur `test_scratch` seulement avec `--contrat-api` (futur banc), sinon inerte et dite « non vérifiée ».
 const GC = require('./collecte-cartes/garde-contrat-api');
+const GA = require('./collecte-cartes/garde-ambiguite-site');   // documentAmbigu du site rejoué sur les sets touchés (incident du 2026-11-09)
 const { sansGardeLignes, installerGardeLignes } = require('./collecte-cartes/lignes-detachees');
 
 const GARDEES = ['cartes', 'cartes_produits', 'sets'];
@@ -204,6 +205,12 @@ function journaliser(t, dossier, combien, sortie) {
         try { api = await GC.chargerApi(); } catch (e) { console.error(`❌ ${e.message}. Rien n'a été sauvegardé ni écrit.`); process.exit(6); }
         console.log('   0 bis. contrat API : chaîne de l\'API importée (projections, décision, règle du site embarquée, validation d\'entrée)');
     } else console.log('   0 bis. contrat API : non vérifié (base de banc)');
+    // 0 bis bis. LA RÈGLE `documentAmbigu` DU SITE, importée AVANT la sauvegarde : une règle absente ou qui ne s'importe pas refuse (code 6), rien n'est sauvegardé ni écrit.
+    let regleAmbiguite = null;
+    if (CONTRAT_ACTIF) {
+        try { regleAmbiguite = await GA.chargerRegleAmbiguite(); } catch (e) { console.error(`❌ ${e.message}. Rien n'a été sauvegardé ni écrit.`); process.exit(6); }
+        console.log('   0 bis bis. ambiguïté du site : règles du site importées (fichesDuDocument, documentAmbigu, setParImpression, impressions et annexes du set)');
+    } else console.log('   0 bis bis. ambiguïté du site : non vérifiée (base de banc)');
     // 0 ter. CE QUE LE SITE LIT, AVANT la sauvegarde (tour de correction 1, 2026-10-24) : SITE_LIT (garde-lot.js) décide quels sets un lot fait revalider ; elle est confrontée au gabarit de lecture du site IMPORTÉ
     // (lib/lireDonnee.ts : SPEC_CARTE, SPEC_PRODUIT, SPEC_SET). Un champ lu par le site et absent de SITE_LIT, un site introuvable, un import qui lève : refus (code 6), rien n'est sauvegardé ni écrit.
     if (BASE === 'cartes') {
@@ -256,7 +263,15 @@ function journaliser(t, dossier, combien, sortie) {
         for (const p of contrat.persistants.slice(0, 6)) console.log(`      persistant (déjà avant, ne bloque pas) : ${p.idProduct} — ${p.motif}`);
         if (contrat.persistants.length > 6) console.log(`      … (+${contrat.persistants.length - 6} persistants)`);
     }
-    const fautivesContrat = contrat ? contrat.fautives : [];
+    // 5 ter. L'AMBIGUÏTÉ DU SITE (2026-11-09) : `documentAmbigu` rejoué sur les sets touchés, avant (sauvegarde) et après (même lecture). Un document qui devient ambigu, ou un set qui bascule de « par impression » à
+    // « par document », arrête le lot exactement comme un refus du contrat (restauration entrée par entrée) ; un document déjà ambigu avant le lot ne bloque pas, il s'imprime.
+    const ambiguite = regleAmbiguite ? GA.jouerAmbiguite({ regle: regleAmbiguite, avant: docsAvant, apres: apres.docs, touchesFn: GC.setsTouchesContrat }) : null;
+    console.log(`   5 ter. ${ambiguite ? ambiguite.ligne : 'ambiguïté du site : non vérifiée (base de banc)'}`);
+    if (ambiguite) {
+        for (const p of ambiguite.persistants.slice(0, 6)) console.log(`      persistant (déjà ambigu avant, ne bloque pas) : carte ${p.carteId} dans ${p.set}`);
+        if (ambiguite.persistants.length > 6) console.log(`      … (+${ambiguite.persistants.length - 6} persistants)`);
+    }
+    const fautivesContrat = [...(contrat ? contrat.fautives : []), ...(ambiguite ? ambiguite.fautives : [])];   // ambiguïté du site : même chemin d'arrêt et de restauration que le contrat
     const legacy = comptes.map((x, i) => `${x.libelle} ${comptesAvant[i]} → ${comptesApres[i]}`).join(' ; ');
 
     if (!cmp.nonAutorisees.length && !fautivesContrat.length) {
@@ -291,7 +306,7 @@ function journaliser(t, dossier, combien, sortie) {
 
     // ── ARRÊT : restauration depuis la sauvegarde
     const fautives = [...cmp.nonAutorisees.map(decrire), ...fautivesContrat];
-    console.log(`\n   🔴 ARRÊT : ${[cmp.nonAutorisees.length ? `${cmp.nonAutorisees.length} baisse(s) NON ANNONCÉE(S)` : '', fautivesContrat.length ? `${fautivesContrat.length} refus du CONTRAT DE L'API` : ''].filter(Boolean).join(' et ')} :\n      ${fautives.join('\n      ')}\n   6. restauration depuis ${dossier}`);
+    console.log(`\n   🔴 ARRÊT : ${[cmp.nonAutorisees.length ? `${cmp.nonAutorisees.length} baisse(s) NON ANNONCÉE(S)` : '', fautivesContrat.length ? `${fautivesContrat.length} refus du CONTRAT DE L'API ou de l'AMBIGUÏTÉ DU SITE` : ''].filter(Boolean).join(' et ')} :\n      ${fautives.join('\n      ')}\n   6. restauration depuis ${dossier}`);
     // une baisse d'images (compteur) est une affaire de SET : le tableau `images` des cartes de ce set est remis (le champ du worker n'y est pas gardé).
     // (tour 2, D1) un refus du contrat se restaure ENTRÉE PAR ENTRÉE (set + cleR2), sur TOUTES les cartes : chaque entrée d'`images` que le LOT a modifiée revient à sa version sauvegardée, ce que le WORKER a écrit pendant la fenêtre
     // reste (les sets de `collecte_images_etat`, la même règle que la garde des compteurs), et ce qui ne se tranche pas (deux entrées de même clé…) est imprimé et fait sortir en code 4. Remettre le tableau des seules cartes
@@ -367,7 +382,8 @@ function journaliser(t, dossier, combien, sortie) {
     // la relecture rejoue aussi le contrat (sur la même lecture) : un refus nouveau qui reste est une restauration incomplète
     const contratRelu = api ? await jouerContrat(api, docsAvant, apresRelu.docs) : null;
     await fermer();
-    const resteContrat = contratRelu ? contratRelu.fautives : [];
+    const ambiguiteRelue = regleAmbiguite ? GA.jouerAmbiguite({ regle: regleAmbiguite, avant: docsAvant, apres: apresRelu.docs, touchesFn: GC.setsTouchesContrat }) : null;
+    const resteContrat = [...(contratRelu ? contratRelu.fautives : []), ...(ambiguiteRelue ? ambiguiteRelue.fautives : [])];
     // un indécidable n'est jamais « restauré » en silence : le lot sort en code 4
     // (tour 3, E1) … et un produit servi dans la SAUVEGARDE et sans entrée dans l'état relu n'a pas été restauré (la perte d'un visuel n'est une « information » qu'avant l'écriture et sans arrêt)
     const perdus = contratRelu?.v ? GC.produitsPerdus(contratRelu.v) : [];
