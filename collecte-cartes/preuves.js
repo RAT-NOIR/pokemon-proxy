@@ -273,7 +273,7 @@ const motifDeNom = (lu, produit, langueProduit, drapeaux = []) => {
     // ➕ 2026-11-03 : les cartes INDONÉSIENNES impriment le nom ANGLAIS des Pokémon (les Dresseurs sont traduits, « Tukar Pokémon », §75) : un nom lu en indonésien IDENTIQUE au nom anglais du produit témoigne
     // seul, exactement comme l'anglais (même fonction). Thaï, chinois, japonais : autre écriture, jamais ouvert ; un nom indonésien DIFFÉRENT suit la règle traduite ci-dessous (témoins ou refus).
     if (lu.langue === 'id' && langueProduit === 'id' && memeNomQueLeProduit(lu.nom, produit?.nomEn)) return null;
-    if (LANGUES_A_NOM_TRADUIT.includes(lu.langue) && lu.langue === langueProduit && porteUnTemoinTraduit(lu)) return motifDeNomTraduit(lu, produit, numeroDuProduit(produit), drapeaux);
+    if (LANGUES_A_NOM_TRADUIT.includes(lu.langue) && lu.langue === langueProduit && (porteUnTemoinTraduit(lu) || totalZhSansCode(lu, produit))) return motifDeNomTraduit(lu, produit, numeroDuProduit(produit), drapeaux);
     return 'nom-langue-non-anglaise';
 };
 // ── Le nom TRADUIT (2026-11-02) : chinois, indonésien, thaï, et japonais sans `nomJa` (fiche simple, aucune carte) ─────────────────────────────────────────────
@@ -331,9 +331,41 @@ const CODES_IMPRIMES_ADMIS = Object.freeze({
     'T-P': Object.freeze({ slugSet: 'T-Promos', imprimes: Object.freeze([Object.freeze({ code: 'T', numeros: Object.freeze(['004']) })]), preuve: 'cache d\'audit 07/11 : 571134 Slowpoke [Pound | Lazy Headbutt] n°004 de T-Promos = la carte 004/T' })
 });
 /** Le code du set lu, confronté au slug Cardmarket (`…-svAL005`, `…-MA5-012`) et à la ligne du produit (`codeSet`, codes_set). @returns {string|null} le motif de refus, null si concordant. */
+/**
+ * (09/11, DÉCISION DU PROPRIÉTAIRE) Scans zh-hans à 733 px dont le code du set est illisible (lu.codeSet reste null : on ne l'écrit JAMAIS depuis l'adresse de l'image, le slug ou le nom de fichier, qui ne sont que des indices).
+ * Le TOTAL imprimé lu sur la carte, exact, désigne alors le set s'il n'appartient qu'à UN set de la table, avec relecture d'illustration du coordinateur (`produit.illustrationsRelues`, mêmes exigences que la voie B).
+ * Table FERMÉE codeSet (minuscules) -> { slugSet exact, totaux admis }. PREUVE, mesurée le 2026-11-09 :
+ *  · base `cartes` : sets.totalImprime est null sur les 98 sets zh-hans, une seule impression zh-hans porte un total : la base ne fournit AUCUN total imprimé ; les totaux viennent des scans lus (90 manifestes
+ *    couverture\S8\PHASE4, 1 962 entrées zh-hans avec total, produits résolus par numeros_cartes + codes_set).
+ *  · 086 : Black Bolt (CSV10.5C, 174 produits) ET White Flare (CSV10.6C, 174 produits) impriment TOUS DEUX /086 → le total ne les sépare pas : les deux sets figurent avec `totaux: []` (jamais admis).
+ *  · 033 : CSVM1C decks A et B (57 + 34 scans) partagent 033 et les mêmes numéros → ambigu, absent ; seul 028 (deck C) est unique.
+ *  · CSVM2 : 031 (deck A), 034 (deck B), 032 (deck C), chacun propre à ce set. Aucun de ces quatre totaux n'est observé sur un autre set zh-hans (limite : seuls les sets déjà scannés ont un total observé).
+ */
+const TOTAUX_ZH_SANS_CODE = Object.freeze({
+    'csv10.5c': Object.freeze({ slugSet: 'Black-Bolt-S-CH', totaux: Object.freeze([]) }),
+    'csv10.6c': Object.freeze({ slugSet: 'White-Flare-S-CH', totaux: Object.freeze([]) }),
+    csvm1c: Object.freeze({ slugSet: 'Master-Strategy-Deck-Building-Sets', totaux: Object.freeze(['028']) }),
+    csvm2: Object.freeze({ slugSet: 'Master-Strategy-Deck-Building-Sets-Vol-2', totaux: Object.freeze(['031', '032', '034']) })
+});
+/** Ouvre l'exception SEULEMENT si : code lu vide, produit ET lecture zh-hans, codeSet + slugSet exacts de la table, total lu exact admis pour CE set, relecture d'illustration valide. @returns {{code: string}|null} */
+function totalZhSansCode(lu, produit) {
+    if (norm(lu?.codeSet)) return null;   // un code lu, même faux, suit la comparaison ordinaire
+    if (produit?.tirage !== 'zh-hans' || lu?.langue !== 'zh-hans') return null;
+    const code = norm(produit?.codeSet);
+    if (!code || !Object.hasOwn(TOTAUX_ZH_SANS_CODE, code)) return null;
+    const set = TOTAUX_ZH_SANS_CODE[code];
+    if (produit.slugSet !== set.slugSet) return null;
+    if (lu?.total == null || !set.totaux.includes(String(lu.total).trim())) return null;
+    if (!relecturesDuProduit(produit).some(r => relectureValide(r, produit))) return null;
+    return { code: produit.codeSet };
+}
 function motifDeCode(lu, produit, np, drapeaux = []) {
     const code = norm(lu.codeSet);
-    if (!code) return 'code-set-non-lu';
+    if (!code) {
+        const t = totalZhSansCode(lu, produit);
+        if (t) { drapeaux.push(`total-zh-sans-code:${t.code}`); return null; }
+        return 'code-set-non-lu';
+    }
     if (demiListe(lu, produit, np)) return null;   // (03/11) demi-liste : le code lu « AC3a » EST le code du produit « a229 » — les trois témoins concordent (table fermée, lettre, slug)
     const ligne = norm(produit?.codeSet);
     const n = String(np).trim().toLowerCase().replace(/^0+(?=\d)/, '');
@@ -471,18 +503,21 @@ function motifSansPokedex(lu, produit, np, nom, nomCarte, drapeaux) {
 // SV-P/CS (6 Dresseurs ; code imprimé « SV-P », alias SV-P/CS→SV-P déjà en place), CSVE2C (10), CSVH1C (26), CSVH2C (12), CSVH3C (29), CSVH5C (1) ; le code imprimé (csvE2C…) est le code de la ligne à la casse près (norm), aucun alias à ajouter.
 // Aucune autre ligne zh (CSVH4C, S-P/CS, SM-P/CS, M-P/CS…) : non mesurée, la voie y reste fermée. Nom lu en han seulement (ECRITURES_PAR_LANGUE['zh-hans'] : le kana et le thaï n'y passent pas).
 const REGLES_NOM_TRADUIT_DRESSEUR = Object.freeze(['M-P/ID', 'SV-P/ID', 'S-P/ID', 'SM-P/ID', 'M-P/TH', 'SV-P/TH', 'S-P/TH', 'SV-P/CS', 'CSVE2C', 'CSVH1C', 'CSVH2C', 'CSVH3C', 'CSVH5C', 'CSVM1C', 'CSVM2', 'CSVH6C']);   // (09/11) + Master Strategy (CSVM1C, CSVM2) et Happy Set 6 (CSVH6C) : `codes_set.codeSet` lus en base sur numeros_cartes, mêmes règles que les six lignes zh d'avant
+/** Les relectures d'illustration du coordinateur propres à CE produit (donnée passée par `produit.illustrationsRelues`, jamais le manifeste). */
+const relecturesDuProduit = produit => (Array.isArray(produit?.illustrationsRelues) ? produit.illustrationsRelues.filter(i => objet(i) && i.idProduct === produit.idProduct) : []);
+/** Une relecture valide : par le coordinateur, datée, au MÊME sha256 que l'image jugée, référençant un visuel de CETTE carte en base. Source unique des deux voies (illustration relue, total zh sans code). */
+const relectureValide = (r, produit) => r.par === 'coordinateur' && typeof r.le === 'string' && /^\d{4}-\d{2}-\d{2}/.test(r.le) && !Number.isNaN(Date.parse(r.le))
+    && texte(produit.sha256Image) && r.sha256 === produit.sha256Image
+    && texte(r.reference) && Array.isArray(produit.cleR2Carte) && produit.cleR2Carte.includes(r.reference);
 function motifIllustrationRelue(lu, produit, drapeaux) {
     const ligne = REGLES_NOM_TRADUIT_DRESSEUR.find(l => texte(produit?.codeSet) && norm(l) === norm(produit.codeSet));
     // (tour de correction 1) la relecture vit HORS du manifeste (VALIDATIONS\illustrations-<FAMILLE>.json, donnée passée par `produit.illustrationsRelues`) : un `lu.illustrationRelue` du manifeste est IGNORÉ
-    const duProduit = Array.isArray(produit?.illustrationsRelues) ? produit.illustrationsRelues.filter(i => objet(i) && i.idProduct === produit.idProduct) : [];
+    const duProduit = relecturesDuProduit(produit);
     if (!ligne || !['dresseur', 'energie'].includes(produit?.categorie) || !duProduit.length) return undefined;
     if (!texte(lu.nom)) return 'nom-different';
     const hors = motifNomLuHorsLangue(lu, produit); if (hors) return hors;
     if (lu.langue !== langueDuProduit({ idExpansion: produit.idExpansion, tirage: produit.tirage, langueLue: lu.langue })) return 'langue-differente';
-    const bonne = r => r.par === 'coordinateur' && typeof r.le === 'string' && /^\d{4}-\d{2}-\d{2}/.test(r.le) && !Number.isNaN(Date.parse(r.le))
-        && texte(produit.sha256Image) && r.sha256 === produit.sha256Image
-        && texte(r.reference) && Array.isArray(produit.cleR2Carte) && produit.cleR2Carte.includes(r.reference);
-    if (!duProduit.some(bonne)) return 'illustration-non-relue';
+    if (!duProduit.some(r => relectureValide(r, produit))) return 'illustration-non-relue';
     drapeaux.push(`temoin-illustration-relue:${ligne}`);
     return null;
 }
@@ -1023,5 +1058,5 @@ function trousDuManifeste({ trous, recus, famille }) {
     return { trous: gardes, ecartes };
 }
 
-module.exports = { cleAliasPour, POSITIONS_RONDES, CODES_IMPRIMES_ADMIS, CODES_SANS_TOTAL, sansTotalAdmis, SOURCE, LOT, SRC, LANGUE_PREUVE, EDITIONS_LOCALES, REGLES, REGLE_MEME_DESSIN, LANGUES_NON_LATINES, MOYENS_DE_LECTURE, MOYENS_DE_LANGUE, SEUIL_PLANCHER, SCORE_PLANCHER, VIDE_PLANCHER, lienAvecLEntree, evaluerRemplacementMemeDessin, langueDuProduit, formeEntree, lireManifeste, lireValidations, lireIllustrations, rapprocher, evaluerPreuveLue, evaluerDeuxSources, evaluerEntree,
+module.exports = { cleAliasPour, TOTAUX_ZH_SANS_CODE, totalZhSansCode,POSITIONS_RONDES, CODES_IMPRIMES_ADMIS, CODES_SANS_TOTAL, sansTotalAdmis, SOURCE, LOT, SRC, LANGUE_PREUVE, EDITIONS_LOCALES, REGLES, REGLE_MEME_DESSIN, LANGUES_NON_LATINES, MOYENS_DE_LECTURE, MOYENS_DE_LANGUE, SEUIL_PLANCHER, SCORE_PLANCHER, VIDE_PLANCHER, lienAvecLEntree, evaluerRemplacementMemeDessin, langueDuProduit, formeEntree, lireManifeste, lireValidations, lireIllustrations, rapprocher, evaluerPreuveLue, evaluerDeuxSources, evaluerEntree,
     verifierCache, setAdmisPourPosition, preuvesDe, motifDeNom, motifDeNomTraduit, REGLES_SANS_POKEDEX, ILLUSTRATIONS_PLEINES_SANS_POKEDEX, NOMS_LATINS_IMPRIMES, NOMS_ID_IMPRIMES_IDENTIQUES, motifNomLuHorsLangue, motifNomLuIdentiqueProduit, REGLES_NOM_TRADUIT_DRESSEUR, construireTableJaCroisee, preuveParTableCroisee, porteUnTemoinTraduit, CHAMPS_TEMOIN_TRADUIT, LANGUES_A_NOM_TRADUIT, TAMPONS_ATTENDUS, tamponAttendu, cleFiche, grouperUnites, MOTIFS_DE_TROU, motifDeTrou, trousDuManifeste, sha256De, racineDe };
