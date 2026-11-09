@@ -63,6 +63,16 @@ const DECISIONS = {
     // lot jumelles-0311 (chasseur « fiches jumelles orphelines », 2026-11-03) : fiches du site (annexes « Yellow A Alternate » comprises, ex. Évoli SUM n°101a) SANS produit rattaché alors que le catalogue Cardmarket
     // a un produit non joint au même numéro et au même nom ; la carte déclare elle-même l'impression de ce numéro dans l'expansion du set. planifier() rejoue chaque preuve (refus nommé sinon).
     '2026-11-03-jumelles-0311': require('./collecte-cartes/decisions-jumelles-0311-2026-11-03.json'),
+    // lot nettoyage (2026-11-09) : trois V2 de stades de Storm Emeralda (m6), produits Cardmarket n°072/074/076 sans ligne. Deux sources lues par la porte le 2026-11-09 (Serebii et TCG Watchtower)
+    // donnent la même paire de numéros par stade (71-72, 73-74, 75-76) ; le nom n'est pas un témoin ici (Lava Tube chez nous, Pyroduct / Lava Lake ailleurs) : prouver() peut refuser, le refus se rapporte, aucune garde assouplie.
+    '2026-11-09-m6': [
+        { idProduct: 900083, carteId: 359046, code: 'm6', idExpansion: 6636, slugSet: 'Storm-Emeralda', voie: 'impression-numero', tirage: 'jp', expansionImpression: 'Storm Emeralda', numeroFiche: '072', ajoutSet: false,
+            preuve: { sources: ['Cardmarket V2 n°072', 'serebii.net/card/stormemeralda 72/76 Legendary Trench', 'tcgwatchtower m6 072 Legendary Ocean Trench'], references: ['https://serebii.net/card/stormemeralda', 'https://tcgwatchtower.com/pokemon/sets/mega-evolution-jp/storm-emeralda/cards'] } },
+        { idProduct: 900085, carteId: 358151, code: 'm6', idExpansion: 6636, slugSet: 'Storm-Emeralda', voie: 'impression-numero', tirage: 'jp', expansionImpression: 'Storm Emeralda', numeroFiche: '074', ajoutSet: false,
+            preuve: { sources: ['Cardmarket V2 n°074', 'serebii 74/76 Legendary Summit', 'tcgwatchtower m6 074 Legendary Summit'], references: ['https://serebii.net/card/stormemeralda', 'https://tcgwatchtower.com/pokemon/sets/mega-evolution-jp/storm-emeralda/cards'] } },
+        { idProduct: 900089, carteId: 359375, code: 'm6', idExpansion: 6636, slugSet: 'Storm-Emeralda', voie: 'impression-numero', tirage: 'jp', expansionImpression: 'Storm Emeralda', numeroFiche: '076', ajoutSet: false,
+            preuve: { sources: ['Cardmarket V2 n°076', 'serebii 76/76 Legendary Pyroduct', 'tcgwatchtower m6 076 Legendary Lava Lake'], references: ['https://serebii.net/card/stormemeralda', 'https://tcgwatchtower.com/pokemon/sets/mega-evolution-jp/storm-emeralda/cards'] } },
+    ],
 };
 
 /** lecture : { cartes, produits: Map(idExpansion → produits), existants: Map(_id → ligne), lignesDuProduit?: Map(idProduct → [_id]), etats?: Map(slugSet → collecte_etat) } */
@@ -265,7 +275,7 @@ async function ouvrirLecture() {
     return { cartes: { db: cartes }, prod: { db: prod }, fermer: async () => { await Promise.allSettled([a.close(), b.close()]); } };
 }
 
-module.exports = { planifier, verifierAttendu, ecrireFiches, appartenances, relire, executer, DECISIONS, ROUTE };
+module.exports = { planifier, verifierAttendu, ecrireFiches, appartenances, relire, executer, ouvrirLecture, DECISIONS, ROUTE };
 
 if (require.main === module) {
     require('dotenv').config({ quiet: true });
