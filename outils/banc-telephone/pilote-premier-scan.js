@@ -11,6 +11,8 @@ const http = require('http'), fs = require('fs'), path = require('path'), cp = r
 const arg = (n, d) => { const a = process.argv.find(x => x.startsWith(`--${n}=`)); return a ? a.slice(n.length + 3) : d; };
 const ETIQ = arg('etiquette', 'mesure'), DOSSIER = arg('dossier', 'banc-telephone'), CPU = Number(arg('cpu', '1')), DEBIT = Number(arg('debit', '0')), PROFIL = arg('profil', ''), SCANS = Number(arg('scans', '2')),
     OVERRIDE = arg('override', ''), QUERY = arg('query', ''), VECS = arg('vecs', ''), JSON_OUT = arg('json', ''), UA = arg('ua', ''), DELAI = Number(arg('delai', '600'));
+// --ref sans --vecs : aucune empreinte à comparer, donc aucune égalité imposée — le refus est IMMÉDIAT (code 3), avant tout travail ; une garde ne doit jamais échouer vers le passant
+if (arg('ref', '') && !arg('vecs', '')) { console.log('ERREUR : --ref exige --vecs (sans fichier d\'empreintes à écrire, l\'égalité au bit ne serait jamais comparée)'); process.exit(3); }
 const MODELE = arg('modele', 'C:\\Users\\Yung\\rat-market-travail\\api\\etude-sans-service\\onnx\\p8000-poids8s.onnx');
 const racine = path.join(__dirname, '..', '..', 'v2', DOSSIER);
 const express = require('express');
@@ -108,7 +110,7 @@ const attente = ms => new Promise(r => setTimeout(r, ms));
             if (REF) { const a = fs.readFileSync(REF), b = fs.readFileSync(VECS); const egal = a.length === b.length && a.length > 0 && Buffer.compare(a, b) === 0; console.log(egal ? `EGALITE AU BIT : ${b.length} octets identiques à ${path.basename(REF)}` : `DIFFERENT de ${path.basename(REF)} (${a.length} / ${b.length} octets)`); if (!egal) sortie = 3; }
         }
         const d1 = mesures[0] || null;
-        const resume = { etiquette: ETIQ, dossier: DOSSIER, cpu: CPU, debitMoS: DEBIT || null, profilConserve: Boolean(PROFIL), ua: UA || 'chrome-bureau', info, override: OVERRIDE || null, tPageOuverteMs: tPageOuverte, tOuvertureAPretMs: aPrep ? attendPret : null, clic1Ms, scansSuivantsMs: scans,
+        const resume = { etiquette: ETIQ, dossier: DOSSIER, cpu: CPU, debitMoS: DEBIT || null, debitApiMoS: DEBIT_API || null, debitModeleMoS: DEBIT_MODELE || null, coeursImposes: Number(arg('coeurs', '0')) || null, profilConserve: Boolean(PROFIL), ua: UA || 'chrome-bureau', info, override: OVERRIDE || null, tPageOuverteMs: tPageOuverte, tOuvertureAPretMs: aPrep ? attendPret : null, clic1Ms, scansSuivantsMs: scans,
             prep: prepFin, prepAvantClic: prep, depot1: d1 && d1.mesure ? { moteur: d1.mesure.moteur, verdict: d1.mesure.verdict, cosMin: d1.mesure.cosMin, filsDemandes: d1.mesure.filsDemandes, fils: d1.mesure.fils, creationSessionMs: d1.mesure.creationSessionMs, premiereMs: d1.mesure.premiereMs, medianeMs: d1.mesure.medianeMs, pretraitementMedianeMs: d1.mesure.pretraitementMedianeMs, premier: d1.mesure.premierScan || null, suite: d1.mesure.scansSuivants || null, entree: d1.mesure.entree && { chemin: d1.mesure.entree.chemin }, erreur: d1.mesure.erreur } : null,
             telechargementMs: d1 ? d1.telechargementMs : null, verifShaMs: d1 ? d1.verifShaMs : null, deposRefuses: deposes.filter(d => d.refuse), ecran: { mot: ecran.mot, detail: ecran.detail, l1: ecran.l1 } };
         if (MEM) {

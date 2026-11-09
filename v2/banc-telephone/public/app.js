@@ -9,7 +9,7 @@ import { cosinus, course, sonderAdaptateur, creerSessionGpu } from './moteur-ort
 import { jugerLot, jugerMesure, gardeExtension, texteGarde, ecartChaine, moteurRealise, texteErreur, classerBlocage, hoteFinal, detecterIOS, choisirMoteur, webgpuForce, optionsSession, statsPixels, assemblerDiagnostic, texteDiagnostic, TEXTE_WEBGPU_IOS, libererOctets,
     resumerEntree, comptePil, resumerTemoin, texteEntree, avisEntree, etatOrientation, texteOrientation } from './verdict.mjs';
 import { decoder, reduire640, VERSION_DECODEUR } from './decodeur.mjs';
-import { chargerOctets, peutPreparerSeul, retirerEntrees } from './preparation.mjs';
+import { chargerOctets, peutPreparerSeul, cleMoteur, verifierMoteur, apresEchecDeSession } from './preparation.mjs';
 // LOT « PREMIER SCAN » : la page PRÉPARE seule, dès son ouverture (modèle + moteur .wasm demandés en parallèle, rangés dans Cache Storage, session créée en arrière-plan) ; un clic avant « prêt » ATTEND et le dit.
 // Cause (RAPPORT-PREMIER-SCAN.md) : ÉTABLIE sur PC sous un débit imposé (création de session : 1,2 s en local, 12,6 à 16,4 s quand l'API sert à 1,2 puis 1 Mo/s) ; sur iPhone c'est une HYPOTHÈSE compatible avec les 15,5 s
 // relevées (dépôt du 2026-11-08 10:17 UTC, collection `banc_telephone` de `rm_essai` : creationSessionMs 15 536, telechargementMs 4 155), NON séparée de la compilation du .wasm. Le .wasm (14 Mo) est téléchargé par ORT
@@ -132,17 +132,11 @@ const phaseModele = phaseDe('modèle');
 // (d) un échec de session alors que les octets venaient du cache retire le moteur ET le modèle du cache (preparerWasm).
 async function chargerWasm(versionOrt) {
     const url = new URL('ort/ort-wasm-simd-threaded.wasm', import.meta.url).pathname;
-    PREP.cleWasm = `${url}?ort=${String(versionOrt || 'inconnue').replace(/[^\w.-]/g, '').slice(0, 20)}`;
-    const MAGIE = [0x00, 0x61, 0x73, 0x6d];
+    PREP.cleWasm = cleMoteur(url, versionOrt);                              // preparation.mjs : décision pure, testée par comportement et par mutation
     let encodage = null;
     const reseau = async () => { const rep = await fetch(url, { credentials: 'omit', cache: 'no-store' }); if (!rep.ok) throw new ErreurBanc(`telechargement-moteur:HTTP-${rep.status}`); encodage = rep.headers.get('content-encoding'); return rep; };
-    const verifier = async (o, { sha } = {}) => {
-        if (!(o.length > 8 && MAGIE.every((x, i) => o[i] === x))) return false;
-        if (!(self.crypto && crypto.subtle)) return true;                    // contexte non sécurisé : ni le cache ni le sha256 n'existent (comme pour le modèle)
-        if (typeof sha !== 'string' || !/^[0-9a-f]{64}$/.test(sha)) return false;      // le serveur DOIT publier le sha256 du fichier : sans lui, rien n'est vérifiable, et rien n'est cru
-        const h = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', o)), b => b.toString(16).padStart(2, '0')).join('');
-        return h === sha;
-    };
+    const sha256Hex = (self.crypto && crypto.subtle) ? async o => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', o)), b => b.toString(16).padStart(2, '0')).join('') : null;
+    const verifier = (o, { sha } = {}) => verifierMoteur(o, sha, { sha256Hex });
     const revalider = async ({ sha }) => { if (!sha) return 'inconnu'; const r = await fetch(url, { method: 'HEAD', credentials: 'omit', cache: 'no-store' }); if (!r.ok) return 'inconnu'; const e = r.headers.get('x-rm-sha256'); return e ? (e === sha ? 'valide' : 'change') : 'inconnu'; };
     const t = performance.now();
     const r = await chargerOctets({ cle: PREP.cleWasm, reseau, caches: cachesOuNul(), verifier, revalider, attendreEcriture: false, surProgres: progres('moteur'), surPhase: phaseDe('moteur') });
@@ -352,7 +346,7 @@ function preparerWasm() {
         echantillonnerTas();
         P.wasm = { source: wasm.source, cache: wasm.cache, ecriture: wasm.ecriture, octets: wasm.octets.length, ms: wasm.msTotal, transfert: wasm.transfert, corps: wasm.corps, encodage: wasm.encodage, finEcriture: wasm.finEcriture };
         P.modele = E.modeleCache;
-        ort.env.wasm.wasmBinary = wasm.octets;       // le moteur est fourni en octets : ORT ne le télécharge plus lui-même (c'était l'essentiel des ~15 s de « création »)
+        ort.env.wasm.wasmBinary = wasm.octets;       // le moteur est fourni en octets : ORT ne le télécharge plus lui-même (sur PC, sous un débit imposé à l'API, ce téléchargement faisait l'essentiel de la « création » ; sur iPhone c'est une HYPOTHÈSE, non séparée de la compilation : `creationSessionMs` et `wasmCompileMs` du dépôt trancheront)
         ort.env.wasm.numThreads = demande; ort.env.wasm.proxy = false;
         let modele = tampon;
         etape('creation-session-wasm'); PROG['modèle'] = ''; PROG['moteur'] = ''; PROG['session'] = 'création de la session WASM (compilation du moteur, graphe)'; majPrep();
@@ -361,7 +355,7 @@ function preparerWasm() {
         try { session = await ort.InferenceSession.create(modele, { executionProviders: ['wasm'], graphOptimizationLevel: 'all', ...E.session.options }); cree = true; }
         catch (e) {
             // un échec de session alors que les octets venaient du CACHE : le moteur et le modèle rangés sont suspects, ils sont retirés (le prochain essai repart du réseau) avant d'abandonner
-            if (wasm.source === 'cache' || (E.modeleCache && E.modeleCache.source === 'cache')) await retirerEntrees({ caches: cachesOuNul(), cles: [PREP.cleWasm, PREP.cleModele].filter(Boolean) });
+            await apresEchecDeSession({ caches: cachesOuNul(), sources: { wasm: wasm.source, modele: E.modeleCache && E.modeleCache.source }, cles: [PREP.cleWasm, PREP.cleModele].filter(Boolean) });
             throw e;
         }
         finally { P.wasmCompileMs = sonde.fin(); if (cree) libererOctets(modele); modele = null; try { ort.env.wasm.wasmBinary = undefined; } catch { /* sans effet */ } wasm.octets = null; }    // ORT a copié les octets dans son tas : la page ne garde plus rien du modèle ni du moteur (rendus AU SYSTÈME tout de suite)
@@ -413,7 +407,7 @@ function bilanPreparation({ attente, clicAResultat, scans, uaMo = null }) {
         telechargementModeleMs: nul(mo.telechargementMs), lectureCacheModeleMs: nul(mo.lectureCacheMs), verifShaMs: nul(mo.verifShaMs), chargementMoteurMs: nul(P.chargementMoteurMs), wasmMs: nul(w.ms), wasmOctets: w.octets || null,
         wasmCompileMs: nul(P.wasmCompileMs), creationSessionMs: nul(P.creationSessionMs), ouvertureAPretMs: nul(P.pretMs), attenteAvantScanMs: nul(attente), clicAPremierResultatMs: nul(clicAResultat),
         premierScanMs: nul(scans[0]), scanSuivantMedianeMs: nul(mediane(suite)), scanSuivantP95Ms: nul(p95(suite)), nScans: scans.length, filsSession: PREP.demande == null ? null : Number(PREP.demande),
-        stockagePersistant: typeof P.stockagePersistant === 'boolean' ? P.stockagePersistant : null, interrompueAvant: P.interrompueAvant === true,
+        stockagePersistant: typeof P.stockagePersistant === 'boolean' ? P.stockagePersistant : null, interrompueAvant: P.interrompueAvant === true, raison: P.raison || null,
         wasmTransfertOctets: w.transfert == null ? null : w.transfert, wasmCorpsOctets: w.corps == null ? null : w.corps, wasmEncodage: w.encodage || null,
         modeleOctets: mo.octets || null, modeleDebitMoS: typeof mo.debitMoS === 'number' ? arrondi(mo.debitMoS, 2) : null,
         memoireJsPicMo: typeof P.jsPicMo === 'number' ? arrondi(P.jsPicMo, 1) : null, memoireUaMo: nul(uaMo) };

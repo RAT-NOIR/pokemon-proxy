@@ -140,6 +140,49 @@ const egal = (a, b) => a && b && a.length === b.length && Buffer.compare(Buffer.
         H.v('1b. retirerEntrees ne lève jamais (cache absent ou open qui lève)', leve, false);
     }
 
+    // ═══ 1 ter. (tour 2, P3-1) les trois décisions de B1 sont des fonctions PURES, testées par leur comportement ; trois mutations les font échouer ═══
+    {
+        const os = require('os');
+        const sha256Hex = async o => require('crypto').createHash('sha256').update(Buffer.from(o)).digest('hex');
+        const wasm = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 1, 0, 0, 0, 9, 9, 9, 9]), SHA_OK = require('crypto').createHash('sha256').update(Buffer.from(wasm)).digest('hex');
+        // les verdicts de B1 pour un module `M` (le vrai, ou un mutant) : chacun doit être VRAI pour le vrai module
+        const verdictsB1 = async M => {
+            const v = [];
+            // (1) la clé suit la version d'ORT
+            v.push(M.cleMoteur('/m.wasm', '1.30.0') !== M.cleMoteur('/m.wasm', '1.31.0'));
+            v.push(/1\.30\.0/.test(M.cleMoteur('/m.wasm', '1.30.0')) && M.cleMoteur('/m.wasm', '1.30.0').startsWith('/m.wasm'));
+            v.push(/inconnue/.test(M.cleMoteur('/m.wasm', null)) && /^\/m\.wasm\?ort=[\w.-]*$/.test(M.cleMoteur('/m.wasm', '../../x y/z')));      // version absente : « inconnue » ; version étrange : nettoyée, jamais un second chemin
+            // (2) le sha du moteur est REJOUÉ : bon sha accepté ; mauvais, absent, mal formé, mauvaise magie refusés
+            v.push(await M.verifierMoteur(wasm, SHA_OK, { sha256Hex }) === true);
+            v.push(await M.verifierMoteur(wasm, 'f'.repeat(64), { sha256Hex }) === false);
+            v.push(await M.verifierMoteur(wasm, null, { sha256Hex }) === false && await M.verifierMoteur(wasm, 'xyz', { sha256Hex }) === false);
+            v.push(await M.verifierMoteur(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), SHA_OK, { sha256Hex }) === false && await M.verifierMoteur(new Uint8Array(3), SHA_OK, { sha256Hex }) === false);
+            v.push(await M.verifierMoteur(wasm, null, {}) === true);       // contexte non sécurisé : pas de sha256 possible, comme pour le modèle
+            // (3) un échec de session venu du cache retire modèle ET moteur ; rien ne bouge si tout venait du réseau
+            const cas = async (sources) => { const c = faussesCaches(); for (const k of ['/w', '/m', '/autre']) await P.chargerOctets({ cle: k, reseau: async () => reponse(octetsDe(500)), caches: c }); const r = await M.apresEchecDeSession({ caches: c, sources, cles: ['/w', '/m'] }); return { r, restent: [...c.magasins.get(P.NOM_CACHE).keys()].sort() }; };
+            const a = await cas({ wasm: 'cache', modele: 'reseau' }), b = await cas({ wasm: 'reseau', modele: 'cache' }), n = await cas({ wasm: 'reseau', modele: 'reseau' }), t = await cas({ wasm: 'cache', modele: 'cache' });
+            v.push(a.r === true && JSON.stringify(a.restent) === '["/autre"]');
+            v.push(b.r === true && JSON.stringify(b.restent) === '["/autre"]');
+            v.push(n.r === false && JSON.stringify(n.restent) === '["/autre","/m","/w"]');
+            v.push(t.r === true && JSON.stringify(t.restent) === '["/autre"]');
+            return v;
+        };
+        const reel = await verdictsB1(P);
+        H.v('1c. les décisions de B1 (clé versionnée, sha du moteur rejoué, éviction sur échec venu du cache) : tous les comportements tiennent sur le vrai module', reel.every(x => x === true), true);
+        // trois mutations, du TEXTE de preparation.mjs, chacune doit être TUÉE (au moins un verdict faux)
+        const source = fs.readFileSync(path.join(PUB, 'preparation.mjs'), 'utf8'); let n = 0;
+        const muter = async (de, vers) => {
+            if (!source.includes(de)) return { absente: true };
+            const tmp = path.join(os.tmpdir(), `rm-mutant-ps-${process.pid}-${++n}.mjs`); fs.writeFileSync(tmp, source.replace(de, vers));
+            try { const M = await import(pathToFileURL(tmp).href); return { verdicts: await verdictsB1(M) }; } finally { try { fs.unlinkSync(tmp); } catch { /* jetable */ } }
+        };
+        const tuee = r => !r.absente && r.verdicts.some(x => x === false);
+        H.v('1c. MUTATION 1 — l\'éviction ne se déclenche plus quand le moteur venait du cache (`false && …`) : TUÉE', tuee(await muter('if (sources.wasm === \'cache\' ||', 'if (false && sources.wasm === \'cache\' ||')), true);
+        H.v('1c. MUTATION 2 — le sha du moteur n\'est plus jamais comparé (`return true`) : TUÉE', tuee(await muter('return (await sha256Hex(octets)) === sha;', 'return true;')), true);
+        H.v('1c. MUTATION 3 — la clé du cache n\'a plus la version d\'ORT : TUÉE', tuee(await muter('?ort=${String(versionOrt || \'inconnue\').replace(/[^\\w.-]/g, \'\').slice(0, 20)}', '')), true);
+        H.v('1c. MUTATION 4 (témoin) — un texte sans rapport ne tue rien : le banc ne crie pas à tort', (await muter('export const ETATS_CACHE', 'export const ETATS_CACHE_X = 0; export const ETATS_CACHE')).verdicts.every(x => x === true), true);
+    }
+
     // ═══ 2. la préparation seule : la garde ═══
     H.v('2. rien de particulier ⇒ la page prépare seule', P.peutPreparerSeul({ marqueur: null, deviceMemory: undefined, recherche: '' }), { auto: true, raison: 'ok' });
     H.v('2. ?prep=0 ⇒ pas de préparation seule (on attend le clic)', P.peutPreparerSeul({ marqueur: null, deviceMemory: 8, recherche: '?prep=0' }), { auto: false, raison: 'demande' });
@@ -156,8 +199,11 @@ const egal = (a, b) => a && b && a.length === b.length && Buffer.compare(Buffer.
     H.v('2. mémoire présente et ≥ 2 ⇒ oui ; exactement 2 aussi', [g({ deviceMemory: 2 }).auto, g({ deviceMemory: 8 }).auto], [true, true]);
     H.v('2. mémoire présente mais illisible (texte, NaN, négative) ⇒ pas de préparation seule', [g({ deviceMemory: '4' }).auto, g({ deviceMemory: NaN }).auto, g({ deviceMemory: -1 }).auto, g({ deviceMemory: 0.5 }).auto], [false, false, false, false]);
     H.v('2. économie de données (navigator.connection.saveData) ⇒ pas de préparation seule', g({ saveData: true }), { auto: false, raison: 'data-economie' });
-    H.v('2. saveData autre que true (absent, « true » texte, 1) ⇒ ne bloque pas : seul le booléen true est le signal', [g({ saveData: undefined }).auto, g({ saveData: 'true' }).auto, g({ saveData: 1 }).auto], [true, true, true]);
-    H.v('2. toute la garde absente (arguments manquants) ⇒ la préparation attend le clic ou démarre seule sans lever', (() => { try { return typeof P.peutPreparerSeul({}).auto; } catch { return 'leve'; } })(), 'boolean');
+    // tour 2 : saveData aussi par ce qu'il AUTORISE — absent (undefined, null : Safari ne l'expose pas) ou exactement false ; toute autre valeur bloque
+    H.v('2. saveData absent (undefined, null) ou exactement false ⇒ oui', [g({ saveData: undefined }).auto, g({ saveData: null }).auto, g({ saveData: false }).auto], [true, true, true]);
+    H.v('2. saveData autre qu\'absent ou false (true, « true », 1, 0, « false ») ⇒ pas de préparation seule', [g({ saveData: true }), g({ saveData: 'true' }), g({ saveData: 1 }), g({ saveData: 0 }), g({ saveData: 'false' })].map(r => [r.auto, r.raison]), Array(5).fill([false, 'data-economie']));
+    H.v('2. aucun argument ⇒ le marqueur est absent, la mémoire et saveData aussi : la garde autorise, sans lever', (() => { try { return P.peutPreparerSeul({}); } catch { return 'leve'; } })(), { auto: true, raison: 'ok' });
+    H.v('2. aucun objet du tout ⇒ même réponse', (() => { try { return P.peutPreparerSeul(); } catch { return 'leve'; } })(), { auto: true, raison: 'ok' });
     H.v('2. médiane et p95 (échantillons de scans)', [P.mediane([5, 1, 3]), P.mediane([4, 1, 3, 2]), P.p95([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), P.mediane([]), P.p95([])], [3, 2.5, 10, null, null]);
 
     // ═══ 3. les fichiers servis : compressés, revalidables, identiques une fois décompressés ═══
@@ -170,7 +216,7 @@ const egal = (a, b) => a && b && a.length === b.length && Buffer.compare(Buffer.
         app.use(router); const s = await H.serveur(app);
         // http brut : fetch décompresserait seul, et ce banc doit voir les octets TELS QU'ENVOYÉS
         const http = require('http');
-        const get = (chemin, entetes = {}) => new Promise((ok, ko) => { http.get(s.url + chemin, { headers: entetes }, res => { const morceaux = []; res.on('data', c => morceaux.push(c)); res.on('end', () => { const corps = Buffer.concat(morceaux); ok({ status: res.statusCode, headers: { get: n => (res.headers[n.toLowerCase()] === undefined ? null : String(res.headers[n.toLowerCase()])) }, arrayBuffer: async () => corps, corps }); }); }).on('error', ko); });
+        const get = (chemin, entetes = {}, methode = 'GET') => new Promise((ok, ko) => { http.request(s.url + chemin, { method: methode, headers: entetes }, res => { const morceaux = []; res.on('data', c => morceaux.push(c)); res.on('end', () => { const corps = Buffer.concat(morceaux); ok({ status: res.statusCode, headers: { get: n => (res.headers[n.toLowerCase()] === undefined ? null : String(res.headers[n.toLowerCase()])) }, arrayBuffer: async () => corps, corps }); }); }).on('error', ko).end(); });
         const wasm = '/api/banc/telephone/ort/ort-wasm-simd-threaded.wasm', fichier = fs.readFileSync(path.join(PUB, 'ort', 'ort-wasm-simd-threaded.wasm'));
         let r = await get(wasm, { 'accept-encoding': 'br' }); let corps = Buffer.from(await r.arrayBuffer());
         H.v('3. .wasm avec Accept-Encoding: br ⇒ brotli, Content-Length = octets envoyés, bien plus petit', [r.status, r.headers.get('content-type'), r.headers.get('content-encoding'), Number(r.headers.get('content-length')) === corps.length, corps.length < fichier.length / 3, /Accept-Encoding/i.test(r.headers.get('vary') || '')], [200, 'application/wasm', 'br', true, true, true]);
@@ -179,6 +225,9 @@ const egal = (a, b) => a && b && a.length === b.length && Buffer.compare(Buffer.
         H.v('3. X-Rm-Octets dit la taille DÉCOMPRESSÉE (le client préalloue d\'après elle : fetch décompresse, Content-Length est celui du corps compressé)', r.headers.get('x-rm-octets'), String(fichier.length));
         const shaBrut = require('crypto').createHash('sha256').update(fichier).digest('hex');
         H.v('3. X-Rm-Sha256 = le sha256 du fichier BRUT (pas du corps compressé), sur la réponse compressée', r.headers.get('x-rm-sha256'), shaBrut);
+        // la revalidation du moteur (app.js) se fait par HEAD : le sha, la taille et l'étiquette doivent y figurer, sans corps
+        const rh = await get(wasm, { 'accept-encoding': 'br' }, 'HEAD');
+        H.v('3. HEAD : X-Rm-Sha256, X-Rm-Octets, ETag, isolement présents, AUCUN corps', [rh.status, rh.headers.get('x-rm-sha256'), rh.headers.get('x-rm-octets'), rh.headers.get('etag') === r.headers.get('etag'), rh.headers.get('cross-origin-embedder-policy'), rh.corps.length], [200, shaBrut, String(fichier.length), true, 'require-corp', 0]);
         const etag = r.headers.get('etag');
         H.v('3. un ETag est posé, et le cache est « no-cache » (revalidation à chaque visite, jamais un fichier périmé)', [typeof etag === 'string' && etag.length > 4, /no-cache/.test(r.headers.get('cache-control') || '')], [true, true]);
         r = await get(wasm, { 'accept-encoding': 'br', 'if-none-match': etag });
@@ -216,7 +265,10 @@ const egal = (a, b) => a && b && a.length === b.length && Buffer.compare(Buffer.
         H.v('4. un objet n\'est pas une chaîne : forme refusée', avec('x').detail, 'champ:mesure.preparation');
         H.v('4. le document le plus chargé reste sous 8 Ko', Buffer.byteLength(JSON.stringify((() => { const d = base(); d.mesure.preparation = prep; return d; })())) < 2000, true);
         // tour 1 : de quoi trancher la cause sur le prochain dépôt iPhone — octets transférés et encodage du .wasm, octets et débit du modèle, mémoire si le navigateur la donne
-        const plus = { wasmTransfertOctets: 2700000, wasmCorpsOctets: 2688054, wasmEncodage: 'br', modeleOctets: 118202501, modeleDebitMoS: 27.2, memoireJsPicMo: 183.5, memoireUaMo: 412 };
+        const plus = { wasmTransfertOctets: 2700000, wasmCorpsOctets: 2688054, wasmEncodage: 'br', modeleOctets: 118202501, modeleDebitMoS: 27.2, memoireJsPicMo: 183.5, memoireUaMo: 412, raison: 'memoire-faible' };
+        // tour 2 : la raison de la garde est déposée (un état « manuel » dit enfin pourquoi)
+        H.v('4. la raison de la garde est acceptée (ok, demande, interrompue, echec, inconnu, data-economie, memoire-faible)', ['ok', 'demande', 'interrompue', 'echec', 'inconnu', 'data-economie', 'memoire-faible'].map(r => avec({ ...prep, raison: r }).ok), Array(7).fill(true));
+        H.v('4. une raison hors liste ou libre est refusée', [avec({ ...prep, raison: 'parce que' }).detail, avec({ ...prep, raison: 12 }).detail], ['champ:mesure.preparation.raison', 'champ:mesure.preparation.raison']);
         H.v('4. les champs de diagnostic (transferSize, encodedBodySize, encodage du .wasm, octets et débit du modèle, mémoire) sont acceptés', avec({ ...prep, ...plus }).ok, true);
         H.v('4. encodage du .wasm hors liste refusé (br, gzip, identity, inconnu seulement)', avec({ ...prep, ...plus, wasmEncodage: 'zstd' }).detail, 'champ:mesure.preparation.wasmEncodage');
         H.v('4. débit négatif ou octets hors bornes refusés', [avec({ ...prep, modeleDebitMoS: -1 }).detail, avec({ ...prep, wasmTransfertOctets: -5 }).detail, avec({ ...prep, memoireUaMo: 1e9 }).detail], ['champ:mesure.preparation.modeleDebitMoS', 'champ:mesure.preparation.wasmTransfertOctets', 'champ:mesure.preparation.memoireUaMo']);
@@ -247,7 +299,15 @@ const egal = (a, b) => a && b && a.length === b.length && Buffer.compare(Buffer.
         H.v('5. la session préparée est RÉUTILISÉE par la mesure suivante et libérée avant WebGPU', [/preparerWasm\(/.test(app), /libererSessionPreparee\(/.test(app)], [true, true]);
         H.v('5. une fois la page quittée (pagehide), aucun événement de visibilité ne ré-écrit « pret » ; un retour du cache de navigation (pageshow) le fait', [/quittee\s*=\s*true/.test(app), /if \(quittee\) return/.test(app), /addEventListener\('pageshow'/.test(app)], [true, true, true]);
         H.v('5. le verdict est celui d\'avant : jugerMesure appelé avec les mêmes quatre champs', /jugerMesure\(\{ nEmpreintes: m\.nEmpreintes, nVecteursRefuses: refuses, cos, cosModeleSeul: cosPx, shaVerifie: E\.shaVerifie \}\)/.test(app), true);
-        H.v('5. (B1) la clé du moteur porte la version d\'ORT du bundle CHARGÉ, le sha256 du serveur est rejoué (X-Rm-Sha256), un échec de session venu du cache retire modèle ET moteur', [/ort\.env\.versions/.test(app), /x-rm-sha256/i.test(app), /retirerEntrees\(/.test(app), /source === 'cache'/.test(app)], [true, true, true, true]);
+        // tour 2 : la LOGIQUE de B1 vit dans preparation.mjs (testée par comportement et par mutation, 1c) ; app.js ne fait que l'appeler — ce test-ci ne vérifie que le CÂBLAGE, et qu'app.js n'a pas gardé sa propre copie de la règle
+        H.v('5. (B1, câblage) app.js appelle cleMoteur, verifierMoteur et apresEchecDeSession ; la version vient du bundle chargé ; aucune copie de la règle (sha comparé, clé, éviction) n\'est restée dans app.js', [/cleMoteur\(/.test(app), /verifierMoteur\(/.test(app), /apresEchecDeSession\(/.test(app), /ort\.env\.versions/.test(app), /\bh === sha\b/.test(app), /retirerEntrees\(/.test(app), /\?ort=/.test(app)], [true, true, true, true, false, false, false]);
+        H.v('5. (P3-7) le commentaire d\'app.js ne répète plus « c\'était l\'essentiel des ~15 s » sans réserve (cause établie sur PC, hypothèse sur iPhone)', [/c'était l'essentiel des ~15 s/.test(fs.readFileSync(path.join(PUB, 'app.js'), 'utf8')), /HYPOTH/.test(fs.readFileSync(path.join(PUB, 'app.js'), 'utf8'))], [false, true]);
+        H.v('5. la raison de la garde est déposée avec la préparation', /raison: E\.prep\.raison|raison: P\.raison/.test(app), true);
+        // tour 2, P3-8 : --ref sans --vecs doit ÉCHOUER (code 3), jamais sortir en silence ; le chemin du modèle est faux exprès : l'ancien pilote s'arrêterait en erreur 1 sans rien lancer, le nouveau refuse tout de suite en 3
+        {
+            const r = require('child_process').spawnSync(process.execPath, [path.join(__dirname, '..', '..', 'outils', 'banc-telephone', 'pilote-premier-scan.js'), '--ref=inexistant.bin', '--modele=Z:\\n-existe-pas.onnx'], { encoding: 'utf8', timeout: 60000 });
+            H.v('5. (P3-8) le pilote refuse --ref sans --vecs : code 3 et un message qui le dit', [r.status, /--ref exige --vecs/.test(r.stdout || '')], [3, true]);
+        }
         H.v('5. (B2) la garde reçoit saveData et deviceMemory', [/saveData/.test(app), /deviceMemory/.test(app)], [true, true]);
         H.v('5. (M2) l\'écriture du cache n\'est plus attendue avant la création de la session (attendreEcriture: false, finEcriture)', [/attendreEcriture:\s*false/.test(app), /finEcriture/.test(app)], [true, true]);
         H.v('5. aucun navigator.storage.persist() affiché comme garanti : la page DIT si le stockage est persistant ou non', /stockagePersistant/.test(app), true);

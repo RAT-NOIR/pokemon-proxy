@@ -69,6 +69,7 @@ const PREPARATION = {
     // de quoi trancher la cause sur un appareil réel : les octets RÉELLEMENT transférés pour le .wasm (PerformanceResourceTiming : transferSize, encodedBodySize) et son encodage, les octets et le débit du modèle,
     // et la mémoire quand le navigateur la donne (tas JS le plus haut vu pendant la préparation ; mémoire de l'agent utilisateur une fois prêt). null = le navigateur ne le dit pas (absent ≠ zéro).
     wasmTransfertOctets: ouNul(entier(0, 2e9)), wasmCorpsOctets: ouNul(entier(0, 2e9)), wasmEncodage: ouNul(parmi('br', 'gzip', 'identity', 'inconnu')),
+    raison: ouNul(parmi('ok', 'demande', 'interrompue', 'echec', 'inconnu', 'data-economie', 'memoire-faible')),      // pourquoi la garde a (ou n'a pas) lancé la préparation seule : un état « manuel » dit enfin d'où il vient
     modeleOctets: ouNul(entier(0, 2e9)), modeleDebitMoS: ouNul(nombre(0, 1e5)), memoireJsPicMo: ouNul(nombre(0, 1e5)), memoireUaMo: ouNul(nombre(0, 1e5))
 };
 const STAT = { n: entier(0, 1e8), max: entier(0, 255), somme: entier(0, 1e11), nDiff: entier(0, 1e8), moy: nombre(0, 255), pctDiff: nombre(0, 100) };

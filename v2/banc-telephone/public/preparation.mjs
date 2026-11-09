@@ -107,7 +107,31 @@ export async function retirerEntrees({ caches, nomCache = NOM_CACHE, cles = [] }
     } catch { /* sans effet */ }
 }
 
-/** La page prépare-t-elle seule, dès son ouverture ? { auto, raison }. Écrite par ce qui REFUSE précisément (rien d'autre ne bloque) : `?prep=0`, une préparation précédente jamais finie (onglet tué : marqueur « en-cours »), moins de 2 Go déclarés. */
+// ── les trois décisions de B1 (le moteur .wasm rangé au cache), PURES et testées par comportement ET par mutation (v2/test/test-banc-telephone-premier-scan.js, section 1c) ; app.js ne fait que les appeler.
+export const MAGIE_WASM = Object.freeze([0x00, 0x61, 0x73, 0x6d]);
+/** La clé du moteur dans le cache : le chemin ET la version d'ORT du bundle chargé (une autre version = une autre clé ; version absente : « inconnue » ; jamais un second chemin). */
+export const cleMoteur = (chemin, versionOrt) => `${chemin}?ort=${String(versionOrt || 'inconnue').replace(/[^\w.-]/g, '').slice(0, 20)}`;
+/**
+ * Le moteur reçu ou lu au cache est-il le bon ? Magie « \0asm » ET sha256 du fichier brut égal à celui que le SERVEUR publie (`sha`, rangé avec l'entrée) ; un sha absent ou mal formé = refus.
+ * `sha256Hex(octets)` : le calcul (crypto.subtle) ; absent ⇒ contexte non sécurisé, où ni le cache ni le sha256 n'existent (comme pour le modèle) : la magie seule décide.
+ */
+export async function verifierMoteur(octets, sha, { sha256Hex } = {}) {
+    if (!(octets && octets.length > 8 && MAGIE_WASM.every((x, i) => octets[i] === x))) return false;
+    if (typeof sha256Hex !== 'function') return true;
+    if (typeof sha !== 'string' || !/^[0-9a-f]{64}$/.test(sha)) return false;
+    return (await sha256Hex(octets)) === sha;
+}
+/** Après un échec de création de session : si le moteur OU le modèle venaient du cache, les deux entrées sont retirées (le prochain essai repart du réseau). Rend true si elles ont été retirées. Ne lève jamais. */
+export async function apresEchecDeSession({ caches, nomCache = NOM_CACHE, sources = {}, cles = [] }) {
+    if (sources.wasm === 'cache' || sources.modele === 'cache') { await retirerEntrees({ caches, nomCache, cles }); return true; }
+    return false;
+}
+
+/**
+ * La page prépare-t-elle seule, dès son ouverture ? { auto, raison }. Écrite par ce qu'elle AUTORISE : marqueur absent ou « ferme », `?prep` ≠ 0, saveData absent ou exactement false, deviceMemory absent ou ≥ 2 ; tout le reste bloque.
+ * ATTENTION, Safari/iOS n'expose NI `deviceMemory` NI `navigator.connection` (donc pas de `saveData`) : sur iPhone ces deux gardes sont inertes et SEULS le marqueur et `?prep=0` protègent — 113 Mo partent à l'ouverture,
+ * sans geste, y compris en 4G. C'est la décision de l'éditeur (la préparation à l'ouverture se mesure sur iPhone), pas un oubli.
+ */
 export function peutPreparerSeul({ marqueur, deviceMemory, recherche, saveData } = {}) {
     let prep = null; try { prep = typeof recherche === 'string' ? new URLSearchParams(recherche).get('prep') : null; } catch { prep = null; }
     if (prep === '0') return { auto: false, raison: 'demande' };
@@ -116,7 +140,8 @@ export function peutPreparerSeul({ marqueur, deviceMemory, recherche, saveData }
     if (marqueur === 'en-cours' || marqueur === 'pret') return { auto: false, raison: 'interrompue' };
     if (marqueur === 'echec') return { auto: false, raison: 'echec' };
     if (!(marqueur === null || marqueur === undefined || marqueur === 'ferme')) return { auto: false, raison: 'inconnu' };
-    if (saveData === true) return { auto: false, raison: 'data-economie' };       // 113 Mo ne partent pas sans geste quand le navigateur demande d'économiser les données
+    // l'économie de données : écrite par ce qu'elle AUTORISE aussi — absente (undefined, null : Safari n'expose pas navigator.connection) ou exactement false ; toute autre valeur bloque
+    if (!(saveData === undefined || saveData === null || saveData === false)) return { auto: false, raison: 'data-economie' };       // 113 Mo ne partent pas sans geste quand le navigateur demande d'économiser les données
     // la mémoire de l'appareil : ABSENTE (Safari/iOS ne la donne pas) autorise — décision de l'éditeur : la préparation à l'ouverture se mesure sur iPhone, et le marqueur protège après un onglet tué ;
     // présente, elle doit être un nombre fini d'au moins 2 (Go) ; toute autre valeur bloque
     if (!(deviceMemory === undefined || deviceMemory === null || (typeof deviceMemory === 'number' && Number.isFinite(deviceMemory) && deviceMemory >= 2))) return { auto: false, raison: 'memoire-faible' };
