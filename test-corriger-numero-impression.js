@@ -7,7 +7,7 @@ const eq = (a, b, m) => { if (JSON.stringify(a) !== JSON.stringify(b)) throw new
 const PREUVE = { motif: 'le numéro 055 est celui du Fossile non identifié, la carte est le 056', sources: [{ nom: 'Serebii', url: 'https://serebii.net/card/ultrasun' }, { nom: 'Pokewiki', url: 'https://pokewiki.de/Ultra_Sun_(TCG)' }] };
 const imp = (o = {}) => ({ tirage: 'jp', expansion: 'Ultra Sun', numero: '055', total: '066', ...o });
 const carte = (o = {}) => ({ _id: 217135, nomEn: 'Nest Ball', impressions: [imp(), imp({ tirage: 'intl', expansion: 'Ultra Sun', numero: '119' })], ...o });
-const A = (o = {}) => ({ carte: 217135, expansion: 'Ultra Sun', tirage: 'jp', avant: '055', apres: '056', attendu: 1, ...o });
+const A = (o = {}) => ({ carte: 217135, expansion: 'Ultra Sun', set: 'Ultra-Sun', tirage: 'jp', avant: '055', apres: '056', attendu: 1, ...o });
 const plan = (a = {}, c = carte(), p = PREUVE, lignes = []) => C.planifier(A(a), { carteDoc: c, lignes }, p);
 const refus = (r, motif) => { if (r.ok) throw new Error('devait refuser'); if (!r.refus.some(x => x.includes(motif))) throw new Error(`motif absent « ${motif} » dans ${JSON.stringify(r.refus)}`); if (r.operations.length) throw new Error('des opérations malgré le refus'); };
 
@@ -49,21 +49,22 @@ t('domaines : suffixes à deux niveaux (bbc.co.uk, a.bbc.co.uk = un, autre.co.uk
 t('refus : impression déjà corrigée, numeroAvant explicite non nul', () => refus(plan({}, carte({ impressions: [imp({ numeroAvant: '054', numeroCorrigeLe: new Date() })] })), 'déjà corrigée'));
 t('numeroAvant null explicite = absent : accepté', () => eq(plan({}, carte({ impressions: [imp({ numeroAvant: null })] })).ok, true));
 t('refus : une ligne de la carte porte numeroFiche = avant (055) : elle doit changer dans le même geste ou refus', () => refus(plan({}, carte(), PREUVE, [{ _id: '217135|560009', carteId: 217135, idProduct: 560009, slugSet: 'Ultra-Sun', numeroFiche: '055' }]), 'numeroFiche'));
-t('refus : numeroFiche 55 compte aussi (clé de numéro)', () => refus(plan({}, carte(), PREUVE, [{ _id: 'x|1', carteId: 217135, idProduct: 1, slugSet: 'S', numeroFiche: '55' }]), 'numeroFiche'));
+t('refus : numeroFiche 55 compte aussi (clé de numéro)', () => refus(plan({}, carte(), PREUVE, [{ _id: 'x|1', carteId: 217135, idProduct: 1, slugSet: 'Ultra-Sun', numeroFiche: '55' }]), 'numeroFiche'));
+t('nominal : une ligne de la carte à numeroFiche 055 dans un AUTRE set (Collection-Moon) est sans effet', () => eq(plan({}, carte(), PREUVE, [{ _id: '217135|561656', carteId: 217135, idProduct: 561656, slugSet: 'Collection-Moon', numeroFiche: '055' }]).ok, true));
 t('nominal : lignes de la carte à d\'autres numeroFiche, ou d\'une autre carte au 055 : sans effet', () => eq(plan({}, carte(), PREUVE, [{ _id: '217135|9', carteId: 217135, idProduct: 9, slugSet: 'Collection-Moon', numeroFiche: '071' }, { _id: '226761|560009', carteId: 226761, idProduct: 560009, slugSet: 'Ultra-Sun', numeroFiche: '055' }]).ok, true));
 t('le plan expose le décompte des lignes à numeroFiche = avant', () => eq(plan({}, carte(), PREUVE, [{ _id: '217135|560009', carteId: 217135, idProduct: 560009, slugSet: 'Ultra-Sun', numeroFiche: '055' }]).lignesAvant, 1));
 t('refus : attendu différent', () => refus(plan({ attendu: 2 }), 'attendu'));
 t('refus : attendu absent', () => refus(plan({ attendu: undefined }), 'attendu'));
 
-t('arguments : cas nominal', () => { const r = C.lireArguments(['--carte=217135', '--expansion=Ultra Sun', '--tirage=jp', '--avant=055', '--apres=056', '--preuve=p.json', '--attendu=1']); eq([r.erreur, r.carte, r.expansion, r.tirage, r.avant, r.apres, r.preuve, r.attendu, r.ecrire], [undefined, 217135, 'Ultra Sun', 'jp', '055', '056', 'p.json', 1, false]); });
-for (const m of ['carte', 'expansion', 'tirage', 'avant', 'apres', 'preuve', 'attendu']) t(`arguments : --${m} obligatoire`, () => {
-    const base = ['--carte=1', '--expansion=E', '--tirage=jp', '--avant=1', '--apres=2', '--preuve=p.json', '--attendu=1'];
+t('arguments : cas nominal', () => { const r = C.lireArguments(['--carte=217135', '--expansion=Ultra Sun', '--set=Ultra-Sun', '--tirage=jp', '--avant=055', '--apres=056', '--preuve=p.json', '--attendu=1']); eq([r.erreur, r.carte, r.expansion, r.set, r.tirage, r.avant, r.apres, r.preuve, r.attendu, r.ecrire], [undefined, 217135, 'Ultra Sun', 'Ultra-Sun', 'jp', '055', '056', 'p.json', 1, false]); });
+for (const m of ['carte', 'expansion', 'set', 'tirage', 'avant', 'apres', 'preuve', 'attendu']) t(`arguments : --${m} obligatoire`, () => {
+    const base = ['--carte=1', '--expansion=E', '--set=S', '--tirage=jp', '--avant=1', '--apres=2', '--preuve=p.json', '--attendu=1'];
     if (!C.lireArguments(base.filter(x => !x.startsWith(`--${m}=`))).erreur) throw new Error('accepté');
 });
-t('arguments : inconnu refusé', () => { if (!C.lireArguments(['--carte=1', '--expansion=E', '--tirage=jp', '--avant=1', '--apres=2', '--preuve=p.json', '--attendu=1', '--force']).erreur) throw new Error('accepté'); });
-t('arguments : répété refusé', () => { if (!C.lireArguments(['--carte=1', '--carte=2', '--expansion=E', '--tirage=jp', '--avant=1', '--apres=2', '--preuve=p.json', '--attendu=1']).erreur) throw new Error('accepté'); });
-t('arguments : carte non entière', () => { if (!C.lireArguments(['--carte=x', '--expansion=E', '--tirage=jp', '--avant=1', '--apres=2', '--preuve=p.json', '--attendu=1']).erreur) throw new Error('accepté'); });
-t('arguments : --ecrire', () => eq(C.lireArguments(['--carte=1', '--expansion=E', '--tirage=jp', '--avant=1', '--apres=2', '--preuve=p.json', '--attendu=1', '--ecrire']).ecrire, true));
+t('arguments : inconnu refusé', () => { if (!C.lireArguments(['--carte=1', '--expansion=E', '--set=S', '--tirage=jp', '--avant=1', '--apres=2', '--preuve=p.json', '--attendu=1', '--force']).erreur) throw new Error('accepté'); });
+t('arguments : répété refusé', () => { if (!C.lireArguments(['--carte=1', '--carte=2', '--expansion=E', '--set=S', '--tirage=jp', '--avant=1', '--apres=2', '--preuve=p.json', '--attendu=1']).erreur) throw new Error('accepté'); });
+t('arguments : carte non entière', () => { if (!C.lireArguments(['--carte=x', '--expansion=E', '--set=S', '--tirage=jp', '--avant=1', '--apres=2', '--preuve=p.json', '--attendu=1']).erreur) throw new Error('accepté'); });
+t('arguments : --ecrire', () => eq(C.lireArguments(['--carte=1', '--expansion=E', '--set=S', '--tirage=jp', '--avant=1', '--apres=2', '--preuve=p.json', '--attendu=1', '--ecrire']).ecrire, true));
 
 t('hors lot refusé', () => { let m = ''; try { C.garderSousLot({}, 123); } catch (e) { m = e.message; } if (!/hors de lot-additif/.test(m)) throw new Error('non refusé'); });
 t('hors lot : mauvais ppid refusé', () => { let m = ''; try { C.garderSousLot({ LOT_ADDITIF_PID: '5' }, 6); } catch (e) { m = e.message; } if (!m) throw new Error('non refusé'); });

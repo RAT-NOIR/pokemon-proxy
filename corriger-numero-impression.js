@@ -9,19 +9,19 @@
 // sources d'hôtes https DISTINCTS ; `--attendu` (obligatoire) = le nombre d'écritures planifiées (1).
 // Écriture : UN updateOne sur `impressions.$.numero`, avec `numeroAvant`, `numeroCorrigeLe`, `numeroCorrigeMotif` sur la même impression. Rien d'autre ne bouge (le total non plus).
 // `--ecrire` ne tourne que SOUS lot-additif.js, enfant direct. Réversible : remettre `numeroAvant` dans `numero`.
-const AUTORISES = [/^--carte=\d+$/, /^--expansion=.+$/, /^--tirage=[^\s,]+$/, /^--avant=\S+$/, /^--apres=\S+$/, /^--preuve=.+$/, /^--attendu=\d+$/, /^--ecrire$/];
+const AUTORISES = [/^--carte=\d+$/, /^--expansion=.+$/, /^--set=[^\s,]+$/, /^--tirage=[^\s,]+$/, /^--avant=\S+$/, /^--apres=\S+$/, /^--preuve=.+$/, /^--attendu=\d+$/, /^--ecrire$/];
 
 function lireArguments(argv) {
     const inconnus = argv.filter(a => !AUTORISES.some(r => r.test(a)));
     if (inconnus.length) return { erreur: `argument inconnu ou invalide : ${inconnus.join(' ')} — autorisés : --carte= --expansion= --tirage= --avant= --apres= --preuve=<fichier> --attendu=N [--ecrire]` };
     const un = n => argv.filter(a => a.startsWith(`--${n}=`));
-    for (const n of ['carte', 'expansion', 'tirage', 'avant', 'apres', 'preuve', 'attendu']) {
+    for (const n of ['carte', 'expansion', 'set', 'tirage', 'avant', 'apres', 'preuve', 'attendu']) {
         if (un(n).length > 1) return { erreur: `--${n} répété` };
         if (!un(n).length) return { erreur: `--${n} obligatoire` };
     }
     if (argv.filter(a => a === '--ecrire').length > 1) return { erreur: '--ecrire répété' };
     const v = n => un(n)[0].slice(n.length + 3);
-    return { carte: Number(v('carte')), expansion: v('expansion'), tirage: v('tirage'), avant: v('avant'), apres: v('apres'), preuve: v('preuve'), attendu: Number(v('attendu')), ecrire: argv.includes('--ecrire') };
+    return { carte: Number(v('carte')), expansion: v('expansion'), set: v('set'), tirage: v('tirage'), avant: v('avant'), apres: v('apres'), preuve: v('preuve'), attendu: Number(v('attendu')), ecrire: argv.includes('--ecrire') };
 }
 
 /** Domaine enregistrable (eTLD+1) : deux sous-domaines d'un même site ne sont pas deux sources. Liste fermée des suffixes à deux niveaux (co.uk…), sinon les deux derniers labels. */
@@ -73,8 +73,8 @@ function planifier(a, { carteDoc, lignes }, preuve) {
         }
     }
     // Les lignes cartes_produits de CETTE carte dont numeroFiche vaut vant : elles désigneraient l'ancien numéro. Aucune ne se réécrit ici (jamais une ligne existante) : refus nommé.
-    const lignesAvant = (lignes || []).filter(l => l && l.carteId === a.carte && l.numeroFiche != null && cleNumero(l.numeroFiche) && cleNumero(l.numeroFiche) === cleNumero(a.avant));
-    if (lignesAvant.length) R(` ligne(s) de la carte portent numeroFiche «  » () : à changer dans le même geste, jamais écrit ici — refus`);
+    const lignesAvant = (lignes || []).filter(l => l && l.carteId === a.carte && l.slugSet === a.set && l.numeroFiche != null && cleNumero(l.numeroFiche) && cleNumero(l.numeroFiche) === cleNumero(a.avant));
+    if (lignesAvant.length) R(`${lignesAvant.length} ligne(s) de la carte dans « ${a.set} » portent numeroFiche « ${a.avant} » (${lignesAvant.slice(0, 3).map(l => l._id).join(', ')}) : à changer dans le même geste, jamais écrit ici — refus`);
     const operations = [];
     if (!refus.length) {
         operations.push({ filter: { _id: a.carte, impressions: { $elemMatch: { tirage: a.tirage, expansion: a.expansion, numero: a.avant, numeroAvant: { $exists: false } } } },
@@ -111,6 +111,7 @@ async function executer(db, a, preuve) {
     const m = await lireMonde(db, a);
     const plan = planifier(a, m, preuve);
     lignes.push(`carte ${a.carte}${m.carteDoc?.nomEn ? ` « ${m.carteDoc.nomEn} »` : ''} · ${a.tirage} « ${a.expansion} » : ${JSON.stringify(a.avant)} → ${JSON.stringify(a.apres)} · sources ${JSON.stringify(lirePreuve(preuve).hotes)}`);
+    lignes.push(`   lignes cartes_produits de la carte : ${m.lignes.length} lues · dans « ${a.set} » à numeroFiche « ${a.avant} » : ${plan.lignesAvant} · à numeroFiche « ${a.apres} » : ${m.lignes.filter(l => l.slugSet === a.set && l.numeroFiche === a.apres).length} · lignes de la carte dans « ${a.set} » : ${m.lignes.filter(l => l.slugSet === a.set).length}`);
     if (!plan.ok) return { ok: false, code: 1, modifiees: 0, plan, lignes, message: `REFUS : ${plan.refus.join(' ; ')} — rien n'est écrit` };
     lignes.push(`✓ ${plan.ecritures} écriture(s) planifiée(s) : impressions.$.numero ${JSON.stringify(a.avant)} → ${JSON.stringify(a.apres)} (numeroAvant, date et motif sur l'impression)`);
     if (!a.ecrire) return { ok: true, code: 0, modifiees: 0, plan, lignes };
