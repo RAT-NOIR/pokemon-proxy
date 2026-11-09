@@ -13,7 +13,7 @@
 <body>
 <main>
   <h1>Banc téléphone</h1>
-  <p class="sous">Le même modèle servi, le même moteur et le même prétraitement que l'extension v2, sur cet appareil. Page d'essai : rien de personnel n'est envoyé, hors l'agent utilisateur et les mesures.</p>
+  <p class="sous">Le même modèle servi, le même moteur et le même prétraitement que l'extension v2, sur cet appareil. Page d'essai : rien de personnel n'est envoyé, hors l'agent utilisateur et les mesures ; pour les photos de la section « Photos du téléphone », s'y ajoutent le SHA-256 de chaque fichier, sa taille, ses dimensions et l'orientation appliquée (jamais l'image, ni son nom).</p>
 
   <section id="verdict" class="verdict attente" aria-live="polite">
     <div id="verdictMot">PRÊT</div>
@@ -47,10 +47,12 @@
   </section>
   <section id="grandes">
     <h2>Photos du téléphone</h2>
-    <p class="sous">Choisissez des photos prises avec cet appareil (12 Mpx). La page les mesure ICI, avec la chaîne Rat-Market (« rm ») et avec celle du navigateur, et dépose seulement des empreintes et des nombres, six photos par dépôt : <b>aucune image n'est envoyée ni conservée</b>. Une photo HEIC reçue telle quelle serait refusée (code FORMAT) : le sélecteur ne propose que JPEG, PNG et WebP, et un iPhone convertit alors le HEIC en JPEG au choix.</p>
+    <p class="sous">Choisissez des photos prises avec cet appareil (12 Mpx). La page les mesure ICI, avec la chaîne Rat-Market (« rm ») et avec celle du navigateur, et dépose seulement des empreintes SHA-256 (dont celle du fichier) et des nombres (taille, dimensions, orientation, temps), six photos par dépôt : <b>aucune image n'est envoyée ni conservée</b>. Une photo HEIC reçue telle quelle serait refusée (code FORMAT) : le sélecteur ne propose que JPEG, PNG et WebP ; la conversion du HEIC par Safari n'est pas vérifiée. Un dépôt refusé est gardé dans la page pour être renvoyé.</p>
     <input id="fichiersGrandes" type="file" accept="image/jpeg,image/png,image/webp" multiple>
     <div class="boutons"><button id="btnGrandes" type="button">Mesurer ces photos</button></div>
     <p id="grandesEtat" aria-live="polite"></p>
+    <p id="grandesRefuses"></p>
+    <div class="boutons"><button id="btnGrandesRenvoyer" type="button" disabled>Renvoyer les dépôts refusés</button></div>
     <ul id="grandesListe"></ul>
     <pre id="grandesBrut"></pre>
   </section>

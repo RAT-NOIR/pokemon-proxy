@@ -43,7 +43,7 @@ const MESURE = {
 const GRANDES = { version: chaine(30), photos: v => Array.isArray(v) && v.length >= 1 && v.length <= 6 };
 const GRANDE_PHOTO = {
     sha256Fichier: hexN(64), format: parmi('jpeg', 'png', 'webp', 'heic', 'autre'), octets: entier(0, 1e9), largeur: ouNul(entier(0, 100000)), hauteur: ouNul(entier(0, 100000)), orientation: ouNul(entier(1, 8)),
-    prereduit: ouNul(booleen), voie: ouNul(parmi('canvas-high', 'pillow')), rm: objetSimple, nav: objetSimple, ecartQuadPct: ouNul(nombre(0, 1000)), memeCarte: ouNul(booleen)
+    prereduit: ouNul(booleen), voie: ouNul(parmi('canvas-high', 'pillow')), rm: objetSimple, nav: objetSimple, ecartQuadPct: ouNul(nombre(0, 1000)), memeQuad: ouNul(booleen)
 };
 const GRANDE_MOTEUR = { ok: booleen, code: ouNul(chaine(30)), redressee: booleen, nCartes: entier(0, 100), rgb640: ouNul(hexN(64)), quads: ouNul(hexN(64)), carte: ouNul(hexN(64)), dim640: ouNul(chaine(12)), ms: ouNul(nombre(0, 1e7)) };
 const DETECTION = {
