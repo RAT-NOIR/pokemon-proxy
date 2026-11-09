@@ -61,10 +61,21 @@ const attente = ms => new Promise(r => setTimeout(r, ms));
         if (UA === 'iphone') await cdp('Emulation.setUserAgentOverride', { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1', platform: 'iPhone' });
         if (CPU > 1) await cdp('Emulation.setCPUThrottlingRate', { rate: CPU });
         if (DEBIT > 0) { await cdp('Network.enable'); await cdp('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: Math.round(DEBIT * 1048576), uploadThroughput: -1 }); }
+        // --coeurs=N : navigator.hardwareConcurrency vu par la page (la page en tire le nombre de fils WASM : moitié des cœurs, de 1 à FILS_MAX = 4)
+        if (arg('coeurs', '')) await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `Object.defineProperty(Navigator.prototype, 'hardwareConcurrency', { get: () => ${Number(arg('coeurs', '4'))} });` });
         const tNav = Date.now();
         await cdp('Page.navigate', { url: `http://127.0.0.1:${port}/api/banc/telephone${QUERY ? '?' + QUERY : ''}` });
         for (let i = 0; i < 120; i++) { await attente(250); if (await evalue('Boolean(window.__banc)')) break; }
         const tPageOuverte = Date.now() - tNav;
+        // --memoire=1 : la mémoire PRIVÉE de chaque processus Chrome (par PID, psapi, toutes les ~40 ms) pendant tout le reste du passage ; pic par type de processus et pic de la somme à un même instant
+        let echant = null; const MEM = arg('memoire', '') === '1', stopMem = path.join(profil, 'STOP-MEM'), fichierMem = path.join(os.tmpdir(), `rm-mem-ps-${process.pid}.csv`), typeDe = {};
+        if (MEM) {
+            const nav = new WebSocket((await (await fetch(`http://127.0.0.1:${dbg}/json/version`)).json()).webSocketDebuggerUrl); await new Promise((r, k) => { nav.onopen = r; nav.onerror = k; });
+            const procs = await new Promise(r => { nav.onmessage = ev => r(JSON.parse(ev.data).result.processInfo); nav.send(JSON.stringify({ id: 1, method: 'SystemInfo.getProcessInfo' })); }); nav.close();
+            for (const p of procs) typeDe[p.id] = p.type;
+            echant = cp.spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(__dirname, 'echantillonneur-memoire.ps1'), '-Pids', procs.map(p => p.id).join(','), '-Sortie', fichierMem, '-Stop', stopMem, '-Max', '1500'], { stdio: 'ignore', windowsHide: true });
+            await attente(1500);
+        }
         if (OVERRIDE) await evalue(`Object.assign(window.__banc.E.session.options, ${OVERRIDE})`);   // avant le clic : la page ancienne ne crée sa session qu'au clic
         const info = JSON.parse(await evalue('JSON.stringify({isole: self.crossOriginIsolated, nav: navigator.userAgent, coeurs: navigator.hardwareConcurrency})'));
         // la page NOUVELLE prépare seule : on attend son « prêt » (honnêtement mesuré par elle) ; l'ancienne n'a pas E.prep : on lance tout de suite
@@ -97,10 +108,20 @@ const attente = ms => new Promise(r => setTimeout(r, ms));
         const resume = { etiquette: ETIQ, dossier: DOSSIER, cpu: CPU, debitMoS: DEBIT || null, profilConserve: Boolean(PROFIL), ua: UA || 'chrome-bureau', info, override: OVERRIDE || null, tPageOuverteMs: tPageOuverte, tOuvertureAPretMs: aPrep ? attendPret : null, clic1Ms, scansSuivantsMs: scans,
             prep: prepFin, prepAvantClic: prep, depot1: d1 && d1.mesure ? { moteur: d1.mesure.moteur, verdict: d1.mesure.verdict, cosMin: d1.mesure.cosMin, filsDemandes: d1.mesure.filsDemandes, fils: d1.mesure.fils, creationSessionMs: d1.mesure.creationSessionMs, premiereMs: d1.mesure.premiereMs, medianeMs: d1.mesure.medianeMs, pretraitementMedianeMs: d1.mesure.pretraitementMedianeMs, premier: d1.mesure.premierScan || null, suite: d1.mesure.scansSuivants || null, entree: d1.mesure.entree && { chemin: d1.mesure.entree.chemin }, erreur: d1.mesure.erreur } : null,
             telechargementMs: d1 ? d1.telechargementMs : null, verifShaMs: d1 ? d1.verifShaMs : null, deposRefuses: deposes.filter(d => d.refuse), ecran: { mot: ecran.mot, detail: ecran.detail, l1: ecran.l1 } };
+        if (MEM) {
+            fs.writeFileSync(stopMem, '1');
+            for (let i = 0; i < 100; i++) { await attente(200); try { if (/^P;/m.test(fs.readFileSync(fichierMem, 'utf8'))) break; } catch { /* fichier pas encore là */ } }
+            const brut = fs.readFileSync(fichierMem, 'utf8').trim().split('\n'), lignes = brut.filter(l => !l.startsWith('P;')).map(l => l.split(';').map(Number)).filter(l => l.length === 4 && Number.isFinite(l[2]));
+            const parType = {}, parInstant = {}; for (const [t, pid, priv] of lignes) { const k = typeDe[pid] || '?'; parType[k] = Math.max(parType[k] || 0, priv); parInstant[t] = (parInstant[t] || 0) + priv; }
+            resume.memoire = { echantillons: lignes.length, picParTypeMo: Object.fromEntries(Object.entries(parType).map(([k, v]) => [k, Math.round(v / 1048576)])), picSommeMo: Math.round(Math.max(0, ...Object.values(parInstant)) / 1048576) };
+            try { fs.unlinkSync(fichierMem); } catch { /* jetable */ } try { fs.unlinkSync(stopMem); } catch { /* jetable */ }
+            if (echant) { try { cp.execFileSync('taskkill.exe', ['/PID', String(echant.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* déjà arrêté */ } }
+        }
         console.log(JSON.stringify(resume, null, 1));
         if (JSON_OUT) fs.writeFileSync(JSON_OUT, JSON.stringify({ resume, journal: ecran.journal, depots: deposes.filter(d => !d.refuse).map(d => d.mesure) }, null, 1));
         if (!mesures.length) sortie = 2;
         // une fermeture NORMALE de la page (pagehide : le marqueur de préparation devient « ferme ») ; un Chrome tué en pleine page laisserait « pret » et la garde refuserait la préparation seule au retour, à raison
+        await evalue('(window.dispatchEvent(new Event("pagehide")), true)');      // le gestionnaire réel de la page (marqueur « ferme »)
         await cdp('Page.navigate', { url: 'about:blank' }); await attente(7000);      // le localStorage de Chrome n'est écrit sur le disque que par lots (~5 s) : un Chrome tué avant perdrait « ferme »
         w.close();
     } catch (e) { console.log('ERREUR pilote', e.stack); sortie = 1; }
