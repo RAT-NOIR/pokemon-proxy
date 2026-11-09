@@ -36,8 +36,16 @@ const MESURE = {
     // décodeur Rat-Market : le chemin qui a servi d'entrée au modèle (rm / mixte / navigateur), ses refus, le témoin du navigateur, et l'orientation EXIF des WebP/JPEG vue par ce navigateur
     entree: ouNul(objetSimple), orientationNavigateur: ouNul(objetSimple),
     // test de detection deterministe (detection-page.mjs) : liste fermee, comptes et durees
-    detection: ouNul(objetSimple)
+    detection: ouNul(objetSimple),
+    // test des grandes photos (grandes-page.mjs) : jusqu'a 6 photos par depot, des empreintes SHA-256 et des nombres, jamais une image
+    grandesPhotos: ouNul(objetSimple)
 };
+const GRANDES = { version: chaine(30), photos: v => Array.isArray(v) && v.length >= 1 && v.length <= 6 };
+const GRANDE_PHOTO = {
+    sha256Fichier: hexN(64), format: parmi('jpeg', 'png', 'webp', 'heic', 'autre'), octets: entier(0, 1e9), largeur: ouNul(entier(0, 100000)), hauteur: ouNul(entier(0, 100000)), orientation: ouNul(entier(1, 8)),
+    prereduit: ouNul(booleen), voie: ouNul(parmi('canvas-high', 'pillow')), rm: objetSimple, nav: objetSimple, ecartQuadPct: ouNul(nombre(0, 1000)), memeCarte: ouNul(booleen)
+};
+const GRANDE_MOTEUR = { ok: booleen, code: ouNul(chaine(30)), redressee: booleen, nCartes: entier(0, 100), rgb640: ouNul(hexN(64)), quads: ouNul(hexN(64)), carte: ouNul(hexN(64)), dim640: ouNul(chaine(12)), ms: ouNul(nombre(0, 1e7)) };
 const DETECTION = {
     version: chaine(30), nImages: entier(0, 100), nIdentiques: entier(0, 100), nRgb640: entier(0, 100), nQuads: entier(0, 100), nCartes: entier(0, 100), voieCanvas: entier(0, 100), voiePillow: entier(0, 100),
     ecarts: chaine(200), empreinteLot: ouNul(hexN(64)), msOpencv: ouNul(nombre(0, 1e7)), msMediane: ouNul(nombre(0, 1e7)), msTotal: ouNul(nombre(0, 1e7)),
@@ -103,6 +111,15 @@ function valider(corps) {
     if (ori !== null && ori !== undefined) { d = defaut(ori, ORIENTATION, 'mesure.orientationNavigateur.'); if (d) return { ok: false, detail: d }; }
     const det = corps.mesure.detection;
     if (det !== null && det !== undefined) { d = defaut(det, DETECTION, 'mesure.detection.'); if (d) return { ok: false, detail: d }; }
+    const gp = corps.mesure.grandesPhotos;
+    if (gp !== null && gp !== undefined) {
+        d = defaut(gp, GRANDES, 'mesure.grandesPhotos.'); if (d) return { ok: false, detail: d };
+        if (!('photos' in gp)) return { ok: false, detail: 'manque:mesure.grandesPhotos.photos' };
+        for (const p of gp.photos) {
+            d = defaut(p, GRANDE_PHOTO, 'mesure.grandesPhotos.photos.'); if (d) return { ok: false, detail: d };
+            for (const m of ['rm', 'nav']) { d = defaut(p[m], GRANDE_MOTEUR, `mesure.grandesPhotos.photos.${m}.`); if (d) return { ok: false, detail: d }; }
+        }
+    }
     for (const k of ['moteur', 'verdict']) if (!(k in corps.mesure)) return { ok: false, detail: `manque:mesure.${k}` };
     return { ok: true, doc: corps };
 }

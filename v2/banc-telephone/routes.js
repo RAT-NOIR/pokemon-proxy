@@ -31,6 +31,7 @@ const FICHIERS = Object.freeze({
     // la detection deterministe (detection.mjs : JavaScript pur + OpenCV.js de l'extension, sa licence Apache-2.0) et son test (page, lot compose de visuels publics sur fonds synthetiques)
     '/api/banc/telephone/detection.mjs': { f: 'detection.mjs', t: JS },
     '/api/banc/telephone/detection-page.mjs': { f: 'detection-page.mjs', t: JS },
+    '/api/banc/telephone/grandes-page.mjs': { f: 'grandes-page.mjs', t: JS },
     '/api/banc/telephone/lot-detection.json': { f: 'lot-detection.json', t: 'application/json; charset=utf-8' },
     '/api/banc/telephone/opencv/opencv.js': { f: 'opencv/opencv.js', t: JS },
     '/api/banc/telephone/opencv/opencv_js.wasm': { f: 'opencv/opencv_js.wasm', t: 'application/wasm' },

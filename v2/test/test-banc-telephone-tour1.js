@@ -108,7 +108,7 @@ const sha256 = p => crypto.createHash('sha256').update(fs.readFileSync(p)).diges
         console.error = ecrire;
         H.v('M2. base « test » (la production) : non monté, aucune route', [m1, r1.stack.length], [false, 0]);
         H.v('M2. base absente : non monté', [m2, r2.stack.length], [false, 0]);
-        H.v('M2. MONGODB_BASE=rm_essai (lu dans l\'environnement injecté) : monté', [m3, r3.stack.length], [true, 22]);
+        H.v('M2. MONGODB_BASE=rm_essai (lu dans l\'environnement injecté) : monté', [m3, r3.stack.length], [true, 23]);
         H.v('M2. « rm_essai » avec une espace de fin : tolérée par la lecture (comme index.js), montée', m4, true);
         H.vrai('M2. le refus est DIT au démarrage (nomme la base trouvée et celle attendue)', sonde.some(l => /NON MONTÉ/.test(l) && /« test »/.test(l) && /« rm_essai »/.test(l)) && sonde.some(l => /MONGODB_BASE absente/.test(l)));
         const coll = { insertOne: async () => { throw new Error('ne devait pas écrire'); }, countDocuments: async () => 0 };

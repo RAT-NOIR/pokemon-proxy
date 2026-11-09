@@ -88,7 +88,7 @@ const doc = (o = {}) => ({ v: 1, runId: '0123456789abcdef', modeleSha: SHA, ua: 
             H.v(`5. ${chemin} : 200, bon type, bonne longueur, isolement`, [r.statut, r.h['content-type'], Number(r.tete.get('content-length')), r.h['cross-origin-embedder-policy']], [200, t, taille, 'require-corp']);
         }
         // les cinq fichiers de la detection : type MIME EXACT et les trois en-tetes d'isolement, un par un (la boucle ci-dessus compare au type de la table : ici le type attendu est ecrit en dur)
-        for (const [chemin, type] of [['detection.mjs', 'text/javascript; charset=utf-8'], ['detection-page.mjs', 'text/javascript; charset=utf-8'], ['lot-detection.json', 'application/json; charset=utf-8'], ['opencv/opencv.js', 'text/javascript; charset=utf-8'], ['opencv/opencv_js.wasm', 'application/wasm']]) {
+        for (const [chemin, type] of [['detection.mjs', 'text/javascript; charset=utf-8'], ['detection-page.mjs', 'text/javascript; charset=utf-8'], ['grandes-page.mjs', 'text/javascript; charset=utf-8'], ['lot-detection.json', 'application/json; charset=utf-8'], ['opencv/opencv.js', 'text/javascript; charset=utf-8'], ['opencv/opencv_js.wasm', 'application/wasm']]) {
             const r = await brut(srv, 'GET', `/api/banc/telephone/${chemin}`);
             H.v(`5. ${chemin} : MIME ${type}, CORP same-origin, COOP same-origin, COEP require-corp, aucun CORS`, [r.statut, r.h['content-type'], r.h['cross-origin-resource-policy'], r.h['cross-origin-opener-policy'], r.h['cross-origin-embedder-policy'], r.h['access-control-allow-origin']], [200, type, 'same-origin', 'same-origin', 'require-corp', undefined]);
         }
@@ -146,8 +146,22 @@ const doc = (o = {}) => ({ v: 1, runId: '0123456789abcdef', modeleSha: SHA, ua: 
         const luDet = await db.col('banc_telephone').findOne({ runId: 'fedcba9876543210' });
         H.v('6. la detection est stockee telle que recue (comptes, empreinte du lot, voies)', [luDet.mesure.detection.nIdentiques, luDet.mesure.detection.empreinteLot, luDet.mesure.detection.voiePillow], [12, 'b'.repeat(64), 3]);
         await refus('une cle inconnue dans la detection', doc({ mesure: mDet({ ...det, photo: 'x' }), runId: 'fedcba9876543211' }), 400, 'champ-inconnu:mesure.detection.photo');
+        // le test des grandes photos (grandes-page.mjs) : un depot HTTP reel de mesure.grandesPhotos accepte, puis refuse si une cle inconnue s'y ajoute, a n'importe quel niveau
+        const mot = (o = {}) => ({ ok: true, code: null, redressee: true, nCartes: 2, rgb640: 'c'.repeat(64), quads: 'd'.repeat(64), carte: 'e'.repeat(64), dim640: '640x480', ms: 210, ...o });
+        const gph = (o = {}) => ({ sha256Fichier: 'f'.repeat(64), format: 'jpeg', octets: 5400000, largeur: 4032, hauteur: 3024, orientation: 1, prereduit: true, voie: 'canvas-high', rm: mot(), nav: mot({ rgb640: 'a'.repeat(64) }), ecartQuadPct: 0.4, memeCarte: true, ...o });
+        const mGp = (photos) => ({ moteur: 'wasm', verdict: 'IDENTIQUE', grandesPhotos: { version: 'rm-detection-2', photos } });
+        r = await post(doc({ mesure: mGp([gph(), gph({ rm: mot({ ok: false, code: 'TROP_GRAND', redressee: false, nCartes: 0, rgb640: null, quads: null, carte: null, dim640: null }), ecartQuadPct: null, memeCarte: null })]), runId: 'fedcba9876543220' }));
+        H.v('6. un depot de grandes photos (HTTP reel, 2 photos dont une refusee par le decodeur) ⇒ 201', [r.statut, JSON.parse(r.texte).success], [201, true]);
+        H.v('6. les grandes photos sont stockees telles que recues (empreintes, ecart, code du refus)', (({ grandesPhotos: g }) => [g.photos.length, g.photos[0].nav.rgb640, g.photos[1].rm.code])((await db.col('banc_telephone').findOne({ runId: 'fedcba9876543220' })).mesure), [2, 'a'.repeat(64), 'TROP_GRAND']);
+        await refus('une cle inconnue dans une photo', doc({ mesure: mGp([gph({ idCarte: 5 })]), runId: 'fedcba9876543221' }), 400, 'champ-inconnu:mesure.grandesPhotos.photos.idCarte');
+        await refus('une cle inconnue dans le moteur rm', doc({ mesure: mGp([gph({ rm: mot({ image: 'x' }) })]), runId: 'fedcba9876543222' }), 400, 'champ-inconnu:mesure.grandesPhotos.photos.rm.image');
+        await refus('une cle inconnue dans grandesPhotos', doc({ mesure: { moteur: 'wasm', verdict: 'IDENTIQUE', grandesPhotos: { version: 'rm-detection-2', photos: [gph()], note: 'x' } }, runId: 'fedcba9876543223' }), 400, 'champ-inconnu:mesure.grandesPhotos.note');
+        await refus('sept photos dans un depot', doc({ mesure: mGp([1, 2, 3, 4, 5, 6, 7].map(() => gph())), runId: 'fedcba9876543224' }), 400, 'champ:mesure.grandesPhotos.photos');
+        await refus('un format inconnu', doc({ mesure: mGp([gph({ format: 'tiff' })]), runId: 'fedcba9876543225' }), 400, 'champ:mesure.grandesPhotos.photos.format');
+        await refus('un sha256 de fichier mal forme', doc({ mesure: mGp([gph({ sha256Fichier: 'abc' })]), runId: 'fedcba9876543226' }), 400, 'champ:mesure.grandesPhotos.photos.sha256Fichier');
+        H.vrai('6. six photos tiennent sous la borne de 8 Ko du depot', Buffer.byteLength(JSON.stringify(doc({ mesure: mGp([1, 2, 3, 4, 5, 6].map(() => gph())) }))) < 8192);
         await refus('un compte hors bornes dans la detection', doc({ mesure: mDet({ ...det, nIdentiques: 101 }), runId: 'fedcba9876543212' }), 400, 'champ:mesure.detection.nIdentiques');
-        H.v('6. les depots de detection : un accepte, deux refuses non stockes', await db.col('banc_telephone').countDocuments({}), avant + 3);
+        H.v('6. les depots de detection et de grandes photos : deux acceptes, les refus non stockes', await db.col('banc_telephone').countDocuments({}), avant + 4);
         // les clés dangereuses : refusées par la liste fermée, jamais copiées
         x = await post('{"__proto__":{"admin":true},"v":1}');
         H.v('6. __proto__ à la racine ⇒ 400 (liste fermée)', x.statut, 400);
@@ -204,7 +218,7 @@ const doc = (o = {}) => ({ v: 1, runId: '0123456789abcdef', modeleSha: SHA, ua: 
         H.v('10. assembler() accepte les routes du lot (liste blanche des chemins, routes seulement)', erreur, null);
         const r = express.Router(); routes.monter(r, cfg, { envBancTelephone: ENV_BON, nomBaseBancTelephone: 'test_scratch', baseAttendueBancTelephone: 'test_scratch' });
         const chemins = r.stack.map(c => `${Object.keys(c.route.methods).join()} ${c.route.path}`);
-        H.v('10. 22 routes : la page, 20 fichiers (dont les 5 du décodeur Rat-Market et les 5 de la détection : detection.mjs, detection-page.mjs, lot-detection.json, opencv.js, opencv_js.wasm), le dépôt — toutes littérales', [chemins.length, chemins.filter(c => /[*?(]|:[a-z]/i.test(c.split(' ')[1])).length], [22, 0]);
+        H.v('10. 23 routes : la page, 21 fichiers (dont les 5 du décodeur Rat-Market et les 6 de la détection : detection.mjs, detection-page.mjs, grandes-page.mjs, lot-detection.json, opencv.js, opencv_js.wasm), le dépôt — toutes littérales', [chemins.length, chemins.filter(c => /[*?(]|:[a-z]/i.test(c.split(' ')[1])).length], [23, 0]);
         const rOff = express.Router(); H.v('10. éteint : monter() ne monte rien et le dit', [routes.monter(rOff, cfg, { envBancTelephone: {} }), rOff.stack.length], [false, 0]);
     }
 

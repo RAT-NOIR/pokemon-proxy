@@ -20,11 +20,15 @@ async function chargerOpenCV() {
   return cv;
 }
 
+// UNE seule instance d'OpenCV par page (le test de detection et le test de grandes photos la partagent : 128 Mo de tas WASM une fois, pas deux).
+let promesseCv = null;
+export function obtenirOpenCV() { if (!promesseCv) promesseCv = chargerOpenCV().catch((e) => { promesseCv = null; throw e; }); return promesseCv; }
+
 export async function executerTest() {
   const lot = await (await fetch('/api/banc/telephone/lot-detection.json')).json();
   const heap0 = performance.memory ? performance.memory.usedJSHeapSize : null;
   const t0 = performance.now();
-  const cv = await chargerOpenCV();
+  const cv = await obtenirOpenCV();
   const msOpencv = Math.round(performance.now() - t0);
   const r = { version: VERSION_DETECTION, nImages: lot.images.length, nIdentiques: 0, nRgb640: 0, nQuads: 0, nCartes: 0, voieCanvas: 0, voiePillow: 0, ecarts: [], msOpencv, msMediane: null, msTotal: null, jsHeapMo: null, jsHeapApresMo: null, wasmHeapMo: null, erreur: null };
   const ms = []; const empreintes = [];
