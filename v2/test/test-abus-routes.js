@@ -727,7 +727,8 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             { fichier: 'index.js', contient: 'console.error(`🔴 [v2] ${e.message} — les routes v2', raison: 'message d\'une CONFIGURATION invalide (lireConfig) : noms de variables, jamais la valeur d\'un secret' },
             { fichier: 'identifier/routes.js', contient: 'r.erreur.message', raison: 'champ `message` de l\'objet de refus FABRIQUÉ par verifierEntree (pas une Error de pilote)' },
             { fichier: 'identifier/adaptateur.js', contient: 'e instanceof Panne ? e.message', raison: 'message d\'une Panne : phrase fabriquée par l\'adaptateur (motif ou nature du refus de la chaîne héritée), jamais un message de pilote' },
-            { fichier: 'openapi/valider.js', contient: 'meilleure[0].message', raison: 'champ `message` d\'un écart du validateur (objet fabriqué)' }
+            { fichier: 'openapi/valider.js', contient: 'meilleure[0].message', raison: 'champ `message` d\'un écart du validateur (objet fabriqué)' },
+            { fichier: 'banc-telephone/public/opencv/opencv.js', contient: 'this.message=`Program terminated with exit', raison: 'bibliothèque tierce OpenCV.js servie au navigateur (empreinte épinglée dans copies-extension.json) : jamais chargée par le serveur, aucun journal de serveur' }
         ];
         // `mesures` : outillage lancé à la main (comme migrations/ et admin/), JAMAIS chargé par le serveur — l'assertion « aucun require de mesures/ » plus bas garde cette exclusion de devenir un trou
         const REPERTOIRES_CLI = ['migrations', 'admin', 'test', 'mesures'];       // outils en ligne de commande : ils écrivent sur le terminal de l'opérateur, pas dans un journal de serveur
