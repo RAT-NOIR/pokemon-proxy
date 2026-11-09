@@ -240,6 +240,24 @@ async function parcourir() {
         H.vrai('   prixGuide rempli ET daté', k.carte.prixGuide && k.carte.prixGuide.tendance === 1 && /^2026-10-04/.test(String(k.carte.prixGuide.date)));
         H.v('   facturation affirmee, solde 25 -> 24', [j.facturation.motif, j.facturation.debite, j.offre.restant, await soldeCompte(compteA.c)], ['affirmee', 1, 24, 24]);
         scanAffirme = j;
+        // PRO-PRIX-RESERVE : drapeau ALLUMÉ, le scanner ne sert JAMAIS prixLive ni prixRepli, à Pro comme au gratuit (la route est branchée sur `sansPrix`) ; un Pro y verrait sinon l'instruction de lecture en direct
+        {
+            const cfgPro = lireConfig({ MONGODB_BASE: 'test_scratch', V2_QUOTA_GRATUIT: '1000', V2_QUOTA_PRO_PLAFOND: '1000', V2_PRO_PRIX_RESERVE: '1' });
+            const svPro = await monter({}, cfgPro);
+            const abo = { actif: true, quotaMensuel: 100, moisCle: '2026-11', restant: 100, jusquAu: new Date(Date.now() + 40 * 86400e3) };
+            const pro = await compte({ abonnement: abo }), gratuit = await compte();
+            mode = 'affirmee';
+            const rp = await scanner(svPro.url, pro.cookie, { nom: '4-pro' }), rg = await scanner(svPro.url, gratuit.cookie, { nom: '4-gratuit' });
+            H.v('4 bis. PRO-PRIX-RESERVE allumé : un compte Pro et un compte gratuit reçoivent prixLive null et AUCUNE clé prixRepli au scanner (analyse rendue, offre pro / gratuit)',
+                [rp.statut, rg.statut, rp.json.offre.nom, rg.json.offre.nom, rp.json.analyse.cartes[0].prixLive, rg.json.analyse.cartes[0].prixLive, 'prixRepli' in rp.json.analyse.cartes[0], 'prixRepli' in rg.json.analyse.cartes[0]],
+                [200, 200, 'pro', 'gratuit', null, null, false, false]);
+            mode = 'ambigue';
+            const qp = await scanner(svPro.url, pro.cookie, { nom: '4-pro-q' });
+            const repP = await repondre(svPro.url, pro.cookie, qp.json.scanId, { choix: qp.json.analyse.cartes[0].question.choix[0].id }, { nom: '4-pro-r' });
+            H.v('   la réponse à une question du scanner, compte Pro, allumé : la carte rendue ne porte ni prixLive ni prixRepli', [repP.statut, repP.json.carte.prixLive, 'prixRepli' in repP.json.carte], [200, null, false]);
+            mode = 'affirmee';
+            await svPro.fermer();
+        }
         const a = await raw('analyses').findOne({ _id: new mongoose.Types.ObjectId(j.scanId) });
         H.v('   la ligne analyses est celle du compte, surface scanner', [a.porteur, a.surface], [`compte:${compteA.c._id}`, 'scanner']);
         // formats : PNG ok ; WebP ok

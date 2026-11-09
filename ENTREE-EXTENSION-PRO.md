@@ -14,7 +14,7 @@ Jeton annoncé, pour une réponse dont l'offre (`offre.nom`) n'est pas exactemen
 | `cartes[].carte.prixGuide` (et celui des impressions et des candidats) | **inchangé** : le prix du guide général (tendance, « De », moyennes), avec la date du guide. |
 | `liens.cardmarket` (« Voir le prix ») | **inchangé**. |
 | `cartes[].prixLive` | **`null`** (la clé reste). C'est l'instruction « lis le prix de CETTE carte, dans CES langues, à CET état » : sans elle, l'extension **ne lit rien sur Cardmarket** (ni prix par état, ni prix par langue). `prixLive.etatVise` n'est plus servi non plus : l'état à afficher est `etat.retenu`. |
-| `cartes[].prixRepli` | **absent** pour les replis `etat-proche` et `fourchette` (et tout repli qui porte une `fourchette`). **Conservé** pour le repli général `tendance` (tendance et moyennes du guide, sans fourchette ni offre lue), cause `langue-non-lue` ou `tendance-seule`. |
+| `cartes[].prixRepli` | **absent** pour les replis `etat-proche` et `fourchette` (guide absent). Le repli `tendance` qui porte une `fourchette` (état non estimable) est **servi sans la `fourchette`** : repli général, même `guide` (sous sa mention d'état non estimable, jamais fiable), causes `etat-non-retenu`, `langue-non-lue`, `lecture-ratee` ou `tendance-seule`. Le repli général `tendance` (sans fourchette ni offre lue) est **conservé** tel quel. Afficher le guide, jamais de fourchette. |
 | `POST /api/retour-live` → `prixRepli` | même règle. |
 | `POST /api/identifier/reponse`, `POST /api/identifier/mesures`, lot | même règle, carte par carte. |
 
@@ -27,7 +27,11 @@ Pour Pro (`offre.nom === "pro"`) : tout est servi comme avant, octet pour octet.
 3. **Afficher le prix du guide** (`prixGuide`, avec sa date et ses réserves) et le lien « Voir le prix ». Si un repli `tendance` est servi, l'afficher comme avant (c'est le guide du jour).
 4. **Proposer Pro** à la place du prix lu en direct : une ligne « Prix selon l'état et la langue : Pro » (texte à fixer par l'éditeur), qui renvoie vers l'offre sur le site. Pas de prix inventé, pas de fourchette calculée côté client.
 5. **Un `prixLive` non nul chez un non-Pro ne doit pas arriver** : si le jeton est annoncé et que `prixLive` est un objet alors que l'offre n'est pas Pro, c'est un défaut serveur ; l'extension n'affiche rien de plus et le signale (journal), sans lire Cardmarket.
-6. **Quota** : l'extension n'a rien à faire. Un scan gratuit dont le repli est retiré n'est plus compté comme « prix affiché » : une lecture ratée définitive est alors remboursée (`sans-prix`), comme avant l'introduction du repli ; le lot du gratuit, sans instruction de prix ni repli, est rendu quand aucune carte n'a de prix au guide.
+6. **Quota** : l'extension n'a rien à faire, et surtout n'a PAS à envoyer de `lectureRatee` pour obtenir un remboursement. Le serveur décide seul, à partir de ce qu'il sert :
+   - un gratuit dont le guide est servi (même sous la mention d'état non estimable) garde un repli général : son scan COMPTE, comme celui de Pro ; une lecture ratée définitive n'est pas remboursée ;
+   - un non-Pro dont AUCUN prix n'est servi (pas de `prixGuide`, pas de repli général, et plus de `prixLive`) : le scan est RENDU par le serveur dans la réponse même de `POST /api/identifier` (carte unique : `facturation { debite: 0, rembourse: true, motif: "sans-prix" }`) ou du lot (LOT-SANS-PRIX). Afficher « aucun prix disponible », sans rien envoyer de plus ;
+   - un `POST /api/retour-live` envoyé malgré tout après ce remboursement trouve le scan déjà rendu (`raisonNonRembourse: "deja-rembourse"`, `debite: 0`) : jamais de double remboursement ; un rejeu de la même requête rend la même réponse sans rembourser une seconde fois ;
+   - non couvert, listé : la réponse à une QUESTION (`/api/identifier/reponse`) dont la carte tranchée n'a aucun prix pour un non-Pro n'est pas rendue par le serveur.
 
 ## Cas limites que l'extension rencontrera
 

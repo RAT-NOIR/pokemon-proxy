@@ -490,6 +490,8 @@ function traiterIdentifier(cfg, deps = {}) {
 
         const admin = debit.administrateur === true, credit = admin ? null : (debit.credit ?? null);
         const userId = `v2:${porteur.type}:${porteur.id}`;
+        // PRO-PRIX-RESERVE : la décision UNIQUE du scan, lue UNE fois (éteint : aucune lecture, accès pour tous) ; elle sert la décision d'argent (lot, scan sans prix) ET la réponse (une seule lecture de l'offre : pas de fenêtre entre les deux).
+        const acces = await PRO.accesPour({ cfg, porteur, argent });
         // ACHETE-AVANT-JOUR : d'où vient l'analyse (`facturation.poche`), posé sur la RÉPONSE seulement ; un lot qui chevauche les deux poches dit "jour" (voir argent/poche-servie.js)
         const poche = () => PS.pocheDuScan(porteur, scanId, credit, typeof deps.identifierLot === 'function');
         // 4. la chaîne héritée, avec le DOUBLE de res ; tout ce qui suit se décide dans le contexte de CE scan (la cause d'un non-remboursement s'y note)
@@ -526,7 +528,7 @@ function traiterIdentifier(cfg, deps = {}) {
                 if (pd) { T.poser('photo', pd.totalMs); T.poser('photoTraitement', pd.traitementMs); }
             }
             if (modeLot && !sortie) {
-                const l = await executerLot({ cfg, deps, catalogue, argent, porteur, entree, annonce, scanId, cleDebit, admin, credit, ip: req.ip, userId, facturationDe });
+                const l = await executerLot({ cfg, deps, catalogue, argent, porteur, entree, annonce, scanId, cleDebit, admin, credit, ip: req.ip, userId, facturationDe, acces });
                 if (l.erreur) erreurLot = l.erreur; else if ('unique' in l) injecte = l.unique; else sortie = l.sortie;     // la présence se teste par la FORME, jamais par la valeur
             }
             // Pas de lot (crochet absent) OU un crochet qui n'a rendu qu'UN résultat : la branche UNE-CARTE (règle G, question réservée, sans-prix), qui reçoit ce résultat
@@ -740,10 +742,20 @@ function traiterIdentifier(cfg, deps = {}) {
                     } catch (e) { journalErreur('passage en probable', e); }
                     if (!ok) probableDecide = null;
                 } else probableDecide = null;
+                // PRO-PRIX-RESERVE (F2 de la relecture de l'argent) : un non-Pro n'a plus d'instruction de prix en direct ; une carte unique SANS aucun prix au guide (ni repli général) n'affiche donc aucun prix : le scan est rendu ICI, une seule
+                // fois, par le remboursement existant (symétrique de lot.js, sans dépendre de l'extension) ; drapeau éteint, Pro, administrateur, scanner : jamais. Un retour-live qui suit trouve le scan déjà rendu (deja-rembourse).
+                let scanSansPrix = false;
+                if (!acces && !admin && credit && porteur.surface !== 'scanner' && resultat.issue === 'affirmee' && !reqH.scanRembourse && resultat.analyse && Array.isArray(resultat.analyse.cartes) && resultat.analyse.cartes.length === 1 && PRO.carteSansPrixPourGratuit(resultat.analyse.cartes[0])) {
+                    scanSansPrix = true;
+                    try { await rembourserMoi('sans-prix'); } catch (e) { journalErreur('remboursement sans-prix', e); }
+                }
                 const faits = { admin, rendu: Boolean(reqH.scanRendu), question: Boolean(reqH.questionId) && resultat.issue === 'question', probable: Boolean(probableDecide), cause: reqH.scanRendu ? null : raisonNonRemboursement() };
+                const facturationScan = scanSansPrix
+                    ? (faits.rendu ? fabriquerFacturation({ debite: 0, rembourse: true, motif: 'sans-prix' }) : fabriquerFacturation({ debite: 1, rembourse: false, motif: faits.cause === 'plafond-jour' ? 'plafond-jour' : 'sans-prix', raisonNonRembourse: faits.cause ?? 'erreur' }))
+                    : facturationDe(resultat.issue, faits);
                 // I-2 : la borne du scan est atteinte pendant les étapes qui suivent la chaîne (catalogue, seconde lecture, règle G) : l'analyse finit en ÉCHEC par le chemin d'exception existant (ci-dessous : le crédit pris est rendu)
                 if (entree.arret && entree.arret.signal.aborted && resultat.issue !== 'panne') throw Object.assign(new Error('borne du scan atteinte'), { code: 'BORNE_PHOTOS' });
-                return { resultat, facturation: facturationDe(resultat.issue, faits), lecture, desaccord: desaccordG, motif: resultat.motif ?? null, ...(traceSeconde ? { secondeLecture: traceSeconde } : {}), ...(traceTampon ? { lectureTampon: traceTampon } : {}), ...(empreinteInfo ? { empreinte: empreinteInfo } : {}), ...(traceImage ? { surParImage: traceImage } : {}), ...(traceMarqueurs ? { regleMarqueurs: traceMarqueurs } : {}), ...(tracePromotion ? { promotionSurs: tracePromotion } : {}),
+                return { resultat, facturation: facturationScan, lecture, desaccord: desaccordG, motif: resultat.motif ?? null, ...(traceSeconde ? { secondeLecture: traceSeconde } : {}), ...(traceTampon ? { lectureTampon: traceTampon } : {}), ...(empreinteInfo ? { empreinte: empreinteInfo } : {}), ...(traceImage ? { surParImage: traceImage } : {}), ...(traceMarqueurs ? { regleMarqueurs: traceMarqueurs } : {}), ...(tracePromotion ? { promotionSurs: tracePromotion } : {}),
                     ...(probableDecide ? { probable: probableDecide } : {}),
                     ...(complement && resultat.issue === 'question' ? { complement } : {}) };     // CALCUL-CLIENT : seulement si la question a TENU jusqu'ici (une question non écrite est devenue une panne : pas de complément)
             }, traceScan);          // I1 : la trace du scan survit à la chaîne (catalogueIndex)
@@ -804,7 +816,6 @@ function traiterIdentifier(cfg, deps = {}) {
         // PRIX-LISIBLE : une carte identifiée dont l'analyse n'a rien dicté à lire (langue non lue, état non retenu) reçoit le repli honnête `prixRepli` SI sa fiche a une donnée de prix ; toute autre carte est rendue telle quelle.
         // Posé ICI, après la lecture du tampon (qui peut refaire le Produit) : le guide du repli est celui de la carte servie. Rien n'en entre dans la ligne `analyses` (elle est écrite depuis `analyse.cartes` : le repli se recalcule à la demande).
         // PRO-PRIX-RESERVE : `acces` est la décision UNIQUE (offre relue plus haut, `offre`). Sans accès, `prixLive` et les replis d'état sont retirés ICI, après le calcul du repli ; la réponse COMPLÈTE est gardée pour le rejeu d'idempotence.
-        const acces = PRO.accesPrixParEtat(cfg, offre);
         const analysePleine0 = acces ? null : { ...analyseAvecRepli(resultat.analyse), regleVerdict: regle, ...(photosDites || {}) };
         const analyse0 = acces ? { ...analyseAvecRepli(resultat.analyse), regleVerdict: regle, ...(photosDites || {}) } : { ...PRO.analyseSelonOffre(analysePleine0, false), regleVerdict: regle, ...(photosDites || {}) };
         const avecNiveauSiServi = (a, p) => (niveauServi(cfg, entree) ? avecNiveau(a, p) : a);

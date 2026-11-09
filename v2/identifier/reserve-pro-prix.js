@@ -21,6 +21,7 @@
 // que RETIRER (jamais de fuite), jamais ajouter.
 
 const { offreSur } = require('../argent/offre-sur');
+const PR = require('./prix-repli');
 
 const aPropre = (o, k) => Boolean(o) && typeof o === 'object' && Object.prototype.hasOwnProperty.call(o, k);
 
@@ -47,20 +48,40 @@ async function accesPour({ cfg, porteur, argent = null }) {
 /** Le repli GÉNÉRAL : la tendance du guide, sans offre lue ni fourchette. Écrit par ce qu'il AUTORISE. */
 const repliGeneral = r => Boolean(r) && typeof r === 'object' && !Array.isArray(r) && r.repli === 'tendance' && r.offre === null && !aPropre(r, 'fourchette');
 
-/** Un repli selon l'accès : tel quel avec l'accès, sinon seulement le repli général (tout autre genre : null). La MÊME référence quand rien ne change. */
+/** Le repli 	endance AVEC fourchette (état non estimable) : son guide (sous la mention d'état non estimable) est un prix du guide général ; seule la fourchette est un prix par état. */
+const repliTendanceAFourchette = r => Boolean(r) && typeof r === 'object' && !Array.isArray(r) && r.repli === 'tendance' && r.offre === null && aPropre(r, 'fourchette') && Boolean(r.guide) && typeof r.guide === 'object';
+
+/**
+ * Un repli selon l'accès : tel quel avec l'accès. Sans accès : le repli général tel quel ; le repli 	endance à fourchette DÉGRADÉ en repli général (le même guide, la fourchette retirée : il reste un prix du guide affiché, donc le scan
+ * reste compté, F1 de la relecture de l'argent) ; tout autre genre (etat-proche, ourchette sans guide) : null. La MÊME référence quand rien ne change.
+ */
 function repliSelonOffre(repli, acces) {
     if (acces) return repli;
-    return repliGeneral(repli) ? repli : null;
+    if (repliGeneral(repli)) return repli;
+    if (repliTendanceAFourchette(repli)) { const { fourchette, ...general } = repli; return general; }
+    return null;
+}
+
+/**
+ * F2 (relecture de l'argent) : une carte IDENTIFIÉE (analyse COMPLÈTE : avec son repli de Pro) qui, servie à un non-Pro, n'affiche POSITIVEMENT aucun prix : prixGuide exactement null et aucun repli général. Un champ absent ou
+ * d'une forme inconnue est un doute : un prix est supposé affiché (jamais un remboursement sur un doute). Même règle que lot.js (afficheUnPrix, la seule).
+ */
+function carteSansPrixPourGratuit(c) {
+    try {
+        if (!c || typeof c !== 'object' || c.statut !== 'identifiee' || !c.carte || typeof c.carte !== 'object' || c.carte.prixGuide !== null) return false;
+        return !PR.afficheUnPrix({ prixRendu: false, repli: repliSelonOffre(PR.avecRepliAnalyse(c).prixRepli ?? null, false) });
+    } catch (_) { return false; }
 }
 
 /** Une carte d'analyse selon l'accès. Sans accès : `prixLive` à null (la clé reste, comme pour une langue non lue) et `prixRepli` retiré s'il n'est pas général. La MÊME référence quand rien ne change (octet pour octet). */
 function carteSelonOffre(c, acces) {
     if (acces || !c || typeof c !== 'object' || Array.isArray(c)) return c;
-    const retireRepli = aPropre(c, 'prixRepli') && !repliGeneral(c.prixRepli);
+    const repli = aPropre(c, 'prixRepli') ? repliSelonOffre(c.prixRepli, false) : undefined;
+    const changeRepli = aPropre(c, 'prixRepli') && repli !== c.prixRepli;
     const retireLive = c.prixLive !== null && c.prixLive !== undefined;
-    if (!retireRepli && !retireLive) return c;
+    if (!changeRepli && !retireLive) return c;
     const o = { ...c };
-    if (retireRepli) delete o.prixRepli;
+    if (changeRepli) { if (repli === null) delete o.prixRepli; else o.prixRepli = repli; }
     if (retireLive) o.prixLive = null;
     return o;
 }
@@ -81,7 +102,7 @@ function corpsSelonOffre(corps, acces) {
     let sortie = corps;
     if (corps.analyse && typeof corps.analyse === 'object') { const a = analyseSelonOffre(corps.analyse, false); if (a !== corps.analyse) sortie = { ...sortie, analyse: a }; }
     if (corps.carte && typeof corps.carte === 'object') { const c = carteSelonOffre(corps.carte, false); if (c !== corps.carte) sortie = { ...sortie, carte: c }; }
-    if (aPropre(corps, 'prixRepli') && !repliGeneral(corps.prixRepli)) { const { prixRepli, ...reste } = sortie; sortie = reste; }
+    if (aPropre(corps, 'prixRepli')) { const r = repliSelonOffre(corps.prixRepli, false); if (r !== corps.prixRepli) { if (r === null) { const { prixRepli, ...reste } = sortie; sortie = reste; } else sortie = { ...sortie, prixRepli: r }; } }
     return sortie;
 }
 
@@ -112,4 +133,4 @@ function rejeuSelonOffre(cfg, obtenirArgent = null) {
     };
 }
 
-module.exports = { reservationActive, accesPrixParEtat, accesPour, repliGeneral, repliSelonOffre, carteSelonOffre, analyseSelonOffre, corpsSelonOffre, conserverComplet, rejeuSelonOffre };
+module.exports = { carteSansPrixPourGratuit, reservationActive, accesPrixParEtat, accesPour, repliGeneral, repliSelonOffre, carteSelonOffre, analyseSelonOffre, corpsSelonOffre, conserverComplet, rejeuSelonOffre };

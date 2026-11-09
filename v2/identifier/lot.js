@@ -192,7 +192,7 @@ async function executerLot(p) {
     // 5. un lot ENTIÈREMENT introuvable est remboursé (toutes ses unités) ; un lot dont AUCUNE carte n'affiche de prix l'est aussi (LOT-SANS-PRIX) ; une seule carte qui affiche un prix et il reste compté
     let facturation, sansPrixRendu = false;
     // PRO-PRIX-RESERVE : la décision unique, relue sur l'offre du porteur (éteint : aucune lecture, accès pour tous) ; ce que la réponse SERT décide si le lot « affiche un prix »
-    const acces = await PRO.accesPour({ cfg, porteur, argent });
+    const acces = typeof p.acces === 'boolean' ? p.acces : await PRO.accesPour({ cfg, porteur, argent });      // la route a déjà lu l'offre UNE fois (p.acces) : la même décision pour l'argent et pour la réponse
     if (lotInfo.identifiees === 0 && lotInfo.aTrancher === 0) {
         const r = await rendre('introuvable', toutesParLaGarde ? { compteur: 'jumeaux', unites: cartes.length } : {});          // lot entièrement refusé PAR LA GARDE (carte par carte, `every`) : une unité par carte ; constaté par le serveur, rendu sans plafond (PLAFOND-DECLARE)
         facturation = p.facturationDe('introuvable', { admin, rendu: r.rendu, question: false, cause: r.cause });

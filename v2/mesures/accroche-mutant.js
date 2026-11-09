@@ -7,6 +7,9 @@ if (!cible || !source) throw new Error('accroche-mutant : RM_MUTANT_CIBLE et RM_
 if (path.relative(require('os').tmpdir(), source).startsWith('..')) throw new Error('accroche-mutant : la copie mutée doit se trouver dans le dossier temporaire');
 const compiler = Module.prototype._compile;
 Module.prototype._compile = function (contenu, nom) {
-    if (path.resolve(nom) === cible) contenu = fs.readFileSync(source, 'utf8');
+    if (path.resolve(nom) === cible) {
+        contenu = fs.readFileSync(source, 'utf8');
+        if (process.env.RM_MUTANT_TRACE) { try { fs.writeFileSync(process.env.RM_MUTANT_TRACE, 'charge'); } catch (_) { /* la trace est facultative */ } }      // RM_MUTANT_TRACE : preuve que la copie mutée a bien été COMPILÉE (un mutant jamais chargé ne meurt pas : il est ignoré)
+    }
     return compiler.call(this, contenu, nom);
 };

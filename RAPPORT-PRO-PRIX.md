@@ -1,35 +1,53 @@
-# RAPPORT — réservation Pro du prix par état et par langue (critère n° 5, 08-09/11/2026)
+# RAPPORT — réservation Pro du prix par état et par langue (critère n° 5, 08-09/11/2026) — après le tour 1 des relectures
 
 Branche `v2-pro-prix` (depuis `origin/api-v2`), rien poussé ni déployé. Drapeau `V2_PRO_PRIX_RESERVE`, ÉTEINT par défaut, non posé sur l'essai.
 
 ## Ce qui est écrit
-- `v2/identifier/reserve-pro-prix.js` : LA décision `accesPrixParEtat(cfg, offre)` (éteint : vrai pour tous ; allumé : vrai seulement si `offre.nom === 'pro'`, la lecture de l'offre en erreur donne `undefined` donc le gratuit) et ses applicateurs (`carteSelonOffre`, `analyseSelonOffre`, `corpsSelonOffre`, `repliSelonOffre`), plus `rejeuSelonOffre`. Éteint, chacun rend la MÊME référence.
-- Sorties couvertes (déduites du code par le banc : tout fichier de `v2/` qui nomme `prixLive`, `prixRepli` ou les fabriques de repli doit importer la décision) :
-  1. `POST /api/identifier`, une carte et lot (`routes.js`, une seule sortie) ;
+- `v2/identifier/reserve-pro-prix.js` : LA décision `accesPrixParEtat(cfg, offre)` (éteint : vrai pour tous ; allumé : vrai seulement si `offre.nom === 'pro'`, une lecture d'offre en erreur donne `undefined` donc le gratuit) et ses applicateurs (`carteSelonOffre`, `analyseSelonOffre`, `corpsSelonOffre`, `repliSelonOffre`, `carteSansPrixPourGratuit`), plus `rejeuSelonOffre`. Éteint, chacun rend la MÊME référence.
+- Sorties couvertes (déduites du code par le banc : tout fichier de `v2/` qui nomme `prixLive`, `prixRepli` ou les fabriques de repli doit importer la décision et en DÉRIVER son accès) :
+  1. `POST /api/identifier`, une carte et lot (`routes.js`) ; l'offre est lue UNE fois par scan (`acces`) et passée au lot (`lot.js`, F1 de la relecture 2) ;
   2. `POST /api/identifier/reponse` (`routes.js`) ;
-  3. `POST /api/identifier/mesures` (`calcul-client-route.js` : la promotion par les mesures et la carte « probable » de groupe) ;
-  4. `POST /api/retour-live` (`retour-live.js` : repli retiré AVANT la décision d'argent) ;
-  5. quota du lot (`lot.js`) ;
+  3. `POST /api/identifier/mesures` (`calcul-client-route.js` : la promotion par les mesures, et la carte « probable de groupe », F5) ;
+  4. `POST /api/retour-live` (repli réduit AVANT la décision d'argent) ;
+  5. quota du lot (`lot.js`) et scan sans prix d'une carte unique (`routes.js`, F2) ;
   6. rejeu d'idempotence des quatre routes (`transport/idempotence.js`, option `rejeu`, branchée par `identifier/monter.js`).
-  Hors périmètre, vérifié : le scanner ne sert jamais ces champs (`sansLive`, pour tout le monde) ; l'historique (`solde.js::ligneAnalyse`) ne porte que nom, set et numéro ; aucun cache de réponse.
-- Config `proPrixReserve` ; jeton `/ping` `prix-pro-reserve` (dernier de la liste), enum OpenAPI, `fausses/ping.json`, descriptions `PrixLive` et `PrixRepli`, contrat §1.5, `AUDIT-SECURITE-V2.md` (table des variables).
-- Banc `v2/test/test-offre-prix-reserve-pro.js` (85 assertions) ; mutations `v2/mesures/mutations-prix-reserve-pro.js` (16 mutants, une garde retirée à la fois).
+  Hors périmètre, vérifié : le scanner ne sert jamais ces champs (`sansLive`) ; l'historique (`solde.js::ligneAnalyse`) ne porte que nom, set et numéro ; aucun cache de réponse.
+- Config `proPrixReserve` ; jeton `/ping` `prix-pro-reserve` (dernier de la liste), enum OpenAPI, `fausses/ping.json`, descriptions `PrixLive` et `PrixRepli`, contrat §1.5, `AUDIT-SECURITE-V2.md`, `ENTREE-EXTENSION-PRO.md`.
+- Bancs : `test-offre-prix-reserve-pro.js` (103 assertions), `test-offre-prix-reserve-pro-mesures.js` (10), cas 4 bis de `test-scanner-routes.js` ; aide `_prix-reserve-aide.js` ; jeu de mutants `v2/mesures/mutations-prix-reserve-pro.js` (22).
 
-## Arbitrages
-- Le gratuit garde le prix guide (fiche, impressions, candidats, mention d'état non estimable), le lien « Voir le prix » et le repli GÉNÉRAL `tendance` (sans `fourchette` ni offre lue : causes `langue-non-lue` et `tendance-seule`). Il perd `prixLive` (mis à `null`, la clé reste) et tout `prixRepli` `etat-proche`, `fourchette` ou à fourchette. Le champ `etat` n'est jamais lu ni modifié (comparé à l'octet pour 5 offres, allumé et éteint).
-- Le repli est calculé sur l'analyse complète PUIS filtré : un gratuit ne reçoit jamais un repli `langue-non-lue` fabriqué par le retrait de `prixLive`.
-- Contradiction signalée : retirer `prixLive` retire l'instruction de lecture de la LANGUE, pas seulement de l'état (le critère dit « par état ou par langue » : cohérent, mais le contrat devait le dire ; fait en §1.5).
-- Quota : le repli retiré n'est plus un « prix affiché » (`afficheUnPrix`). Lecture ratée définitive d'un gratuit : remboursée `sans-prix` (Pro : `prix-repli`, compté). Lot du gratuit : `prixLive` et repli d'état ne comptent plus ; un lot de cartes sans prix au guide est rendu (Pro et drapeau éteint : compté).
-- Rejeu : la réponse conservée est la réponse COMPLÈTE quand le gratuit est servi sans prix (une carte, une réponse à question, les mesures) ; l'offre ACTUELLE décide au rejeu : abonnement expiré = rien ne fuit, passé à Pro = rien retiré à tort. Lot et `retour-live` : la décision d'argent a dépendu de la réservation, la réponse conservée est celle qui a été SERVIE, le rejeu ne fait que retirer (un lot rendu au gratuit ne devient pas un lot à prix par un rejeu sous Pro). Texte conservé illisible : 503. Lecture de l'offre en erreur au rejeu : réponse du gratuit.
+## Corrections du tour 1
+- **F1 (argent)** : un non-Pro dont l'état n'est pas estimable et dont le guide est servi recevait un repli `tendance` à fourchette retiré ENTIER : retour-live remboursait `sans-prix` un scan dont le guide était affiché. Corrigé : le repli est DÉGRADÉ en repli général (même `guide` sous sa mention d'état non estimable, `fourchette` retirée) ; le scan reste compté, comme pour Pro. Les assertions de B4 qui figeaient l'ancien remboursement sont remplacées (non-Pro = facturation de Pro).
+- **F2 (argent)** : carte unique d'un non-Pro, `prixGuide` nul, `prixLive` mis à `null` : le scan était compté sans aucun prix. Corrigé par une décision serveur symétrique du lot, drapeau allumé seulement : le scan est RENDU une seule fois (`rembourserMoi('sans-prix')`, facturation `sans-prix`, `debite 0`) ; jamais pour Pro, l'administrateur, le scanner, ni un guide servi. Prouvé (B9) : un retour-live qui suit répond `deja-rembourse` (un seul mouvement de remboursement, compteur du jour à 0) ; un rejeu rend la même réponse sans second remboursement ; les témoins à guide servi (états nul et estimable, langue lue et non lue) restent comptés.
+- **F5** : la branche « probable de groupe » de `/mesures` appelle `conserverComplet`.
+- **F1 de la relecture 2** : l'offre est lue une fois par scan et passée au lot.
+- **Preuve 1** : le mutant `mesures` ne pouvait pas mourir (le banc ne montait pas la route). Nouveau banc `test-offre-prix-reserve-pro-mesures.js`, sur le harnais de `test-calcul-client-route.js` : garde de scénario (carte complète avec prix par état), Pro = carte complète, non-Pro (gratuit, sans compte, expiré, offre inconnue) = oracle du gratuit, `etat` identique, Pro éteint = Pro allumé, rejeu après expiration sans fuite, rejeu après passage à Pro sans retrait. Deux mutants (promotion) le tuent.
+  La ligne « probable de groupe » (l. 169) ne peut PAS être tuée par un test : la carte servie y est une QUESTION (`a-trancher`), qui ne porte jamais `prixLive` ni `prixRepli`. Le mutant est déclaré ÉQUIVALENT, raison écrite dans le jeu ; il est chargé et resté vert (10/0).
+- **Preuve 2** : scanner : cas 4 bis de `test-scanner-routes.js` (drapeau allumé, compte Pro et compte gratuit : `prixLive` null, aucune clé `prixRepli`, y compris à la réponse d'une question) ; mutant sur le branchement `sansPrix` (`scanner/routes.js:243`) tué (107 réussis, 10 échoués).
+- **Preuve 3, fixtures** : plus aucune valeur de prix ni identifiant saisis. Origine de chaque valeur dans l'en-tête de `_prix-reserve-aide.js` : guides, prix lu 7,67 et noms = `fixtures/prix-repli-reels.json` ; idProduct 273844 et 371545, et six produits sans guide (273830, 273854, 273837, 273804, 273855, 273856) = `cartes.cartes_produits`, lus par l'outil MCP `mongodb-lecture` le 2026-11-09 ; prix lu dans un état pire et grille = DÉRIVÉS du guide réel de Tauros (low, trend). Reste une clé STRUCTURELLE non réelle, dite : `idMetacard` = l'idProduct (la table `catalogue_produits` n'est pas lisible par le MCP). Le banc des mesures réutilise les produits P et A de `_empreinte-aide.js` (existants), avec le guide réel de Tauros à la place de l'ancien 1,0 ; leurs noms et numéros restent ceux, existants, de ce harnais. Les noms des six produits sans guide viennent de leurs slugs.
+- **Preuve 4** : C2 compte les mutants non équivalents par sortie ; C3 et C4 vérifient que chaque banc existe, que l'équivalent a sa raison, et que le jeu exige la preuve de chargement. **La mort est prouvée par le jeu lui-même** : l'accroche écrit une trace quand la copie mutée est compilée (`RM_MUTANT_TRACE`) ; un mutant dont la copie n'a pas été chargée est « NON-CHARGÉ », jamais « TUÉ ». L'ancienne phrase du rapport (« un mutant qui échoue sur ce test statique »), fausse, est supprimée. « Offre inconnue » passe maintenant par un routeur (genre `inconnue`, offre rendue `{ nom: 'inconnue' }`) dans toutes les sections.
+- **« Éteint = identique »** : ce banc compare, drapeau éteint, les porteurs ENTRE EUX (cartes, rejeu au texte près). L'identité avec le code d'AVANT ce lot s'appuie sur le rejeu des suites existantes (liste ci-dessous), pas sur une réponse de référence figée.
+- **Rouge vu** : le code des corrections a été écrit avant le banc retouché ; le rouge de chaque assertion nouvelle est établi par les MUTANTS (F1, F2, mesures, scanner : le banc devient rouge quand le code est retiré, voir ci-dessous), pas par un run du banc contre l'ancien code.
 
-## Vérifications exécutées
-- Banc `test-offre-prix-reserve-pro.js` : 85/0, rouge vu avant le code (0b, A2, B...) puis vert ; sous les 6 conditions du critère.
-- Suites rejouées une par une : capacites-ping 216/0, montage 26/0, lot-sans-prix 51/0, repli-quota 26/0, prix-repli-routes 50/0, idempotence 45/0, mutations-lot-sans-prix 4/0, mutations-repli-quota 4/0, openapi 133/0, openapi-fausses 323/0, contrat-reel 70/0, retour-live-v2 40/0, identifier-lot 91/0, abus-routes 89/0, config-invalide-heritage 27/0, lanceur 26/0. Ancres des jeux de mutants existants (lot-sans-prix, repli-quota) remises à jour.
-- Mutations : voir plus bas (résultat du jeu complet).
+## Mutation (jeu complet, `node v2/mesures/mutations-prix-reserve-pro.js`, Start-Process, 2026-11-09)
+22 mutants : **21 tués, 1 équivalent déclaré, 0 survivant, 0 non chargé, 0 ancre cassée.** Chaque verdict TUÉ a une copie mutée chargée (trace) ET un banc rouge. Un seul sans bilan (« le repli général est retiré avec les autres ») : le banc a planté, rouge aussi. Détail : identifier 86/17, reponse 102/1, retour-live 100/3, lot 102/1, mesures 8/2, scanner 107/10, rejeu 99/4, décision 80/23, F1 91/12, F2 98/5.
+
+## Arbitrages (inchangés, plus F1 et F2)
+- Le gratuit garde le prix guide (fiche, impressions, candidats, mention d'état non estimable), le lien « Voir le prix » et le repli général `tendance` ; le repli à fourchette est dégradé en repli général. Il perd `prixLive` (mis à `null`) et les replis `etat-proche` et `fourchette` sans guide. `etat` n'est jamais lu ni modifié (comparé à l'octet pour six offres, allumé et éteint).
+- Rejeu : la réponse conservée est la réponse COMPLÈTE quand le non-Pro est servi sans prix (carte, réponse à question, mesures) ; l'offre ACTUELLE décide au rejeu. Lot et `retour-live` : réponse servie conservée, le rejeu ne fait que retirer.
+- Retirer `prixLive` retire aussi la lecture par LANGUE ; dit au contrat §1.5, à l'OpenAPI et à l'entrée extension.
+
+## Listé SANS correction (consigne)
+- F3 (relecture 3) : Pro expiré entre le scan et le `retour-live` : jugé gratuit à l'arrivée (repli dégradé ; le scan reste compté si le guide est servi). Borné, à documenter.
+- F4 (relecture 3) : rejeu d'un `retour-live` sous une offre qui a baissé : repli retiré mais facturation conservée « prix-repli ». Cosmétique.
+- F2 de la relecture 2 : `offre` servie dans le corps de `retour-live` lue séparément de l'accès. Sans effet de prix.
+- F3 de la relecture 2 : un Pro qui rejoue un LOT conservé « gratuit » reçoit la version sans prix (arbitrage documenté).
+- Résidu de F2, non demandé : la réponse à une QUESTION tranchée (`/api/identifier/reponse`) dont la carte n'a aucun prix pour un non-Pro n'est pas rendue par le serveur (dit au contrat et à l'entrée extension).
+- L'administrateur est « pro » et reçoit le prix.
+
+## Suites rejouées une par une après les corrections (toutes vertes)
+capacites-ping 216/0, montage 26/0, lot-sans-prix 51/0, repli-quota 26/0, prix-repli-routes 50/0, prix-repli 96/0, fourchette-etat 141/0, mutations-lot-sans-prix 4/0, mutations-repli-quota 4/0, openapi 133/0, openapi-fausses 323/0, contrat-reel 70/0, retour-live-v2 40/0, identifier-lot 91/0, idempotence 45/0, calcul-client-route 32/0, g-groupe-probable 32/0, scanner-routes 117/0, abus-routes 89/0, config-invalide-heritage 27/0, lanceur 26/0 ; banc principal 103/0, banc mesures 10/0.
 
 ## Non vérifié
-- `lancer-tout.js` non lancé (consigne). Le verrou reste à passer.
-- La route `POST /api/identifier/mesures` n'a pas de test comportemental (elle exige V2_MESURES_CLIENT et V2_EMPREINTE_EXTENSION et un modèle) : couverte par le test statique (importe la décision, dérive `acces`) et un mutant qui échoue sur ce test statique.
-- Le scanner : couverture statique seulement.
-- Aucune lecture réelle d'abonnement Stripe : l'offre « pro » est celle de `argent/offre.js` (abonnement actif et en cours, ou administrateur : l'administrateur est donc « pro » et reçoit le prix).
-- Le banc se terminait mal (processus resté vivant : `mongoose.disconnect()` manquant) : corrigé.
+- `lancer-tout.js` non lancé (consigne) : le verrou complet reste à passer.
+- Aucune lecture réelle d'abonnement Stripe : l'offre « pro » est celle de `argent/offre.js`.
+- `MONGOMS_DOWNLOAD_DIR` n'était pas posée : la base de banc en mémoire a fonctionné quand même.

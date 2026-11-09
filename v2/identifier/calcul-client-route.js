@@ -129,7 +129,7 @@ async function jugerG({ cm, resultats, catalogue }) {
  * @returns {{reponse: {carte, facturation, solde?, offre?}} | {refus: string}}
  */
 async function devenirProbable({ cfg, argent, porteur, scanId, an, entree, cm, ordre, catalogue }) {
-    let debite = false, reponse = null;
+    let debite = false, reponse = null, carteComplete = null, acces = true;
     try {
         if (!cm.probableG || typeof cm.probableG !== 'object') return { refus: 'sans-donnees' };
         const c0 = an.cartes[0];
@@ -166,12 +166,13 @@ async function devenirProbable({ cfg, argent, porteur, scanId, an, entree, cm, o
         let solde, offre;
         try { solde = await argent.solde(porteur); } catch (e) { journalErreur('solde', e); }
         try { offre = await offreSur(porteur, argent); } catch (e) { journalErreur('offre', e); }
-        reponse = { carte: PRO.carteSelonOffre(carte, PRO.accesPrixParEtat(cfg, offre)), facturation, ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) };      // PRO-PRIX-RESERVE : la même décision (une carte à trancher n'a ni prixLive ni repli : garde par construction)
-        return { reponse };
+        acces = PRO.accesPrixParEtat(cfg, offre); carteComplete = carte;
+        reponse = { carte: PRO.carteSelonOffre(carte, acces), facturation, ...(solde !== undefined ? { solde } : {}), ...avecOffre(offre) };      // PRO-PRIX-RESERVE : la même décision (une carte à trancher n'a ni prixLive ni repli : garde par construction)
+        return { reponse, carteComplete, acces };
     } catch (e) {
         journalErreur('probable de groupe', e);
         // une exception APRÈS le débit : la carte et la facturation sont déjà prêtes quand elles existent, elles sont servies ; jamais « change: false » sur un crédit débité
-        if (debite && reponse) return { reponse };
+        if (debite && reponse) return { reponse, carteComplete, acces };
         if (debite) console.error(`🔴 [v2 mesures] scan ${scanId} : crédit débité (probable de groupe) et réponse non fabriquée — à la réconciliation`);
         return { refus: 'erreur' };
     }
@@ -218,7 +219,12 @@ function traiterMesures(cfg, deps = {}) {
             // argent.passerEnProbable (la fonction de PROBABLE). Un refus laisse la question réservée : le résultat d'avant, `change: false`.
             if (cfg.gGroupe === true && cfg.probable === true && b.accepteProbable === true && j.ordreGroupe && j.ordreGroupe.change === true) {
                 const p = await devenirProbable({ cfg, argent, porteur, scanId, an, entree, cm, ordre: j.ordreGroupe, catalogue });
-                if (p.reponse) { await noter('probable-groupe', { ...j.ordreGroupe, probable: 'servi' }); return res.status(200).json({ success: true, scanId: b.scanId, change: true, ...p.reponse }); }
+                if (p.reponse) {
+                    await noter('probable-groupe', { ...j.ordreGroupe, probable: 'servi' });
+                    // PRO-PRIX-RESERVE (F5) : la même conservation que la promotion ci-dessous ; la carte « probable » est une question (ni prixLive ni repli) : la réduction n'y change rien, la conservation reste uniforme
+                    if (p.carteComplete && p.reponse.carte !== p.carteComplete) PRO.conserverComplet(res, { success: true, scanId: b.scanId, change: true, ...p.reponse, carte: p.carteComplete }, { acces: p.acces });
+                    return res.status(200).json({ success: true, scanId: b.scanId, change: true, ...p.reponse });
+                }
                 return inchange(j.issue || 'inchange', { ...j.ordreGroupe, probable: `refus:${p.refus}` });
             }
             return inchange(j.issue || 'inchange', j.ordreGroupe);
