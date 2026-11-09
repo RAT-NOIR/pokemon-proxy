@@ -272,6 +272,18 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         refus(ee(), pe({ couplesDuSet: undefined }), undefined, 'liste du set inconnue');
         refus(ee(), pe({ couplesDuSet: [] }), undefined, 'liste du set vide');
         refus(ee(), pe({ couplesDuSet: [...COUPLES, { nomEn: null, numero: '2010' }] }), undefined, 'un nom inconnu dans la liste pourrait cacher un doublon');
+        for (const numero of [null, undefined, '', '  ']) refus(ee(), pe({ couplesDuSet: [...COUPLES, { nomEn: 'Fire Energy', numero }] }), undefined, `un numéro absent (${JSON.stringify(numero)}) dans la liste pourrait cacher un doublon`);
+        // la liste se construit sur TOUS les produits du référentiel du set, joints ou non (fonction extraite, sans base)
+        const ref = [{ idProduct: 1, numero: '2010' }, { idProduct: 2, numero: '2011' }, { idProduct: 3, numero: '2010' }];
+        const noms = new Map([[1, 'Grass Energy'], [2, 'Grass Energy'], [3, 'Fire Energy']]);
+        assert.deepStrictEqual(PV.couplesDuSetDepuis(ref, id => noms.get(id)), [{ idProduct: 1, nomEn: 'Grass Energy', numero: '2010' }, { idProduct: 2, nomEn: 'Grass Energy', numero: '2011' }, { idProduct: 3, nomEn: 'Fire Energy', numero: '2010' }]);
+        assert.strictEqual(lue(ee(), pe({ couplesDuSet: PV.couplesDuSetDepuis(ref, id => noms.get(id)) })).ok, true, 'liste complète : admis');
+        const avecNonJoint = [...ref, { idProduct: 4, numero: '2010' }];   // 4 : produit du set sans carte jointe, même type, même année
+        noms.set(4, 'Grass Energy [V9]');
+        refus(ee(), pe({ couplesDuSet: PV.couplesDuSetDepuis(avecNonJoint, id => noms.get(id)) }), undefined, 'un produit non joint du même type et de la même année refuse le produit joint');
+        noms.delete(4);
+        refus(ee(), pe({ couplesDuSet: PV.couplesDuSetDepuis(avecNonJoint, id => noms.get(id)) }), undefined, 'un produit non joint sans nom : la liste refuse');
+        assert.deepStrictEqual(PV.couplesDuSetDepuis([{ idProduct: 5, numero: '2010' }], () => '   '), [{ idProduct: 5, nomEn: null, numero: '2010' }], 'nom inutilisable -> null');
         refus(ee(), pe({ couplesDuSet: [{ nomEn: 'Fire Energy', numero: '2010' }] }), undefined, 'le produit n\'est pas dans sa propre liste');
         refus(ee({ annee: 2010 }), pe({ numero: '1' }), undefined, 'numéro du produit qui n\'est pas une année');
         refus(ee({ annee: 1 }), pe({ numero: '1' }), undefined, 'idem, année lue 1');
