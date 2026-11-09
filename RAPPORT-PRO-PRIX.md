@@ -41,7 +41,6 @@ Branche `v2-pro-prix` (depuis `origin/api-v2`), rien poussé ni déployé. Drape
 - F4 (relecture 3) : rejeu d'un `retour-live` sous une offre qui a baissé : repli retiré mais facturation conservée « prix-repli ». Cosmétique.
 - F2 de la relecture 2 : `offre` servie dans le corps de `retour-live` lue séparément de l'accès. Sans effet de prix.
 - F3 de la relecture 2 : un Pro qui rejoue un LOT conservé « gratuit » reçoit la version sans prix (arbitrage documenté).
-- Résidu de F2, non demandé : la réponse à une QUESTION tranchée (`/api/identifier/reponse`) dont la carte n'a aucun prix pour un non-Pro n'est pas rendue par le serveur (dit au contrat et à l'entrée extension).
 - L'administrateur est « pro » et reçoit le prix.
 
 ## Suites rejouées une par une après les corrections (toutes vertes)
@@ -51,3 +50,13 @@ capacites-ping 216/0, montage 26/0, lot-sans-prix 51/0, repli-quota 26/0, prix-r
 - `lancer-tout.js` non lancé (consigne) : le verrou complet reste à passer.
 - Aucune lecture réelle d'abonnement Stripe : l'offre « pro » est celle de `argent/offre.js`.
 - `MONGOMS_DOWNLOAD_DIR` n'était pas posée : la base de banc en mémoire a fonctionné quand même.
+
+## Tour 2 (fermer ce qui reste avant le verrou)
+- **Résidu de F2, `POST /api/identifier/reponse`** : un non-Pro dont le candidat TRANCHÉ n'a aucun prix (pas de guide, pas de repli général, plus d'instruction `prixLive`) voyait une carte sans prix, scan compté. Corrigé, drapeau allumé seulement : le crédit confirmé est rendu une fois (`argent.rembourser(..., 'sans-prix', { compteur: 'sans-prix' })`, comme le scanner), facturation `sans-prix`, `debite 0`. Jamais pour Pro, administrateur, scanner, ni question de LOT. L'offre est lue une fois au début de la réponse. Banc B10 : la garde de scénario, Pro et drapeau éteint comptés, les six non-Pro rendus (compteur du jour à 0, un seul mouvement de remboursement, aucune instruction servie), rejeu de la même réponse (toujours « rendu », un seul remboursement), retour-live qui suit (pas de second remboursement), témoin à guide (compté), question de lot (rien rendu par cette route). Deux mutants le tuent (la garde et la règle).
+- **Fixtures** : `prix: 1` de `cand` et de `lecture()` remplacés par `null` (structurellement nul : la chaîne fabriquée ne donne aucun prix) ; le total des produits sans guide vient du total réel de Jungle (fixture) ; l'en-tête de `_prix-reserve-aide.js` dit exactement ce qui est réel et ce qui ne l'est pas (total sur 3 chiffres, défauts du harnais `_visuels-banc.js`, champs de structure de l'abonnement et de l'offre inconnue, `idMetacard`). Plus aucun prix ni identifiant de produit saisis.
+- **Historique** : B11 appelle `argent.historique` (ce que sert `GET /api/compte`) après un scan de Pro et d'un gratuit : la ligne `analyse` est présente et ne porte aucun champ de prix (`prixLive`, `prixRepli`, `prixGuide`, `fourchette`, `tendance`, `langues`, `etatVise`).
+- **Commentaires de `reserve-pro-prix.js`** : le caractère \f et les tabulations (des `\`t` et `\`f` de PowerShell qui avaient mangé des guillemets obliques) sont retirés ; un balayage des 18 fichiers touchés ne trouve plus aucun caractère de contrôle ni tabulation.
+- **Mutation** (jeu complet, Start-Process) : 23 mutants, **22 tués, 1 équivalent déclaré, 0 survivant, 0 non chargé, 0 ancre cassée**.
+- **Banc principal 119/0**, banc des mesures 10/0. Suites rejouées une par une, toutes vertes : capacites-ping 216, montage 26, lot-sans-prix 51, repli-quota 26, prix-repli-routes 50, prix-repli 96, fourchette-etat 141, mutations-lot-sans-prix 4, mutations-repli-quota 4, openapi 133, openapi-fausses 323, contrat-reel 70, retour-live-v2 40, identifier-lot 91, idempotence 45, calcul-client-route 32, g-groupe-probable 32, scanner-routes 117, abus-routes 89, config-invalide-heritage 27, lanceur 26, argent-questions 56, offre-quota 78.
+- **Rouge vu** : comme au tour 1, le rouge des assertions nouvelles est établi par les mutants (garde et règle du remboursement de la réponse, tués).
+- Toujours non vérifié : `lancer-tout.js` (consigne).

@@ -964,8 +964,9 @@ function traiterReponse(cfg, deps = {}) {
         const entree = Array.isArray(an.cartes) ? an.cartes[carte] : null;
         if (!entree || entree.statut !== 'a-trancher') return repondreErreur(res, 'CODE_INVALIDE', 'Question introuvable');
         const admin = Boolean(an.facturation && an.facturation.motif === 'administrateur');
+        const acces = await PRO.accesPour({ cfg, porteur, argent });      // PRO-PRIX-RESERVE (réponse) : la décision UNIQUE, lue une fois ; elle sert la décision d'argent ci-dessous ET la carte rendue
 
-        let facturation, idProduct = null, le = new Date(), enAttente = false, declaration = null;
+        let facturation, idProduct = null, le = new Date(), enAttente = false, declaration = null, questionDeLot = false;
         if (admin) {
             // un administrateur n'a rien débité : aucune question n'a été réservée. La réponse se résout sur la ligne analyses, et se rejoue / se contredit comme les autres.
             const ids = ((entree.question && entree.question.choix) || []);
@@ -986,7 +987,7 @@ function traiterReponse(cfg, deps = {}) {
             if (r.statut === 409) return repondreErreur(res, 'CONFLIT', 'Une autre réponse a déjà été donnée');
             if (r.statut === 410) { const s = await soldeSur(), o = await offreP(); return repondreErreur(res, 'CODE_EXPIRE', 'La question a expiré', { facturation: r.facturation, ...(r.declaration ? { declaration: r.declaration } : {}), ...(s !== undefined ? { solde: s } : {}), ...avecOffre(o) }); }
             if (r.statut !== 200 || !r.question) { console.error(`🔴 [v2 reponse] statut inattendu ${r.statut} pour ${scanId}`); return repondreErreur(res, 'SERVEUR'); }
-            facturation = r.facturation; enAttente = r.remboursementEnAttente === true; declaration = r.declaration || null;
+            facturation = r.facturation; enAttente = r.remboursementEnAttente === true; declaration = r.declaration || null; questionDeLot = Boolean(r.question && r.question.lot);
             idProduct = r.question.reponse && r.question.reponse.idProduct != null ? r.question.reponse.idProduct : null;
             le = (r.question.reponse && r.question.reponse.le) || le;
         }
@@ -1001,8 +1002,16 @@ function traiterReponse(cfg, deps = {}) {
             try { await col('analyses').updateOne({ _id: scanId, [`cartes.${carte}.probableConfirme`]: { $exists: false } }, { $set: { [`cartes.${carte}.probableConfirme`]: idProduct === entree.probable.idProduct } }); }
             catch (e) { journalErreur('probable confirmé', e); }
         }
+        // PRO-PRIX-RESERVE (résidu de F2) : une carte TRANCHÉE par la réponse du client et sans AUCUN prix servi à un non-Pro (pas de guide, pas de repli général, plus d'instruction prixLive) : le crédit confirmé est RENDU ici, une seule
+        // fois (le grand livre refuse le second : un rejeu retrouve « deja-rembourse »), comme le scanner ; drapeau éteint, Pro, administrateur, scanner et question de LOT (elle ne coûte ni ne rend rien) : jamais.
+        if (!acces && !admin && !questionDeLot && porteur.surface !== 'scanner' && PRO.carteSansPrixPourGratuit(resolueComplete)) {
+            try {
+                const rb = await argent.rembourser(porteur, { poche: null }, 'sans-prix', { scanId, compteur: 'sans-prix' });
+                facturation = rb.rendu || rb.raisonNonRembourse === 'deja-rembourse' ? fabriquerFacturation({ debite: 0, rembourse: true, motif: 'sans-prix' }) : require('./retour-live').facturationDeLecture(rb);
+                if (rb.declaration) declaration = rb.declaration;
+            } catch (e) { journalErreur('remboursement sans-prix de la réponse', e); }
+        }
         const solde = await soldeSur(), offre = await offreP();
-        const acces = PRO.accesPrixParEtat(cfg, offre);      // PRO-PRIX-RESERVE : la décision unique, sur l'offre relue ci-dessus
         const resolue = PRO.carteSelonOffre(resolueComplete, acces);
         // B6.4 : le crochet du banc réel, APRÈS la vérification du porteur (analyses) et l'acceptation de la réponse ; jamais attendu, ne lève jamais
         require('../banc/crochet').apresReponse({ cfg, req, scanId: b.scanId, carte, choix, idProduct });

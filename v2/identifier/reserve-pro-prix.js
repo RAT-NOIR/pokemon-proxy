@@ -48,12 +48,12 @@ async function accesPour({ cfg, porteur, argent = null }) {
 /** Le repli GÉNÉRAL : la tendance du guide, sans offre lue ni fourchette. Écrit par ce qu'il AUTORISE. */
 const repliGeneral = r => Boolean(r) && typeof r === 'object' && !Array.isArray(r) && r.repli === 'tendance' && r.offre === null && !aPropre(r, 'fourchette');
 
-/** Le repli 	endance AVEC fourchette (état non estimable) : son guide (sous la mention d'état non estimable) est un prix du guide général ; seule la fourchette est un prix par état. */
+/** Le repli « tendance » AVEC fourchette (état non estimable) : son guide (sous la mention d'état non estimable) est un prix du guide général ; seule la fourchette est un prix par état. */
 const repliTendanceAFourchette = r => Boolean(r) && typeof r === 'object' && !Array.isArray(r) && r.repli === 'tendance' && r.offre === null && aPropre(r, 'fourchette') && Boolean(r.guide) && typeof r.guide === 'object';
 
 /**
- * Un repli selon l'accès : tel quel avec l'accès. Sans accès : le repli général tel quel ; le repli 	endance à fourchette DÉGRADÉ en repli général (le même guide, la fourchette retirée : il reste un prix du guide affiché, donc le scan
- * reste compté, F1 de la relecture de l'argent) ; tout autre genre (etat-proche, ourchette sans guide) : null. La MÊME référence quand rien ne change.
+ * Un repli selon l'accès : tel quel avec l'accès. Sans accès : le repli général tel quel ; le repli « tendance » à fourchette DÉGRADÉ en repli général (le même guide, la fourchette retirée : il reste un prix du guide affiché, donc le scan
+ * reste compté, F1 de la relecture de l'argent) ; tout autre genre (« etat-proche », « fourchette » sans guide) : null. La MÊME référence quand rien ne change.
  */
 function repliSelonOffre(repli, acces) {
     if (acces) return repli;

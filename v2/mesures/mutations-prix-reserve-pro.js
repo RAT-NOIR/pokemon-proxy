@@ -13,8 +13,9 @@ const ROUTES = 'identifier/routes.js', LOT = 'identifier/lot.js', RL = 'identifi
 
 // [nom, fichier (relatif à v2/), ancre, remplacement, banc, équivalent? (raison écrite)] — `fichier` est AUSSI la sortie que le banc exige de couvrir (test-offre-prix-reserve-pro.js, C2)
 const MUTANTS = [
-    ['/api/identifier (une carte et un lot) : la garde est retirée (tout le monde reçoit)', ROUTES, "const acces = await PRO.accesPour({ cfg, porteur, argent });", "const acces = true;", BANC],
-    ['/api/identifier/reponse : la garde est retirée (tout le monde reçoit)', ROUTES, "const acces = PRO.accesPrixParEtat(cfg, offre);      // PRO-PRIX-RESERVE : la décision unique, sur l'offre relue ci-dessus", "const acces = true;      // PRO-PRIX-RESERVE : la décision unique, sur l'offre relue ci-dessus", BANC],
+    ['/api/identifier (une carte et un lot) : la garde est retirée (tout le monde reçoit)', ROUTES, "const acces = await PRO.accesPour({ cfg, porteur, argent });\n        // ACHETE-AVANT-JOUR", "const acces = true;\n        // ACHETE-AVANT-JOUR", BANC],
+    ['/api/identifier/reponse : la garde est retirée (tout le monde reçoit)', ROUTES, "const acces = await PRO.accesPour({ cfg, porteur, argent });      // PRO-PRIX-RESERVE (réponse)", "const acces = true;      // PRO-PRIX-RESERVE (réponse)", BANC],
+    ['/api/identifier/reponse (résidu de F2) : une carte tranchée sans prix du gratuit n\'est plus rendue (scan compté sans prix affiché)', ROUTES, "&& PRO.carteSansPrixPourGratuit(resolueComplete)) {", "&& false) {", BANC],
     ['/api/identifier/reponse : la carte du gratuit garde son prix (la réduction n\'est plus appliquée)', ROUTES, "const resolue = PRO.carteSelonOffre(resolueComplete, acces);", "const resolue = resolueComplete;", BANC],
     ['/api/identifier : l\'analyse du gratuit garde son prix (la réduction n\'est plus appliquée)', ROUTES, "{ ...PRO.analyseSelonOffre(analysePleine0, false), regleVerdict: regle, ...(photosDites || {}) };", "{ ...analysePleine0, regleVerdict: regle, ...(photosDites || {}) };", BANC],
     ['F2 : une carte unique sans prix du gratuit n\'est plus rendue (scan compté sans prix affiché)', ROUTES, "scanSansPrix = true;", "scanSansPrix = false;", BANC],

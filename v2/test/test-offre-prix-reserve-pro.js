@@ -95,15 +95,23 @@ const prisDuJour = async x => (await Q.prisAujourdhui(x.cleQuota)) ?? 0;
 
     const pret = require('../pret'); const { dansUnScan } = require('../../sources'); const { assembler } = require('../index');
     let lotImpl = null;
-    const chaine = async (req, res) => res.json({ ...X.aff(PRODUIT, MODE).corps, scanId: String(req.scanIdImpose) });
+    let QUESTION = null;                                  // non nul : la chaîne fabriquée pose UNE question (une carte, deux candidats) sur ces produits
+    const chaine = async (req, res) => {
+        if (QUESTION) {
+            await req.credit.v2.poserQuestion(req, { scanId: req.scanIdImpose, raison: 'egalite-sans-enjeu', candidats: QUESTION.map(m => m.id) });
+            return res.json({ ...X.qst(QUESTION, MODE).corps, scanId: String(req.scanIdImpose) });
+        }
+        return res.json({ ...X.aff(PRODUIT, MODE).corps, scanId: String(req.scanIdImpose) });
+    };
     const identifierLot = async req => (lotImpl ? lotImpl(req) : [X.aff(PRODUIT, MODE)]);      // sans liste imposée : UN résultat = une carte (la route d'une carte)
-    const monter = async cfg => {
+    const monter = async (cfg, avecLot = true) => {
         const app = express(); app.set('trust proxy', true); app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
         pret.armer(M.verifierIndex);
-        app.use(assembler([require('../argent/monter'), require('../identifier/monter')], cfg, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), identifierLot }));
+        app.use(assembler([require('../argent/monter'), require('../identifier/monter')], cfg, { jumeaux: () => ({ conclu: true, ids: [] }), gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), ...(avecLot ? { identifierLot } : {}) }));
         return H.serveur(app);
     };
     const svOff = await monter(cfgOff), svOn = await monter(cfgOn);
+    const svOffQ = await monter(cfgOff, false), svOnQ = await monter(cfgOn, false);      // sans crochet de lot : la chaîne fabriquée pose elle-même la question d'UNE carte
     X.armerOffres(registre.obtenir('argent'));
     H.vrai('B0. les offres en panne et inconnue sont bien armées (le banc fabrique l\'erreur de lecture et l\'offre inconnue)', await (async () => {
         const a = await porteurDe('panne'), b = await porteurDe('inconnue'); const ag = registre.obtenir('argent');
@@ -291,6 +299,49 @@ const prisDuJour = async x => (await Q.prisAujourdhui(x.cleQuota)) ?? 0;
         }
     }
 
+    // ── B10. résidu de F2 : la réponse à une QUESTION d'UNE carte dont le candidat tranché n'a aucun prix, servie à un non-Pro : le crédit confirmé est RENDU une seule fois
+    {
+        const E1 = { retenu: 'EX', codeLangue: 2 };
+        MODE = E1; PRODUIT = TAUROS; lotImpl = null;
+        const jouerQ = async (url, g, ms) => { QUESTION = ms; const x = await porteurDe(g); const r = await ident(url, x); const rep = await repondre(url, x, { scanId: r.json.scanId, carte: 0, choix: 'a' }); QUESTION = null; return { x, r, rep, scanId: r.json.scanId }; };
+        const f = o => { const x = o.rep.json.facturation; return { debite: x.debite, rembourse: x.rembourse, motif: x.motif }; };
+        const sansPrix = [SANS[0], SANS[1]];
+        const on = {}, off = {};
+        for (const g of GENRES) { on[g] = await jouerQ(svOnQ.url, g, sansPrix); off[g] = await jouerQ(svOffQ.url, g, sansPrix); }
+        H.v('B10 (garde de scénario) : la question d\'UNE carte est répondue, la carte tranchée est identifiée, et la carte complète de Pro porte une instruction prixLive sans aucun guide', [on.pro.r.json.analyse.cartes[0].statut, on.pro.rep.statut, on.pro.rep.json.carte.statut, on.pro.rep.json.carte.carte.idProduct, on.pro.rep.json.carte.prixLive !== null, on.pro.rep.json.carte.carte.prixGuide], ['a-trancher', 200, 'identifiee', SANS[0].id, true, null]);
+        H.v('B10 Pro : le scan COMPTE (debite 1, question), un crédit pris, aucun remboursement', [f(on.pro), await prisDuJour(on.pro.x), await remboursements(on.pro.scanId)], [{ debite: 1, rembourse: false, motif: 'question' }, 1, 0]);
+        H.v('B10 drapeau éteint, gratuit : le scan compte (la réponse d\'avant)', [f(off.gratuit), await prisDuJour(off.gratuit.x)], [{ debite: 1, rembourse: false, motif: 'question' }, 1]);
+        for (const g of LIBRES) H.v(`B10 ${g}, allumé : aucun prix affiché (ni instruction, ni guide, ni repli) : le scan est RENDU (sans-prix), le compteur du jour revient à 0, UN remboursement, aucune instruction servie`, [f(on[g]), await prisDuJour(on[g].x), await remboursements(on[g].scanId), on[g].rep.json.carte.prixLive], [{ debite: 0, rembourse: true, motif: 'sans-prix' }, 0, 1, null]);
+        // pas de DOUBLE remboursement : le rejeu de la même réponse retrouve le scan déjà rendu
+        const g = on.gratuit;
+        const rej = await repondre(svOnQ.url, g.x, { scanId: g.scanId, carte: 0, choix: 'a' });
+        H.v('B10 rejeu de la même réponse : la facturation dit toujours « rendu », toujours UN remboursement, compteur à 0', [rej.statut, rej.json.facturation.rembourse, rej.json.facturation.motif, await remboursements(g.scanId), await prisDuJour(g.x)], [200, true, 'sans-prix', 1, 0]);
+        // et un retour-live qui suit trouve le scan déjà rendu
+        await raw('journal_scans').insertOne({ _id: oid(g.scanId), userId: g.x.userId, route: 'identifier' });
+        const rl = await retour(svOnQ.url, g.x, { scanId: g.scanId, lectureRatee: { cause: 'sans-prix', definitive: true } });
+        H.v('B10 retour-live (lecture ratée définitive) après le remboursement serveur : jamais de second remboursement', [rl.statut, await remboursements(g.scanId), await prisDuJour(g.x)], [200, 1, 0]);
+        // témoin : le candidat tranché a un GUIDE : le guide affiché est un prix, le scan compte, rien n'est rendu
+        const t = await jouerQ(svOnQ.url, 'gratuit', [TAUROS, ARCANIN]);
+        H.v('B10 témoin : candidat tranché AU GUIDE, gratuit allumé : le scan COMPTE, aucun remboursement', [t.rep.json.carte.carte.idProduct, f(t), await prisDuJour(t.x), await remboursements(t.scanId)], [TAUROS.id, { debite: 1, rembourse: false, motif: 'question' }, 1, 0]);
+        // un LOT : répondre à une question de lot ne coûte ni ne rend rien : jamais de remboursement par cette route
+        const lotQ = async () => { const x = await porteurDe('gratuit'); lotImpl = async () => [X.aff(TAUROS, { retenu: 'EX', codeLangue: 2 }), X.qst([SANS[0], SANS[1]], { retenu: 'EX', codeLangue: 2 })]; const r = await ident(svOn.url, x); const q = cartesDe(r).findIndex(c => c.statut === 'a-trancher'); const rep = await repondre(svOn.url, x, { scanId: r.json.scanId, carte: q, choix: 'a' }); lotImpl = null; return { x, r, rep }; };
+        const L = await lotQ();
+        H.v('B10 une question de LOT : le lot garde une carte AU GUIDE (donc compté) ; répondre à sa question sans prix ne rembourse rien (le lot se juge une fois, à l\'analyse)', [L.rep.statut, await remboursements(L.r.json.scanId)], [200, 0]);
+    }
+
+    // ── B11. l'HISTORIQUE (argent/solde.js::ligneAnalyse, servi par GET /api/compte) ne porte AUCUN champ de prix réservé : ni pour Pro, ni pour un non-Pro
+    {
+        MODE = { retenu: null, codeLangue: 2 }; PRODUIT = TAUROS; lotImpl = null; QUESTION = null;
+        const ag = registre.obtenir('argent');
+        for (const g of ['pro', 'gratuit']) {
+            const x = await porteurDe(g); const r = await ident(svOn.url, x);
+            const h = await ag.historique({ type: 'compte', id: x.compte._id }, {});
+            const ligne = (h.lignes || []).find(l => l.genre === 'analyse');
+            H.vrai(`B11 (${g}) : l'historique porte la ligne de l'analyse qui vient d'être faite (statut ${ligne && ligne.statut})`, Boolean(ligne) && ligne.statut === 'identifiee' && r.statut === 200);
+            H.v(`B11 (${g}) : aucun champ de prix (prixLive, prixRepli, prixGuide, fourchette, tendance, langues, etatVise) dans la ligne servie`, /prixLive|prixRepli|prixGuide|fourchette|tendance|langues|etatVise|reverseHolo/.test(j(ligne || {})), false);
+        }
+    }
+
     // ── B8. le contrat : /ping annonce la réservation seulement quand elle est allumée
     {
         const { capacitesServies } = require('../capacites');
@@ -307,7 +358,7 @@ const prisDuJour = async x => (await Q.prisAujourdhui(x.cleQuota)) ?? 0;
         H.v('C4. le jeu EXIGE la preuve de chargement : un mutant dont la copie n\'a pas été compilée ne peut pas être « TUÉ » (accroche-mutant.js écrit sa trace, le jeu la relit)', [/RM_MUTANT_TRACE/.test(fs.readFileSync(path.join(V, 'mesures', 'accroche-mutant.js'), 'utf8')), /NON-CHARGÉ/.test(fs.readFileSync(path.join(V, 'mesures', 'mutations-prix-reserve-pro.js'), 'utf8'))], [true, true]);
     } catch (e) { H.vrai(`C. le jeu de mutants est chargeable (${e && e.message})`, false); }
 
-    await svOff.fermer(); await svOn.fermer();
+    await svOff.fermer(); await svOn.fermer(); await svOffQ.fermer(); await svOnQ.fermer();
     await mongoose.disconnect(); await H.arreterBanc();
     H.bilan();
 })().catch(async e => { console.error('❌', e); try { await H.arreterBanc(); } catch (_) { } process.exit(1); });

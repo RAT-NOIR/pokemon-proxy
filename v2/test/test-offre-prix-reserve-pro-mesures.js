@@ -51,12 +51,12 @@ const semer = async id => {
     const pret = require('../pret'); const { assembler } = require('../index');
     const lecture = id => ({ success: true, question: null, carte: { idProduct: id, nomProduit: 'Tropius', nom: 'Tropius', numero: '001', total: '064', setCode: 'PBL', rarete: null, langue: 'FR', ambigu: false },
         etat: { estimeIA: null, confianceIA: null, defautsVus: [], declareVendeur: null, declareCardmarket: null, retenu: null },
-        candidats: [{ idProduct: id, nom: 'Tropius', numero: '001', set: 'Banc Set', prix: 1, photoUrl: null }], classement: [], guidePrix: {}, reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: null }, codeLangue: 2 });
+        candidats: [{ idProduct: id, nom: 'Tropius', numero: '001', set: 'Banc Set', prix: null, photoUrl: null }], classement: [], guidePrix: {}, reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: null }, codeLangue: 2 });
     const IDS = [A.ID_P, A.ID_A];
     const chaine = async (req, res) => {
         await req.credit.v2.poserQuestion(req, { scanId: req.scanIdImpose, raison: 'egalite-sans-enjeu', candidats: IDS });
         const l = lecture(IDS[0]);
-        return res.json({ ...l, scanId: String(req.scanIdImpose), question: { etat: 'en-attente', delaiHeures: 24 }, carte: { ...l.carte, ambigu: true }, candidats: IDS.map(id => ({ idProduct: id, nom: 'Tropius', numero: '001', set: 'Banc Set', prix: 1, photoUrl: null })) });
+        return res.json({ ...l, scanId: String(req.scanIdImpose), question: { etat: 'en-attente', delaiHeures: 24 }, carte: { ...l.carte, ambigu: true }, candidats: IDS.map(id => ({ idProduct: id, nom: 'Tropius', numero: '001', set: 'Banc Set', prix: null, photoUrl: null })) });
     };
     const monter = async cfg => {
         const app = express(); app.set('trust proxy', true); app.use(express.json({ limit: '2400kb' }));

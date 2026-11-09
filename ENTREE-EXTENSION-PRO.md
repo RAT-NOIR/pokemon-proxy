@@ -31,7 +31,7 @@ Pour Pro (`offre.nom === "pro"`) : tout est servi comme avant, octet pour octet.
    - un gratuit dont le guide est servi (même sous la mention d'état non estimable) garde un repli général : son scan COMPTE, comme celui de Pro ; une lecture ratée définitive n'est pas remboursée ;
    - un non-Pro dont AUCUN prix n'est servi (pas de `prixGuide`, pas de repli général, et plus de `prixLive`) : le scan est RENDU par le serveur dans la réponse même de `POST /api/identifier` (carte unique : `facturation { debite: 0, rembourse: true, motif: "sans-prix" }`) ou du lot (LOT-SANS-PRIX). Afficher « aucun prix disponible », sans rien envoyer de plus ;
    - un `POST /api/retour-live` envoyé malgré tout après ce remboursement trouve le scan déjà rendu (`raisonNonRembourse: "deja-rembourse"`, `debite: 0`) : jamais de double remboursement ; un rejeu de la même requête rend la même réponse sans rembourser une seconde fois ;
-   - non couvert, listé : la réponse à une QUESTION (`/api/identifier/reponse`) dont la carte tranchée n'a aucun prix pour un non-Pro n'est pas rendue par le serveur.
+   - la réponse à une QUESTION (`POST /api/identifier/reponse`) dont le candidat tranché n'a aucun prix pour un non-Pro : le serveur rend le crédit confirmé dans cette réponse (`facturation { debite: 0, rembourse: true, motif: "sans-prix" }`, compteur des déclarations du jour) ; rejouer la même réponse redit « rendu », un seul remboursement ; une question de LOT ne rend rien par cette route ; l'historique du compte ne porte aucun champ de prix.
 
 ## Cas limites que l'extension rencontrera
 
