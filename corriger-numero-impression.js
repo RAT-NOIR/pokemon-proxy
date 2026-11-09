@@ -24,17 +24,25 @@ function lireArguments(argv) {
     return { carte: Number(v('carte')), expansion: v('expansion'), tirage: v('tirage'), avant: v('avant'), apres: v('apres'), preuve: v('preuve'), attendu: Number(v('attendu')), ecrire: argv.includes('--ecrire') };
 }
 
+/** Domaine enregistrable (eTLD+1) : deux sous-domaines d'un même site ne sont pas deux sources. Liste fermée des suffixes à deux niveaux (co.uk…), sinon les deux derniers labels. */
+const SUFFIXES_2 = new Set(['co', 'com', 'org', 'net', 'gov', 'ac', 'edu']);
+function domaineEnregistrable(h) {
+    const l = String(h).toLowerCase().split('.').filter(Boolean);
+    if (l.length <= 2) return l.join('.');
+    return (l[l.length - 1].length === 2 && SUFFIXES_2.has(l[l.length - 2]) ? l.slice(-3) : l.slice(-2)).join('.');
+}
+
 /** Les hôtes https distincts des sources d'une preuve : { hotes: string[], motif }. */
 function lirePreuve(preuve) {
     const hotes = new Set();
     for (const s of Array.isArray(preuve?.sources) ? preuve.sources : []) {
-        try { const u = new URL(s?.url); if (u.protocol === 'https:') hotes.add(u.hostname.replace(/^www\./, '')); } catch (_) { /* source illisible : ne compte pas */ }
+        try { const u = new URL(s?.url); if (u.protocol === 'https:') hotes.add(domaineEnregistrable(u.hostname)); } catch (_) { /* source illisible : ne compte pas */ }
     }
     return { hotes: [...hotes], motif: typeof preuve?.motif === 'string' ? preuve.motif.trim() : '' };
 }
 
 /** Le cœur, pur. a = { carte, expansion, tirage, avant, apres, attendu } ; monde = { carteDoc } ; preuve = le contenu du fichier. */
-function planifier(a, { carteDoc }, preuve) {
+function planifier(a, { carteDoc, lignes }, preuve) {
     const { cleNumero } = require('./collecte-cartes/jointure');
     const refus = [];
     const R = m => { refus.push(m); };
@@ -58,20 +66,24 @@ function planifier(a, { carteDoc }, preuve) {
             else {
                 if (cand[0].numeroAvant != null) R(`impression déjà corrigée (numeroAvant ${JSON.stringify(cand[0].numeroAvant)}) : l'ancienne valeur ne s'écrase pas`);
                 const cn = cleNumero(a.apres);
-                if (cn && duSet.some(i => i !== cand[0] && i.numero != null && cleNumero(i.numero) === cn)) R(`apres « ${a.apres} » déjà pris par une autre impression de ce set sur la carte`);
+                if (!cn || !cleNumero(a.avant)) R(`numéro inexploitable par la clé de la jointure (avant ${JSON.stringify(a.avant)}, apres ${JSON.stringify(a.apres)})`);
+                else if (duSet.some(i => i !== cand[0] && i.numero != null && cleNumero(i.numero) === cn)) R(`apres « ${a.apres} » déjà pris par une autre impression de ce set sur la carte`);
                 motifImp = p?.motif ?? null;
             }
         }
     }
+    // Les lignes cartes_produits de CETTE carte dont numeroFiche vaut vant : elles désigneraient l'ancien numéro. Aucune ne se réécrit ici (jamais une ligne existante) : refus nommé.
+    const lignesAvant = (lignes || []).filter(l => l && l.carteId === a.carte && l.numeroFiche != null && cleNumero(l.numeroFiche) && cleNumero(l.numeroFiche) === cleNumero(a.avant));
+    if (lignesAvant.length) R(` ligne(s) de la carte portent numeroFiche «  » () : à changer dans le même geste, jamais écrit ici — refus`);
     const operations = [];
     if (!refus.length) {
-        operations.push({ filter: { _id: a.carte, impressions: { $elemMatch: { tirage: a.tirage, expansion: a.expansion, numero: a.avant } } },
+        operations.push({ filter: { _id: a.carte, impressions: { $elemMatch: { tirage: a.tirage, expansion: a.expansion, numero: a.avant, numeroAvant: { $exists: false } } } },
             update: { $set: { 'impressions.$.numero': a.apres, 'impressions.$.numeroAvant': a.avant, 'impressions.$.numeroCorrigeLe': new Date(), 'impressions.$.numeroCorrigeMotif': motifImp } } });
     }
     if (a.attendu === undefined || a.attendu === null) R('attendu absent');
     else if (!refus.length && a.attendu !== operations.length) R(`attendu ${a.attendu} différent des ${operations.length} écriture(s) planifiée(s)`);
     if (refus.length) operations.length = 0;
-    return { ok: !refus.length, refus, operations, ecritures: operations.length };
+    return { ok: !refus.length, refus, operations, ecritures: operations.length, lignesAvant: lignesAvant.length };
 }
 
 /** `--ecrire` ne tourne que SOUS lot-additif.js : il pose LOT_ADDITIF_PID = son pid, et la commande en est l'enfant direct. */
@@ -87,7 +99,10 @@ function releve({ carteDoc }, a) {
 }
 
 async function lireMonde(db, a) {
-    return { carteDoc: await db.collection('cartes').findOne({ _id: a.carte }, { projection: { nomEn: 1, impressions: 1 } }) };
+    return {
+        carteDoc: await db.collection('cartes').findOne({ _id: a.carte }, { projection: { nomEn: 1, impressions: 1 } }),
+        lignes: await db.collection('cartes_produits').find({ carteId: a.carte }).toArray(),
+    };
 }
 
 /** Simulation ou écriture, sur une base injectée. Rend { ok, code, message?, modifiees, plan, lignes[] } ; n'imprime rien. */
@@ -107,7 +122,7 @@ async function executer(db, a, preuve) {
     return { ok: rl.ok, code: rl.ok ? 0 : 1, modifiees: 1, plan, lignes, message: rl.ok ? undefined : '🔴 la relecture ne concorde pas' };
 }
 
-module.exports = { lireArguments, lirePreuve, planifier, garderSousLot, releve, lireMonde, executer };
+module.exports = { lireArguments, lirePreuve, domaineEnregistrable, planifier, garderSousLot, releve, lireMonde, executer };
 
 if (require.main === module) {
     const a = lireArguments(process.argv.slice(2));

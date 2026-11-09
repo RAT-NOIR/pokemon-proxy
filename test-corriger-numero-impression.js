@@ -8,13 +8,13 @@ const PREUVE = { motif: 'le numéro 055 est celui du Fossile non identifié, la 
 const imp = (o = {}) => ({ tirage: 'jp', expansion: 'Ultra Sun', numero: '055', total: '066', ...o });
 const carte = (o = {}) => ({ _id: 217135, nomEn: 'Nest Ball', impressions: [imp(), imp({ tirage: 'intl', expansion: 'Ultra Sun', numero: '119' })], ...o });
 const A = (o = {}) => ({ carte: 217135, expansion: 'Ultra Sun', tirage: 'jp', avant: '055', apres: '056', attendu: 1, ...o });
-const plan = (a = {}, c = carte(), p = PREUVE) => C.planifier(A(a), { carteDoc: c }, p);
+const plan = (a = {}, c = carte(), p = PREUVE, lignes = []) => C.planifier(A(a), { carteDoc: c, lignes }, p);
 const refus = (r, motif) => { if (r.ok) throw new Error('devait refuser'); if (!r.refus.some(x => x.includes(motif))) throw new Error(`motif absent « ${motif} » dans ${JSON.stringify(r.refus)}`); if (r.operations.length) throw new Error('des opérations malgré le refus'); };
 
 t('nominal : un updateOne ciblé, numeroAvant, date et motif sauvegardés', () => {
     const r = plan(); eq(r.ok, true); eq(r.ecritures, 1);
     const o = r.operations[0];
-    eq(o.filter, { _id: 217135, impressions: { $elemMatch: { tirage: 'jp', expansion: 'Ultra Sun', numero: '055' } } });
+    eq(o.filter, { _id: 217135, impressions: { $elemMatch: { tirage: 'jp', expansion: 'Ultra Sun', numero: '055', numeroAvant: { $exists: false } } } });
     eq(Object.keys(o.update), ['$set']);
     eq(Object.keys(o.update.$set).sort(), ['impressions.$.numero', 'impressions.$.numeroAvant', 'impressions.$.numeroCorrigeLe', 'impressions.$.numeroCorrigeMotif']);
     eq(o.update.$set['impressions.$.numero'], '056'); eq(o.update.$set['impressions.$.numeroAvant'], '055'); eq(o.update.$set['impressions.$.numeroCorrigeMotif'], PREUVE.motif);
@@ -23,7 +23,7 @@ t('nominal : un updateOne ciblé, numeroAvant, date et motif sauvegardés', () =
 t('nominal : le total et les autres impressions ne sont pas nommés', () => { const s = JSON.stringify(plan().operations[0]); if (/total|intl/.test(s)) throw new Error(s); });
 t('nominal : même numéro dans un AUTRE tirage de la même expansion n\'empêche pas', () => eq(plan({}, carte({ impressions: [imp(), imp({ tirage: 'intl', numero: '056' })] })).ok, true));
 t('nominal : même numéro dans une AUTRE expansion n\'empêche pas', () => eq(plan({}, carte({ impressions: [imp(), imp({ expansion: 'Autre', numero: '056' })] })).ok, true));
-t('refus : carte absente', () => refus(C.planifier(A(), { carteDoc: null }, PREUVE), 'carte'));
+t('refus : carte absente', () => refus(C.planifier(A(), { carteDoc: null, lignes: [] }, PREUVE), 'carte'));
 t('refus : aucune impression à ce tirage et cette expansion', () => refus(plan({ tirage: 'th' }), 'aucune impression'));
 t('refus : avant ne concorde pas', () => refus(plan({ avant: '054' }), 'avant'));
 t('refus : avant comparé tel quel (55 n\'est pas 055)', () => refus(plan({ avant: '55' }), 'avant'));
@@ -40,6 +40,18 @@ t('refus : même hôte, deux pages = une seule source', () => refus(plan({}, car
 t('refus : source sans url', () => refus(plan({}, carte(), { ...PREUVE, sources: [PREUVE.sources[0], { nom: 'x' }] }), 'deux sources'));
 t('refus : source non https', () => refus(plan({}, carte(), { ...PREUVE, sources: [PREUVE.sources[0], { nom: 'x', url: 'ftp://a.b/c' }] }), 'deux sources'));
 t('refus : motif absent', () => refus(plan({}, carte(), { ...PREUVE, motif: '' }), 'motif'));
+t('refus : apres blanc', () => refus(plan({ apres: '   ' }), 'apres'));
+t('refus : cleNumero vide (avant vide) ne saute pas la garde', () => refus(plan({ avant: '' }, carte({ impressions: [imp({ numero: '' })] })), 'inexploitable'));
+t('refus : deux sous-domaines du même domaine = une seule source', () => refus(plan({}, carte(), { ...PREUVE, sources: [{ nom: 'a', url: 'https://a.serebii.net/x' }, { nom: 'b', url: 'https://b.serebii.net/y' }] }), 'deux sources'));
+t('refus : www et nu = un seul domaine', () => refus(plan({}, carte(), { ...PREUVE, sources: [{ nom: 'a', url: 'https://www.serebii.net/x' }, { nom: 'b', url: 'https://serebii.net/y' }] }), 'deux sources'));
+t('nominal : deux domaines enregistrables différents (sous-domaine compris)', () => eq(plan({}, carte(), { ...PREUVE, sources: [{ nom: 'a', url: 'https://a.serebii.net/x' }, { nom: 'b', url: 'https://wiki.pokewiki.de/y' }] }).ok, true));
+t('domaines : suffixes à deux niveaux (bbc.co.uk, a.bbc.co.uk = un, autre.co.uk = autre)', () => { eq(C.lirePreuve({ sources: [{ url: 'https://bbc.co.uk/a' }, { url: 'https://a.bbc.co.uk/b' }] }).hotes, ['bbc.co.uk']); eq(C.lirePreuve({ sources: [{ url: 'https://bbc.co.uk/a' }, { url: 'https://autre.co.uk/b' }] }).hotes.length, 2); });
+t('refus : impression déjà corrigée, numeroAvant explicite non nul', () => refus(plan({}, carte({ impressions: [imp({ numeroAvant: '054', numeroCorrigeLe: new Date() })] })), 'déjà corrigée'));
+t('numeroAvant null explicite = absent : accepté', () => eq(plan({}, carte({ impressions: [imp({ numeroAvant: null })] })).ok, true));
+t('refus : une ligne de la carte porte numeroFiche = avant (055) : elle doit changer dans le même geste ou refus', () => refus(plan({}, carte(), PREUVE, [{ _id: '217135|560009', carteId: 217135, idProduct: 560009, slugSet: 'Ultra-Sun', numeroFiche: '055' }]), 'numeroFiche'));
+t('refus : numeroFiche 55 compte aussi (clé de numéro)', () => refus(plan({}, carte(), PREUVE, [{ _id: 'x|1', carteId: 217135, idProduct: 1, slugSet: 'S', numeroFiche: '55' }]), 'numeroFiche'));
+t('nominal : lignes de la carte à d\'autres numeroFiche, ou d\'une autre carte au 055 : sans effet', () => eq(plan({}, carte(), PREUVE, [{ _id: '217135|9', carteId: 217135, idProduct: 9, slugSet: 'Collection-Moon', numeroFiche: '071' }, { _id: '226761|560009', carteId: 226761, idProduct: 560009, slugSet: 'Ultra-Sun', numeroFiche: '055' }]).ok, true));
+t('le plan expose le décompte des lignes à numeroFiche = avant', () => eq(plan({}, carte(), PREUVE, [{ _id: '217135|560009', carteId: 217135, idProduct: 560009, slugSet: 'Ultra-Sun', numeroFiche: '055' }]).lignesAvant, 1));
 t('refus : attendu différent', () => refus(plan({ attendu: 2 }), 'attendu'));
 t('refus : attendu absent', () => refus(plan({ attendu: undefined }), 'attendu'));
 
@@ -67,7 +79,7 @@ t('relecture concordante / discordante', () => {
 
 function fauxDb({ modifie = 1 } = {}) {
     const etat = { carte: carte(), ops: [] };
-    const col = { cartes: {
+    const col = { cartes_produits: { find: () => ({ toArray: async () => [] }) }, cartes: {
         findOne: async f => (f._id === etat.carte._id ? etat.carte : null),
         updateOne: async (f, u) => {
             etat.ops.push([f, u]); if (!modifie) return { modifiedCount: 0 };

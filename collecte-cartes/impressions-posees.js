@@ -24,6 +24,7 @@ const CHAMPS_POSES_APRES = ['illustrateur', 'illustrateurPreuve'];
 // ➕ 2026-11-08 : `origine-lue` (poser-numeros-imprimes.js) — le numéro et le total d'ORIGINE tels qu'IMPRIMÉS sur la carte WCD / Prize Pack, LUS sur un scan.
 // Aucune page de carte ne les déclare : sans cette marque, une recollecte les effacerait (§59). Posée dans le même commit que l'outil.
 const SOURCES_POSEES_APRES = ['setlist', 'numero-cardmarket', 'origine-slug', 'origine-lue'];
+const CHAMPS_CORRECTION_NUMERO = ['numeroAvant', 'numeroCorrigeLe', 'numeroCorrigeMotif'];
 const cleImpression = i => `${i.tirage}|${i.expansion}|${i.numero ?? ''}|${i.deck ?? ''}`;
 
 /**
@@ -32,11 +33,25 @@ const cleImpression = i => `${i.tirage}|${i.expansion}|${i.numero ?? ''}|${i.dec
  * @returns {{ impressions: object[], reportes: number, perdus: number }}  `perdus` : impressions anciennes qui portaient un
  *          champ posé et dont la clé n'existe plus dans les nouvelles
  */
-function reporterChampsPoses(anciennes, nouvelles) {
+function reporterChampsPoses(anciennes, nouvelles0) {
     const parCle = new Map((anciennes || []).map(i => [cleImpression(i), i]));
-    const cles = new Set((nouvelles || []).map(cleImpression));
+    // ➕ 2026-11-09 : une CORRECTION DE NUMÉRO posée (corriger-numero-impression.js : `numeroAvant` + `numeroCorrigeLe`) survit au parseur, qui rend encore l'ancien numéro.
+    // Écrit par ce qu'il autorise : l'impression du parseur à la clé (tirage, expansion, ANCIEN numéro, deck) est UNIQUE et la clé du numéro corrigé n'est pas déjà rendue.
+    // Sinon rien n'est remplacé (le parseur fait foi). Les champs du parseur (total, rareté…) restent les siens ; seuls le numéro et les trois champs de la liste fermée se posent.
+    let corrigees = 0;
+    const nouvelles = (nouvelles0 || []).slice();
+    const dejaRendues = new Set(nouvelles.map(cleImpression));
+    for (const a of anciennes || []) {
+        if (a.numeroAvant == null || a.numeroCorrigeLe == null || dejaRendues.has(cleImpression(a))) continue;
+        const kAvant = cleImpression({ ...a, numero: a.numeroAvant });
+        const idx = nouvelles.map((n, i) => (cleImpression(n) === kAvant ? i : -1)).filter(i => i >= 0);
+        if (idx.length !== 1) continue;
+        nouvelles[idx[0]] = { ...nouvelles[idx[0]], numero: a.numero, ...Object.fromEntries(CHAMPS_CORRECTION_NUMERO.map(k => [k, a[k]])) };
+        dejaRendues.add(cleImpression(a)); corrigees++;
+    }
+    const cles = new Set(nouvelles.map(cleImpression));
     let reportes = 0;
-    const impressions = (nouvelles || []).map(n => {
+    const impressions = nouvelles.map(n => {
         const a = parCle.get(cleImpression(n));
         const aReporter = a ? CHAMPS_POSES_APRES.filter(k => k in a && !(k in n)) : [];
         if (!aReporter.length) return n;
@@ -46,7 +61,7 @@ function reporterChampsPoses(anciennes, nouvelles) {
     // une impression posée depuis la Setlist que le parseur ne rend pas est GARDÉE ; s'il rend la même clé, la sienne vaut
     const gardees = (anciennes || []).filter(a => SOURCES_POSEES_APRES.includes(a.source) && !cles.has(cleImpression(a)));
     const perdus = (anciennes || []).filter(a => !SOURCES_POSEES_APRES.includes(a.source) && CHAMPS_POSES_APRES.some(k => k in a) && !cles.has(cleImpression(a))).length;
-    return { impressions: [...impressions, ...gardees], reportes, perdus, gardees: gardees.length };
+    return { impressions: [...impressions, ...gardees], reportes, perdus, gardees: gardees.length, corrigees };
 }
 
-module.exports = { CHAMPS_POSES_APRES, SOURCES_POSEES_APRES, cleImpression, reporterChampsPoses };
+module.exports = { CHAMPS_CORRECTION_NUMERO, CHAMPS_POSES_APRES, SOURCES_POSEES_APRES, cleImpression, reporterChampsPoses };
