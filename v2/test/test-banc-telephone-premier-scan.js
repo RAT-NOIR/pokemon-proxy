@@ -179,6 +179,7 @@ const egal = (a, b) => a && b && a.length === b.length && Buffer.compare(Buffer.
         H.v('5. la préparation se lance à l\'ouverture (peutPreparerSeul) et la page garde une trace d\'une préparation tuée (marqueur)', [/peutPreparerSeul\(/.test(app), /rm-banc-prep/.test(app)], [true, true]);
         H.v('5. un clic avant « prêt » ATTEND et le dit (attenteAvantScanMs), il ne cache pas l\'attente', [/attenteAvantScanMs/.test(app), /clicAPremierResultatMs/.test(app)], [true, true]);
         H.v('5. la session préparée est RÉUTILISÉE par la mesure suivante et libérée avant WebGPU', [/preparerWasm\(/.test(app), /libererSessionPreparee\(/.test(app)], [true, true]);
+        H.v('5. une fois la page quittée (pagehide), aucun événement de visibilité ne ré-écrit « pret » ; un retour du cache de navigation (pageshow) le fait', [/quittee\s*=\s*true/.test(app), /if \(quittee\) return/.test(app), /addEventListener\('pageshow'/.test(app)], [true, true, true]);
         H.v('5. le verdict est celui d\'avant : jugerMesure appelé avec les mêmes quatre champs', /jugerMesure\(\{ nEmpreintes: m\.nEmpreintes, nVecteursRefuses: refuses, cos, cosModeleSeul: cosPx, shaVerifie: E\.shaVerifie \}\)/.test(app), true);
         H.v('5. aucun navigator.storage.persist() affiché comme garanti : la page DIT si le stockage est persistant ou non', /stockagePersistant/.test(app), true);
     }

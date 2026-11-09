@@ -508,8 +508,10 @@ decrireAppareil(); avertirReprise();
 {
     const avant = lireMarqueur(), garde = peutPreparerSeul({ marqueur: avant, deviceMemory: navigator.deviceMemory, recherche: RECHERCHE });
     E.prep.auto = garde.auto; E.prep.raison = garde.raison; E.prep.interrompueAvant = avant === 'en-cours' || avant === 'pret';
-    document.addEventListener('visibilitychange', () => { if (PREP.session) marqueur(document.visibilityState === 'hidden' ? 'ferme' : 'pret'); });
-    window.addEventListener('pagehide', () => { if (PREP.session) marqueur('ferme'); });
+    let quittee = false;      // pagehide a eu lieu : un événement de visibilité tardif (certains navigateurs en émettent un « visible » pendant le départ) ne doit pas ré-écrire « pret »
+    document.addEventListener('visibilitychange', () => { if (quittee) return; if (PREP.session) marqueur(document.visibilityState === 'hidden' ? 'ferme' : 'pret'); });
+    window.addEventListener('pagehide', () => { quittee = true; if (PREP.session) marqueur('ferme'); });
+    window.addEventListener('pageshow', () => { quittee = false; if (PREP.session) marqueur('pret'); });      // retour depuis le cache de navigation : la session est toujours là
     if (garde.auto) setTimeout(() => { preparerWasm().catch(e => journal(`PRÉPARATION en échec : ${texteErreur(ETAPE, e)}`)); }, 0);
     else {
         E.prep.etat = 'manuel';
