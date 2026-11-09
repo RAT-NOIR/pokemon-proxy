@@ -25,6 +25,9 @@ for sha, p in sorted(liste.items()):
         f = os.path.join(sortie, nom, sha + '.webp')
         im.resize((W, H), filtre).save(f, 'WEBP', quality=80)
         sorties[nom] = f
+    # bp (ajoute apres la premiere mesure, pour SEPARER la perte de decodage + filtre de celle de l'encodage WebP) : decodage Pillow + BILINEAR, PNG SANS PERTE
+    f = os.path.join(sortie, 'bp', sha + '.png'); os.makedirs(os.path.dirname(f), exist_ok=True)
+    im.resize((W, H), Image.BILINEAR).save(f, 'PNG'); sorties['bp'] = f
     man[sha] = {**sorties, 'W': W, 'H': H, 'sourceW': w, 'sourceH': h}
     n += 1
 json.dump(man, open(os.path.join(sortie, 'b-manifeste.json'), 'w'), indent=0)

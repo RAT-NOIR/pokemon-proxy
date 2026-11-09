@@ -14,7 +14,7 @@ const { creerDecideur } = require('./decideur.cjs');
 const sharp = createRequire('C:\\Users\\Yung\\Desktop\\pokemon-proxy-api-v2\\package.json')('sharp');
 const args = process.argv.slice(2), pos = args.filter((a) => !a.startsWith('--')), opt = Object.fromEntries(args.filter((a) => a.startsWith('--')).map((a) => { const [k, v] = a.slice(2).split('='); return [k, v === undefined ? true : v]; }));
 const [fPop, dossier, variante] = pos;
-if (!['A', 'B', 'BB', 'B0'].includes(variante)) { console.error('variante : A | B | BB | B0'); process.exit(2); }
+if (!['A', 'B', 'BB', 'B0', 'BP'].includes(variante)) { console.error('variante : A | B | BB | B0 | BP'); process.exit(2); }
 const MODELE_ONNX = process.env.MODELE_ONNX || 'C:\\Users\\Yung\\rat-market-travail\\api\\etude-sans-service\\onnx\\p8000-poids8s.onnx';
 const SHA_MODELE = '857105e3eb0035c5e0b6eab88f898a134d171321eb00e90452f4d37f7df28ec2';
 
@@ -25,7 +25,7 @@ const liste = new Map();
 for (const k of ['population1_banc', 'population2_lotEbayLocal']) for (const p of P[k].liste) liste.set(p.sha256, p);
 const manB = fs.existsSync(path.join(dossier, 'b-manifeste.json')) ? JSON.parse(fs.readFileSync(path.join(dossier, 'b-manifeste.json'), 'utf8')) : {};
 const manB0 = fs.existsSync(path.join(dossier, 'b0-manifeste.json')) ? JSON.parse(fs.readFileSync(path.join(dossier, 'b0-manifeste.json'), 'utf8')) : {};
-const fichierDe = (sha) => variante === 'A' ? liste.get(sha).chemin : variante === 'B' ? manB[sha].b : variante === 'BB' ? manB[sha].bb : manB0[sha].b0;
+const fichierDe = (sha) => variante === 'A' ? liste.get(sha).chemin : variante === 'B' ? manB[sha].b : variante === 'BB' ? manB[sha].bb : variante === 'BP' ? manB[sha].bp : manB0[sha].b0;
 let shas = [...liste.keys()].sort();
 if (opt.serie) { const [i, n] = opt.serie.split('/').map(Number); shas = shas.filter((_, k) => k % n === i); }
 if (opt.limite) shas = shas.slice(0, Number(opt.limite));
