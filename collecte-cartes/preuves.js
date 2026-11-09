@@ -161,11 +161,16 @@ function energieParAnnee(lu, produit, np) {
     if (!Number.isInteger(lu?.annee) || lu.annee !== Number(String(np).trim())) return null;
     if (texte(lu?.numero) || texte(lu?.total)) return null;
     const liste = produit?.couplesDuSet;
-    if (!Array.isArray(liste) || liste.length === 0 || !texte(produit?.nomEn) || liste.some(c => !c || !texte(c.nomEn))) return null;   // un nom inconnu dans la liste pourrait cacher un doublon : on ne conclut pas
+    if (!Array.isArray(liste) || liste.length === 0 || !texte(produit?.nomEn) || liste.some(c => !c || !texte(c.nomEn) || !texte(c.numero))) return null;   // un nom OU un numéro inconnu dans la liste pourrait cacher un doublon : on ne conclut pas
     const mien = J.decomposerNomCardmarket(produit.nomEn).nom;
     const memeCouple = liste.filter(c => String(c.numero ?? '').trim() === String(np).trim() && memeNomQueLeProduit(mien, c.nomEn));
     return memeCouple.length === 1 ? { annee: lu.annee } : null;
 }
+/**
+ * La liste `couplesDuSet` se construit sur TOUS les produits du référentiel du set (numeros_cartes par slugSet), joints à une carte ou non. `nomDe(idProduct)` rend le nom Cardmarket du produit (catalogue / état A/B/C,
+ * la MÊME source que `produit.nomEn`) ; un nom absent ou vide devient null, et energieParAnnee refuse alors toute la liste. La comparaison du nom se fait ensuite par memeNomQueLeProduit (decomposerNomCardmarket + clesNom).
+ */
+const couplesDuSetDepuis = (produitsRef, nomDe) => produitsRef.map(p => { const n = nomDe(p.idProduct); return { idProduct: p.idProduct, nomEn: texte(n) ? n : null, numero: p.numero ?? null }; });
 /** Tour 4 (3) : le numéro en FIN de slug Cardmarket (« …-PPS8MEG-114 » -> « 114 »), frontière non alphanumérique avant ; null si le slug n'en porte pas (« …-CIN71 » : collé à des lettres, ce n'est pas un numéro). */
 const numeroFinDeSlug = slug => { const m = /(?:^|[^A-Za-z0-9])(\d+[A-Za-z]*)$/.exec(String(slug ?? '').trim()); return m ? m[1] : null; };
 // Tour 4 (5) : la variante nommée d'un produit sans numéro (« Blue Border » / « standard ») se compare à la finition LUE, par table fermée ; une autre valeur de `attendu.variante` (V1, V2…) n'entre pas ici.
@@ -1078,5 +1083,5 @@ function trousDuManifeste({ trous, recus, famille }) {
     return { trous: gardes, ecartes };
 }
 
-module.exports = { ENERGIES_PAR_ANNEE_SETS, energieParAnnee, cleAliasPour, TOTAUX_ZH_SANS_CODE, totalZhSansCode,POSITIONS_RONDES, CODES_IMPRIMES_ADMIS, CODES_SANS_TOTAL, sansTotalAdmis, SOURCE, LOT, SRC, LANGUE_PREUVE, EDITIONS_LOCALES, REGLES, REGLE_MEME_DESSIN, LANGUES_NON_LATINES, MOYENS_DE_LECTURE, MOYENS_DE_LANGUE, SEUIL_PLANCHER, SCORE_PLANCHER, VIDE_PLANCHER, lienAvecLEntree, evaluerRemplacementMemeDessin, langueDuProduit, formeEntree, lireManifeste, lireValidations, lireIllustrations, rapprocher, evaluerPreuveLue, evaluerDeuxSources, evaluerEntree,
+module.exports = { couplesDuSetDepuis, ENERGIES_PAR_ANNEE_SETS, energieParAnnee, cleAliasPour, TOTAUX_ZH_SANS_CODE, totalZhSansCode,POSITIONS_RONDES, CODES_IMPRIMES_ADMIS, CODES_SANS_TOTAL, sansTotalAdmis, SOURCE, LOT, SRC, LANGUE_PREUVE, EDITIONS_LOCALES, REGLES, REGLE_MEME_DESSIN, LANGUES_NON_LATINES, MOYENS_DE_LECTURE, MOYENS_DE_LANGUE, SEUIL_PLANCHER, SCORE_PLANCHER, VIDE_PLANCHER, lienAvecLEntree, evaluerRemplacementMemeDessin, langueDuProduit, formeEntree, lireManifeste, lireValidations, lireIllustrations, rapprocher, evaluerPreuveLue, evaluerDeuxSources, evaluerEntree,
     verifierCache, setAdmisPourPosition, preuvesDe, motifDeNom, motifDeNomTraduit, REGLES_SANS_POKEDEX, ILLUSTRATIONS_PLEINES_SANS_POKEDEX, NOMS_LATINS_IMPRIMES, NOMS_ID_IMPRIMES_IDENTIQUES, motifNomLuHorsLangue, motifNomLuIdentiqueProduit, REGLES_NOM_TRADUIT_DRESSEUR, construireTableJaCroisee, preuveParTableCroisee, porteUnTemoinTraduit, CHAMPS_TEMOIN_TRADUIT, LANGUES_A_NOM_TRADUIT, TAMPONS_ATTENDUS, tamponAttendu, cleFiche, grouperUnites, MOTIFS_DE_TROU, motifDeTrou, trousDuManifeste, sha256De, racineDe };
