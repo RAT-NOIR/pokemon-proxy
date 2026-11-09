@@ -42,7 +42,7 @@ for (const [nom, de, vers] of MUT) {
   if (!source.includes(de)) { console.log('MUTATION INAPPLICABLE (texte absent) :', nom); vivantes++; continue; }
   fs.writeFileSync(path.join(W, 'detection.mjs'), source.replace(de, vers));
   const r = spawnSync(process.execPath, [path.join(RACINE, 'v2', 'test', 'test-detection.js')], { env: { ...process.env, RM_DETECTION_PUB: W }, encoding: 'utf8', maxBuffer: 1 << 26 });
-  const ko = (r.stdout.match(/(\d+) en echec/) || [])[1];
+  const ko = (r.stdout.match(/(\d+) échoués/) || [])[1];
   const rouge = r.status !== 0;
   if (!rouge) vivantes++;
   console.log(`${rouge ? 'ROUGE  ' : 'VIVANTE'} ${nom} : ${ko === undefined ? 'sortie ' + r.status : ko + ' assertion(s) en echec'}`);

@@ -150,15 +150,23 @@ const aleaGraine = (s) => () => { s = (s + 0x6d2b79f5) >>> 0; let t = s; t = Mat
     // ═══ 7. la PRE-REDUCTION des grandes photos (grand cote > 800 px -> 800 px, entiers) ═══
     {
         const fx = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures-detection', 'pre-pillow.json'), 'utf8'));
-        let bons = 0;
+        let bons = 0, divergentes = 0;
         for (const c of fx.cas) {
             const d = D.dimensionsPre(c.w, c.h);
             vrai(`7. ${c.w}x${c.h} : dimensions ${c.W}x${c.H} (grand cote 800, arrondi entier)`, d && d.W === c.W && d.H === c.H && Math.max(d.W, d.H) === 800, JSON.stringify(d));
             const src = D.sourceSynthetique(c.graine, c.w, c.h), r = D.prereduire(src, c.w, c.h);
+            if (c.divergente) {
+                // h/w >= 2 : Pillow inverse l'ordre des passes ; la divergence est NOMMEE (ampleur mesuree par Pillow dans la fixture) et NOTRE sortie est figee (sha256 de notre ordre fixe : horizontal puis vertical)
+                const nous = D.sha256(r.rgb);
+                vrai(`7. ${c.w}x${c.h} (h/w >= 2) : DIVERGE de Pillow (${c.octetsDifferents} octets sur ${c.octetsTotal}, ecart max ${c.ecartMax}) et notre sortie est stable`, nous === c.shaRm && nous !== c.sha256 && c.ecartMax >= 1 && c.ecartMax <= 2, `${nous.slice(0, 12)} contre ${String(c.shaRm).slice(0, 12)} / Pillow ${c.sha256.slice(0, 12)}`);
+                divergentes++;
+                continue;
+            }
             const bon = r && r.largeur === c.W && r.hauteur === c.H && D.sha256(r.rgb) === c.sha256; if (bon) bons++;
             vrai(`7. ${c.w}x${c.h} -> ${c.W}x${c.H} == Image.resize BILINEAR de Pillow au bit`, bon);
         }
-        console.log(`   7. pre-reduction identique a ${fx.verite} : ${bons}/${fx.cas.length} cas (de 900x675 a 4080x3072)`);
+        console.log(`   7. pre-reduction identique a ${fx.verite} : ${bons}/${fx.cas.length - divergentes} cas (de 900x675 a 4603x3077) ; ${divergentes} formes h/w >= 2 DIVERGENTES, nommees`);
+        vrai('7. la fixture porte au moins 19 cas identiques dont 4000x3000, 3000x4000 et des dimensions impaires, et 2 formes divergentes', bons >= 19 && divergentes === 2 && fx.cas.some((c) => c.w === 4000 && c.h === 3000) && fx.cas.some((c) => c.w === 2999), `${bons} / ${divergentes}`);
         vrai('7. grand cote <= 800 : aucune pre-reduction (800x600, 640x480, 800x800 -> aucune ; 801x600 -> reduite)', D.dimensionsPre(800, 600) === null && D.dimensionsPre(640, 480) === null && D.dimensionsPre(800, 800) === null && D.dimensionsPre(801, 600) !== null);
         vrai('7. dimensions : demi vers le haut, jamais 0 (2000 x 1 -> 800 x 1 ; 801 x 600 -> 800 x 599)', JSON.stringify([D.dimensionsPre(2000, 1), D.dimensionsPre(801, 600)]) === JSON.stringify([{ W: 800, H: 1 }, { W: 800, H: 599 }]));
         // la pre-reduction ramene sur la voie prouvee : apres elle, la reduction 640 est canvas-high (facteur 1,25), pour les formes usuelles de photos de telephone

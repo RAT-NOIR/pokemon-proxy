@@ -278,7 +278,8 @@ export function detecter(cv, octets, options = {}) {
   const r = options.reducteur ? options.reducteur(rgb, w, h) : reduire(rgb, w, h, { voie: options.voie || 'auto' });
   const t3 = performance.now();
   const det = quadrilateres(cv, r.rgb, r.largeur, r.hauteur);
-  const sortie = { largeur: dec.largeur, hauteur: dec.hauteur, format: dec.format, orientationAppliquee: dec.orientationAppliquee, prereduction: pre, dim640: [r.largeur, r.hauteur], voie: r.voie, nCartes: det.gardes.length, redressee: false, quad: null, paysage: null, carte: null, rgb640: r.rgb,
+  // `candidats` : TOUS les quadrilateres retenus, dans l'ordre de la detection (le rang 1 est celui qui est redresse) ; sert aux mesures, jamais a la decision.
+  const sortie = { largeur: dec.largeur, hauteur: dec.hauteur, format: dec.format, orientationAppliquee: dec.orientationAppliquee, prereduction: pre, dim640: [r.largeur, r.hauteur], voie: r.voie, nCartes: det.gardes.length, candidats: det.gardes.map((g) => ({ quad: g.quad.map((p) => [p.x, p.y]), aire: g.aire })), redressee: false, quad: null, paysage: null, carte: null, rgb640: r.rgb,
     empreintes: { rgb640: sha256(r.rgb), quads: empreinteQuads(det.gardes), carte: null }, ms: { decodage: 0, pre: Math.round(t2 - t1), reduction: Math.round(t3 - t2), detection: 0 } };
   if (det.gardes.length) {
     const cand = det.gardes[0];
