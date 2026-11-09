@@ -1,5 +1,5 @@
 // MESURE SUR GRANDES PHOTOS : chaine A (Rat-Market : pre-reduction entiere + canvas emule) contre chaine B (servie aujourd'hui : canvas du navigateur sur la photo entiere), dans Chrome ; et A node contre A Chrome (invariance).
-//   node comparer-grandes.mjs <chrome-grandes.json> [--node=<node.json>] [--verites=<verites.json>] [--meta=<meta.json>]
+//   node comparer-grandes.mjs <chrome-grandes.json> [--node=<node.json>] [--verites=<verites.json>] [--meta=<meta.json>] [--avec-sans-licence]
 // Imprime les DENOMINATEURS : photos, erreurs de decodage par code, redressees par chaine, deplacement des quadrilateres (en % de la diagonale 640), cosinus des vecteurs A/B, erreur a la verite de position si fournie.
 // « meme quadrilatere de rang 1 » = les quatre coins a moins de 3 % de la diagonale (le seuil de quasi-doublon de la detection) : JAMAIS une identite de carte. AUCUN verdict n'est rejoue ici : pas d'idProduct de verite, donc pas de « sur faux » mesurable.
 import fs from 'node:fs';
@@ -8,7 +8,7 @@ const C = JSON.parse(fs.readFileSync(args.find((a) => !a.startsWith('--')), 'utf
 if (!C.photos) { console.error('sortie sans photos :', C.erreur); process.exit(2); }
 const N = arg('node') ? JSON.parse(fs.readFileSync(arg('node'), 'utf8')) : null, V = arg('verites') ? JSON.parse(fs.readFileSync(arg('verites'), 'utf8')) : null, M = arg('meta') ? JSON.parse(fs.readFileSync(arg('meta'), 'utf8')) : null;
 let ids = Object.keys(C.photos).sort();
-if (M && args.includes('--sans-licence-nulle')) ids = ids.filter((i) => M[i] && !/non declaree/.test(M[i].licence));   // la mesure PRINCIPALE : sans les photos sans licence declaree
+if (M && !args.includes('--avec-sans-licence')) ids = ids.filter((i) => M[i] && !/non declaree/.test(M[i].licence));   // PAR DEFAUT la mesure PRINCIPALE : sans les photos sans licence declaree ; --avec-sans-licence les remet (chiffres « a part »)
 const cnt = (f) => ids.filter(f).length;
 const q = (v, p) => { const s = [...v].sort((a, b) => a - b); return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : null; };
 const f3 = (x) => (x === null || x === undefined ? '-' : x.toFixed(3));

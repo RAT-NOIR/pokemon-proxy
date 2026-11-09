@@ -12,12 +12,14 @@ for (const f of fs.readdirSync(PUB)) if (/^decodeur.*\.mjs$|^lot-detection\.json
 for (const f of ['opencv.js', 'opencv_js.wasm']) fs.copyFileSync(path.join(PUB, 'opencv', f), path.join(W, 'opencv', f));
 const source = fs.readFileSync(path.join(PUB, 'grandes-page.mjs'), 'utf8');
 const MUT = [
-  ['verdict constant IDENTIQUE', 'verdict: verdictDepot(photos)', "verdict: 'IDENTIQUE'"],
+  ['verdict constant CONCORDANT', 'verdict: verdictDepot(photos)', "verdict: 'CONCORDANT'"],
+  ['verdict IDENTIQUE reutilise pour une concordance de quadrilatere', "return 'CONCORDANT';", "return 'IDENTIQUE';"],
+  ['memeQuad absent entre deux redressees : plus ECART', '(p.rm.redressee && p.memeQuad !== true)', 'false'],
   ['la chaine du navigateur tourne meme hors bornes', 'const n = bornes.ok ? await chaine(cv, octets) :', 'const n = true ? await chaine(cv, octets) :'],
   ['un depot refuse n\'est pas garde', 'if (!r.ok) refuses.push(doc);', ''],
   ['seuil « meme quadrilatere » 3 % -> 30 %', 'rec.memeQuad = rec.ecartQuadPct < 3;', 'rec.memeQuad = rec.ecartQuadPct < 30;'],
   ['limite de taille de fichier 64 -> 640 Mio', 'TAILLE_MAX_FICHIER = 64 * 1048576', 'TAILLE_MAX_FICHIER = 640 * 1048576'],
-  ['un quadrilatere de rang 1 different ne fait plus ECART', 'p.memeQuad === false', 'false'],
+  ['une redressee par un seul moteur ne fait plus ECART', 'p.rm.redressee !== p.nav.redressee || ', ''],
   ['un moteur en erreur seul ne fait plus ECART', 'if (p.rm.ok !== p.nav.ok) return \'ECART\';', ''],
   ['zero photo lue : plus ERREUR', "if (!photos.length || !photos.some((p) => p.rm.ok || p.nav.ok)) return 'ERREUR';", ''],
 ];

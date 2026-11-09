@@ -19,7 +19,7 @@ const hexN = n => v => typeof v === 'string' && new RegExp(`^[0-9a-f]{${n}}$`).t
 function objetSimple(o) { return o !== null && typeof o === 'object' && !Array.isArray(o); }
 
 const MESURE = {
-    moteur: parmi('wasm', 'webgpu'), verdict: parmi('IDENTIQUE', 'ECART', 'ERREUR'),
+    moteur: parmi('wasm', 'webgpu'), verdict: parmi('IDENTIQUE', 'ECART', 'ERREUR', 'CONCORDANT'),   // CONCORDANT (grandes-page.mjs) : memes lecture, redressement et quadrilatere de rang 1 a 3 % pres, PIXELS DIFFERENTS : jamais une identite
     fils: ouNul(entier(0, 64)), filsDemandes: ouNul(entier(0, 64)),
     creationSessionMs: ouNul(nombre(0, 1e7)), premiereMs: ouNul(nombre(0, 1e7)), medianeMs: ouNul(nombre(0, 1e7)), p95Ms: ouNul(nombre(0, 1e7)), pretraitementMedianeMs: ouNul(nombre(0, 1e7)),
     nEmpreintes: ouNul(entier(0, 100)), nVecteursRefuses: ouNul(entier(0, 100)),

@@ -37,15 +37,16 @@ export function enregistrementRefuse(codeErreur, octets = 0) {
 
 /**
  * Le verdict d'un depot, CALCULE. ERREUR : aucun des deux moteurs n'a pu lire aucune photo. ECART : une photo lue par un moteur et refusee par l'autre, ou redressee par un seul, ou dont les deux quadrilateres de rang 1
- * different de 3 % de la diagonale ou plus. IDENTIQUE : aucune de ces divergences (les pixels 640 des deux chaines different toujours : ce n'est PAS ce que ce mot affirme).
+ * different de 3 % de la diagonale ou plus (ou dont la concordance n'est pas etablie : redressees des deux cotes sans ecart calcule).
+ * CONCORDANT : aucune de ces divergences. Ce n'est PAS « IDENTIQUE » (mot reserve, dans cette collection, a l'egalite du modele a cos 0,9999 et aux memes octets que l'ordinateur) : les pixels 640 des deux chaines different toujours.
  */
 export function verdictDepot(photos) {
   if (!photos.length || !photos.some((p) => p.rm.ok || p.nav.ok)) return 'ERREUR';
   for (const p of photos) {
     if (p.rm.ok !== p.nav.ok) return 'ECART';
-    if (p.rm.ok && (p.rm.redressee !== p.nav.redressee || p.memeQuad === false)) return 'ECART';
+    if (p.rm.ok && (p.rm.redressee !== p.nav.redressee || (p.rm.redressee && p.memeQuad !== true))) return 'ECART';
   }
-  return 'IDENTIQUE';
+  return 'CONCORDANT';
 }
 
 /** La chaine du navigateur (voir l'en-tete) : rend { ...resume, quad } ; ne leve jamais. */
