@@ -30,7 +30,7 @@ const MUTATIONS = [
     ['bail : perdu sur la moindre coupure', 'planificateur.js', 'catch { if (horloge() - dernierOk > TTL_MS) perdu = true; }', 'catch { perdu = true; }'],
     ['bail : un refus explicite est ignoré', 'planificateur.js', 'if (ok === false) perdu = true; else dernierOk = horloge();', 'dernierOk = horloge();'],
     ['bail : le silence de plus que le TTL n\'est pas vu', 'planificateur.js', 'if (!perdu && horloge() - dernierOk > TTL_MS) perdu = true; return !perdu;', 'return !perdu;'],
-    ['chiffrement : l\'étiquette n\'est pas vérifiée (fichier)', 'chiffrement.js', 'try { const fin = decipher.final();', 'try { const fin = Buffer.alloc(0);'],
+    ['chiffrement : l\'étiquette n\'est pas vérifiée (fichier)', 'chiffrement.js', 'try { fin = decipher.final(); }', 'try { fin = Buffer.alloc(0); }'],
     ['chiffrement : l\'étiquette n\'est pas vérifiée (manifeste)', 'chiffrement.js', 'try { return Buffer.concat([d.update(tout.subarray(EN_TETE, tout.length - ETIQUETTE)), d.final()]); }', 'try { return Buffer.concat([d.update(tout.subarray(EN_TETE, tout.length - ETIQUETTE))]); }'],
     ['chiffrement : le contexte (aad) n\'est pas lié', 'chiffrement.js', "decipher.setAAD(aad);", ''],
     ['chiffrement : le nonce est fixe', 'chiffrement.js', 'const nonce = crypto.randomBytes(NONCE);', 'const nonce = Buffer.alloc(NONCE);'],

@@ -62,8 +62,10 @@ async function dechiffrerVersFichier(source, chemin, { cle, aad }) {
         if (!decipher) { if (tete.length >= MAGIE.length && !tete.subarray(0, MAGIE.length).equals(MAGIE)) refuser('format-inconnu'); refuser('etiquette-refusee'); }
         if (queue.length !== ETIQUETTE) refuser('etiquette-refusee');
         decipher.setAuthTag(queue);
-        try { const fin = decipher.final(); if (fin.length) { await ecrire(fin); octets += fin.length; } }
-        catch (e) { if (e && e.code === 'ERR_CRYPTO_INVALID_AUTH_TAG' || /authenticate|auth/i.test(String(e && e.message))) refuser('etiquette-refusee'); throw e; }
+        // final() ne lève ici que sur une étiquette refusée ; l'écriture est hors du try : une panne de disque ne se fait pas passer pour un fichier altéré.
+        let fin;
+        try { fin = decipher.final(); } catch { refuser('etiquette-refusee'); }
+        if (fin.length) { await ecrire(fin); octets += fin.length; }
         await fermer();
         if (erreurSortie) throw erreurSortie;
         return { octets };

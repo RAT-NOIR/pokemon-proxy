@@ -324,7 +324,7 @@ const JOUEE_AILLEURS = { 'GET /api/modele-empreinte/{sha256}': 'test-modele-empr
     await semer('triple');
     const express = require('express'); const pret = require('../pret'); const registre = require('../registre');
     const { dansUnScan } = require('../../sources'); const { assembler, LOTS } = require('../index');          // LOTS : la liste de v2/index.js, UNE seule définition (tour 1, I7)
-    H.vrai(`LOTS lu de v2/index.js : ${LOTS.length} lots`, Array.isArray(LOTS) && LOTS.length === 10);   // 9 → 10 : le lot LIEN-ORDINATEUR entre dans LOTS (derrière V2_LIEN_ORDINATEUR=1, allumé dans ce banc) ; 8 → 9 : le lot GALERIE entre dans LOTS (derrière V2_GALERIE=1, éteint dans ce banc) ; 7 → 8 : le lot COLLECTION entre dans LOTS (ruling 1 du lot) ; le dénominateur suit la liste, aucune garde n'est desserrée
+    H.vrai(`LOTS lu de v2/index.js : ${LOTS.length} lots`, Array.isArray(LOTS) && LOTS.length === 11);   // 10 → 11 : le lot SAUVEGARDES entre dans LOTS (aucune route, éteint sans ses variables V2_SAUVEGARDE_*) ; 9 → 10 : le lot LIEN-ORDINATEUR entre dans LOTS (derrière V2_LIEN_ORDINATEUR=1, allumé dans ce banc) ; 8 → 9 : le lot GALERIE entre dans LOTS (derrière V2_GALERIE=1, éteint dans ce banc) ; 7 → 8 : le lot COLLECTION entre dans LOTS (ruling 1 du lot) ; le dénominateur suit la liste, aucune garde n'est desserrée
     const { creerCourrierMemoire } = require('../comptes/courrier');
     const courrier = creerCourrierMemoire();
     registre.fournir('courrier', courrier); registre.fournir('turnstile', { verifier: async () => true });

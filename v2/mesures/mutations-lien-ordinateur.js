@@ -72,7 +72,7 @@ const MUTANTS = [
     ['plafond : borne haute relevée à 300', 'config.js', "env.V2_LIEN_ORDINATEUR_JOUR, 100, 1, 150)", "env.V2_LIEN_ORDINATEUR_JOUR, 100, 1, 300)", BANC],
     ['drapeau : la route est montée même éteinte', 'lien-ordinateur/monter.js', "cfg.lienOrdinateur.actif !== true", "false", BANC],
     ['drapeau : toute valeur non vide l\'allume', 'config.js', "actif: env.V2_LIEN_ORDINATEUR === '1',", "actif: Boolean(env.V2_LIEN_ORDINATEUR),", BANC],
-    ['le lot n\'est pas dans la liste des lots du socle', 'index.js', ", require('./lien-ordinateur/monter')]", "]", BANC]
+    ['le lot n\'est pas dans la liste des lots du socle', 'index.js', ", require('./lien-ordinateur/monter'), require('./sauvegardes/monter')]", ", require('./sauvegardes/monter')]", BANC]
 ];
 
 function rejouer({ seulement = null, journal = console.log } = {}) {
