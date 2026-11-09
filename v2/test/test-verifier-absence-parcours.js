@@ -1,6 +1,6 @@
 'use strict';
 // outils/verifier-absence-parcours.js : il dit NON sur des arbres fabriqués où le module est présent ou référencé (et sur ce qu'il ne sait pas lire), OUI sur un arbre sans le module.
-// Arbres fabriqués dans un dossier temporaire PROPRE à ce banc (sans jonction), retirés à la fin. Aucune base, aucun réseau.
+// Arbres fabriqués dans un dossier temporaire PROPRE à ce banc, retirés à la fin ; les cas de liens (D3) se jouent sur un FAUX disque en mémoire : ce banc ne crée AUCUN lien. Aucune base, aucun réseau.
 const fs = require('fs'), os = require('os'), path = require('path'), { execFileSync } = require('child_process');
 const H = require('./_harnais'); const { verifier, deriver, USAGES_TOLERES } = require('../../outils/verifier-absence-parcours');
 const racine = fs.mkdtempSync(path.join(os.tmpdir(), 'absence-parcours-'));
@@ -43,19 +43,41 @@ try {
     H.v('D2 : une signature dans collecte-cartes/ (que v2 charge) => NON ; sans signature => OUI', [verifier(arbre('collecte-sig', { ...BASE, 'collecte-cartes/x.js': "req.get('x-rat-market-mesure');\n" })).ok, verifier(arbre('collecte-ok', { ...BASE, 'collecte-cartes/x.js': "'use strict';\n" })).ok], [false, true]);
     // D3 : un lien symbolique ou une jonction est une FAUTE (jamais un saut silencieux)
     {
-        const lien = arbre('lien', { ...BASE }), cible = path.join(racine, 'cible-du-lien'); fs.mkdirSync(cible); fs.writeFileSync(path.join(cible, 'index.js'), EXEMPTION);
-        let cree = false; const jonction = path.join(lien, 'v2', 'cache');
-        try { fs.symlinkSync(cible, jonction, 'junction'); cree = true; } catch { /* privilège absent */ }
-        if (cree) {
-            const r = verifier(lien);
-            H.v('D3 : une jonction / un lien de dossier dans v2 => NON, nommé (jamais sauté en silence)', [r.ok, r.fautes.some(f => f.includes('v2/cache') && /lien|jonction/.test(f))], [false, true]);
-            fs.rmdirSync(jonction);                                                                    // retire le LIEN seul (non récursif), la cible reste
-            H.v('D3 : (contrôle) le lien retiré, la cible est intacte et l\'arbre redevient OUI', [fs.existsSync(path.join(cible, 'index.js')), verifier(lien).ok], [true, true]);
-        } else H.vrai('D3 : jonction non créable ici (privilège) : assertion non jouée', true);
-        let fichierLien = false; const lf = path.join(lien, 'v2', 'lien.js');
-        try { fs.symlinkSync(path.join(cible, 'index.js'), lf, 'file'); fichierLien = true; } catch { /* privilège absent */ }
-        if (fichierLien) { H.v('D3 : un lien de fichier dans v2 => NON', verifier(lien).ok, false); fs.unlinkSync(lf); } else H.vrai('D3 : lien de fichier non créable ici (privilège) : assertion non jouée', true);
-        H.vrai('D3 : aucune jonction ne reste dans l\'arbre fabriqué avant le nettoyage', !fs.readdirSync(path.join(lien, 'v2'), { withFileTypes: true }).some(e => e.isSymbolicLink()));
+        // AUCUN lien réel : aucun banc n'en crée (règle de test-garde-apports.js, qui protège les dossiers d'apports). La détection réelle vit dans l'outil (`classerEntree`, fonction pure sur ce que rendent
+        // readdir/lstat : libuv rapporte lien symbolique ET jonction par `isSymbolicLink`) ; ici elle reçoit de FAUSSES entrées, et `verifier` / `deriver` un FAUX disque injecté (`fsx`).
+        const R = path.join(path.sep, 'R');
+        const faux = spec => {   // spec : { 'v2': 'dir', 'v2/config.js': 'file:texte', 'v2/cache': 'link', 'v2/x': 'autre' } -> un faux `fs` en mémoire
+            const T = new Map([[R, { t: 'dir' }]]); for (const [rel, v] of Object.entries(spec)) T.set(path.join(R, rel), v === 'dir' ? { t: 'dir' } : v === 'link' ? { t: 'link' } : v === 'autre' ? { t: 'autre' } : { t: 'file', texte: v.slice(5) });
+            const entree = (p, nom) => { const e = T.get(p); return { name: nom, isSymbolicLink: () => e.t === 'link', isDirectory: () => e.t === 'dir', isFile: () => e.t === 'file' }; };
+            const ecrit = [];
+            return { ecrit, lstatSync: p => { if (!T.has(path.normalize(p))) throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); return entree(path.normalize(p), path.basename(p)); },
+                     readdirSync: p => [...T.keys()].filter(k => path.dirname(k) === path.normalize(p) && k !== path.normalize(p)).map(k => entree(k, path.basename(k))),
+                     readFileSync: p => { const e = T.get(path.normalize(p)); if (!e || e.t !== 'file') throw new Error('illisible'); return e.texte; },
+                     existsSync: p => T.has(path.normalize(p)) || ecrit.some(w => w[1] === path.normalize(p)),
+                     mkdirSync: p => { ecrit.push(['mkdir', path.normalize(p)]); }, copyFileSync: (a, b) => { ecrit.push(['copie', path.normalize(b)]); }, writeFileSync: (p, t) => { ecrit.push(['ecrit', path.normalize(p), t]); } };
+        };
+        const OK = { v2: 'dir', 'v2/config.js': 'file:const mesure = {};' };
+        const classer = require('../../outils/verifier-absence-parcours').classerEntree;
+        H.v('D3 : classerEntree : un lien passe AVANT le dossier (lien + dossier = lien), puis dossier, fichier ; null, objet vide, entrée sans méthode = autre',
+            [{ isSymbolicLink: () => true, isDirectory: () => true, isFile: () => false }, { isSymbolicLink: () => false, isDirectory: () => true, isFile: () => false }, { isSymbolicLink: () => false, isDirectory: () => false, isFile: () => true }, null, {}, { isSymbolicLink: () => false, isDirectory: () => false, isFile: () => false }].map(classer), ['lien', 'dossier', 'fichier', 'autre', 'autre', 'autre']);
+        H.v('D3 : (contrôle) le faux disque sans lien => OUI', verifier(R, faux(OK)).ok, true);
+        const nonLien = (nom, spec, motif) => { const r = verifier(R, faux({ ...OK, ...spec })); H.v(`D3 : ${nom} => NON, nommé, jamais sauté en silence`, [r.ok, r.fautes.some(f => f.includes(motif) && /lien symbolique ou une jonction/.test(f))], [false, true]); };
+        nonLien('un lien (ou une jonction) de dossier dans v2', { 'v2/cache': 'link' }, 'v2/cache');
+        nonLien('un lien de fichier JS dans v2', { 'v2/lien.js': 'link' }, 'v2/lien.js');
+        nonLien('un lien nommé node_modules (le saut de node_modules ne couvre pas un lien)', { 'v2/node_modules': 'link' }, 'v2/node_modules');
+        nonLien('un lien profond (v2/a/b/c)', { 'v2/a': 'dir', 'v2/a/b': 'dir', 'v2/a/b/c': 'link' }, 'v2/a/b/c');
+        nonLien('un lien sous v2/test (noms et liens y sont contrôlés)', { 'v2/test': 'dir', 'v2/test/x': 'link' }, 'v2/test/x');
+        nonLien('collecte-cartes lui-même en lien', { 'collecte-cartes': 'link' }, 'collecte-cartes');
+        nonLien('un lien dans ratmarket/', { ratmarket: 'dir', 'ratmarket/a.js': 'link' }, 'ratmarket/a.js');
+        H.v('D3 : v2 lui-même en lien => NON', verifier(R, faux({ v2: 'link' })).ok, false);
+        H.v('D3 : une entrée ni fichier ni dossier ni lien (non classable) => NON : « je ne sais pas » n\'est pas « tout va bien »', verifier(R, faux({ ...OK, 'v2/bizarre': 'autre' })).ok, false);
+        // la DÉRIVATION : un lien dans la source est refusé, et le message le dit (rien n'est suivi)
+        const SRC = { ...OK, 'v2/config.js': 'file:// >>> PARCOURS-SITE-DEBUT\nx\n// <<< PARCOURS-SITE-FIN\n' };
+        const derive = spec => { const f = faux({ ...SRC, ...spec }); try { deriver(R, path.join(path.sep, 'DEST'), f); return { f, erreur: null }; } catch (e) { return { f, erreur: e.message }; } };
+        H.v('D3 : deriver : un lien dans v2 de la source => REFUS nommant le lien, le config.js dérivé n\'est pas écrit', [derive({ 'v2/cache': 'link' }).erreur.includes('lien symbolique ou jonction') && derive({ 'v2/cache': 'link' }).erreur.includes('v2/cache'), derive({ 'v2/cache': 'link' }).f.ecrit.some(w => w[0] === 'ecrit')], [true, false]);
+        H.v('D3 : deriver : un lien dans collecte-cartes, et collecte-cartes lui-même en lien => REFUS', [derive({ 'collecte-cartes': 'dir', 'collecte-cartes/a.js': 'link' }).erreur !== null, derive({ 'collecte-cartes': 'link' }).erreur !== null], [true, true]);
+        const propre = derive({ 'collecte-cartes': 'dir', 'collecte-cartes/a.js': 'file:x' });
+        H.v('D3 : deriver : (contrôle) source sans lien => aucune erreur, config.js dérivé écrit sans le bloc', [propre.erreur, propre.f.ecrit.filter(w => w[0] === 'ecrit').map(w => w[2].includes('PARCOURS-SITE'))], [null, [false]]);
     }
     // D5 : l'arbre de PRODUCTION est DÉRIVÉ par une fonction unique (retrait du dossier, remplacement du bloc balisé de config.js) ; l'outil exige OUI ; la configuration se charge
     {
