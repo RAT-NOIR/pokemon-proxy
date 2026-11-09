@@ -1,0 +1,238 @@
+{
+ "resume": {
+  "etiquette": "mem-froid",
+  "dossier": "banc-telephone",
+  "cpu": 1,
+  "debitMoS": null,
+  "profilConserve": true,
+  "ua": "chrome-bureau",
+  "info": {
+   "isole": true,
+   "nav": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/157.0.0.0 Safari/537.36",
+   "coeurs": 16
+  },
+  "override": null,
+  "tPageOuverteMs": 269,
+  "tOuvertureAPretMs": 5299,
+  "clic1Ms": 43082,
+  "scansSuivantsMs": [],
+  "prep": {
+   "etat": "pret",
+   "auto": true,
+   "raison": "ok",
+   "phase": "",
+   "pretMs": 5291.759999990463,
+   "chargementMoteurMs": 8.185000002384186,
+   "wasm": {
+    "source": "reseau",
+    "cache": "manque",
+    "ecriture": "ok",
+    "octets": 14239897,
+    "ms": 3249.454999998212
+   },
+   "modele": {
+    "source": "reseau",
+    "cache": "manque",
+    "ecriture": "ok",
+    "lectureCacheMs": null,
+    "telechargementMs": 4380.109999999404,
+    "verifShaMs": 123.96499998867512
+   },
+   "wasmCompileMs": 27.894999995827675,
+   "creationSessionMs": 521.7449999898672,
+   "erreur": null,
+   "stockagePersistant": false,
+   "interrompueAvant": false
+  },
+  "prepAvantClic": {
+   "etat": "pret",
+   "auto": true,
+   "raison": "ok",
+   "phase": "",
+   "pretMs": 5291.759999990463,
+   "chargementMoteurMs": 8.185000002384186,
+   "wasm": {
+    "source": "reseau",
+    "cache": "manque",
+    "ecriture": "ok",
+    "octets": 14239897,
+    "ms": 3249.454999998212
+   },
+   "modele": {
+    "source": "reseau",
+    "cache": "manque",
+    "ecriture": "ok",
+    "lectureCacheMs": null,
+    "telechargementMs": 4380.109999999404,
+    "verifShaMs": 123.96499998867512
+   },
+   "wasmCompileMs": 27.894999995827675,
+   "creationSessionMs": 521.7449999898672,
+   "erreur": null,
+   "stockagePersistant": null,
+   "interrompueAvant": false
+  },
+  "depot1": {
+   "moteur": "wasm",
+   "verdict": "IDENTIQUE",
+   "cosMin": 0.9999999,
+   "filsDemandes": 4,
+   "fils": 4,
+   "creationSessionMs": 521.7,
+   "premiereMs": 481.5,
+   "medianeMs": 449.2,
+   "pretraitementMedianeMs": 22.9,
+   "premier": null,
+   "suite": null,
+   "entree": {
+    "chemin": "rm"
+   }
+  },
+  "telechargementMs": 4380,
+  "verifShaMs": 124,
+  "deposRefuses": [],
+  "ecran": {
+   "mot": "IDENTIQUE",
+   "detail": "WASM · cos min 1,000000 sur 30 cartes · modèle seul 1,000000 · identique à la référence, entrée identique au bit",
+   "l1": "1 · verdict : IDENTIQUE (WASM) — cos min 1,000000"
+  },
+  "memoire": {
+   "echantillons": 7849,
+   "picParTypeMo": {
+    "browser": 66,
+    "renderer": 542,
+    "GPU": 128,
+    "network.mojom.NetworkService": 23,
+    "storage.mojom.StorageService": 8
+   },
+   "picSommeMo": 837
+  }
+ },
+ "journal": "[4.6 s] modèle reçu : 118202501 octets en 4,4 s (cache : manque, écriture : ok)\n[4.6 s] sha256 vérifié (0,1 s)\n[5.2 s] session WASM créée en 522 ms\n[5.2 s] prêt : 5,3 s après l'ouverture de la page\n[48.2 s] diagnostic des pixels : cause aucune (pixels identiques au plancher) · décodage navigateur contre PIL (2 cartes) max 0 · moy 0 · redimensionnement de référence max 1 · moy 0,000126 · chaîne complète (12 cartes) max 1 · moy 0,000069\n[48.2 s] orientation EXIF dans ce navigateur : WebP non-tourne, JPEG tourne\n",
+ "depots": [
+  {
+   "moteur": "wasm",
+   "fils": 4,
+   "filsDemandes": 4,
+   "creationSessionMs": 521.7,
+   "premiereMs": 481.5,
+   "medianeMs": 449.2,
+   "p95Ms": 496.5,
+   "pretraitementMedianeMs": 22.9,
+   "nEmpreintes": 30,
+   "nVecteursRefuses": 0,
+   "cosMin": 0.9999999,
+   "cosMoy": 1,
+   "cosMinModeleSeul": 1,
+   "nModeleSeul": 12,
+   "jsHeapApresCreationMo": 41.4,
+   "jsHeapFinMo": 26.4,
+   "uaApresCreationMo": null,
+   "uaFinMo": null,
+   "ecartChaineModele": 1e-7,
+   "verdict": "IDENTIQUE",
+   "entree": {
+    "chemin": "rm",
+    "cartesRm": 30,
+    "cartesRepli": 0,
+    "refus": {},
+    "identiqueAuBit": true,
+    "source": "rm-decodeur-2",
+    "rgbIdentiquesPil": 30,
+    "rgbMesureesPil": 30,
+    "cartesComparees": 30,
+    "rgbIdentiquesNavigateur": 30,
+    "tenseursIdentiquesNavigateur": 30,
+    "ecartMaxNavigateur": 0,
+    "cosMinNavigateur": 0.9999999,
+    "msRmMediane": 12.7,
+    "msNavigateurMediane": 5.6,
+    "cartes640": 3,
+    "ms640": 69.6,
+    "empreinte640": "1cb8790bae75"
+   },
+   "gardeExtension": "PASSE",
+   "preparation": {
+    "etat": "pret",
+    "auto": true,
+    "froid": true,
+    "cacheModele": "manque",
+    "cacheWasm": "manque",
+    "cacheEcriture": "ok",
+    "sourceModele": "reseau",
+    "sourceWasm": "reseau",
+    "telechargementModeleMs": 4380.1,
+    "lectureCacheModeleMs": null,
+    "verifShaMs": 124,
+    "chargementMoteurMs": 8.2,
+    "wasmMs": 3249.5,
+    "wasmOctets": 14239897,
+    "wasmCompileMs": 27.9,
+    "creationSessionMs": 521.7,
+    "ouvertureAPretMs": 5291.8,
+    "attenteAvantScanMs": 0,
+    "clicAPremierResultatMs": 42834.9,
+    "premierScanMs": 520.2,
+    "scanSuivantMedianeMs": 469.7,
+    "scanSuivantP95Ms": 523.2,
+    "nScans": 30,
+    "filsSession": 4,
+    "stockagePersistant": false,
+    "interrompueAvant": false
+   },
+   "orientationNavigateur": {
+    "webp": "non-tourne",
+    "jpeg": "tourne"
+   },
+   "moteurDemande": "wasm",
+   "webgpuDesactive": false,
+   "webgpuForce": false,
+   "diagnosticPixels": {
+    "cause": "aucune",
+    "cartesDecodage": 2,
+    "cartesChaine": 12,
+    "decodage": {
+     "n": 1479240,
+     "max": 0,
+     "somme": 0,
+     "nDiff": 0,
+     "moy": 0,
+     "pctDiff": 0
+    },
+    "redimensionnement": {
+     "n": 301056,
+     "max": 1,
+     "somme": 38,
+     "nDiff": 38,
+     "moy": 0.000126,
+     "pctDiff": 0.012622
+    },
+    "chaine": {
+     "n": 1806336,
+     "max": 1,
+     "somme": 124,
+     "nDiff": 124,
+     "moy": 0.000069,
+     "pctDiff": 0.006865
+    },
+    "bitmapSansConversion": {
+     "n": 1479240,
+     "max": 0,
+     "somme": 0,
+     "nDiff": 0,
+     "moy": 0,
+     "pctDiff": 0
+    },
+    "bitmapAvecConversion": {
+     "n": 1479240,
+     "max": 0,
+     "somme": 0,
+     "nDiff": 0,
+     "moy": 0,
+     "pctDiff": 0
+    },
+    "couleurCanvas": "srgb"
+   }
+  }
+ ]
+}
