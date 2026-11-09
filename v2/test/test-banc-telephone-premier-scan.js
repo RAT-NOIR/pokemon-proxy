@@ -122,6 +122,9 @@ const egal = (a, b) => a && b && a.length === b.length && Buffer.compare(Buffer.
     {
         const app = express(); const router = express.Router();
         H.v('3. (montage) le routeur est monté', routes.monter(router, { modeleEmpreinte: { sha256: 'a'.repeat(64), octets: 118202501 } }, { envBancTelephone: ENV, nomBaseBancTelephone: 'rm_essai' }), true);
+        // le brotli du .wasm est calculé AU MONTAGE, en tâche de fond (le premier visiteur ne paie pas ~1 s de CPU, bien plus sur une petite instance)
+        await routes.attendrePrechauffage();
+        H.v('3. après le montage, le .wasm d\'ORT est DÉJÀ prêt en brotli (préchauffage), le .wasm WebGPU pas encore', [routes.representationsGardees().some(c => /ort-wasm-simd-threaded\.wasm\|br$/.test(c)), routes.representationsGardees().some(c => /asyncify/.test(c))], [true, false]);
         app.use(router); const s = await H.serveur(app);
         // http brut : fetch décompresserait seul, et ce banc doit voir les octets TELS QU'ENVOYÉS
         const http = require('http');

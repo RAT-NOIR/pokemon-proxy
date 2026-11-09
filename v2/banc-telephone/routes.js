@@ -48,6 +48,7 @@ const FICHIERS = Object.freeze({
 // est refaite si le fichier change (taille ou date). Brotli qualité 9 : 14,2 Mo de .wasm → 2,7 Mo en ~1,3 s de CPU une seule fois ; gzip pour un client sans brotli.
 const COMPRESSIBLE = /^(?:text\/|application\/(?:json|wasm))/;
 const REPRESENTATIONS = new Map();
+const PRECHAUFFAGE = Object.freeze(['ort/ort-wasm-simd-threaded.wasm', 'ort/ort.wasm.bundle.min.mjs']), PRECHAUFFAGES = [];
 function choisirEncodage(accept) {
     if (typeof accept !== 'string') return 'identity';
     const q = {};
@@ -100,6 +101,9 @@ function monter(router, cfg, deps = {}) {
     const gabarit = fs.readFileSync(path.join(PUBLIC, 'page.html'), 'utf8');
     const ipHeure = Number.isInteger(deps.ipHeureBancTelephone) && deps.ipHeureBancTelephone >= 1 ? deps.ipHeureBancTelephone : IP_HEURE;
     const maxDocuments = Number.isInteger(deps.documentsMaxBancTelephone) && deps.documentsMaxBancTelephone >= 1 ? deps.documentsMaxBancTelephone : S.DOCUMENTS_MAX;
+    // le brotli du moteur (14 Mo) et du JavaScript d'ORT est calculé AU MONTAGE, en tâche de fond (pool de fils de libuv : la boucle d'événements n'est pas bloquée) : le premier visiteur ne paie pas ce calcul.
+    // Le .wasm WebGPU (26 Mo, hors iOS) et le lot restent à la demande.
+    for (const f of PRECHAUFFAGE) { const disque = path.join(PUBLIC, f); PRECHAUFFAGES.push(fs.promises.stat(disque).then(st => representation(disque, 'br', st)).then(() => {}, () => {})); }
 
     router.get('/api/banc/telephone', (req, res) => {
         const isole = req.query && req.query.iso !== '0';                              // ?iso=0 : la page sans isolement (un seul fil sur Safari) pour comparer
@@ -156,4 +160,6 @@ function monter(router, cfg, deps = {}) {
     return true;
 }
 
-module.exports = { monter, csp, FICHIERS, IP_HEURE, GLOBAL_HEURE };
+const attendrePrechauffage = () => Promise.all(PRECHAUFFAGES).then(() => {});
+const representationsGardees = () => [...REPRESENTATIONS.keys()];
+module.exports = { monter, csp, FICHIERS, IP_HEURE, GLOBAL_HEURE, attendrePrechauffage, representationsGardees };
