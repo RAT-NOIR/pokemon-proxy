@@ -1,6 +1,6 @@
 # RAPPORT — premier scan de la page de banc téléphone (`v2/banc-telephone/`)
 
-Branche `v2-premier-scan`, **rebasée sur `origin/api-v2` (`6f51105c`, avec la détection)**, 16 commits au-dessus, rien de poussé. Ce rapport sépare ce qui est MESURÉ (Chrome de bureau) de ce qui reste à PROUVER (iPhone, Android). Tour 1 (RELECTURE-PS-1.md, -2.md) et tour 2 (RELECTURE-PS-3.md) appliqués : voir §9.
+Branche `v2-premier-scan`, **rebasée sur `origin/api-v2` (`6f51105c`, avec la détection)**, rien de poussé (`git log origin/api-v2..HEAD` : la liste des commits). Ce rapport sépare ce qui est MESURÉ (Chrome de bureau) de ce qui reste à PROUVER (iPhone, Android). Tour 1 (RELECTURE-PS-1.md, -2.md) et tour 2 (RELECTURE-PS-3.md) appliqués : voir §9.
 
 > **Rien dans ce rapport n'est une mesure d'iPhone.** Chrome headless 157 sur un PC Ryzen 7 (16 cœurs), CPU ralentie par `Emulation.setCPUThrottlingRate` (ne touche que le fil principal, pas les fils WASM), réseau simulé **par hôte** par le serveur local du pilote. **Aucune phrase « sous 5 s sur iPhone » n'est permise par ces chiffres.**
 
