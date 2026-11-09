@@ -79,6 +79,8 @@ const attente = ms => new Promise(r => setTimeout(r, ms));
         if (EVAL) { console.log('EVAL', JSON.stringify(await evalue(fs.readFileSync(EVAL, 'utf8'), true))); }
         if (arg('sans-clic', '') === '1') { try { cp.execFileSync('taskkill.exe', ['/PID', String(chrome.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* déjà arrêté */ } srv.close(); setTimeout(() => process.exit(0), 500); return; }
         // le premier clic, puis des scans de plus (même page, session déjà prête)
+        // --sans-diagnostic=1 : la page saute le diagnostic des pixels et le test d'orientation (≈ 40 s de CPU, étrangers au scan) ; la mesure du scan, elle, ne change pas
+        if (arg('sans-diagnostic', '') === '1') await evalue('(window.__banc.E.diagnostic = null, window.__banc.E.orientation = null, true)');
         const t1 = Date.now();
         await evalue('window.__banc.lancer("wasm")', true);
         const clic1Ms = Date.now() - t1;
@@ -99,7 +101,7 @@ const attente = ms => new Promise(r => setTimeout(r, ms));
         if (JSON_OUT) fs.writeFileSync(JSON_OUT, JSON.stringify({ resume, journal: ecran.journal, depots: deposes.filter(d => !d.refuse).map(d => d.mesure) }, null, 1));
         if (!mesures.length) sortie = 2;
         // une fermeture NORMALE de la page (pagehide : le marqueur de préparation devient « ferme ») ; un Chrome tué en pleine page laisserait « pret » et la garde refuserait la préparation seule au retour, à raison
-        await cdp('Page.navigate', { url: 'about:blank' }); await attente(1000);
+        await cdp('Page.navigate', { url: 'about:blank' }); await attente(7000);      // le localStorage de Chrome n'est écrit sur le disque que par lots (~5 s) : un Chrome tué avant perdrait « ferme »
         w.close();
     } catch (e) { console.log('ERREUR pilote', e.stack); sortie = 1; }
     try { cp.execFileSync('taskkill.exe', ['/PID', String(chrome.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* déjà arrêté */ }
