@@ -253,7 +253,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
     await test('UE (09/11) : Unnumbered Energies : lu.annee = année du produit + nom concordant + couple (type, année) unique ; année fausse / absente / non entière, set hors liste, autre type, couple en double ou inconnu refusés', () => {
         const SET = 'Unnumbered-Energies';
         const COUPLES = [{ nomEn: 'Grass Energy', numero: '2010' }, { nomEn: 'Grass Energy', numero: '2011' }, { nomEn: 'Fire Energy', numero: '2010' }];
-        const pe = (o = {}) => produit({ tirage: 'en', slugSet: SET, numero: '2010', slug: 'Grass-Energy-V4-UEN', nomEn: 'Grass Energy', couplesDuSet: COUPLES, ...o });
+        const pe = (o = {}) => produit({ slugSet: SET, numero: '2010', slug: 'Grass-Energy-V4-UEN', nomEn: 'Grass Energy', couplesDuSet: COUPLES, ...o });
         const ee = (o = {}) => entree({ attendu: { ...entree().attendu, nom: 'Grass Energy', numero: '2010' }, lu: { ...entree().lu, nom: 'Grass Energy', numero: null, total: null, annee: 2010, marques: ['aucun numéro imprimé', '©2010 Pokémon/Nintendo'], ...o } });
         assert.deepStrictEqual(lue(ee(), pe()), { ok: true, motifs: [], drapeaux: ['energie-par-annee:2010'] }, 'cas nominal');
         assert.deepStrictEqual(PV.ENERGIES_PAR_ANNEE_SETS, ['Unnumbered-Energies']);
