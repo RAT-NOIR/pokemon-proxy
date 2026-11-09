@@ -1518,6 +1518,60 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
             assert.ok(!drap(ezh(imp), pzh(ligne, 'Autre-Set-ZH')).some(d => d.startsWith('temoin-illustration-relue')), `${ligne} : voie jamais ouverte`);
         }
     });
+    // ───────── (09/11, décision du propriétaire) scans zh-hans sans code lisible : le TOTAL imprimé, seul, désigne un set unique de la table fermée ─────────
+    await test('TZ (09/11) : code non lu admis par le TOTAL imprimé, table fermée Master Strategy ; code lu faux, total absent / d\'un autre set / ambigu (033, 086), set hors table, pas zh-hans, relecture absente refusent', () => {
+        const M1 = 'Master-Strategy-Deck-Building-Sets', M2 = 'Master-Strategy-Deck-Building-Sets-Vol-2';
+        const ill = (o = {}) => ({ idProduct: 1001, sha256: H1, reference: 'cartes/77/mareep-zh.webp', par: 'coordinateur', le: '2026-11-09', ...o });
+        const epk = (o = {}) => trad({ langue: 'zh-hans', nom: '咩利羊', numero: '007', total: '028', codeSet: null, dex: 179, pv: 60, ...o });
+        const ppk = (o = {}) => ptrad({ tirage: 'zh-hans', numero: 'C7', slug: 'Mareep-V2-CSVM1Cc007', slugSet: M1, codeSet: 'CSVM1C', nomEn: 'Mareep', categorie: 'pokemon', pv: 60, ndex: 179, carteId: 77, cleR2Carte: ['cartes/77/mareep-zh.webp'], illustrationsRelues: [ill()], ...o });
+        // table : constante gelée, chaque total admis ne figure que dans UN set, 033 (decks A et B de CSVM1C) et 086 (Black Bolt et White Flare) n'ouvrent rien
+        assert.ok(Object.isFrozen(PV.TOTAUX_ZH_SANS_CODE));
+        assert.deepStrictEqual(Object.keys(PV.TOTAUX_ZH_SANS_CODE).sort(), ['csv10.5c', 'csv10.6c', 'csvm1c', 'csvm2']);
+        const tous = Object.values(PV.TOTAUX_ZH_SANS_CODE).flatMap(s => s.totaux);
+        assert.strictEqual(new Set(tous).size, tous.length, 'aucun total admis pour deux sets');
+        assert.deepStrictEqual([...PV.TOTAUX_ZH_SANS_CODE.csvm1c.totaux], ['028']);
+        assert.deepStrictEqual([...PV.TOTAUX_ZH_SANS_CODE.csvm2.totaux].sort(), ['031', '032', '034']);
+        assert.deepStrictEqual([...PV.TOTAUX_ZH_SANS_CODE['csv10.5c'].totaux], []);
+        assert.deepStrictEqual([...PV.TOTAUX_ZH_SANS_CODE['csv10.6c'].totaux], []);
+        // cas nominal : Pokémon, relecture valide ; drapeau écrit ; le code n'est jamais déduit de l'adresse (lu.codeSet reste vide)
+        assert.deepStrictEqual(lue(epk(), ppk()), { ok: true, motifs: [] }, 'CSVM1C deck C, 028');
+        assert.ok(drap(epk(), ppk()).includes('total-zh-sans-code:CSVM1C'), 'drapeau');
+        for (const [num, tot, lettre, slugEnd] of [['002', '031', 'A2', 'CSVM2a002'], ['002', '034', 'B2', 'CSVM2b002'], ['001', '032', 'C1', 'CSVM2c001']])
+            assert.strictEqual(lue(epk({ numero: num, total: tot }), ppk({ numero: lettre, slug: `Mareep-V1-${slugEnd}`, slugSet: M2, codeSet: 'CSVM2' })).ok, true, `CSVM2 ${lettre} ${tot}`);
+        assert.strictEqual(lue(epk({ codeSet: '' }), ppk()).ok, true, 'code lu vide (chaîne) = non lu');
+        // Dresseur (voie illustration relue) : même exception
+        assert.strictEqual(lue(epk({ nom: '高级球', dex: null, pv: null }), ppk({ categorie: 'dresseur', nomEn: 'Ultra Ball' })).ok, true, 'Dresseur, total 028 + relecture');
+        // refus
+        const refus = (e, p, re = /code-set-non-lu/) => { const m = mt(e, p); assert.ok(!lue(e, p).ok && re.test(m), m); };
+        assert.match(mt(epk({ codeSet: 'csvM2' }), ppk()), /code-set-different/, 'code lu faux : refusé comme avant');
+        assert.ok(!lue(epk({ codeSet: 'csvZ9C' }), ppk()).ok, 'code lu faux (autre)');
+        refus(epk({ total: null }), ppk(), /numero-ou-total-absent/);
+        refus(epk({ total: '' }), ppk(), /numero-ou-total-absent/);
+        refus(epk({ total: '031' }), ppk());                                   // total d'un autre set (CSVM2) sur un produit CSVM1C
+        refus(epk({ total: '028' }), ppk({ numero: 'A2', slug: 'Mareep-V1-CSVM2a002', slugSet: M2, codeSet: 'CSVM2', }));   // total de CSVM1C sur un produit CSVM2
+        refus(epk({ total: '033', numero: '011' }), ppk({ numero: 'A11', slug: 'Mareep-V1-CSVM1Ca011' }));   // 033 : decks A et B, ambigu
+        refus(epk({ total: '033', numero: '014' }), ppk({ numero: 'B14', slug: 'Mareep-V1-CSVM1Cb014' }));
+        refus(epk({ total: '028 ' }), ppk({ slugSet: 'Autre-Set' }));         // slugSet inexact
+        refus(epk({ total: '0280' }), ppk());                                  // total non exact
+        // Black Bolt et White Flare : le total /086 est le MÊME sur les deux, il ne sépare rien
+        for (const [code, slugSet] of [['CSV10.5C', 'Black-Bolt-S-CH'], ['CSV10.6C', 'White-Flare-S-CH']])
+            refus(epk({ numero: '001', total: '086' }), ppk({ numero: '001', slug: 'Mareep-V1-CSV105C001', slugSet, codeSet: code }));
+        // set hors table, même avec un total de la table
+        refus(epk({ numero: '007', total: '028' }), ppk({ numero: '007', slug: 'Mareep-V1-CSV8C007', slugSet: 'Brilliant-Fantasy', codeSet: 'CSV8C' }));
+        // pas zh-hans
+        refus(epk({ langue: 'ja' }), ppk({ tirage: 'jp' }));
+        refus(epk({ langue: 'zh-hant' }), ppk({ tirage: 'zh-hant' }), /./);
+        // relecture d'illustration : absente, d'un autre produit, sha256 ou référence fausse
+        refus(epk(), ppk({ illustrationsRelues: [] }));
+        refus(epk(), ppk({ illustrationsRelues: undefined }));
+        refus(epk(), ppk({ illustrationsRelues: [ill({ idProduct: 1002 })] }));
+        refus(epk(), ppk({ illustrationsRelues: [ill({ sha256: H2 })] }));
+        refus(epk(), ppk({ illustrationsRelues: [ill({ reference: 'cartes/77/inconnue.webp' })] }));
+        refus(epk(), ppk({ illustrationsRelues: [ill({ par: 'chasseur' })] }));
+        refus(epk(), ppk({ illustrationsRelues: [ill({ le: 'hier' })] }));
+        // le manifeste ne rattrape pas la relecture
+        refus(epk({ illustrationRelue: { par: 'coordinateur', reference: 'cartes/77/mareep-zh.webp', le: '2026-11-09', sha256: H1 } }), ppk({ illustrationsRelues: [] }));
+    });
     await test('A (tour de correction) : TOUTES les lettres du nom dans l\'écriture de la langue, hors marques latines imprimées (liste fermée) ; au moins une lettre de l\'écriture', () => {
         const refus = (langue, nom, tirage = langue === 'ja' ? 'jp' : langue) => /nom-lu-hors-langue/.test(mt(trad({ langue, nom, dex: null, pv: null }), ptrad({ tirage, nomEn: 'Energy Search', categorie: 'energie' })));
         assert.ok(refus('th', 'Energy Search ก'), 'un seul glyphe thaï ne sauve pas un nom anglais');
