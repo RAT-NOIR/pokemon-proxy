@@ -106,7 +106,10 @@ async function restaurer({ stockage, cle, base, id = null, client, nomBase, doss
             rapport.push({ nom: c.nom, documents: e.documents, attendu: c.documents, sha256Clair: e.sha256, identique, index: idx.length, indexAttendus: attendus.length, indexIdentiques: JSON.stringify(idx) === JSON.stringify(attendus), optionsIdentiques: optionsOk });
         }
         if (rapport.some(r => !r.identique)) refuser('verification-echouee', rapport);
-        return { id, base, nomBase, collections: rapport, manifeste, aFaire: [MESSAGE_RECONCILIER] };
+        const exclues = Array.isArray(manifeste.exclues) ? manifeste.exclues : [];
+        const aFaire = [MESSAGE_RECONCILIER];
+        if (exclues.length) aFaire.unshift(`Cette sauvegarde a été faite AVEC EXCLUSION : ${exclues.join(', ')} ne sont PAS restaurées (absentes de la sauvegarde) ; à reconstruire par ailleurs avant de s'en servir.`);
+        return { id, base, nomBase, collections: rapport, manifeste, exclues, aFaire };
     } catch (e) {
         if (creee) { try { verifierNomBaseRestauration(nomBase); await client.db(nomBase).dropDatabase(); } catch { /* elle reste, nommée : l'appelant la voit */ } }   // la base qu'on vient de créer (vide au départ) ne reste pas à moitié remplie
         throw e;

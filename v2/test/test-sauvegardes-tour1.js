@@ -288,7 +288,12 @@ const lire = async (r) => { const m = []; for await (const c of r) m.push(Buffer
         H.vrai('    la sauvegarde est valide et complète (manifeste vérifié)', !!(await Plan.derniereSauvegarde({ stockage: st, cle, base: nom, maintenant: T0 })));
         const rr = await Rest.restaurer({ stockage: st, cle, base: nom, id: r.id, client, nomBase: `rm_essai_restau_${alea()}`, dossierTmp: tmp });
         H.v('    restaurée : exactement les collections sauvegardées', (await client.db(rr.nomBase).listCollections({}, { nameOnly: true }).toArray()).map(x => x.name).sort(), ['autre', 'comptes']);
+        H.vrai('    la restauration NOMME les collections exclues (résultat et message) et dit qu\'elles ne sont PAS restaurées', JSON.stringify(rr.exclues) === '["references_image"]' && rr.aFaire.some(m => m.includes('references_image') && m.includes('PAS restaurées')));
         await client.db(rr.nomBase).dropDatabase();
+        const complete = await Exp.exporterBase({ db: d, stockage: st, cle, base: nom, maintenant: new Date(+T0 + 500), exclure: [] });
+        const rc = await Rest.restaurer({ stockage: st, cle, base: nom, id: complete.id, client, nomBase: `rm_essai_restau_${alea()}`, dossierTmp: tmp });
+        H.v('    une sauvegarde complète : aucune exclue, aucun message d\'exclusion', [rc.exclues, rc.aFaire.some(m => m.includes('PAS restaurées'))], [[], false]);
+        await client.db(rc.nomBase).dropDatabase();
         const dbl = await Exp.exporterBase({ db: d, stockage: st, cle, base: nom, maintenant: new Date(+T0 + 1000), exclure: ['references_image', 'references_image'] });
         H.v('    le nom en double ne change rien', dbl.manifeste.exclues, ['references_image']);
         // un manifeste AUTHENTIQUE (et son objet présent) qui déclarerait `comptes` exclue est invalide : jamais « la dernière »
