@@ -376,6 +376,46 @@ const NOMW = FM.expansionDe(W);
         verifier('« origine-lue » est dans SOURCES_POSEES_APRES (sinon une recollecte effacerait ces impressions)', SOURCES_POSEES_APRES.includes('origine-lue'), true);
     }
 
+    // ── 11. le prefixe de promo imprime (SWSH195, XY177, SM68) : tolere seulement si le slug porte exactement ce code de promo, chiffres egaux (liste fermee) ──
+    {
+        // un monde a UNE carte : set `setId` (code `codeSet`), set d'origine de code `codeOrigine` (expansion `exp`), impression d'origine `impNum`
+        const cas = ({ setId, codeSet, slug, codeOrigine, exp, impNum, marque }) => {
+            const db = fakeDb({
+                sets: [SETW({ _id: setId, code: codeSet }), ORIG('Origine-' + codeOrigine, codeOrigine, exp)],
+                cartes: [CARTE(500, 'Promo', [setId], [IMP(exp, impNum, null)], [{ set: setId, cleR2: 'p/500.webp', numero: null }], [5001])],
+                cartes_produits: [LIGNE(5001, 500, slug, setId, 9001)],
+                restes: []
+            });
+            return { db, marque, setId };
+        };
+        const lec = (c, lu) => LEC(5001, 500, c.setId, lu, null, 'p/500.webp', c.marque);
+        const SEPT = [
+            { setId: 'Play-Pokemon-Prize-Pack-Series-Two', codeSet: 'PPS2', slug: 'Leafeon-VSTAR-PPS2SWSH-195', codeOrigine: 'SWSH', exp: 'SWSH Black Star Promos', impNum: 'SWSH195', lu: 'SWSH195', marque: 'tampon' },
+            { setId: 'Play-Pokemon-Prize-Pack-Series-Two', codeSet: 'PPS2', slug: 'Glaceon-VSTAR-PPS2SWSH-197', codeOrigine: 'SWSH', exp: 'SWSH Black Star Promos', impNum: 'SWSH197', lu: 'SWSH197', marque: 'tampon' },
+            { setId: 'WCD-2017', codeSet: 'WCD17', slug: 'Karen-WCD17XYPR-177', codeOrigine: 'XYPR', exp: 'XY Black Star Promos', impNum: 'XY177', lu: 'XY177', marque: null },
+            { setId: 'WCD-2017', codeSet: 'WCD17', slug: 'Giratina-WCD17XYPR-184', codeOrigine: 'XYPR', exp: 'XY Black Star Promos', impNum: 'XY184', lu: 'XY184', marque: null },
+            { setId: 'WCD-2018', codeSet: 'WCD18', slug: 'Xurkitree-GX-WCD18SM-068', codeOrigine: 'SM', exp: 'SM Black Star Promos', impNum: 'SM68', lu: 'SM68', marque: null },
+            { setId: 'WCD-2019', codeSet: 'WCD19', slug: 'Solgaleo-GX-WCD19SM-104', codeOrigine: 'SM', exp: 'SM Black Star Promos', impNum: 'SM104', lu: 'SM104', marque: null },
+            { setId: 'WCD-2023', codeSet: 'WCD23', slug: 'Professor-Burnet-WCD23SWSH-167', codeOrigine: 'SWSH', exp: 'SWSH Black Star Promos', impNum: 'SWSH167', lu: 'SWSH167', marque: null }
+        ];
+        for (const k of SEPT) {
+            const c = cas(k), r = await run(c.db, [lec(c, k.lu)]);
+            verifier(`prefixe imprime ${k.lu} (slug ${k.slug}) : accepte, 1 impression`, [S0(r).statut, S0(r).aEcrire, S0(r).nImpressions, S0(r).parCause], ['ok', 1, 1, {}]);
+            const e = await run(c.db, [lec(c, k.lu)], { ecrire: true, attendu: 1 });
+            const imp = carte(c.db, 500).impressions.find(i => i.source === 'origine-lue');
+            verifier(`   ${k.lu} ecrit : impression.numero = numeroFiche = « ${k.lu} » tel qu'imprime`, [e.code, imp?.numero, ligne(c.db, '500|5001').numeroFiche], [0, k.lu, k.lu]);
+        }
+        const base = SEPT[4];   // SM, slug ...SM-068
+        const refus11 = async (nom, k, lu, cause) => { const c = cas(k), r = await run(c.db, [lec(c, lu)]); verifier(`refus [${cause}] ${nom}`, [S0(r).parCause[cause], S0(r).aEcrire], [1, 0]); };
+        await refus11('prefixe lu different de celui du slug (XY68, slug SM)', base, 'XY68', 'numero-lu-contredit-slug');
+        await refus11('prefixe lu SWSH sous un slug SM', base, 'SWSH68', 'numero-lu-contredit-slug');
+        await refus11('chiffres differents (SM69, slug SM-068)', base, 'SM69', 'numero-lu-contredit-slug');
+        await refus11('XYPR n\'est pas un prefixe imprime (XYPR177 sous slug XYPR-177)', SEPT[2], 'XYPR177', 'numero-lu-contredit-slug');
+        await refus11('slug sans code de promo (WCD17ZZ) : le prefixe XY n\'est pas tolere', { ...SEPT[2], slug: 'Karen-WCD17ZZ-177', codeOrigine: 'ZZ' }, 'XY177', 'numero-lu-contredit-slug');
+        await refus11('slug d\'une extension (code SW) : un prefixe lu n\'y est jamais tolere', { ...SEPT[4], slug: 'Trapinch-WCD18SW-115', codeOrigine: 'SW', exp: 'Stormfront', impNum: '115' }, 'SW115', 'numero-lu-contredit-slug');
+        await refus11('prefixe lu, mais l\'impression d\'origine n\'en porte pas (« 68 » sans SM) : fail closed', { ...base, impNum: '68' }, 'SM68', 'slug-sans-impression-d-origine');
+    }
+
     console.log(`\n${ok} passes, ${ko} en echec`);
     process.exit(ko ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(2); });
