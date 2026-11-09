@@ -10,7 +10,7 @@ const { EJSON } = require('bson');
 const { chiffrer } = require('./chiffrement');
 const { aadDe, cleManifeste, cleCollection, nouvelId } = require('./chemins');
 const { refuser } = require('./erreurs');
-const { structure, COLLECTIONS_EXIGEES } = require('./manifeste');
+const { structure, COLLECTIONS_EXIGEES, EXCLUSIONS_PERMISES } = require('./manifeste');
 
 const NOM_BAIL = 'sauvegardes_bail';
 const LOT = 100, NIVEAU_GZIP = 3;   // mesurés (RAPPORT-SAUVEGARDE-R2.md, tableau des leviers) : des lots de 100 documents, gzip niveau 3 (même taille sur les données incompressibles, moins de mémoire et de CPU)
@@ -42,10 +42,14 @@ const sansBruit = () => { };
 const indexPortables = (liste) => liste.filter(i => i.name !== '_id_').map(i => { const { v, ns, ...reste } = i; return reste; });
 
 /** @returns {Promise<{id:string, manifeste:object}>} */
-async function exporterBase({ db, stockage, cle, base, commit = null, maintenant = new Date(), battement = async () => true, lot = LOT, niveauGzip = NIVEAU_GZIP, ramasser = null }) {
+async function exporterBase({ db, stockage, cle, base, commit = null, maintenant = new Date(), battement = async () => true, lot = LOT, niveauGzip = NIVEAU_GZIP, ramasser = null, exclure = [] }) {
+    // 🔑 une exclusion s'écrit par ce qu'elle AUTORISE : une liste fermée en dur (manifeste.js : seulement `references_image`, un index reconstructible) ; tout autre nom est refusé AVANT toute lecture
+    if (!Array.isArray(exclure) || exclure.some(n => !EXCLUSIONS_PERMISES.includes(n))) refuser('exclusion-refusee');
     const id = nouvelId(maintenant, crypto.randomBytes(4).toString('hex'));
     const toutes = await db.listCollections({}, { nameOnly: false }).toArray();
-    const infos = toutes.filter(c => (c.type === undefined || c.type === 'collection') && !c.name.startsWith('system.') && c.name !== NOM_BAIL).sort((a, b) => (a.name < b.name ? -1 : 1));
+    const infosToutes = toutes.filter(c => (c.type === undefined || c.type === 'collection') && !c.name.startsWith('system.') && c.name !== NOM_BAIL).sort((a, b) => (a.name < b.name ? -1 : 1));
+    const infos = infosToutes.filter(c => !exclure.includes(c.name));
+    const exclues = infosToutes.filter(c => exclure.includes(c.name)).map(c => c.name);       // listées dans le manifeste, séparément des vues et séries temporelles
     // les vues et les séries temporelles ne sont pas exportées (une vue se recrée depuis sa définition, une série temporelle demande un autre format) : elles sont LISTÉES dans le manifeste, jamais ignorées en silence
     const ecartees = toutes.filter(c => c.type === 'view' || c.type === 'timeseries').map(c => ({ nom: c.name, type: c.type })).sort((a, b) => (a.nom < b.nom ? -1 : 1));
     // 🔑 une sauvegarde VIDE n'existe pas : zéro collection, ou une collection exigée absente ou vide, refuse AVANT d'écrire un seul octet
@@ -72,7 +76,7 @@ async function exporterBase({ db, stockage, cle, base, commit = null, maintenant
                                options: infos[i].options && Object.keys(infos[i].options).length ? infos[i].options : undefined, index: indexPortables(await coll.indexes()) });
         }
         await controler();
-        const manifeste = { version: 1, id, base, date: maintenant.toISOString(), commit, octetsChiffres: collections.reduce((n, c) => n + c.octetsChiffres, 0), collections, ecartees };
+        const manifeste = { version: 1, id, base, date: maintenant.toISOString(), commit, octetsChiffres: collections.reduce((n, c) => n + c.octetsChiffres, 0), collections, ecartees, exclues };
         const v = structure(manifeste, base, id);       // le MÊME contrôle que la rétention et la restauration : un manifeste qui ne serait pas valide n'est pas écrit
         if (!v.ok) refuser(v.raison);
         const cm = cleManifeste(base, id);

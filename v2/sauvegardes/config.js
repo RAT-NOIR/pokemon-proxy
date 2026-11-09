@@ -15,9 +15,10 @@
 // personnalisé) est établi UNE fois, à l'installation, par l'API Cloudflare, et sa date est écrite dans le rapport d'installation. Le marqueur exigé avant la première écriture prouve seulement « initialisé par l'outil ».
 const { FORME_BASE } = require('./chemins');
 const { cleDepuisHex } = require('./chiffrement');
+const { EXCLUSIONS_PERMISES } = require('./manifeste');
 
 const NOMS = Object.freeze(['V2_SAUVEGARDE_CLE', 'V2_SAUVEGARDE_BASE', 'V2_SAUVEGARDE_R2_COMPTE', 'V2_SAUVEGARDE_R2_CLE_ID', 'V2_SAUVEGARDE_R2_SECRET', 'V2_SAUVEGARDE_R2_BUCKET']);
-const AUTRES = Object.freeze(['V2_SAUVEGARDE_R2_ENDPOINT', 'V2_SAUVEGARDE_R2_URL_PUBLIQUE']);
+const AUTRES = Object.freeze(['V2_SAUVEGARDE_R2_ENDPOINT', 'V2_SAUVEGARDE_R2_URL_PUBLIQUE', 'V2_SAUVEGARDE_EXCLURE']);
 // Les variables dont la valeur est un bucket PRIVÉ connu : un bucket égal à l'une d'elles est admis (c'est le même bucket privé, sous un autre préfixe).
 const BUCKETS_PRIVES = Object.freeze(['V2_VISUELS_R2_BUCKET', 'R2_BUCKET_BRUT', 'V2_GALERIE_R2_BUCKET_PRIVE']);
 const FORME_BUCKET = /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/;
@@ -50,8 +51,11 @@ function lireConfigSauvegardes(env = process.env) {
     const brutEndpoint = texte(env.V2_SAUVEGARDE_R2_ENDPOINT) || `https://${compte}.r2.cloudflarestorage.com`;
     const endpoint = endpointAdmis(brutEndpoint);
     if (!endpoint) return { ok: false, raison: 'V2_SAUVEGARDE_R2_ENDPOINT n\'est pas un hôte https *.r2.cloudflarestorage.com sans identifiants' };
+    // V2_SAUVEGARDE_EXCLURE (facultative) : des noms séparés par des virgules, écrite par ce qu'elle AUTORISE — uniquement ceux de la liste fermée EN DUR (manifeste.js) ; tout autre nom refuse la configuration
+    const exclure = texte(env.V2_SAUVEGARDE_EXCLURE) ? texte(env.V2_SAUVEGARDE_EXCLURE).split(',').map(s => s.trim()) : [];
+    if (exclure.some(n => !EXCLUSIONS_PERMISES.includes(n))) return { ok: false, raison: `V2_SAUVEGARDE_EXCLURE : seuls ${EXCLUSIONS_PERMISES.join(', ')} peuvent être exclus (liste fermée)` };
     // la config rendue ne porte la clé et le secret que dans des propriétés NON énumérables : ni JSON.stringify ni console.log ne les impriment
-    const c = { base, compte, bucket, endpoint };
+    const c = { base, compte, bucket, endpoint, exclure: [...new Set(exclure)] };
     Object.defineProperty(c, 'cle', { value: cle, enumerable: false });
     Object.defineProperty(c, 'cleId', { value: texte(env.V2_SAUVEGARDE_R2_CLE_ID), enumerable: false });
     Object.defineProperty(c, 'secret', { value: texte(env.V2_SAUVEGARDE_R2_SECRET), enumerable: false });

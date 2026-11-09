@@ -7,6 +7,9 @@ const { PREFIXE, analyser, dateDeId, cleManifeste, aadDe } = require('./chemins'
 const { dechiffrerVersBuffer } = require('./chiffrement');
 
 const COLLECTIONS_EXIGEES = Object.freeze(['comptes']);
+// La SEULE collection qu'on peut choisir de ne pas sauvegarder : `references_image`, un index reconstructible (retiré de la production le 18/10), 387 Mo sur 447 dans l'essai. Liste fermée EN DUR dans le code :
+// ni variable, ni fichier ne l'allonge ; un autre nom est une configuration refusée (config.js) et un export refusé (export.js).
+const EXCLUSIONS_PERMISES = Object.freeze(['references_image']);
 const FUTUR_MAX_MS = 3600e3;
 const HEX64 = /^[0-9a-f]{64}$/;
 
@@ -14,6 +17,7 @@ const HEX64 = /^[0-9a-f]{64}$/;
 function structure(m, base, id) {
     if (!m || typeof m !== 'object' || m.version !== 1 || m.id !== id || m.base !== base) return { ok: false, raison: 'manifeste-incoherent' };
     if (!Array.isArray(m.collections) || m.collections.length === 0) return { ok: false, raison: 'manifeste-sans-collection' };
+    if (m.exclues !== undefined && (!Array.isArray(m.exclues) || m.exclues.some(n => !EXCLUSIONS_PERMISES.includes(n)))) return { ok: false, raison: 'manifeste-incoherent' };
     for (const c of m.collections) {
         if (!c || typeof c.nom !== 'string' || typeof c.objet !== 'string' || !/^c\d{4}\.rmsav$/.test(c.objet) || !Number.isInteger(c.documents) || c.documents < 0 || !HEX64.test(String(c.sha256Clair)) || !Number.isInteger(c.octetsChiffres) || c.octetsChiffres <= 0)
             return { ok: false, raison: 'manifeste-incoherent' };
@@ -54,4 +58,4 @@ async function derniereVerifiable({ stockage, cle, base, maintenant = new Date()
     }
     return null;
 }
-module.exports = { structure, grouper, verifier, candidates, derniereVerifiable, COLLECTIONS_EXIGEES, FUTUR_MAX_MS };
+module.exports = { structure, grouper, verifier, candidates, derniereVerifiable, COLLECTIONS_EXIGEES, EXCLUSIONS_PERMISES, FUTUR_MAX_MS };

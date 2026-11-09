@@ -23,19 +23,20 @@ async function derniereSauvegarde({ stockage, cle, base, maintenant = new Date()
 }
 
 const lireEtat = async (col) => { try { return await col.findOne({ _id: ID_ETAT }); } catch { return null; } };
+/** @returns {Promise<boolean>} vrai si l'état est écrit — l'appelant qui ne peut pas écrire une TENTATIVE n'exporte pas. */
 async function enregistrer(col, champs, journal) {
-    try { await col.updateOne({ _id: ID_ETAT }, { $set: champs }, { upsert: true }); }
-    catch (e) { try { journal(`❌ [v2 sauvegardes] état non enregistré (${code(e)})`); } catch { /* sans effet */ } }
+    try { await col.updateOne({ _id: ID_ETAT }, { $set: champs }, { upsert: true }); return true; }
+    catch (e) { try { journal(`❌ [v2 sauvegardes] état non enregistré (${code(e)})`); } catch { /* sans effet */ } return false; }
 }
 
 async function tourSauvegarde({ cfg, db, stockage, commit = null, maintenant = () => new Date(), etatMongo, colBail = null, exporter = exporterBase, retention = appliquerRetention, journal = console.error,
                                 minuteurs = { setInterval, clearInterval, setTimeout, clearTimeout }, creerBailFn = creerBail, processus = process, quitter = c => process.exit(c), horloge = Date.now }) {
     let bail = null, minuteur = null, ecouteur = null, arretDemande = false, minuterieArret = null, issue = 'echec';
+    let echecsBase = 0, dernierEchecBase;       // les échecs d'AVANT ce tour, une tentative commencée et jamais conclue (l'instance a été tuée : mémoire, OOM) comptée pour un échec
     const col = () => colBail || db.collection(NOM_BAIL);
     const echec = async (e) => {
         try { journal(`❌ [v2 sauvegardes] sauvegarde échouée (${code(e)})`); } catch { /* le journal lui-même ne doit jamais tuer le service */ }
-        const etat = await lireEtat(col());
-        await enregistrer(col(), { echecs: ((etat && etat.echecs) || 0) + 1, dernierEchecLe: maintenant() }, journal);
+        await enregistrer(col(), { echecs: echecsBase + 1, enCours: false, dernierEchecLe: maintenant() }, journal);
         // les orphelines (envois coupés, sans manifeste) sont retirées aussi après un échec (au bout d'une heure : un envoi plus récent peut être en cours)
         try { await retention({ stockage, cle: cfg.cle, base: cfg.base, maintenant: maintenant(), orphelinesHeures: 1 }); } catch (e2) { try { journal(`❌ [v2 sauvegardes] orphelines non retirées (${code(e2)})`); } catch { /* sans effet */ } }
     };
@@ -43,12 +44,18 @@ async function tourSauvegarde({ cfg, db, stockage, commit = null, maintenant = (
         if (!etatMongo || etatMongo() !== 1) return (issue = 'mongo-pas-pret');
         if (!db || db.databaseName !== cfg.base) { journal('❌ [v2 sauvegardes] la base connectée n\'est pas celle de la configuration (base-differente) : rien n\'est exporté'); return (issue = 'base-differente'); }
         const etat = await lireEtat(col());
-        if (etat && etat.echecs > 0 && etat.dernierEchecLe && +maintenant() < +new Date(etat.dernierEchecLe) + delaiFrein(etat.echecs)) return (issue = 'frein');
+        // 🔑 UNE TENTATIVE COMMENCÉE ET JAMAIS CONCLUE EST UN ÉCHEC : l'état « en cours » est écrit AVANT l'export ; si l'instance est tuée pendant (mémoire), rien d'autre n'est écrit, et sans cette règle le redémarrage
+        // retrouverait l'âge > 23 h et relancerait aussitôt le même export, en boucle. Elle compte donc dans le frein, à l'heure où elle a commencé.
+        echecsBase = ((etat && etat.echecs) || 0) + (etat && etat.enCours ? 1 : 0);
+        dernierEchecBase = etat ? (etat.enCours ? etat.debutLe : etat.dernierEchecLe) : undefined;
+        if (echecsBase > 0 && dernierEchecBase && +maintenant() < +new Date(dernierEchecBase) + delaiFrein(echecsBase)) return (issue = 'frein');
         const recente = async () => !!(await derniereVerifiable({ stockage, cle: cfg.cle, base: cfg.base, maintenant: maintenant(), depuis: new Date(+maintenant() - SEUIL_MS + 1) }));
         try { if (await recente()) return (issue = 'recente'); } catch (e) { await echec(e); return (issue = 'echec'); }
         bail = creerBailFn({ col: col(), ttlMs: TTL_MS, maintenant });
         if (!(await bail.prendre())) { bail = null; return (issue = 'occupe'); }
         if (await recente()) return (issue = 'recente');         // l'autre instance a pu finir entre notre lecture et notre prise : on relit sous le bail
+        // la tentative est ÉCRITE avant le premier octet lu ; impossible de l'écrire ⇒ on n'exporte pas
+        if (!(await enregistrer(col(), { echecs: echecsBase, enCours: true, debutLe: maintenant(), ...(dernierEchecBase ? { dernierEchecLe: dernierEchecBase } : {}) }, journal))) return (issue = 'echec');
         let perdu = false, dernierOk = horloge();
         const battre = async () => {
             try { const ok = await bail.battre(); if (ok === false) perdu = true; else dernierOk = horloge(); }
@@ -63,12 +70,12 @@ async function tourSauvegarde({ cfg, db, stockage, commit = null, maintenant = (
         const battement = async () => { if (!perdu && horloge() - dernierOk > TTL_MS) perdu = true; return !perdu; };
         try {
             await stockage.verifierMarqueur();
-            await exporter({ db, stockage, cle: cfg.cle, base: cfg.base, commit, maintenant: maintenant(), battement });
+            await exporter({ db, stockage, cle: cfg.cle, base: cfg.base, commit, maintenant: maintenant(), battement, exclure: cfg.exclure || [] });
         } catch (e) {
-            if (arretDemande) return (issue = 'arret');             // l'abandon du téléversement s'est fait dans le stockage ; ce n'est pas un échec de la sauvegarde
+            if (arretDemande) { await enregistrer(col(), { echecs: echecsBase, enCours: false }, journal); return (issue = 'arret'); }   // l'abandon du téléversement s'est fait dans le stockage ; un déploiement normal n'est pas un échec
             await echec(e); return (issue = 'echec');
         }
-        await enregistrer(col(), { echecs: 0, dernierSuccesLe: maintenant() }, journal);
+        await enregistrer(col(), { echecs: 0, enCours: false, dernierSuccesLe: maintenant() }, journal);
         try { await retention({ stockage, cle: cfg.cle, base: cfg.base, maintenant: maintenant() }); }
         catch (e) { try { journal(`❌ [v2 sauvegardes] rétention échouée (${code(e)}) : la sauvegarde est faite`); } catch { /* sans effet */ } }
         return (issue = 'faite');

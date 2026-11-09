@@ -162,7 +162,7 @@ const lire = async (r) => { const m = []; for await (const c of r) m.push(Buffer
         console.error = oe;
         H.v('D3. SIGTERM pendant un envoi : « arret », le processus sort en 143 après l\'abandon', [rs, sorties], ['arret', [143]]);
         H.vrai('    l\'abandon du téléversement s\'est fait (AbortMultipartUpload), rien n\'est ouvert, aucun manifeste', s.f.journalCmd.some(c => c.nom === 'AbortMultipartUploadCommand') && s.f.televersements.size === 0 && ![...s.f.objets.keys()].some(k => k.endsWith('manifeste.rmsav')));
-        H.vrai('    l\'écouteur SIGTERM est retiré, ce n\'est pas compté comme un échec, le bail est libéré', proc.listenerCount('SIGTERM') === 0 && !(await dsig.collection('sauvegardes_bail').findOne({ _id: 'etat' })) && (await dsig.collection('sauvegardes_bail').findOne({ _id: 'export' })).detenteur === null);
+        H.vrai('    l\'écouteur SIGTERM est retiré, ce n\'est pas compté comme un échec, le bail est libéré', proc.listenerCount('SIGTERM') === 0 && await (async () => { const e = await dsig.collection('sauvegardes_bail').findOne({ _id: 'etat' }); return e && e.echecs === 0 && e.enCours === false; })() && (await dsig.collection('sauvegardes_bail').findOne({ _id: 'export' })).detenteur === null);
         // les orphelines sont retirées aussi après un échec
         const o = neuf(); await o.st.poserMarqueur(); const dor = await mini(); const bor = dor.databaseName;
         const idOrph = Ch.nouvelId(new Date(+T0 - 3 * 3600e3), 'cafecafe');
@@ -268,6 +268,66 @@ const lire = async (r) => { const m = []; for await (const c of r) m.push(Buffer
         // le client S3 réel (jamais appelé : aucun réseau) : réglages mémoire mesurés
         const reel = Stk.creerClient({ endpoint: 'https://abcdef0123456789abcdef0123456789.r2.cloudflarestorage.com', cleId: 'id-essai', secret: 'secret-essai', bucket: 'rm-prive-essai' });
         H.v('M1. le client réel : sommes de contrôle du SDK à la demande (réglage mesuré), partie de 5 Mio (le minimum de R2)', [await reel.config.requestChecksumCalculation(), Stk.PART_OCTETS], ['WHEN_REQUIRED', 5 * 1024 * 1024]);
+    }
+
+    // ═══ H. tour 2 : exclusion de `references_image` (liste fermée en dur) ; une tentative commencée et jamais conclue est un échec ═══
+    {
+        const Cfg = require('../sauvegardes/config');
+        const { ENV_VALIDE } = require('./_aide-sauvegardes');
+        const c = (x) => Cfg.lireConfigSauvegardes({ ...ENV_VALIDE, ...x });
+        H.v('H1. V2_SAUVEGARDE_EXCLURE : absente ou vide ⇒ rien d\'exclu ; references_image admise', [c({}).c.exclure, c({ V2_SAUVEGARDE_EXCLURE: '' }).c.exclure, c({ V2_SAUVEGARDE_EXCLURE: 'references_image' }).c.exclure, c({ V2_SAUVEGARDE_EXCLURE: ' references_image , references_image' }).c.exclure], [[], [], ['references_image'], ['references_image']]);
+        const refuse = (v) => { const r = c({ V2_SAUVEGARDE_EXCLURE: v }); return r.ok === false && r.raison.includes('V2_SAUVEGARDE_EXCLURE'); };
+        H.vrai('    tout autre nom refuse la configuration (le service n\'active pas la sauvegarde et le dit) : comptes, guide_prix, une liste dont un seul nom est permis, une virgule seule', ['comptes', 'guide_prix', 'references_image,comptes', ','].every(refuse));
+        const seule = Cfg.lireConfigSauvegardes({ V2_SAUVEGARDE_EXCLURE: 'references_image' });
+        H.vrai('    la variable posée seule : « variables absentes », pas une sauvegarde sans clé', seule.ok === false && seule.raison.includes('V2_SAUVEGARDE_CLE'));
+        const { f, st } = neuf(); const nom = `rm_excl_${alea()}`; const d = client.db(nom);
+        await d.collection('comptes').insertOne({ _id: 1 }); await d.collection('references_image').insertMany([{ _id: 1, desc: 'x' }, { _id: 2, desc: 'y' }]); await d.collection('autre').insertOne({ _id: 1 }); await d.createCollection('vue', { viewOn: 'comptes', pipeline: [] });
+        H.v('    l\'export refuse lui-même un nom hors de la liste fermée, avant toute commande S3', [await lever(() => Exp.exporterBase({ db: d, stockage: st, cle, base: nom, maintenant: T0, exclure: ['comptes'] })), await lever(() => Exp.exporterBase({ db: d, stockage: st, cle, base: nom, maintenant: T0, exclure: ['autre'] })), f.journalCmd.length], ['exclusion-refusee', 'exclusion-refusee', 0]);
+        const r = await Exp.exporterBase({ db: d, stockage: st, cle, base: nom, maintenant: T0, exclure: ['references_image'] });
+        H.v('H2. references_image exclue : absente des collections, listée dans `exclues`, séparément des vues (`ecartees`)', [r.manifeste.collections.map(x => x.nom), r.manifeste.exclues, r.manifeste.ecartees], [['autre', 'comptes'], ['references_image'], [{ nom: 'vue', type: 'view' }]]);
+        H.vrai('    la sauvegarde est valide et complète (manifeste vérifié)', !!(await Plan.derniereSauvegarde({ stockage: st, cle, base: nom, maintenant: T0 })));
+        const rr = await Rest.restaurer({ stockage: st, cle, base: nom, id: r.id, client, nomBase: `rm_essai_restau_${alea()}`, dossierTmp: tmp });
+        H.v('    restaurée : exactement les collections sauvegardées', (await client.db(rr.nomBase).listCollections({}, { nameOnly: true }).toArray()).map(x => x.name).sort(), ['autre', 'comptes']);
+        await client.db(rr.nomBase).dropDatabase();
+        const dbl = await Exp.exporterBase({ db: d, stockage: st, cle, base: nom, maintenant: new Date(+T0 + 1000), exclure: ['references_image', 'references_image'] });
+        H.v('    le nom en double ne change rien', dbl.manifeste.exclues, ['references_image']);
+        // un manifeste AUTHENTIQUE (et son objet présent) qui déclarerait `comptes` exclue est invalide : jamais « la dernière »
+        const mid = Ch.nouvelId(new Date(+T0 + 7200e3), 'abcdabcd'); f.ajouter(`${Ch.dossier(nom, mid)}c0001.rmsav`, Buffer.alloc(40));
+        await st.envoyer(Ch.cleManifeste(nom, mid), Chiffre.chiffrer(source(JSON.stringify({ version: 1, id: mid, base: nom, date: T0.toISOString(), commit: null, octetsChiffres: 40, collections: [{ nom: 'comptes', objet: 'c0001.rmsav', documents: 1, sha256Clair: 'a'.repeat(64), octetsChiffres: 40, index: [] }], exclues: ['comptes'] })), { cle, aad: Ch.aadDe(nom, mid, 'manifeste.rmsav') }));
+        H.vrai('    un manifeste authentique qui déclarerait `comptes` exclue est invalide', (await Plan.derniereSauvegarde({ stockage: st, cle, base: nom, maintenant: new Date(+T0 + 8000e3) })).id !== mid);
+        await d.collection('comptes').deleteMany({});
+        H.v('    la condition « comptes présente et non vide » reste, avec l\'exclusion', await lever(() => Exp.exporterBase({ db: d, stockage: st, cle, base: nom, maintenant: T0, exclure: ['references_image'] })), 'collection-exigee-vide');
+        await d.dropDatabase();
+
+        // le planificateur transmet l'exclusion à l'export
+        const g = neuf(); await g.st.poserMarqueur(); const dg = await mini(); let recu = null;
+        await Plan.tourSauvegarde({ cfg: { base: dg.databaseName, cle, exclure: ['references_image'] }, db: dg, stockage: g.st, maintenant: () => T0, etatMongo: () => 1, exporter: async (a) => { recu = a.exclure; }, retention: async () => { } });
+        H.v('    le planificateur transmet `exclure` à l\'export', recu, ['references_image']);
+
+        // CRASH EN BOUCLE : l'instance est tuée pendant l'export (mémoire) ; rien d'autre n'est écrit que la tentative, écrite AVANT
+        const nomC = `rm_crash_${alea()}`, dC = client.db(nomC); await dC.collection('comptes').insertOne({ _id: 1 });
+        const k = neuf(); await k.st.poserMarqueur();
+        let lancements = 0; const mortel = async () => { lancements++; await new Promise(() => { }); };      // l'export ne finit jamais : le processus est mort
+        const faux = { setInterval: () => ({ unref() { } }), clearInterval() { }, setTimeout: () => ({ unref() { } }), clearTimeout() { } };
+        const tourC = (t, base = dC) => Plan.tourSauvegarde({ cfg: { base: nomC, cle }, db: base, stockage: k.st, maintenant: () => t, etatMongo: () => 1, exporter: mortel, minuteurs: faux, processus: new EventEmitter(), quitter() { }, retention: async () => { } });
+        const attendre = (n) => new Promise(res => { const i = setInterval(() => { if (lancements >= n) { clearInterval(i); res(); } }, 10); });
+        const etatC = () => dC.collection('sauvegardes_bail').findOne({ _id: 'etat' });
+        const min = 60e3, issues = [];
+        tourC(T0); await attendre(1);
+        const e1 = await etatC();
+        H.vrai('H3. la tentative est écrite AVANT l\'export (en cours, heure de début), sans échec compté', e1 && e1.enCours === true && e1.echecs === 0 && +e1.debutLe === +T0);
+        issues.push(await tourC(new Date(+T0 + 30 * min)));
+        tourC(new Date(+T0 + 61 * min)); await attendre(2);
+        const e2 = await etatC();
+        issues.push(await tourC(new Date(+T0 + (61 + 119) * min)));
+        tourC(new Date(+T0 + (61 + 121) * min)); await attendre(3);
+        const e3 = await etatC();
+        H.v('    deux « morts » pendant l\'export : aucun nouvel export avant le délai du frein (+30 min : frein ; +61 min : repart ; +119 min : frein ; +121 min : repart)', [issues, lancements], [['frein', 'frein'], 3]);
+        H.vrai('    chaque mort est comptée comme un échec, à l\'heure où la tentative a commencé (1 puis 2 échecs persistés)', e2.echecs === 1 && +e2.dernierEchecLe === +T0 && e3.echecs === 2 && +e3.dernierEchecLe === +new Date(+T0 + 61 * min));
+        const client3 = new MongoClient(process.env.MONGODB_URI); await client3.connect();
+        const r3 = await tourC(new Date(+T0 + (61 + 121 + 30) * min), client3.db(nomC));
+        H.v('    après un redémarrage (autre connexion, aucune mémoire) et trois tentatives mortes : toujours le frein (4 h)', [r3, lancements], ['frein', 3]);
+        await client3.close();
     }
 
     await client.close();
