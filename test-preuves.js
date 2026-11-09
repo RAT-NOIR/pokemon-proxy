@@ -232,6 +232,53 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.strictEqual(lue(e('150a'), sans('Pikachu-XYPR-150a')).ok, true);
         assert.match(lue(e('150'), sans('Pikachu-XYPR-150a')).motifs.join(), /numero-different/, 'suffixe compris');
     });
+    // ➕ 2026-11-09 : Prize Packs SANS numéro — la carte imprime « SWSH111 », le slug Cardmarket dit « …-PPS1SWSH-111 » : le préfixe imprimé doit être CELUI du slug (code d'origine collé au tiret)
+    await test('PP (09/11) : produit sans numéro, slug « …PPS1SWSH-111 » : « SWSH111 » lu est admis ; un autre préfixe, une frontière fausse, un autre chiffre ou rien lu reste refusé ; le purement numérique est inchangé', () => {
+        const sans = slug => produit({ numero: null, slug });
+        const e = (numero, o = {}) => entree({ attendu: { ...entree().attendu, numero: null }, lu: { ...entree().lu, numero, total: null, ...o } });
+        const S = 'Galarian-Rapidash-V-PPS1SWSH-111';
+        assert.strictEqual(lue(e('SWSH111'), sans(S)).ok, true, 'préfixe du slug + numéro du slug');
+        assert.strictEqual(lue(e('swsh111'), sans(S)).ok, true, 'casse ignorée');
+        assert.strictEqual(lue(e('SWSH0111'), sans(S)).ok, true, 'cleNumero');
+        assert.match(lue(e('SM111'), sans(S)).motifs.join(), /numero-different/, 'SM111 sous un slug SWSH : refusé');
+        assert.match(lue(e('SH111'), sans(S)).motifs.join(), /numero-different/, 'un suffixe du code (SH) n\'est pas le code : pas de frontière');
+        assert.match(lue(e('SWSH112'), sans(S)).motifs.join(), /numero-different/, 'autre numéro');
+        assert.match(lue(e('XSWSH111'), sans(S)).motifs.join(), /numero-different/, 'préfixe plus long');
+        assert.match(lue(e('SWSH111'), sans('Galarian-Rapidash-V-PPS1-111')).motifs.join(), /numero-different/, 'le slug ne porte pas le code lu');
+        assert.strictEqual(lue(e('111'), sans(S)).ok, true, 'numérique : comparé comme avant');
+        assert.match(lue(e('112'), sans(S)).motifs.join(), /numero-different/, 'numérique faux : refusé comme avant');
+        assert.match(lue(e(null), sans(S)).motifs.join(), /numero-different/);
+    });
+    // ➕ 2026-11-09 : Master Strategy chinois (CSVM1C, CSVM2) — Cardmarket « A11 », la carte imprime « 011/033 » sans lettre ; la lettre du produit est prouvée par le TOTAL propre au deck + le slug « …CSVM1Ca011 »
+    await test('MS (09/11) : Master Strategy zh-hans : numéro sans lettre + total du deck + slug code+lettre+chiffres ; mauvais total, mauvais deck, set hors liste, lettre ambiguë (CSVM1C a/b partagent 033) refusés', () => {
+        const pm = (code, slugSet, numero, slug, o = {}) => produit({ tirage: 'zh-hans', codeSet: code, slugSet, numero, slug, ...o });
+        const em = (numero, total, o = {}) => entree({ lu: { ...entree().lu, numero, total, langue: 'zh-hans', codeSet: null, ...o } });
+        const lm = (e, p) => lue(e, p).motifs;
+        const M1 = 'Master-Strategy-Deck-Building-Sets', M2 = 'Master-Strategy-Deck-Building-Sets-Vol-2';
+        const sansNum = ms => !ms.includes('numero-different') && !ms.includes('numero-ou-total-absent');
+        // CSVM1C : seul le deck C (total 028) est prouvable ; A et B partagent 033 et les mêmes numéros (33 collisions mesurées)
+        assert.ok(sansNum(lm(em('007', '028'), pm('CSVM1C', M1, 'C7', 'Mareep-V2-CSVM1Cc007'))), 'CSVM1C c007 028');
+        assert.ok(!sansNum(lm(em('007', '033'), pm('CSVM1C', M1, 'C7', 'Mareep-V2-CSVM1Cc007'))), 'total du deck A/B sur un produit C');
+        assert.ok(!sansNum(lm(em('011', '033'), pm('CSVM1C', M1, 'A11', 'Counter-Catcher-V1-CSVM1Ca011'))), 'CSVM1C a : ambigu avec b, refusé');
+        assert.ok(!sansNum(lm(em('014', '033'), pm('CSVM1C', M1, 'B14', 'Pokemon-V1-CSVM1Cb014'))), 'CSVM1C b : ambigu avec a, refusé');
+        // CSVM2 : trois totaux distincts
+        for (const [num, tot, lettre, slugEnd] of [['002', '031', 'A2', 'CSVM2a002'], ['002', '034', 'B2', 'CSVM2b002'], ['001', '032', 'C1', 'CSVM2c001']])
+            assert.ok(sansNum(lm(em(num, tot), pm('CSVM2', M2, lettre, `Carte-V1-${slugEnd}`))), `CSVM2 ${lettre}`);
+        assert.ok(!sansNum(lm(em('002', '034'), pm('CSVM2', M2, 'A2', 'Carte-V1-CSVM2a002'))), 'total du deck B sur un produit A');
+        assert.ok(!sansNum(lm(em('002', '031'), pm('CSVM2', M2, 'B2', 'Carte-V1-CSVM2b002'))), 'total du deck A sur un produit B');
+        assert.ok(!sansNum(lm(em('002', '032'), pm('CSVM2', M2, 'A2', 'Carte-V1-CSVM2a002'))), 'total du deck C sur un produit A');
+        assert.ok(!sansNum(lm(em('003', '031'), pm('CSVM2', M2, 'A2', 'Carte-V1-CSVM2a002'))), 'autre numéro');
+        assert.ok(!sansNum(lm(em('002', '031'), pm('CSVM2', M2, 'A2', 'Carte-V1-CSVM2b002'))), 'slug d\'un autre deck');
+        assert.ok(!sansNum(lm(em('002', '031'), pm('CSVM2', M2, 'A2', 'Carte-V1-XY002'))), 'slug sans le code');
+        assert.ok(!sansNum(lm(em('002', '031'), pm('CSVM2', M2, 'A2', null))), 'sans slug : aucun témoin');
+        assert.ok(!sansNum(lm(em('002', '031'), pm('CSVM2', 'Autre-Set', 'A2', 'Carte-V1-CSVM2a002'))), 'slugSet hors de la table');
+        assert.ok(!sansNum(lm(em('002', '031'), pm('CSVM3', M2, 'A2', 'Carte-V1-CSVM3a002'))), 'set hors liste fermée');
+        assert.ok(!sansNum(lm(em('002', '031'), pm('CSVM2', M2, 'A2', 'Carte-V1-CSVM2a002', { tirage: 'jp' }))), 'langue/tirage : la règle ne vaut que pour le chinois simplifié');
+        assert.ok(!sansNum(lm(em('002', ''), pm('CSVM2', M2, 'A2', 'Carte-V1-CSVM2a002'))), 'total absent');
+        assert.ok(!sansNum(lm(em('002', '31'), pm('CSVM2', M2, 'A2', 'Carte-V1-CSVM2a002'))), 'total à comparer tel qu\'imprimé (3 chiffres)');
+        // le total ne remplace jamais le numéro ni la lettre du produit : un produit sans lettre garde la règle ordinaire
+        assert.ok(sansNum(lm(em('002', '031'), pm('CSVM2', M2, '002', 'Carte-V1-CSVM2-002'))), 'produit sans lettre : règle ordinaire 002 = 002 (total non comparé ici)');
+    });
     await test('tour 4 (4) : préfixe de promo : le slug finit par le numéro lu AVEC frontière (le caractère qui précède n\'est pas un chiffre)', () => {
         const lu = entree({ lu: { ...entree().lu, numero: 'XY150a', total: null } });
         const P = slug => produit({ numero: '150a', slug });
@@ -1440,9 +1487,10 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
     // ───────── B (08/11, décision du propriétaire) : chinois simplifié — six lignes MESURÉES sur le manifeste N8S5 (84 Dresseurs/Énergies zh-hans, hors Gem Packs) ─────────
     await test('B zh-hans : SV-P/CS, CSVE2C, CSVH1C, CSVH2C, CSVH3C, CSVH5C ouvrent la voie ; toute autre ligne zh, un Pokémon, un nom hors écriture, une langue ou une relecture fausse la referment', () => {
         const LIGNES_ZH = [['SV-P/CS', 'SV-P', 'Scarlet-Violet-Simplified-Chinese-Promos'], ['CSVE2C', 'csvE2C', 'Battle-Party-Shining-Dream'], ['CSVH1C', 'csvH1C', 'Happy-Set-Pikachu-Clefairy-Turtwig-Gimmighoul'],
-            ['CSVH2C', 'csvH2C', 'Happy-Set-Lucario-Greninja-Zamazenta-Mabosstiff'], ['CSVH3C', 'csvH3C', 'Happy-Set-Altaria-Latios-Infernape-Maushold'], ['CSVH5C', 'csvH5C', 'Happy-Set-Mewtwo-Dragonite-Camerupt-Sinistcha']];
+            ['CSVH2C', 'csvH2C', 'Happy-Set-Lucario-Greninja-Zamazenta-Mabosstiff'], ['CSVH3C', 'csvH3C', 'Happy-Set-Altaria-Latios-Infernape-Maushold'], ['CSVH5C', 'csvH5C', 'Happy-Set-Mewtwo-Dragonite-Camerupt-Sinistcha'],
+            ['CSVM1C', 'csvM1C', 'Master-Strategy-Deck-Building-Sets'], ['CSVM2', 'csvM2', 'Master-Strategy-Deck-Building-Sets-Vol-2'], ['CSVH6C', 'csvH6C', 'Happy-Set-Trainers-Pokemon']];
         for (const [l] of LIGNES_ZH) assert.ok(PV.REGLES_NOM_TRADUIT_DRESSEUR.includes(l), `${l} dans la liste fermée`);
-        assert.strictEqual(PV.REGLES_NOM_TRADUIT_DRESSEUR.length, 13, 'sept lignes id/th + six lignes zh, ni plus ni moins');
+        assert.strictEqual(PV.REGLES_NOM_TRADUIT_DRESSEUR.length, 16, 'sept lignes id/th + neuf lignes zh (dont CSVM1C, CSVM2, CSVH6C du 09/11), ni plus ni moins');
         const ill = (o = {}) => ({ idProduct: 1001, sha256: H1, reference: 'cartes/77/ultra-zh.webp', par: 'coordinateur', le: '2026-11-08', ...o });
         const ezh = (imp, o = {}) => { const e = trad({ langue: 'zh-hans', nom: '高级球', dex: null, pv: null, codeSet: imp, numero: '154', total: '207', ...o }); return { ...e, attendu: { ...e.attendu, numero: '154' } }; };
         const pzh = (ligne, slugSet, o = {}) => ptrad({ tirage: 'zh-hans', numero: '154', slug: 'Ultra-Ball-V1', slugSet, codeSet: ligne, nomEn: 'Ultra Ball', categorie: 'dresseur', cleR2Carte: ['cartes/77/ultra-zh.webp'], illustrationsRelues: [ill()], ...o });
@@ -1465,7 +1513,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
             assert.ok(!lue(ezh('csvZ9C'), pzh(ligne, slugSet)).ok, `${ligne} : code faux, la comparaison reste`);
         }
         // lignes zh hors liste : la voie reste fermée (CSVH4C n'a que des Pokémon dans la mesure, SV-P/CT, S-P/CS, M-P/CS non mesurées)
-        for (const [ligne, imp] of [['CSVH4C', 'csvH4C'], ['CSVH6C', 'csvH6C'], ['CSV8C', 'csv8C'], ['SV-P/CT', 'SV-P'], ['S-P/CS', 'S-P'], ['M-P/CS', 'M-P']]) {
+        for (const [ligne, imp] of [['CSVH4C', 'csvH4C'], ['CSVM3', 'csvM3'], ['CSV8C', 'csv8C'], ['SV-P/CT', 'SV-P'], ['S-P/CS', 'S-P'], ['M-P/CS', 'M-P']]) {
             assert.ok(!lue(ezh(imp), pzh(ligne, 'Autre-Set-ZH')).ok, `${ligne} : hors liste, refusé`);
             assert.ok(!drap(ezh(imp), pzh(ligne, 'Autre-Set-ZH')).some(d => d.startsWith('temoin-illustration-relue')), `${ligne} : voie jamais ouverte`);
         }
