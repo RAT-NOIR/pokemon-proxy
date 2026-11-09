@@ -24,8 +24,8 @@ const app = express(); app.use(require(path.join(racine, 'corps')).analyseur());
 // --debit-api / --debit-modele (Mo/s) : le débit de CHAQUE hôte, côté serveur, sur les octets réellement envoyés (compressés ou non). Le modèle vient de R2 (rapide) et le reste de l'API (Render, mesuré ~1 Mo/s sur iPhone) :
 // deux hôtes, deux débits ; Network.emulateNetworkConditions (--debit) ne sait donner qu'un débit unique, partagé.
 const limiter = (res, Mo) => {
-    const octetsParS = Mo * 1048576, ow = res.write.bind(res), oe = res.end.bind(res); let chaine = Promise.resolve();
-    const envoyer = async c => { const b = Buffer.isBuffer(c) ? c : Buffer.from(c); const tranche = Math.max(65536, Math.round(octetsParS / 20)); for (let i = 0; i < b.length; i += tranche) { const s = b.subarray(i, i + tranche); ow(s); await new Promise(r => setTimeout(r, (s.length / octetsParS) * 1000)); } };
+    const octetsParS = Mo * 1048576, ow = res.write.bind(res), oe = res.end.bind(res); let chaine = Promise.resolve(), prochain = Date.now();
+    const envoyer = async c => { const b = Buffer.isBuffer(c) ? c : Buffer.from(c); const tranche = Math.max(65536, Math.round(octetsParS / 20)); for (let i = 0; i < b.length; i += tranche) { const s = b.subarray(i, i + tranche); ow(s); prochain = Math.max(prochain, Date.now()) + (s.length / octetsParS) * 1000; const attente = prochain - Date.now(); if (attente > 30) await new Promise(r => setTimeout(r, attente)); } };   // un seau de jetons : la résolution du minuteur (15 ms sous Windows) ne fait pas perdre de débit
     res.write = (c, ...r) => { if (c) chaine = chaine.then(() => envoyer(c)); const cb = r.find(x => typeof x === 'function'); if (cb) cb(); return true; };
     res.end = (c, ...r) => { chaine = chaine.then(async () => { if (c && typeof c !== 'function') await envoyer(c); oe(); }); return res; };
 };
@@ -98,6 +98,8 @@ const attente = ms => new Promise(r => setTimeout(r, ms));
         console.log(JSON.stringify(resume, null, 1));
         if (JSON_OUT) fs.writeFileSync(JSON_OUT, JSON.stringify({ resume, journal: ecran.journal, depots: deposes.filter(d => !d.refuse).map(d => d.mesure) }, null, 1));
         if (!mesures.length) sortie = 2;
+        // une fermeture NORMALE de la page (pagehide : le marqueur de préparation devient « ferme ») ; un Chrome tué en pleine page laisserait « pret » et la garde refuserait la préparation seule au retour, à raison
+        await cdp('Page.navigate', { url: 'about:blank' }); await attente(1000);
         w.close();
     } catch (e) { console.log('ERREUR pilote', e.stack); sortie = 1; }
     try { cp.execFileSync('taskkill.exe', ['/PID', String(chrome.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* déjà arrêté */ }
