@@ -275,7 +275,7 @@ async function ouvrirLecture() {
     return { cartes: { db: cartes }, prod: { db: prod }, fermer: async () => { await Promise.allSettled([a.close(), b.close()]); } };
 }
 
-module.exports = { planifier, verifierAttendu, ecrireFiches, appartenances, relire, executer, DECISIONS, ROUTE };
+module.exports = { planifier, verifierAttendu, ecrireFiches, appartenances, relire, executer, ouvrirLecture, DECISIONS, ROUTE };
 
 if (require.main === module) {
     require('dotenv').config({ quiet: true });
