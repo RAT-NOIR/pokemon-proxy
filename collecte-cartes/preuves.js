@@ -216,7 +216,16 @@ const memeNomQueLeProduit = (lu, nomProduit) => {
 };
 /** Égalité de deux noms japonais : NFKC, espaces et points médians retirés ; l'un ou l'autre côté vide = non (rien à comparer n'est jamais une concordance). */
 const cleJaponaise = s => (texte(s) ? String(s).normalize('NFKC').replace(/[\s・･·]/g, '') : '');
-const memeNomJaponais = (lu, nomJa) => cleJaponaise(lu) !== '' && cleJaponaise(lu) === cleJaponaise(nomJa);
+// (09/11) côté BASE seulement : l'annotation de lecture « [してんのう] » du nomJa n'est pas imprimée sur la carte ; forme exacte […] collée au mot ou en fin de nom. Un crochet dans `lu.nom` n'est jamais retiré.
+const sansAnnotationDeLecture = s => (texte(s) ? String(s).replace(/\s*\[[^\[\]]*\]\s*$/, '').replace(/(?<=\S)\[[^\[\]]*\]/g, '') : s);
+const memeNomJaponais = (lu, nomJa) => cleJaponaise(lu) !== '' && cleJaponaise(lu) === cleJaponaise(sansAnnotationDeLecture(nomJa));
+// (09/11) marque « LV.X » en fin de lu.nom ignorée seulement si la carte désignée la porte dans son nom anglais ; un niveau chiffré (LV.11) n'est pas concerné.
+const SANS_LVX = /\s+LV\.X\s*$/;
+const luSansLvx = (lu, produit) => {
+    const nom = String(lu?.nom ?? '').normalize('NFKC');
+    const en = String(produit?.nomEnCarte ?? produit?.nomEn ?? '').normalize('NFKC');
+    return SANS_LVX.test(nom) && /(?<![A-Za-z])LV\.X(?![A-Za-z])/.test(en) ? { ...lu, nom: nom.replace(SANS_LVX, '') } : lu;
+};
 // ── (08/11, décision du testeur) A : le nom lu contre la langue lue — AVANT tout autre jugement du nom ───────────────────────────────────────────────────────────────
 // Des chasseurs ont écrit dans `lu.nom` le nom ANGLAIS du produit au lieu du nom IMPRIMÉ (« Energy Search » sur une carte qui imprime « Transfer Energi ») : la règle du nom traduit comparait le produit à lui-même.
 // Écrit par ce qu'il AUTORISE : pour th, zh-hans, zh-hant, ja, ko, `lu.nom` contient au moins un caractère de l'écriture de la langue lue ; sinon `nom-lu-hors-langue`.
@@ -243,7 +252,8 @@ const NOMS_LATINS_IMPRIMES = Object.freeze([
  * Ajoutées au calibrage sur les manifestes réels (08/11, cartes japonaises imprimant ces lettres) : M (Méga : « Mリザードン EX »), LEGEND (« ルギアLEGEND », imprimé en pleine chasse), vs (« …バトル 3vs3 »), TV (« TVレポーター »), W (« なんでもなおしW »).
  * Retirées seulement quand elles ne touchent aucune lettre latine (« Vivid » garde son V) ; tout autre lettre latine du nom reste à juger. Le nom est mis en NFKC avant (« ＬＥＧＥＮＤ » pleine chasse = LEGEND, demi-chasse kana).
  */
-const MARQUES_LATINES_IMPRIMEES = /(?<![A-Za-z])(?:V-UNION|VSTAR|VMAX|TAG TEAM|LV\.X|BREAK|LEGEND|TV|vs|[XY]?ex|[XY]?EX|GX|V|X|Y|M|W)(?![A-Za-z])/g;
+// Ajoutées le 09/11 (séries SP japonaises, relevé en base) : G (« リザードンG », « 発明G-105 », avant GX qui reste plus haut dans l'alternation) et SP (« SPエネルギー ») ; bornées par les lettres latines : GREAT, Gardevoir, SPIDER ne passent pas.
+const MARQUES_LATINES_IMPRIMEES = /(?<![A-Za-z])(?:V-UNION|VSTAR|VMAX|TAG TEAM|LV\.X|BREAK|LEGEND|TV|vs|SP|[XY]?ex|[XY]?EX|GX|G|V|X|Y|M|W)(?![A-Za-z])/g;
 const nomLatinImprime =(lu, produit) => NOMS_LATINS_IMPRIMES.some(x => x.langue === lu.langue && x.nom === String(lu.nom ?? '').trim() && (x.categorie == null || produit?.categorie === x.categorie) && (x.idProduct == null || produit?.idProduct === x.idProduct));
 /** @returns {string|null} `nom-lu-hors-langue` ou null (langue sans contrôle d'écriture, écriture conforme, ou exception de la liste fermée). */
 function motifNomLuHorsLangue(lu, produit) {
@@ -289,6 +299,7 @@ function motifNomLuIdentiqueProduit(lu, produit, exceptions = NOMS_ID_IMPRIMES_I
 const motifDeNom = (lu, produit, langueProduit, drapeaux = []) => {
     const hors = motifNomLuHorsLangue(lu, produit) ?? motifNomLuIdentiqueProduit(lu, produit);   // (08/11) A : avant tout autre jugement du nom
     if (hors) return hors;
+    if (lu.langue === 'ja' && langueProduit === 'ja') lu = luSansLvx(lu, produit);   // (09/11) LV.X seulement dans la comparaison japonaise
     if (lu.langue === 'en') return memeNomQueLeProduit(lu.nom, produit?.nomEn) ? null : 'nom-different';
     if (lu.langue === 'fr' && langueProduit === 'fr') return memeNomQueLeProduit(lu.nom, produit?.nomFr) ? null : 'nom-different';
     // a-reste (japonais) : un nom lu en japonais se compare au nom JAPONAIS de la carte désignée par la ligne (`produit.nomJa`, témoin de lecture, jamais écrit en public), SEULEMENT pour un tirage japonais ; jamais au nom anglais.
