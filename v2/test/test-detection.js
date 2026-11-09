@@ -146,6 +146,6 @@ const aleaGraine = (s) => () => { s = (s + 0x6d2b79f5) >>> 0; let t = s; t = Mat
         vrai('6. la diagonale est celle de l\'image (3,1 % de 500 est ecarte sur une image dix fois plus grande : seuil 150)', D.retenirCandidats([cand(0, 0.5), cand(0.031 * diag, 0.4)], 3000, 4000).length === 1);
         vrai('6. aire 0,986 ecartee, 0,984 gardee ; le plus grand d\'abord', (() => { const a = D.retenirCandidats([cand(0, 0.986)], W, H), b = D.retenirCandidats([cand(0, 0.4), cand(100, 0.984)], W, H); return a.length === 0 && b.length === 2 && b[0].aire === 0.984; })());
     }
-    console.log(`\n${ok} assertions passees, ${ko} en echec`);
+    console.log(`\n${ok} réussis, ${ko} échoués`);
     process.exit(ko ? 1 : 0);
 })();

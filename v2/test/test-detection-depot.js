@@ -18,5 +18,5 @@ for (const [nom, d] of [
 vrai('3. un objet detection imbrique inconnu est refuse', S.valider(doc({ ...detection(), imbrique: { a: 1 } })).ok === false);
 vrai('3. la mesure du modele (sans detection) reste acceptee', S.valider({ ...doc(null), mesure: { moteur: 'wasm', verdict: 'IDENTIQUE' } }).ok === true);
 vrai('3. le document reste sous la borne de taille', Buffer.byteLength(JSON.stringify(doc(detection({ ecarts: 'x'.repeat(200) }))), 'utf8') < S.OCTETS_MAX);
-console.log(`${ok} assertions passees, ${ko} en echec`);
+console.log(`${ok} réussis, ${ko} échoués`);
 process.exit(ko ? 1 : 0);
