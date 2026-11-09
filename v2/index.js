@@ -12,7 +12,7 @@ const etatVisuels = require('./chargeur/etat');   // la version des visuels EN M
 
 // L'ORDRE est celui du graphe des lots ; chaque emplacement est un fichier que SEUL son lot réécrit.
 const LOTS = [require('./transport/monter'), require('./installations/monter'), require('./comptes/monter'), require('./argent/monter'),
-              require('./identifier/monter'), require('./banc/monter'), require('./scanner/monter'), require('./collection/monter'), require('./galerie/monter'), require('./lien-ordinateur/monter')];
+              require('./identifier/monter'), require('./banc/monter'), require('./scanner/monter'), require('./collection/monter'), require('./galerie/monter'), require('./lien-ordinateur/monter'), require('./sauvegardes/monter')];
 // Les chemins PROPRES à la v2 (aucune route héritée dessous) : fermés en 503 quand la configuration est invalide. test-collection.js la compare aux routes MONTÉES (§21 bis : deux listes, une vérité).
 const CHEMINS_FERMES_503 = Object.freeze(['/api/installation', '/api/compte', '/api/scanner', '/api/banc', '/api/collection']);
 
