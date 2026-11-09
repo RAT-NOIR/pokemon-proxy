@@ -10,7 +10,7 @@ module.exports = {
             registre.fournir('turnstile', { verifier: (jeton, ip, action) => verifierTurnstile(jeton, ip, { action }) });
         }
         // L1 : la dispense de mesure dit toujours son état au démarrage (jamais le secret) : active sur le seul service de l'essai, inactive partout ailleurs avec sa raison.
-        if (cfg.mesure) console.log(cfg.mesure.actif ? '🔓 [v2] dispense de mesure : active (essai ; en-tête X-Rat-Market-Mesure, défi Turnstile seul)' : `🔒 [v2] dispense de mesure : inactive (${cfg.mesure.raison})`);
+        if (cfg.mesure) console.log(cfg.mesure.actif ? '🔓 [v2] dispense de mesure : active (essai ; défi Turnstile seul, liste fermée d\'adresses)' : `🔒 [v2] dispense de mesure : inactive (${cfg.mesure.raison})`);
         if (absent('courrier')) {
             if (!process.env.BREVO_API_KEY) {
                 registre.fournir('courrier', require('./courrier').creerCourrierMemoire());   // sans clé : mémoire seulement — mais JAMAIS en silence (tour 1) : aucune valeur de secret dans la ligne

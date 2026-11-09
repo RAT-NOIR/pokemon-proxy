@@ -24,7 +24,7 @@ const courrierPour = (cfg, req, courrier) => (mesureAutorisee(cfg, req) && typeo
 /** L1 : le défi Turnstile en garde de route (connexion, mot-de-passe-oublie, renvoyer-verification), avec la MÊME fonction `defi` et le MÊME refus que l'inscription
  *  (422 ENTREE `defi-anti-robot`, 503 si le pilote manque ou tombe). Il se place APRÈS l'origine et la limite par IP, AVANT tout budget par adresse et toute lecture de compte :
  *  un robot sans jeton ne consomme ni le budget d'un titulaire ni un hachage. `avecCourrier` : l'oubli et le renvoi n'ont pas de sens sans courrier (503 d'abord, comme l'inscription). */
-/** Exemption des outils de mesure : `cfg.mesure` ACTIVE (essai + secret >= 32 + service Render de l'essai, voir config.js) ET l'en-tête X-Rat-Market-Mesure dont le SHA-256 égale le condensé gardé, à temps constant (deux condensés de même longueur). */
+/** Exemption des outils de mesure (essai seulement) : `cfg.mesure` ACTIVE ET sa fonction `autorise` répond oui. Ici rien ne la décide. */
 // PARCOURS DU SITE : la décision vit dans le module des parcours du site (dossier dédié sous v2) (secret en temps constant ET adresse EXACTE du compte de test) ; `cfg.mesure.autorise` n'existe que sur l'essai (v2/config.js, garde-essai.js).
 // Ici rien ne la décide : sans fonction, c'est NON (production comprise).
 function mesureAutorisee(cfg, req) {

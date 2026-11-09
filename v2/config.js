@@ -129,6 +129,7 @@ function lireConfig(env = process.env) {
         if (empreinteVoulue) { empreinteExtension = false; console.warn(`⚠️ [v2 config] empreintes de l'extension DÉSACTIVÉES : configuration du modèle mal formée (${raison})`); }
         else console.warn(`⚠️ [v2 config] configuration du modèle d'empreinte mal formée, ignorée (drapeau éteint) : ${raison}`);
     }
+    // >>> PARCOURS-SITE-DEBUT : ce bloc est REMPLACÉ, à la bascule de production, par un `mesure` inerte (outils/verifier-absence-parcours.js, fonction `deriver`) ; les deux marqueurs sont exigés, une seule fois chacun.
     // L1 : exemption ÉTROITE du défi Turnstile pour les outils de mesure. Écrite par ce qu'elle autorise : TROIS conditions positives, toutes requises —
     // V2_CIBLE exactement « essai », V2_SECRET_MESURE d'au moins 32 caractères, ET RENDER_SERVICE_ID exactement le service de l'essai (variable posée par Render lui-même : un copier-coller
     // des variables de l'essai vers un autre service ne l'emporte pas). Le secret n'est JAMAIS gardé : seul son condensé SHA-256 l'est, non énumérable (ni JSON.stringify ni console.log ne l'impriment).
@@ -137,6 +138,7 @@ function lireConfig(env = process.env) {
     // UN SEUL point de chargement ; le retirer d'un geste = supprimer cette ligne et le dossier.
     const refusEssai = GARDE_ESSAI.raisonRefus(env);
     const mesure = refusEssai === null ? require('./essai-parcours').depuis(env) : { actif: false, raison: refusEssai };
+    // <<< PARCOURS-SITE-FIN
     return gele({
         actif,
         base,
