@@ -287,6 +287,19 @@ const egal = (a, b) => a && b && a.length === b.length && Buffer.compare(Buffer.
             if (S.MESURE.detection) d.mesure.detection = { version: 'v'.repeat(30), nImages: 100, nIdentiques: 100, nRgb640: 100, nQuads: 100, nCartes: 100, voieCanvas: 100, voiePillow: 100, ecarts: 'x'.repeat(200), empreinteLot: 'a'.repeat(64), msOpencv: 9999999.9, msMediane: 9999999.9, msTotal: 9999999.9, jsHeapMo: 99999.9, jsHeapApresMo: 99999.9, wasmHeapMo: 99999.9, erreur: 'e'.repeat(200) };
             const taille = Buffer.byteLength(JSON.stringify(d)), v = S.valider(d);
             H.v(`4. dépôt WebGPU COMPLET${S.MESURE.detection ? ' avec la détection' : ''}, tous champs au plus long (${taille} octets) : accepté, sous 8 192`, [v.ok, taille < S.OCTETS_MAX, v.detail || null], [true, true, null]);
+            // le dépôt MAXIMAL de la base : tout ce qui précède PLUS six grandes photos (chacune : rm et nav aux champs au plus long) ; le contrôle de la limite se fait ici, il ne se devine pas
+            if (S.MESURE.grandesPhotos) {
+                const moteur = { ok: true, code: 'c'.repeat(30), redressee: true, nCartes: 100, rgb640: 'a'.repeat(64), quads: 'b'.repeat(64), carte: 'c'.repeat(64), dim640: 'd'.repeat(12), ms: 9999999.9 };
+                const photo = { sha256Fichier: 'e'.repeat(64), format: 'autre', octets: 999999999, largeur: 99999, hauteur: 99999, orientation: 8, prereduit: true, voie: 'canvas-high', rm: { ...moteur }, nav: { ...moteur }, ecartQuadPct: 999.99, memeQuad: true };
+                const m = JSON.parse(JSON.stringify(d)); m.mesure.grandesPhotos = { version: 'v'.repeat(30), photos: Array.from({ length: 6 }, () => ({ ...photo })) };
+                const t2 = Buffer.byteLength(JSON.stringify(m)), v2 = S.valider(m);
+                // un dépôt de grandes photos SEUL (sans le reste d'un passage WebGPU) tient-il ? c'est le cas réel d'un dépôt de la page des grandes photos
+                const seul = JSON.parse(JSON.stringify(base())); seul.mesure.grandesPhotos = m.mesure.grandesPhotos; seul.mesure.preparation = { ...prep, ...plus };
+                const t3 = Buffer.byteLength(JSON.stringify(seul)), v3 = S.valider(seul);
+                H.v(`4. dépôt grandes photos SEUL au plus long avec une préparation complète (${t3} octets) : accepté sous 8 192`, [v3.ok, t3 < S.OCTETS_MAX, v3.detail || null], [true, true, null]);
+                H.v(`4. dépôt ABSOLUMENT maximal (WebGPU complet + détection + six grandes photos, ${t2} octets) : le contrôle de la limite répond sans lever — accepté ou « trop-gros », jamais autre chose`, [v2.ok || v2.detail === 'trop-gros'], [true]);
+                console.log(`   (information) dépôt absolument maximal : ${t2} octets, ${v2.ok ? 'accepté' : v2.detail} ; grandes photos seules avec préparation : ${t3} octets`);
+            }
         }
     }
 
