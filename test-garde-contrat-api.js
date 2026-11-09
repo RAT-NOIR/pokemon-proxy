@@ -397,7 +397,7 @@ const TAMPON_78 = 'x'.repeat(78);
     verifier('lot-additif.js : étape 0 bis, chargerApi avant la sauvegarde, exit 6 si elle ne peut pas conclure',
         [src.indexOf('GC.chargerApi()') > 0 && src.indexOf('GC.chargerApi()') < src.indexOf("spawnSync(process.execPath, ['backup-collections.js'"), /process\.exit\(6\)/.test(src)], [true, true]);
     verifier('lot-additif.js : un refus nouveau ou une exception du contrat arrête le lot (fautivesContrat) et la relecture rejoue le contrat',
-        [/!cmp\.nonAutorisees\.length && !fautivesContrat\.length/.test(src), /contratRelu = api \? await jouerContrat/.test(src), /RESTAURATION INCOMPLÈTE/.test(src)], [true, true, true]);
+        [/!DL\.fautif\(\{ nonAutorisees: cmp\.nonAutorisees, contrat: fautivesContratSeul/.test(src), /contratRelu = api \? await jouerContrat/.test(src), /RESTAURATION INCOMPLÈTE/.test(src)], [true, true, true]);
     verifier('lot-additif.js : la garde est active sur `cartes`, sur test_scratch seulement avec --contrat-api', [/CONTRAT_ACTIF = BASE === 'cartes' \|\| options\.includes\('--contrat-api'\)/.test(src), /non vérifié \(base de banc\)/.test(src)], [true, true]);
     verifier('lot-additif.js : AUCUNE limite recopiée (ni 40 ni 6 ni liste de variantes)', /TAMPON_MAX|PARTAGES_MAX|MARQUES\b/.test((src + require('fs').readFileSync(path.join(__dirname, 'collecte-cartes', 'garde-contrat-api.js'), 'utf8')).replace(/\/\/.*$/gm, '')), false);
 
