@@ -68,7 +68,7 @@ const MUTATIONS = [
     { nom: '/ping : le jeton est annoncé sans V2_LEVIERS_ABDE', fichier: CAP, de: JETON, vers: 'cfg.promotionSurs === true && cfg.probable === true && cfg.gardeMarqueurs === true' },
     { nom: '/ping : le jeton est annoncé sans V2_PROBABLE', fichier: CAP, de: JETON, vers: 'cfg.promotionSurs === true && cfg.leviersAbde === true && cfg.gardeMarqueurs === true' },
     { nom: '/ping : le jeton est annoncé sans V2_GARDE_MARQUEURS (M3)', fichier: CAP, de: JETON, vers: 'cfg.promotionSurs === true && cfg.leviersAbde === true && cfg.probable === true' },
-    { nom: '/ping : le jeton sort de la liste fermée', fichier: CAP, de: "'leviers-abde', 'promotion-surs']);", vers: "'leviers-abde']);" }
+    { nom: '/ping : le jeton sort de la liste fermée', fichier: CAP, de: "'leviers-abde', 'promotion-surs', 'prix-pro-reserve']);", vers: "'leviers-abde', 'prix-pro-reserve']);" }
 ];
 
 function lancer(mutation) {
