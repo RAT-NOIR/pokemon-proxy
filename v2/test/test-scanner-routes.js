@@ -255,6 +255,12 @@ async function parcourir() {
             const qp = await scanner(svPro.url, pro.cookie, { nom: '4-pro-q' });
             const repP = await repondre(svPro.url, pro.cookie, qp.json.scanId, { choix: qp.json.analyse.cartes[0].question.choix[0].id }, { nom: '4-pro-r' });
             H.v('   la réponse à une question du scanner, compte Pro, allumé : la carte rendue ne porte ni prixLive ni prixRepli', [repP.statut, repP.json.carte.prixLive, 'prixRepli' in repP.json.carte], [200, null, false]);
+            // F3 (relecture 5) : au scanner, la carte tranchée sans prix d'un gratuit est rendue par le SCANNER (compteur des déclarations : la réponse porte `declaration`), jamais par la route de l'extension (compteur des constats : pas de `declaration`)
+            mode = 'ambigue-sans-prix';
+            const qs = await scanner(svPro.url, gratuit.cookie, { nom: '4-gratuit-qs' });
+            const choixC = qs.json.analyse.cartes[0].question.choix.find(c => c.idProduct === ID_C).id;
+            const repS = await repondre(svPro.url, gratuit.cookie, qs.json.scanId, { choix: choixC }, { nom: '4-gratuit-rs' });
+            H.v('   la réponse du scanner (compte gratuit, allumé) sur un candidat SANS guide : rendue par le scanner (rembourse true, sans-prix, champ declaration présent), ni prixLive ni prixRepli', [repS.statut, repS.json.facturation.rembourse, repS.json.facturation.motif, 'declaration' in repS.json, repS.json.carte.prixLive, 'prixRepli' in repS.json.carte], [200, true, 'sans-prix', true, null, false]);
             mode = 'affirmee';
             await svPro.fermer();
         }

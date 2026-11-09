@@ -323,6 +323,21 @@ const prisDuJour = async x => (await Q.prisAujourdhui(x.cleQuota)) ?? 0;
         // témoin : le candidat tranché a un GUIDE : le guide affiché est un prix, le scan compte, rien n'est rendu
         const t = await jouerQ(svOnQ.url, 'gratuit', [TAUROS, ARCANIN]);
         H.v('B10 témoin : candidat tranché AU GUIDE, gratuit allumé : le scan COMPTE, aucun remboursement', [t.rep.json.carte.carte.idProduct, f(t), await prisDuJour(t.x), await remboursements(t.scanId)], [TAUROS.id, { debite: 1, rembourse: false, motif: 'question' }, 1, 0]);
+        // F1/F3 (relecture 5) : le remboursement part sur le compteur des CONSTATS : un porteur dont le budget des DÉCLARATIONS du jour est épuisé le reçoit quand même, et ce budget n'est pas consommé
+        const compteur = async (x, type) => ((await raw('plafonds').findOne({ porteur: x.cleQuota, type })) || {}).count ?? 0;
+        for (const [genre, plafondDeclare] of [['sans', 1], ['gratuit', 3]]) {
+            const x = await porteurDe(genre);
+            await raw('plafonds').insertOne({ porteur: x.cleQuota, jour: Q.jourCourant(), type: 'declare', count: plafondDeclare, expireLe: new Date(Date.now() + 3 * 86400e3) });
+            QUESTION = sansPrix; const r0 = await ident(svOnQ.url, x); const rep = await repondre(svOnQ.url, x, { scanId: r0.json.scanId, carte: 0, choix: 'a' }); QUESTION = null;
+            H.v(`B10 F1 ${genre} au plafond des déclarations (${plafondDeclare}) : le remboursement part quand même (sans-prix, rendu), compteur du jour à 0, UN remboursement ; déclarations toujours à ${plafondDeclare} (non consommé), constats à 1 ; aucun champ declaration`,
+                [f({ rep }), await prisDuJour(x), await remboursements(r0.json.scanId), await compteur(x, 'declare'), await compteur(x, 'constate'), 'declaration' in rep.json],
+                [{ debite: 0, rembourse: true, motif: 'sans-prix' }, 0, 1, plafondDeclare, 1, false]);
+        }
+        // F3 : un administrateur dont la lecture d'offre échoue (« je ne sais pas » = non-Pro) ne se voit jamais rembourser : il n'a rien débité
+        {
+            const x = await porteurDe('adminPanne'); QUESTION = sansPrix; const r0 = await ident(svOnQ.url, x); const rep = await repondre(svOnQ.url, x, { scanId: r0.json.scanId, carte: 0, choix: 'a' }); QUESTION = null;
+            H.v('B10 F3 administrateur (offre illisible), carte tranchée sans prix : facturation administrateur, aucun remboursement', [rep.statut, rep.json.facturation.motif, await remboursements(r0.json.scanId)], [200, 'administrateur', 0]);
+        }
         // un LOT : répondre à une question de lot ne coûte ni ne rend rien : jamais de remboursement par cette route
         const lotQ = async () => { const x = await porteurDe('gratuit'); lotImpl = async () => [X.aff(TAUROS, { retenu: 'EX', codeLangue: 2 }), X.qst([SANS[0], SANS[1]], { retenu: 'EX', codeLangue: 2 })]; const r = await ident(svOn.url, x); const q = cartesDe(r).findIndex(c => c.statut === 'a-trancher'); const rep = await repondre(svOn.url, x, { scanId: r.json.scanId, carte: q, choix: 'a' }); lotImpl = null; return { x, r, rep }; };
         const L = await lotQ();

@@ -1006,9 +1006,8 @@ function traiterReponse(cfg, deps = {}) {
         // fois (le grand livre refuse le second : un rejeu retrouve « deja-rembourse »), comme le scanner ; drapeau éteint, Pro, administrateur, scanner et question de LOT (elle ne coûte ni ne rend rien) : jamais.
         if (!acces && !admin && !questionDeLot && porteur.surface !== 'scanner' && PRO.carteSansPrixPourGratuit(resolueComplete)) {
             try {
-                const rb = await argent.rembourser(porteur, { poche: null }, 'sans-prix', { scanId, compteur: 'sans-prix' });
+                const rb = await argent.rembourser(porteur, { poche: null }, 'sans-prix', { scanId, compteur: 'constate-question' });      // le compteur des CONSTATS (classe constate, plafond par offre), comme la carte unique et le lot : le client n'a rien déclaré, le serveur constate l'absence de prix (le budget des déclarations n'est ni lu ni consommé). Pas natureDuMotif('sans-prix') : il rend « introuvable » (livre: true), qui refuse de rendre une question DÉJÀ répondue ; « constate-question » est la nature des constats qui SUIVENT une question (livre: false)
                 facturation = rb.rendu || rb.raisonNonRembourse === 'deja-rembourse' ? fabriquerFacturation({ debite: 0, rembourse: true, motif: 'sans-prix' }) : require('./retour-live').facturationDeLecture(rb);
-                if (rb.declaration) declaration = rb.declaration;
             } catch (e) { journalErreur('remboursement sans-prix de la réponse', e); }
         }
         const solde = await soldeSur(), offre = await offreP();

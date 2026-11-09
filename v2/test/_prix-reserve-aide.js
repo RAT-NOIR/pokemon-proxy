@@ -63,12 +63,12 @@ async function porteurDe(raw, genre) {
     const jeton = J.genererJeton(); let compte = null;
     if (genre !== 'sans') {
         const a = `prp${++nMail}.${Date.now().toString(36)}@exemple.fr`;
-        compte = Object.assign(M.nouveauCompte({ email: a, emailCle: a, motDePasse: {} }), { verifie: true }, genre === 'pro' ? { abonnement: abo(futur) } : genre === 'expire' ? { abonnement: abo(passe) } : {});
+        compte = Object.assign(M.nouveauCompte({ email: a, emailCle: a, motDePasse: {} }), { verifie: true }, genre === 'pro' ? { abonnement: abo(futur) } : genre === 'expire' ? { abonnement: abo(passe) } : genre === 'adminPanne' ? { role: 'administrateur' } : {});
         await raw('comptes').insertOne(compte);
     }
     const i = Object.assign(M.nouvelleInstallation({ jetonEmpreinte: J.empreinte(jeton), essais: 3, libelle: 'banc' }), compte ? { compteId: compte._id, lieeLe: new Date() } : {});
     await raw('installations').insertOne(i);
-    if (genre === 'panne') enPanne.add(String(compte._id));
+    if (genre === 'panne' || genre === 'adminPanne') enPanne.add(String(compte._id));
     if (genre === 'inconnue') offreInconnue.add(String(compte._id));
     return { genre, jeton, compte, i, userId: compte ? `v2:compte:${compte._id}` : `v2:installation:${i._id}`, cleQuota: compte ? `compte:${compte._id}` : `installation:${i._id}` };
 }
