@@ -44,6 +44,7 @@ const GS = require('./collecte-cartes/garde-site-lu');   // la liste de ce que l
 // ➕ 2026-10-19 : la garde rejoue aussi le CONTRAT DE L'API (collecte-cartes/garde-contrat-api.js : sa chaîne importée, jamais recopiée). Active sur la base `cartes` ;
 // sur `test_scratch` seulement avec `--contrat-api` (futur banc), sinon inerte et dite « non vérifiée ».
 const GC = require('./collecte-cartes/garde-contrat-api');
+const DL = require('./collecte-cartes/decision-lot');   // la décision d'arrêt (causes nommées, restauration puis relecture, code de sortie), testée avec des doubles
 const GA = require('./collecte-cartes/garde-ambiguite-site');   // documentAmbigu du site rejoué sur les sets touchés (incident du 2026-11-09)
 const { sansGardeLignes, installerGardeLignes } = require('./collecte-cartes/lignes-detachees');
 
@@ -265,16 +266,17 @@ function journaliser(t, dossier, combien, sortie) {
     }
     // 5 ter. L'AMBIGUÏTÉ DU SITE (2026-11-09) : `documentAmbigu` rejoué sur les sets touchés, avant (sauvegarde) et après (même lecture). Un document qui devient ambigu, ou un set qui bascule de « par impression » à
     // « par document », arrête le lot exactement comme un refus du contrat (restauration entrée par entrée) ; un document déjà ambigu avant le lot ne bloque pas, il s'imprime.
-    const ambiguite = regleAmbiguite ? GA.jouerAmbiguite({ regle: regleAmbiguite, avant: docsAvant, apres: apres.docs, touchesFn: GC.setsTouchesContrat }) : null;
+    const ambiguite = regleAmbiguite ? GA.jouerAmbiguite({ regle: regleAmbiguite, avant: docsAvant, apres: apres.docs, touchesFn: GC.setsTouchesContrat, projections: { cartes: api.projectionsEtat.cartes, cartesProduits: api.projectionsEtat.cartesProduits } }) : null;
     console.log(`   5 ter. ${ambiguite ? ambiguite.ligne : 'ambiguïté du site : non vérifiée (base de banc)'}`);
     if (ambiguite) {
         for (const p of ambiguite.persistants.slice(0, 6)) console.log(`      persistant (déjà ambigu avant, ne bloque pas) : carte ${p.carteId} dans ${p.set}`);
         if (ambiguite.persistants.length > 6) console.log(`      … (+${ambiguite.persistants.length - 6} persistants)`);
     }
     const fautivesContrat = [...(contrat ? contrat.fautives : []), ...(ambiguite ? ambiguite.fautives : [])];   // ambiguïté du site : même chemin d'arrêt et de restauration que le contrat
+    const fautivesContratSeul = contrat ? contrat.fautives : [], fautivesAmbiguite = ambiguite ? ambiguite.fautives : [];
     const legacy = comptes.map((x, i) => `${x.libelle} ${comptesAvant[i]} → ${comptesApres[i]}`).join(' ; ');
 
-    if (!cmp.nonAutorisees.length && !fautivesContrat.length) {
+    if (!DL.fautif({ nonAutorisees: cmp.nonAutorisees, contrat: fautivesContratSeul, ambiguite: fautivesAmbiguite })) {
         let revalidation = null;
         if (BASE === 'cartes' && !options.includes('--sans-revalidation')) {
             const touches = setsTouches({ avant: docsAvant, apres: apres.docs });
@@ -306,7 +308,13 @@ function journaliser(t, dossier, combien, sortie) {
 
     // ── ARRÊT : restauration depuis la sauvegarde
     const fautives = [...cmp.nonAutorisees.map(decrire), ...fautivesContrat];
-    console.log(`\n   🔴 ARRÊT : ${[cmp.nonAutorisees.length ? `${cmp.nonAutorisees.length} baisse(s) NON ANNONCÉE(S)` : '', fautivesContrat.length ? `${fautivesContrat.length} refus du CONTRAT DE L'API ou de l'AMBIGUÏTÉ DU SITE` : ''].filter(Boolean).join(' et ')} :\n      ${fautives.join('\n      ')}\n   6. restauration depuis ${dossier}`);
+    const causes = DL.causesDArret({ nonAutorisees: cmp.nonAutorisees, contrat: fautivesContratSeul, ambiguite: fautivesAmbiguite });
+    console.log(`\n   🔴 ARRÊT : ${causes.phrases.join(' et ')} :\n      ${fautives.join('\n      ')}\n   6. restauration depuis ${dossier}`);
+    // la restauration puis la relecture sont deux fermetures appelées par DL.arretDuLot (testé avec des doubles) ; ce qu'elles posent sert au journal plus bas
+    const faits = [];
+    let nonRestaurees = [], contratRelu = null, ok = false, incomplet = [];
+    const rapportImages = { cartes: new Set(), restaurees: [], gardees: [], indecidables: [] };
+    const restaurer = async () => {
     // une baisse d'images (compteur) est une affaire de SET : le tableau `images` des cartes de ce set est remis (le champ du worker n'y est pas gardé).
     // (tour 2, D1) un refus du contrat se restaure ENTRÉE PAR ENTRÉE (set + cleR2), sur TOUTES les cartes : chaque entrée d'`images` que le LOT a modifiée revient à sa version sauvegardée, ce que le WORKER a écrit pendant la fenêtre
     // reste (les sets de `collecte_images_etat`, la même règle que la garde des compteurs), et ce qui ne se tranche pas (deux entrées de même clé…) est imprimé et fait sortir en code 4. Remettre le tableau des seules cartes
@@ -314,7 +322,6 @@ function journaliser(t, dossier, combien, sortie) {
     const imagesFautives = new Set(cmp.nonAutorisees.filter(b => b.compteur === 'images').map(b => b.groupe.replace(/^set:/, '')));
     const entierParCompteur = (d, a) => [...(d.images || []), ...(a.images || [])].some(im => imagesFautives.has(im?.set));   // une baisse d'images (compteur) : tout le tableau, comme avant
     const swRestauration = fautivesContrat.length ? await setsDuWorker(db, depuis) : new Set();
-    const rapportImages = { cartes: new Set(), restaurees: [], gardees: [], indecidables: [] };
     const garderPour = coll => (d, a) => {
         const champs = CHAMPS_DU_WORKER[coll] || [];
         if (coll === 'cartes' && entierParCompteur(d, a)) return champs.filter(f => f !== 'images');
@@ -327,7 +334,6 @@ function journaliser(t, dossier, combien, sortie) {
         if (r.restaurees.length) rapportImages.cartes.add(d._id);
         return r.restaurees.length ? { images: r.images } : {};      // rien à restaurer ou indécidable : le tableau actuel reste tel quel
     } : null;
-    const faits = [];
     // 🔑 UNE RESTAURATION REMET L'ÉTAT EXACT D'AVANT LE LOT : le filet des lignes détachées (lignes-detachees.js) ne la juge jamais. Le lot qui détache une ligne pose aussi le reste qui l'interdit ; si la ligne revient
     // (sauvegarde) pendant que ce reste existe encore, le filet la refuserait et la restauration resterait à moitié faite. Le filet est LEVÉ sur cette connexion seulement (compteur local, pas d'environnement hérité),
     // pour les seules écritures de restauration ci-dessous, et `restes` est restauré AVANT `cartes_produits` quel que soit l'ordre de `--collections` (l'état d'avant, dans le bon ordre, même sans le filet).
@@ -374,24 +380,29 @@ function journaliser(t, dossier, combien, sortie) {
         console.log(`      ${faits.at(-1)}`);
     }
     });
-    const nonRestaurees = aSauver.filter(x => !RESTAURABLES.includes(x));
+    nonRestaurees = aSauver.filter(x => !RESTAURABLES.includes(x));
     if (nonRestaurees.length) console.log(`      ⚠️ NON restaurées (tenues par le worker, ou hors de la garde) : ${nonRestaurees.join(', ')} — la sauvegarde les porte`);
     apres = null;                                                                  // l'état d'avant la restauration n'est plus utile : une seule copie de l'état « après » à la fois
+    };
+    const relire = async () => {
     const apresRelu = await etatDeLaBase(db, api);
     const relu = comparer(avant, apresRelu, { annonces, setsDuWorker: await setsDuWorker(db, depuis) });
     // la relecture rejoue aussi le contrat (sur la même lecture) : un refus nouveau qui reste est une restauration incomplète
-    const contratRelu = api ? await jouerContrat(api, docsAvant, apresRelu.docs) : null;
+    contratRelu = api ? await jouerContrat(api, docsAvant, apresRelu.docs) : null;
     await fermer();
-    const ambiguiteRelue = regleAmbiguite ? GA.jouerAmbiguite({ regle: regleAmbiguite, avant: docsAvant, apres: apresRelu.docs, touchesFn: GC.setsTouchesContrat }) : null;
+    const ambiguiteRelue = regleAmbiguite ? GA.jouerAmbiguite({ regle: regleAmbiguite, avant: docsAvant, apres: apresRelu.docs, touchesFn: GC.setsTouchesContrat, projections: { cartes: api.projectionsEtat.cartes, cartesProduits: api.projectionsEtat.cartesProduits } }) : null;
     const resteContrat = [...(contratRelu ? contratRelu.fautives : []), ...(ambiguiteRelue ? ambiguiteRelue.fautives : [])];
     // un indécidable n'est jamais « restauré » en silence : le lot sort en code 4
     // (tour 3, E1) … et un produit servi dans la SAUVEGARDE et sans entrée dans l'état relu n'a pas été restauré (la perte d'un visuel n'est une « information » qu'avant l'écriture et sans arrêt)
     const perdus = contratRelu?.v ? GC.produitsPerdus(contratRelu.v) : [];
-    const ok = !relu.nonAutorisees.length && !resteContrat.length && !rapportImages.indecidables.length && !perdus.length;
-    const incomplet = [...relu.nonAutorisees.map(decrire), ...resteContrat, ...rapportImages.indecidables.map(x => `images indécidable : carte ${x.carte} ${x.set}|${x.cleR2} (${x.raison})`),
+    ok = !relu.nonAutorisees.length && !resteContrat.length && !rapportImages.indecidables.length && !perdus.length;
+    incomplet = [...relu.nonAutorisees.map(decrire), ...resteContrat, ...rapportImages.indecidables.map(x => `images indécidable : carte ${x.carte} ${x.set}|${x.cleR2} (${x.raison})`),
         ...perdus.map(p => `produit ${p.idProduct} sans entrée après la restauration (servi dans la sauvegarde${p.sets.length ? `, sets ${p.sets.join(', ')}` : ''})`)];
-    console.log(`   7. relu après restauration : ${ok ? `✅ aucune baisse non annoncée${contratRelu ? ' · contrat API respecté' : ''}` : `🔴 RESTAURATION INCOMPLÈTE : ${liste(incomplet)}`}${contratRelu ? `\n      ${contratRelu.ligne}` : ''}`);
-    const combien = [legacy, atlasApres, contrat ? contrat.ligne : null, `🔴 ARRÊT : ${cmp.nonAutorisees.length ? 'baisses non annoncées' : 'refus du contrat API'} ${liste(fautives)} — RESTAURÉ : ${faits.join(' ; ')}${nonRestaurees.length ? ` ; non restaurées ${nonRestaurees.join(',')}` : ''} ; relu ${ok ? '✅ aucune baisse' : `🔴 INCOMPLET ${liste(incomplet)}`}${contratRelu ? ` ; relu ${contratRelu.ligne}` : ''}`].filter(Boolean).join(' ; ');
-    journaliser(t, dossier, combien, ok ? `3 (commande ${c.status})` : `4 (commande ${c.status})`);
-    process.exit(ok ? 3 : 4);
+    console.log(`   7. relu après restauration : ${ok ? `✅ aucune baisse non annoncée${contratRelu ? ' · contrat API respecté' : ''}` : `🔴 RESTAURATION INCOMPLÈTE : ${liste(incomplet)}`}${contratRelu ? `\n      ${contratRelu.ligne}` : ''}${ambiguiteRelue ? `\n      relu ${ambiguiteRelue.ligne}` : ''}`);
+    return { ok };
+    };
+    const arret = await DL.arretDuLot({ nonAutorisees: cmp.nonAutorisees, contrat: fautivesContratSeul, ambiguite: fautivesAmbiguite, restaurer, relire });
+    const combien = [legacy, atlasApres, contrat ? contrat.ligne : null, ambiguite ? ambiguite.ligne : null, `🔴 ARRÊT : ${causes.court} ${liste(fautives)} — RESTAURÉ : ${faits.join(' ; ')}${nonRestaurees.length ? ` ; non restaurées ${nonRestaurees.join(',')}` : ''} ; relu ${ok ? '✅ aucune baisse' : `🔴 INCOMPLET ${liste(incomplet)}`}${contratRelu ? ` ; relu ${contratRelu.ligne}` : ''}`].filter(Boolean).join(' ; ');
+    journaliser(t, dossier, combien, `${arret.code} (commande ${c.status})`);
+    process.exit(arret.code);
 })().catch(e => { console.error('❌', e.message); process.exit(1); });

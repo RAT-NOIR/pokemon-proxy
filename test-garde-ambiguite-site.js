@@ -80,10 +80,64 @@ const lib = process.env.RAT_MARKET_SITE_LIB || 'C:/Users/Yung/Desktop/rat-market
         const v = G.verifierAmbiguite({ regle, avant, apres, touchesFn: GC.setsTouchesContrat });
         assert.strictEqual(v.sets, 1); assert.strictEqual(v.nouveaux.length, 1);
     });
-    await t('lot-additif.js branche la garde (import, étape, arrêt, relecture)', () => {
+    // ── tour 1 : projection symétrique, cas « seul images[].numero change »
+    const PROJ = { cartes: { sets: 1, nomEn: 1, 'impressions.tirage': 1, 'impressions.expansion': 1, 'impressions.deck': 1, 'impressions.numero': 1, 'images.set': 1, 'images.numero': 1 }, cartesProduits: { carteId: 1 } };
+    await t('(1) un lot où seul un champ HORS projection change ne rejoue aucun set (avant et après projetés pareil)', () => {
+        const c = (id, hors) => ({ ...carte(id, ['1', '2'], [img('1', 'a')]), collecteLe: hors, bulba: { x: hors } });
+        const r = G.jouerAmbiguite({ regle, avant: etat([c(1, 'lundi')]), apres: etat([c(1, 'mardi')]), touchesFn: GC.setsTouchesContrat, projections: PROJ });
+        assert.deepStrictEqual(r.fautives, []); assert.strictEqual(r.v.sets, 0);
+        const sans = G.jouerAmbiguite({ regle, avant: etat([c(1, 'lundi')]), apres: etat([c(1, 'mardi')]), touchesFn: GC.setsTouchesContrat });
+        assert.strictEqual(sans.v.sets, 1);                       // sans projection le champ hors projection ferait rejouer le set : c'est ce que la projection évite
+    });
+    await t('(1) la projection donne les mêmes verdicts qu\'un état déjà projeté', () => {
+        const avant = etat([carte(1, ['1', '2'], [img('1', 'a')])]), apres = etat([carte(1, ['1', '2'], [img('1', 'a'), img(null, 'b')])]);
+        const r = G.jouerAmbiguite({ regle, avant, apres, touchesFn: GC.setsTouchesContrat, projections: PROJ });
+        assert.strictEqual(r.v.nouveaux.length, 1); assert.deepStrictEqual(r.v.bascules, ['Set-test']);
+    });
+    await t('(2) SEUL images[].numero change : numero effacé → le document devient ambigu et arrête', () => {
+        const r = G.jouerAmbiguite({ regle, avant: etat([carte(1, ['1', '2'], [img('1', 'a')])]), apres: etat([carte(1, ['1', '2'], [img(null, 'a')])]), touchesFn: GC.setsTouchesContrat, projections: PROJ });
+        assert.strictEqual(r.v.sets, 1); assert.strictEqual(r.v.nouveaux.length, 1); assert.strictEqual(r.fautives.length, 2);
+    });
+    await t('(2) SEUL images[].numero change : numero posé sur une image ambiguë → le set se répare, rien n\'arrête', () => {
+        const r = G.jouerAmbiguite({ regle, avant: etat([carte(1, ['1', '2'], [img(null, 'a')])]), apres: etat([carte(1, ['1', '2'], [img('1', 'a')])]), touchesFn: GC.setsTouchesContrat, projections: PROJ });
+        assert.deepStrictEqual(r.fautives, []); assert.strictEqual(r.v.avant, 1); assert.strictEqual(r.v.apres, 0);
+    });
+
+    // ── tour 1 points 3 et 4 : la décision d'arrêt, isolée, avec des doubles en mémoire (aucune base, aucune grappe)
+    const DL = require('./collecte-cartes/decision-lot');
+    const doubles = (relu = { ok: true }) => { const appels = []; return { appels, restaurer: async () => { appels.push('restaurer'); }, relire: async () => { appels.push('relire'); return relu; } }; };
+    await t('(4) fautif (ambiguïté) → restauration appelée → relecture → code d\'arrêt 3', async () => {
+        const d = doubles();
+        const r = await DL.arretDuLot({ nonAutorisees: [], contrat: [], ambiguite: ['ambiguïté du site : x'], restaurer: d.restaurer, relire: d.relire });
+        assert.deepStrictEqual(d.appels, ['restaurer', 'relire']); assert.strictEqual(r.arret, true); assert.strictEqual(r.code, 3);
+    });
+    await t('(4) fautif et relecture incomplète → code 4', async () => {
+        const d = doubles({ ok: false });
+        const r = await DL.arretDuLot({ nonAutorisees: [], contrat: ['c'], ambiguite: [], restaurer: d.restaurer, relire: d.relire });
+        assert.strictEqual(r.code, 4); assert.deepStrictEqual(d.appels, ['restaurer', 'relire']);
+    });
+    await t('(4) non fautif → ni restauration ni relecture, pas d\'arrêt', async () => {
+        const d = doubles();
+        const r = await DL.arretDuLot({ nonAutorisees: [], contrat: [], ambiguite: [], restaurer: d.restaurer, relire: d.relire });
+        assert.deepStrictEqual(d.appels, []); assert.strictEqual(r.arret, false); assert.strictEqual(r.code, null);
+    });
+    await t('(4) une restauration qui lève : l\'erreur remonte, la relecture n\'a pas lieu (jamais ✅)', async () => {
+        const appels = [];
+        await assert.rejects(DL.arretDuLot({ nonAutorisees: [{}], contrat: [], ambiguite: [], restaurer: async () => { throw new Error('boum'); }, relire: async () => { appels.push('relire'); return { ok: true }; } }), /boum/);
+        assert.deepStrictEqual(appels, []);
+    });
+    await t('(3) le message nomme la cause : ambiguïté seule ≠ contrat API', () => {
+        const a = DL.causesDArret({ nonAutorisees: [], contrat: [], ambiguite: ['x', 'y'] });
+        assert.match(a.phrases.join(' '), /2 refus de l'AMBIGUÏTÉ DU SITE/); assert.doesNotMatch(a.phrases.join(' '), /CONTRAT/); assert.strictEqual(a.court, 'refus de l\'ambiguïté du site');
+        const c = DL.causesDArret({ nonAutorisees: [], contrat: ['x'], ambiguite: [] });
+        assert.match(c.phrases.join(' '), /1 refus du CONTRAT DE L'API/); assert.doesNotMatch(c.phrases.join(' '), /AMBIGU/); assert.strictEqual(c.court, 'refus du contrat API');
+        const m = DL.causesDArret({ nonAutorisees: [{}], contrat: ['x'], ambiguite: ['y'] });
+        assert.strictEqual(m.phrases.length, 3); assert.match(m.court, /baisses non annoncées.*contrat API.*ambiguïté du site/);
+    });
+    await t('lot-additif.js appelle la décision isolée, fautives séparées par cause, projection symétrique', () => {
         const src = require('fs').readFileSync(path.join(__dirname, 'lot-additif.js'), 'utf8');
-        for (const m of [/garde-ambiguite-site/, /chargerRegleAmbiguite/, /jouerAmbiguite/, /ambiguïté du site/]) assert.match(src, m);
-        assert.match(src, /fautivesContrat = \[.*ambiguite\.fautives/);
+        for (const m of [/garde-ambiguite-site/, /chargerRegleAmbiguite/, /jouerAmbiguite/, /DL\.arretDuLot\(/, /DL\.causesDArret\(/, /projections: \{ cartes: api\.projectionsEtat\.cartes/]) assert.match(src, m);
+        assert.doesNotMatch(src, /'refus du contrat API'\} \$\{liste\(fautives\)\}/);
     });
 
     console.log(`\n${ok} passés, ${ko} en échec`);

@@ -76,8 +76,15 @@ function comparerAmbiguite(etatAvant, etatApres, slugs) {
 }
 
 /** Rejoue la règle du site sur les sets touchés du lot. `touchesFn({avant, apres})` rend les slugs touchés (garde-contrat-api : setsTouchesContrat). N'attrape rien : l'appelant refuse de conclure. */
-function verifierAmbiguite({ regle, avant, apres, touchesFn }) {
+function verifierAmbiguite({ regle, avant, apres, touchesFn, projections }) {
     if (typeof touchesFn !== 'function') throw refus('liste des sets touchés absente');
+    // 🔑 FORME ÉGALE : l'état « après » est lu avec les projections réunies du site et de l'API, la sauvegarde « avant » est entière. Comparées telles quelles, un champ hors projection (collecteLe, bulba…) ferait rejouer des sets
+    // que le lot n'a pas touchés. Si `projections` ({ cartes, cartesProduits }) est donné, les DEUX côtés sont projetés pareil (garde-contrat-api.projeter, idempotente), comme verifierContrat le fait via projeterEtat.
+    if (projections) {
+        const { projeter } = require('./garde-contrat-api');
+        const p = e => ({ ...e, cartes: projeter(e.cartes, projections.cartes), cartesProduits: projeter(e.cartesProduits, projections.cartesProduits) });
+        avant = p(avant); apres = p(apres);
+    }
     const slugs = [...touchesFn({ avant, apres })];
     const a = etatAmbiguite({ cartes: avant.cartes, sets: avant.sets }, slugs, regle);
     const b = etatAmbiguite({ cartes: apres.cartes, sets: apres.sets }, slugs, regle);
@@ -85,9 +92,9 @@ function verifierAmbiguite({ regle, avant, apres, touchesFn }) {
 }
 
 /** La forme que lot-additif.js consomme : jamais d'exception, une impossibilité de conclure est une fautive. */
-function jouerAmbiguite({ regle, avant, apres, touchesFn }) {
+function jouerAmbiguite({ regle, avant, apres, touchesFn, projections }) {
     try {
-        const v = verifierAmbiguite({ regle, avant, apres, touchesFn });
+        const v = verifierAmbiguite({ regle, avant, apres, touchesFn, projections });
         return { ligne: v.ligne, fautives: v.fautives, persistants: v.persistants, v };
     } catch (e) {
         const raison = /^garde ambiguïté/.test(e.message) ? e.message : String(e.message).replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>').slice(0, 300);
