@@ -126,7 +126,10 @@ const attente = ms => new Promise(r => setTimeout(r, ms));
         // une fermeture NORMALE de la page (pagehide : le marqueur de préparation devient « ferme ») ; un Chrome tué en pleine page laisserait « pret » et la garde refuserait la préparation seule au retour, à raison
         await evalue('(window.dispatchEvent(new Event("pagehide")), true)');      // le gestionnaire réel de la page (marqueur « ferme »)
         await attente(6500);                                                      // la page reste VIVANTE le temps que Chrome écrive son localStorage (commit toutes les ~5 s) : une navigation immédiate puis un kill perd l'écriture (mesuré)
-        await cdp('Page.navigate', { url: 'about:blank' }); await attente(500);      // le localStorage de Chrome n'est écrit sur le disque que par lots (~5 s) : un Chrome tué avant perdrait « ferme »
+        await cdp('Page.navigate', { url: 'about:blank' }); await attente(500);
+        // un arrêt PROPRE de Chrome (Browser.close) : Chrome écrit son localStorage avec un retard et une cadence limitée (mesuré : les écritures d'après les ~5 premières secondes manquaient après un kill) ; le kill ne sert plus que de filet
+        try { w.send(JSON.stringify({ id: 99999, method: 'Browser.close' })); } catch { /* sans effet */ }
+        for (let i = 0; i < 40 && chrome.exitCode === null; i++) await attente(250);      // le localStorage de Chrome n'est écrit sur le disque que par lots (~5 s) : un Chrome tué avant perdrait « ferme »
         w.close();
     } catch (e) { console.log('ERREUR pilote', e.stack); sortie = 1; }
     try { cp.execFileSync('taskkill.exe', ['/PID', String(chrome.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* déjà arrêté */ }
