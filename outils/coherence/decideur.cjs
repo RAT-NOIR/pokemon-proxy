@@ -44,15 +44,30 @@ async function creerDecideur({ delaiMs = DELAI_MS } = {}) {
         manque.scans++; manque.cles.add(cle); return null;
     };
     const etat = { courante: () => ({ index: o.index, meta: { modele: MODELE } }) };
-    const fournisseur = VE.creerFournisseurEmpreinte({ cfg: { modeleEmpreinte: MODELE }, etat, zones, scan, delaiMs, budget: 10, fileMax: 3 });
+    // la garde des zones, suivie : une exception d'OpenCV ou une mesure invalide est NOTEE (cause de « muette ») ; le fournisseur de production les avale (catch -> echec 'muette')
+    const suivi = { exceptions: [] };
+    const zonesSuivies = {};
+    for (const nom of ['photoGrise', 'comparerPaire', 'scoresZones']) {
+        zonesSuivies[nom] = async (...a) => { try { return await zones[nom](...a); } catch (e) { suivi.exceptions.push(`${nom}:${String((e && (e.message || e.name)) || e).slice(0, 80)}`); throw e; } };
+    }
+    const RG = rq('v2/identifier/regle-g');
+    const fournisseur = VE.creerFournisseurEmpreinte({ cfg: { modeleEmpreinte: MODELE }, etat, zones: zonesSuivies, scan, delaiMs, budget: 10, fileMax: 3 });
     const gel = { index: INDEX, indexSha256: sha256Fichier(INDEX), archive: ARCHIVE, archiveSha256: sha256Fichier(ARCHIVE), modele: MODELE, seuilsG: G.SEUILS_G, delaiZonesMs: delaiMs, budgetMesures: 10, versionDetection: null };
     async function decider(emb, carteJpegBase64) {
         const vecteur = EV.encoderVecteur(Float32Array.from(emb));
         const entree = { empreintes: { modele: MODELE, rejet: null, entrees: [{ photo: 0, vecteur, redressee: true, carte: carteJpegBase64 }] } };
+        suivi.exceptions.length = 0; const manquesAvant = manque.cles.size, t0 = Date.now();
         const r = await fournisseur({ entree, scanId: 'coherence' });
-        if (!r.ok) return { decision: { muette: r.code + (r.raison ? ':' + r.raison : '') }, top: null, nMesures: 0 };
-        const d = G.decider(r.contexteG, r.ligne, r.nEssais, r.mesures, r.seuils);
-        return { decision: d, top: r.ligne.top.slice(0, 3).map(([k, s]) => [k, Math.round(s * 1e4) / 1e4]), nMesures: r.nMesures, meilleurCosinus: r.meilleurCosinus };
+        if (!r.ok) {
+            // la CAUSE de « muette » : scan manquant (cle nommee), exception (nommee), delai de la garde, ou le code ferme du fournisseur (budget, file, carte invalide)
+            const cle = manque.cles.size > manquesAvant ? [...manque.cles].pop() : null;
+            const cause = suivi.exceptions.length ? 'exception:' + suivi.exceptions[0] : cle ? 'scan-manquant:' + cle : (r.code === 'indisponible' && Date.now() - t0 >= delaiMs * 0.95) ? 'delai' : `${r.code}${r.raison ? ':' + r.raison : ''}:sans-cause-observee`;
+            return { decision: { muette: r.code + (r.raison ? ':' + r.raison : '') }, production: { muette: r.code + (r.raison ? ':' + r.raison : '') }, cause, top: null, nMesures: 0 };
+        }
+        const d = G.decider(r.contexteG, r.ligne, r.nEssais, r.mesures, r.seuils);          // sortie BRUTE de G (annexe)
+        // LA DECISION DE PRODUCTION : decisionRegleG (importee), appelee comme la route (routes.js:323) : produit affirme avec partenaires de reimpression -> question ; plus de 3 candidats -> null (la chaine decide)
+        let production; try { production = RG.decisionRegleG({ ligne: r.ligne, nEssais: r.nEssais, mesures: r.mesures, contexteG: r.contexteG }, r.seuils); } catch (e) { production = { muette: 'regle-g-exception:' + String((e && e.message) || e).slice(0, 80) }; }
+        return { decision: d, production, cause: null, top: r.ligne.top.slice(0, 3).map(([k, s]) => [k, Math.round(s * 1e4) / 1e4]), nMesures: r.nMesures, meilleurCosinus: r.meilleurCosinus };
     }
     return { decider, gel, manque, lus, G };
 }

@@ -90,5 +90,28 @@ const resDet = CMP.comparer([rec(1, aff(10))], [rec(1, aff(10), { redressee: fal
 egal('19. redressee d\'un seul cote : difference, classe autre, depuis-affirmee', [resDet.differences[0].classe, resDet.differences[0].severite], ['autre', 'depuis-affirmee']);
 vrai('19. chaque difference porte score, marge, candidats et cosinus des deux cotes', (() => { const d = CMP.comparer([rec(1, aff(10), { score: 0.8, marge: 0.3, nCandidats: 2 })], [rec(1, aff(11), { score: 0.7, marge: 0.25, nCandidats: 3 })]).differences[0]; return d.a.score === 0.8 && d.b.marge === 0.25 && d.a.nCandidats === 2 && d.b.nCandidats === 3 && d.cosinus === 1; })());
 
+// ── 3. LE VERDICT DE PRODUCTION (decisionRegleG) : issue « aucun » quand la regle ne tranche pas (la chaine heritee decide) ───────────────────────────
+egal('20. production : null (la regle ne tranche pas) = issue aucun', CMP.issueDeProduction(null), { issue: 'aucun', produit: null, candidats: [] });
+egal('20. production : affirmee', CMP.issueDeProduction({ issue: 'affirmee', produit: 5 }), { issue: 'affirmee', produit: 5, candidats: [5] });
+egal('20. production : question (candidats tries)', CMP.issueDeProduction({ issue: 'question', candidats: [7, 5] }), { issue: 'question', produit: null, candidats: [5, 7] });
+egal('20. production : muette (code ferme)', CMP.issueDeProduction({ muette: 'indisponible' }), { issue: 'muette', produit: null, candidats: [], code: 'indisponible' });
+vrai('21. deux « aucun » = meme verdict', CMP.memeVerdict(CMP.issueDeProduction(null), CMP.issueDeProduction(null)));
+vrai('21. NON : aucun contre question', !CMP.memeVerdict(CMP.issueDeProduction(null), que([5, 6])));
+egal('21. severite : aucun contre affirmee = vers-affirmee', CMP.severite(CMP.issueDeProduction(null), aff(5)), 'vers-affirmee');
+// ── 4. LES CONTROLES DE DENOMINATEUR de l'analyse ──────────────────────────────────────────────────────────────────────────────────────────────────
+const CTL = require(path.join('..', '..', 'outils', 'coherence', 'controles.cjs'));
+leve('22. un doublon de sha256 (meme fichier ou deux fichiers) est un echec', () => CTL.indexerSansDoublon([{ fichier: 'a', lignes: [{ sha256: sha(1) }, { sha256: sha(1) }] }]), /doublon/);
+leve('22. un doublon entre deux series est un echec', () => CTL.indexerSansDoublon([{ fichier: 'a', lignes: [{ sha256: sha(1) }] }, { fichier: 'b', lignes: [{ sha256: sha(1) }] }]), /doublon/);
+vrai('22. sans doublon : une carte par sha256', CTL.indexerSansDoublon([{ fichier: 'a', lignes: [{ sha256: sha(1) }] }, { fichier: 'b', lignes: [{ sha256: sha(2) }] }]).size === 2);
+const m = (...ns) => new Map(ns.map(n => [sha(n), { sha256: sha(n) }]));
+const base = () => ({ attendues: new Set([sha(1), sha(2), sha(3)]), toutesAttendues: new Set([sha(1), sha(2), sha(3)]), erreursA: new Set([sha(3)]), parVariante: { A: m(1, 2, 3), B: m(1, 2) }, sansTemoin: {} });
+egal('23. denominateurs justes : comparees = attendues - erreurs de A', CTL.controlerDenominateurs(base()).comparees.map(s => parseInt(s, 16)), [1, 2]);
+leve('23. une photo absente d\'une variante est un echec', () => { const b = base(); b.parVariante.B = m(1); CTL.controlerDenominateurs(b); }, /absente de la variante B/);
+leve('23. une photo absente de A est un echec', () => { const b = base(); b.parVariante.A = m(1, 3); CTL.controlerDenominateurs(b); }, /absente de A/);
+leve('23. une photo inattendue dans une variante est un echec', () => { const b = base(); b.parVariante.B = m(1, 2, 9); CTL.controlerDenominateurs(b); }, /inattendue/);
+leve('23. une erreur de A hors de la population est un echec', () => { const b = base(); b.erreursA = new Set([sha(9)]); CTL.controlerDenominateurs(b); }, /erreur de A hors/);
+vrai('23. sansTemoin : une photo sans temoin B0 declaree est admise', (() => { const b = base(); b.erreursA = new Set(); b.parVariante.B0 = m(1, 2); b.sansTemoin = { B0: new Set([sha(3)]) }; b.parVariante.B = m(1, 2, 3); return CTL.controlerDenominateurs(b).comparees.length === 3; })());
+leve('23. sansTemoin : une photo manquante NON declaree reste un echec', () => { const b = base(); b.erreursA = new Set(); b.parVariante.B0 = m(1, 2); b.parVariante.B = m(1, 2, 3); CTL.controlerDenominateurs(b); }, /absente de la variante B0/);
+
 console.log(`${ok} réussis, ${ko} échoués`);
 process.exit(ko ? 1 : 0);

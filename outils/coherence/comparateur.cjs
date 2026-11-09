@@ -18,6 +18,14 @@ function issueDe(d) {
     return { issue: 'question', produit: null, candidats: Array.isArray(d.question) ? tri(d.question) : [] };
 }
 
+/** Le verdict dans la forme du comparateur, depuis la sortie de `decisionRegleG` (identifier/regle-g.js, la fonction de PRODUCTION) : null = la regle ne tranche pas, la chaine heritee (texte) decide : issue « aucun ». */
+function issueDeProduction(d) {
+    if (d === null || d === undefined) return { issue: 'aucun', produit: null, candidats: [] };
+    if (d.muette) return { issue: 'muette', produit: null, candidats: [], code: d.muette };
+    if (d.issue === 'affirmee') return { issue: 'affirmee', produit: d.produit, candidats: [d.produit] };
+    return { issue: 'question', produit: null, candidats: Array.isArray(d.candidats) ? tri(d.candidats) : [] };
+}
+
 function memeVerdict(a, b) {
     if (a.issue !== b.issue) return false;
     if (a.issue === 'affirmee') return a.produit === b.produit;
@@ -66,16 +74,16 @@ function comparer(A, B) {
     if (A.length !== B.length || !meme(cles(A), cles(B))) throw new Error('les deux listes ne portent pas les memes photos : refus de comparer');
     const parSha = new Map(B.map(e => [e.sha256, e]));
     const differences = [], parSeverite = {}, parClasse = {};
-    let top3Differents = 0;
+    let top3Differents = 0; const top3Liste = [];
     for (const ea of A) {
         const eb = parSha.get(ea.sha256);
         const sev = severite(ea.verdict, eb.verdict);
-        if (sev === null) { if (top3Different(ea.verdict, eb.verdict)) top3Differents++; continue; }
+        if (sev === null) { if (top3Different(ea.verdict, eb.verdict)) { top3Differents++; top3Liste.push({ sha256: ea.sha256, issue: ea.verdict.issue, produit: ea.verdict.produit, a: ea.verdict.candidats, b: eb.verdict.candidats }); } continue; }
         const classe = classer(ea, eb);
         differences.push({ sha256: ea.sha256, severite: sev, classe, deplacementPct: (ea.redressee && eb.redressee) ? deplacementQuadPct(ea.quad, eb.quad, ea.dim640 || [640, 640]) : null, cosinus: cosinus(ea.emb, eb.emb), a: resume(ea), b: resume(eb) });
         parSeverite[sev] = (parSeverite[sev] || 0) + 1; parClasse[classe] = (parClasse[classe] || 0) + 1;
     }
-    return { total: A.length, identiques: A.length - differences.length, differences, parSeverite, parClasse, top3Differents };
+    return { total: A.length, identiques: A.length - differences.length, differences, parSeverite, parClasse, top3Differents, top3Liste };
 }
 
-module.exports = { issueDe, memeVerdict, top3Different, severite, deplacementQuadPct, cosinus, classer, comparer, SEUIL_DETECTION, SEUIL_CADRAGE };
+module.exports = { issueDeProduction, issueDe, memeVerdict, top3Different, severite, deplacementQuadPct, cosinus, classer, comparer, SEUIL_DETECTION, SEUIL_CADRAGE };
