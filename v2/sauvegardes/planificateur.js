@@ -1,47 +1,86 @@
 'use strict';
 // SAUVEGARDES — le déclenchement, DANS le service (aucun service Render de plus : l'instance de l'essai s'endort sans trafic, elle sauvegarde quand elle est réveillée).
-// Au démarrage (différé) puis toutes les heures : on regarde l'âge de la dernière sauvegarde RÉUSSIE (un manifeste écrit) ; à partir de 23 h, on en lance une, sous le bail (une seule instance exporte).
-// Un échec n'est JAMAIS silencieux (une ligne au niveau erreur : un CODE, jamais une donnée ni un identifiant) et ne lève JAMAIS (le service ne meurt pas pour une sauvegarde).
-const { PREFIXE, analyser, dateDeId } = require('./chemins');
+// Au démarrage (différé) puis toutes les heures : on regarde l'âge de la dernière sauvegarde VÉRIFIÉE (manifeste réellement déchiffré, non vide : manifeste.js — jamais le nom d'un objet) ; à partir de 23 h, on en lance
+// une, sous le bail (une seule instance exporte). Un échec n'est JAMAIS silencieux (une ligne au niveau erreur : un CODE, jamais une donnée ni un identifiant) et ne lève JAMAIS (le service ne meurt pas).
+// ÉCHECS RÉPÉTÉS : un frein exponentiel (1 h, 2 h, 4 h… plafonné à 12 h) dont l'état — nombre d'échecs, heure du dernier échec, dernier succès — est PERSISTÉ en base (le service s'endort : la mémoire ne suffit pas),
+// dans la collection du bail (exclue de l'export). Le bail : `perdu` seulement après un refus explicite ou un silence de plus que son TTL, jamais sur une coupure d'une seconde. SIGTERM : l'export est marqué perdu,
+// l'abandon du téléversement en cours se fait, puis le processus sort (code 143) — l'écouteur n'existe que pendant un export.
+const { PREFIXE } = require('./chemins');
 const { exporterBase, NOM_BAIL } = require('./export');
 const { creerBail } = require('./bail');
 const { appliquerRetention } = require('./retention');
+const { derniereVerifiable } = require('./manifeste');
 
-const SEUIL_MS = 23 * 3600e3, INTERVALLE_MS = 3600e3, DIFFERE_MS = 2 * 60e3, BATTEMENT_MS = 30000, TTL_MS = 90000;
+const SEUIL_MS = 23 * 3600e3, INTERVALLE_MS = 3600e3, DIFFERE_MS = 2 * 60e3, BATTEMENT_MS = 30000, TTL_MS = 90000, FREIN_MAX_MS = 12 * 3600e3, ATTENTE_SIGTERM_MS = 20000;
+const ID_ETAT = 'etat';
 const code = e => String((e && (e.code || e.name)) || 'erreur').replace(/[^A-Za-z0-9_.-]/g, '').slice(0, 60) || 'erreur';
+/** Le délai avant le prochain essai après `n` échecs de suite : 1 h, 2 h, 4 h… plafonné à 12 h. */
+const delaiFrein = n => Math.min(3600e3 * 2 ** Math.max(0, n - 1), FREIN_MAX_MS);
 
-/** La dernière sauvegarde RÉUSSIE de cette base : le manifeste le plus récent. @returns {Promise<{id:string,date:Date}|null>} */
-async function derniereSauvegarde({ stockage, base }) {
-    const ids = (await stockage.lister(`${PREFIXE}${base}/`)).map(o => analyser(base, o.cle)).filter(a => a && a.objet === 'manifeste.rmsav').map(a => a.id).sort();
-    const id = ids[ids.length - 1];
-    return id ? { id, date: dateDeId(id) } : null;
+/** La dernière sauvegarde VÉRIFIÉE de cette base ({id, date, manifeste}) ou null. */
+async function derniereSauvegarde({ stockage, cle, base, maintenant = new Date(), depuis = null }) {
+    return derniereVerifiable({ stockage, cle, base, maintenant, depuis });
 }
 
-async function tourSauvegarde({ cfg, db, stockage, commit = null, maintenant = () => new Date(), etatMongo, colBail = null, exporter = exporterBase, retention = appliquerRetention, journal = console.error, minuteurs = { setInterval, clearInterval } }) {
-    let bail = null, minuteur = null;
-    try {
-        if (!etatMongo || etatMongo() !== 1) return 'mongo-pas-pret';
-        if (!db || db.databaseName !== cfg.base) { journal('❌ [v2 sauvegardes] la base connectée n\'est pas celle de la configuration (base-differente) : rien n\'est exporté'); return 'base-differente'; }
-        const recente = async () => { const d = await derniereSauvegarde({ stockage, base: cfg.base }); return d && +maintenant() - +d.date < SEUIL_MS; };
-        if (await recente()) return 'recente';
-        bail = creerBail({ col: colBail || db.collection(NOM_BAIL), ttlMs: TTL_MS, maintenant });
-        if (!(await bail.prendre())) { bail = null; return 'occupe'; }
-        // l'autre instance a pu finir entre notre lecture et notre prise : on relit sous le bail
-        if (await recente()) return 'recente';
-        let perdu = false;
-        minuteur = minuteurs.setInterval(() => { bail.battre().then(ok => { if (!ok) perdu = true; }, () => { perdu = true; }); }, BATTEMENT_MS);
-        if (minuteur && minuteur.unref) minuteur.unref();
-        await stockage.verifierMarqueur();
-        await exporter({ db, stockage, cle: cfg.cle, base: cfg.base, commit, maintenant: maintenant(), battement: async () => !perdu });
-        try { await retention({ stockage, cle: cfg.cle, base: cfg.base, maintenant: maintenant() }); }
-        catch (e) { journal(`❌ [v2 sauvegardes] rétention échouée (${code(e)}) : la sauvegarde est faite`); }
-        return 'faite';
-    } catch (e) {
+const lireEtat = async (col) => { try { return await col.findOne({ _id: ID_ETAT }); } catch { return null; } };
+async function enregistrer(col, champs, journal) {
+    try { await col.updateOne({ _id: ID_ETAT }, { $set: champs }, { upsert: true }); }
+    catch (e) { try { journal(`❌ [v2 sauvegardes] état non enregistré (${code(e)})`); } catch { /* sans effet */ } }
+}
+
+async function tourSauvegarde({ cfg, db, stockage, commit = null, maintenant = () => new Date(), etatMongo, colBail = null, exporter = exporterBase, retention = appliquerRetention, journal = console.error,
+                                minuteurs = { setInterval, clearInterval, setTimeout, clearTimeout }, creerBailFn = creerBail, processus = process, quitter = c => process.exit(c), horloge = Date.now }) {
+    let bail = null, minuteur = null, ecouteur = null, arretDemande = false, minuterieArret = null, issue = 'echec';
+    const col = () => colBail || db.collection(NOM_BAIL);
+    const echec = async (e) => {
         try { journal(`❌ [v2 sauvegardes] sauvegarde échouée (${code(e)})`); } catch { /* le journal lui-même ne doit jamais tuer le service */ }
-        return 'echec';
+        const etat = await lireEtat(col());
+        await enregistrer(col(), { echecs: ((etat && etat.echecs) || 0) + 1, dernierEchecLe: maintenant() }, journal);
+        // les orphelines (envois coupés, sans manifeste) sont retirées aussi après un échec (au bout d'une heure : un envoi plus récent peut être en cours)
+        try { await retention({ stockage, cle: cfg.cle, base: cfg.base, maintenant: maintenant(), orphelinesHeures: 1 }); } catch (e2) { try { journal(`❌ [v2 sauvegardes] orphelines non retirées (${code(e2)})`); } catch { /* sans effet */ } }
+    };
+    try {
+        if (!etatMongo || etatMongo() !== 1) return (issue = 'mongo-pas-pret');
+        if (!db || db.databaseName !== cfg.base) { journal('❌ [v2 sauvegardes] la base connectée n\'est pas celle de la configuration (base-differente) : rien n\'est exporté'); return (issue = 'base-differente'); }
+        const etat = await lireEtat(col());
+        if (etat && etat.echecs > 0 && etat.dernierEchecLe && +maintenant() < +new Date(etat.dernierEchecLe) + delaiFrein(etat.echecs)) return (issue = 'frein');
+        const recente = async () => !!(await derniereVerifiable({ stockage, cle: cfg.cle, base: cfg.base, maintenant: maintenant(), depuis: new Date(+maintenant() - SEUIL_MS + 1) }));
+        try { if (await recente()) return (issue = 'recente'); } catch (e) { await echec(e); return (issue = 'echec'); }
+        bail = creerBailFn({ col: col(), ttlMs: TTL_MS, maintenant });
+        if (!(await bail.prendre())) { bail = null; return (issue = 'occupe'); }
+        if (await recente()) return (issue = 'recente');         // l'autre instance a pu finir entre notre lecture et notre prise : on relit sous le bail
+        let perdu = false, dernierOk = horloge();
+        const battre = async () => {
+            try { const ok = await bail.battre(); if (ok === false) perdu = true; else dernierOk = horloge(); }
+            catch { if (horloge() - dernierOk > TTL_MS) perdu = true; }       // une coupure d'une seconde n'est pas une perte ; un silence de plus que le TTL, si (un autre a pu prendre le bail)
+        };
+        minuteur = minuteurs.setInterval(battre, BATTEMENT_MS); if (minuteur && minuteur.unref) minuteur.unref();
+        ecouteur = () => {
+            arretDemande = true; perdu = true;
+            minuterieArret = minuteurs.setTimeout(() => quitter(143), ATTENTE_SIGTERM_MS); if (minuterieArret && minuterieArret.unref) minuterieArret.unref();
+        };
+        processus.once('SIGTERM', ecouteur);
+        const battement = async () => { if (!perdu && horloge() - dernierOk > TTL_MS) perdu = true; return !perdu; };
+        try {
+            await stockage.verifierMarqueur();
+            await exporter({ db, stockage, cle: cfg.cle, base: cfg.base, commit, maintenant: maintenant(), battement });
+        } catch (e) {
+            if (arretDemande) return (issue = 'arret');             // l'abandon du téléversement s'est fait dans le stockage ; ce n'est pas un échec de la sauvegarde
+            await echec(e); return (issue = 'echec');
+        }
+        await enregistrer(col(), { echecs: 0, dernierSuccesLe: maintenant() }, journal);
+        try { await retention({ stockage, cle: cfg.cle, base: cfg.base, maintenant: maintenant() }); }
+        catch (e) { try { journal(`❌ [v2 sauvegardes] rétention échouée (${code(e)}) : la sauvegarde est faite`); } catch { /* sans effet */ } }
+        return (issue = 'faite');
+    } catch (e) {
+        try { journal(`❌ [v2 sauvegardes] sauvegarde échouée (${code(e)})`); } catch { /* sans effet */ }
+        return (issue = 'echec');
     } finally {
         if (minuteur) minuteurs.clearInterval(minuteur);
+        if (ecouteur) processus.removeListener('SIGTERM', ecouteur);
         if (bail) { try { await bail.liberer(); } catch { /* le bail expire seul (trois battements) */ } }
+        if (minuterieArret) minuteurs.clearTimeout(minuterieArret);
+        if (arretDemande) quitter(143);
     }
 }
 
@@ -60,4 +99,4 @@ function demarrer({ tour, minuteurs = global, differeMs = DIFFERE_MS, intervalle
     intervalle = minuteurs.setInterval(passe, intervalleMs); if (intervalle && intervalle.unref) intervalle.unref();
     return intervalle;
 }
-module.exports = { tourSauvegarde, derniereSauvegarde, demarrer, arreter, SEUIL_MS, INTERVALLE_MS, DIFFERE_MS };
+module.exports = { tourSauvegarde, derniereSauvegarde, demarrer, arreter, delaiFrein, SEUIL_MS, INTERVALLE_MS, DIFFERE_MS, TTL_MS, ID_ETAT, PREFIXE };

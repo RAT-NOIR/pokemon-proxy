@@ -9,7 +9,10 @@
 //   V2_SAUVEGARDE_R2_ENDPOINT    facultative : l'hôte de la juridiction (UE : <compte>.eu.r2.cloudflarestorage.com)
 // 🔑 LA GARDE DU BUCKET S'ÉCRIT PAR CE QU'ELLE AUTORISE : un nom de forme valide, un hôte *.r2.cloudflarestorage.com en https sans identifiants, et un nom qui n'est celui d'AUCUNE autre variable de bucket de
 // l'environnement — sauf les trois buckets nommés PRIVÉS ci-dessous (la liste des buckets privés connus est le petit ensemble stable ; tout bucket qu'on ne sait pas privé, dont le bucket public des images, la
-// galerie publique et tout ce qu'on n'a pas prévu, est refusé). Aucune adresse publique n'est admise. À l'exécution, le marqueur posé dans le bucket par l'outil d'initialisation est exigé avant la première écriture.
+// galerie publique et tout ce qu'on n'a pas prévu, est refusé). Aucune adresse publique n'est admise.
+// ⚠️ CE QUE CETTE GARDE PROUVE, ET CE QU'ELLE NE PROUVE PAS : elle prouve que le nom n'est pas celui d'un bucket que le dépôt sait PUBLIC ; elle ne prouve pas que le bucket est privé. Aucune sonde du service ne le peut : un point
+// d'accès S3 refuse l'anonyme même pour un bucket public, donc « essayer de lire sans signature » ne peut pas échouer dans le cas redouté (on ne la simule donc pas). Le caractère PRIVÉ (accès r2.dev éteint, aucun domaine
+// personnalisé) est établi UNE fois, à l'installation, par l'API Cloudflare, et sa date est écrite dans le rapport d'installation. Le marqueur exigé avant la première écriture prouve seulement « initialisé par l'outil ».
 const { FORME_BASE } = require('./chemins');
 const { cleDepuisHex } = require('./chiffrement');
 

@@ -5,7 +5,7 @@ const { Readable } = require('stream');
 const CLASSE_A = new Set(['PutObjectCommand', 'CreateMultipartUploadCommand', 'UploadPartCommand', 'CompleteMultipartUploadCommand', 'AbortMultipartUploadCommand', 'ListObjectsV2Command', 'CopyObjectCommand']);
 const CLASSE_B = new Set(['GetObjectCommand', 'HeadObjectCommand']);
 
-function fauxS3({ echecApresOctets = null, echecListe = false } = {}) {
+function fauxS3({ echecApresOctets = null, echecListe = false, liste = null, pageTaille = 0 } = {}) {
     const objets = new Map();          // clé -> { corps: Buffer, modifie: Date }
     const televersements = new Map();  // id -> { cle, parties: Map }
     const ops = { A: 0, B: 0, supprimes: 0 }, journalCmd = [];
@@ -32,7 +32,11 @@ function fauxS3({ echecApresOctets = null, echecListe = false } = {}) {
                 case 'ListObjectsV2Command': {
                     if (echecListe) throw erreur('InternalError', 500);
                     const cles = [...objets.keys()].filter(k => k.startsWith(i.Prefix || '')).sort();
-                    return { Contents: cles.map(k => ({ Key: k, Size: objets.get(k).corps.length, LastModified: objets.get(k).modifie })), IsTruncated: false };
+                    const contenu = k => ({ Key: k, Size: objets.get(k).corps.length, LastModified: objets.get(k).modifie });
+                    if (liste === 'sans-jeton') return { Contents: cles.slice(0, 1).map(contenu), IsTruncated: true };                      // tronquée, aucun jeton pour continuer
+                    if (liste === 'infinie') return { Contents: cles.slice(0, 1).map(contenu), IsTruncated: true, NextContinuationToken: 'encore' };   // ne finit jamais
+                    if (pageTaille) { const debut = i.ContinuationToken ? Number(i.ContinuationToken) : 0, fin = debut + pageTaille; return { Contents: cles.slice(debut, fin).map(contenu), IsTruncated: fin < cles.length, ...(fin < cles.length ? { NextContinuationToken: String(fin) } : {}) }; }
+                    return { Contents: cles.map(contenu), IsTruncated: false };
                 }
                 default: throw new Error(`faux S3 : commande non prévue ${nom}`);
             }
@@ -41,8 +45,8 @@ function fauxS3({ echecApresOctets = null, echecListe = false } = {}) {
     return { client, objets, televersements, ops, journalCmd, plusGrosMorceau: () => plusGrosMorceau, ajouter: (cle, corps, modifie = new Date()) => objets.set(cle, { corps: Buffer.from(corps), modifie }) };
 }
 
-const CLE_TEST = 'a1'.repeat(32);       // 64 chiffres hexadécimaux : 32 octets, jamais une vraie clé
-const AUTRE_CLE = 'b2'.repeat(32);
+const CLE_TEST = '0123456789abcdef'.repeat(4);       // 64 chiffres hexadécimaux : 32 octets variés, jamais une vraie clé (un seul octet répété serait refusé)
+const AUTRE_CLE = 'fedcba9876543210'.repeat(4);
 const ENV_VALIDE = Object.freeze({
     V2_SAUVEGARDE_CLE: CLE_TEST, V2_SAUVEGARDE_BASE: 'rm_essai', V2_SAUVEGARDE_R2_COMPTE: 'abcdef0123456789abcdef0123456789',
     V2_SAUVEGARDE_R2_CLE_ID: 'id-essai-0001', V2_SAUVEGARDE_R2_SECRET: 'secret-essai-0001', V2_SAUVEGARDE_R2_BUCKET: 'rm-prive-essai',

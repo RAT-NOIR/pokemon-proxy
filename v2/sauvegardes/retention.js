@@ -1,29 +1,16 @@
 'use strict';
 // SAUVEGARDES — la rétention. 30 jours, MAIS il reste toujours les `garder` (3) dernières sauvegardes complètes ET vérifiables, même vieilles.
-//   · « complète » = un manifeste est écrit ; « vérifiable » = ce manifeste se déchiffre avec la clé ET chaque objet qu'il liste est là, à la taille annoncée. Une sauvegarde qu'on ne sait pas vérifier
-//     (autre clé, objet manquant) ne compte PAS parmi les 3 et n'est JAMAIS retirée : on la signale (`inverifiables`), un humain décide.
+//   · « vérifiable » = (manifeste.js) le manifeste se déchiffre avec la clé, liste AU MOINS une collection dont `comptes` non vide, et chaque objet listé est là, à la taille annoncée. Une sauvegarde sans collection
+//     n'est JAMAIS vérifiable (un `every` sur une liste vide rendrait vrai) et ne compte pas parmi les 3 ; une sauvegarde qu'on ne sait pas vérifier (autre clé, objet manquant) non plus, et n'est JAMAIS retirée :
+//     on la signale (`inverifiables`), un humain décide.
 //   · seuls les objets qui ont EXACTEMENT la forme de ce mécanisme (chemins.analyser) sous le préfixe de cette base sont concernés ; tout autre objet, dans le préfixe ou ailleurs, n'est jamais touché.
 //   · une sauvegarde sans manifeste (envoi coupé) n'existe pas : retirée passé `orphelinesHeures` (une plus récente peut être en cours d'envoi).
-const { PREFIXE, analyser, dateDeId, cleManifeste, aadDe } = require('./chemins');
-const { dechiffrerVersBuffer } = require('./chiffrement');
-const { lireTout } = require('./stockage-r2');
-
-async function verifier({ stockage, cle, base, id, objets }) {
-    try {
-        const m = JSON.parse((await dechiffrerVersBuffer(await stockage.lire(cleManifeste(base, id)), { cle, aad: aadDe(base, id, 'manifeste.rmsav'), max: 16 * 1024 * 1024 })).toString('utf8'));
-        if (!m || m.id !== id || m.base !== base || !Array.isArray(m.collections)) return false;
-        return m.collections.every(c => { const o = objets.find(x => x.objet === c.objet); return o && o.octets === c.octetsChiffres; });
-    } catch { return false; }
-}
+const { PREFIXE, dateDeId } = require('./chemins');
+const { grouper, verifier } = require('./manifeste');
 
 async function appliquerRetention({ stockage, cle, base, maintenant = new Date(), jours = 30, garder = 3, orphelinesHeures = 48 }) {
-    const tous = await stockage.lister(`${PREFIXE}${base}/`);
-    const groupes = new Map();
-    for (const o of tous) {
-        const a = analyser(base, o.cle); if (!a) continue;
-        if (!groupes.has(a.id)) groupes.set(a.id, []);
-        groupes.get(a.id).push({ cle: o.cle, octets: o.octets, objet: a.objet });
-    }
+    const tous = await stockage.lister(`${PREFIXE}${base}/`);      // lève si la liste est tronquée : on ne décide jamais sur une partie des objets
+    const groupes = grouper(base, tous);
     const ids = [...groupes.keys()].sort().reverse();                        // les plus récents d'abord (l'identifiant commence par la date)
     const verifiables = [], inverifiables = [], supprimes = [];
     const retirer = async (id) => {
@@ -43,4 +30,4 @@ async function appliquerRetention({ stockage, cle, base, maintenant = new Date()
     for (const id of ids) { if (!groupes.get(id).some(o => o.objet === 'manifeste.rmsav') && +dateDeId(id) < orphelines) await retirer(id); }
     return { gardes: verifiables.filter(id => !supprimes.includes(id)), supprimes, inverifiables };
 }
-module.exports = { appliquerRetention, verifier, lireTout };
+module.exports = { appliquerRetention };

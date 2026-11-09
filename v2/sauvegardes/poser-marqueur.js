@@ -1,6 +1,7 @@
 'use strict';
 // SAUVEGARDES — l'outil d'initialisation du bucket : pose le MARQUEUR (`sauvegardes-v2/marqueur-prive.json`) que le service exige avant sa première écriture. À lancer UNE fois, à la main, après avoir
-// vérifié que le bucket est PRIVÉ (accès r2.dev éteint, aucun domaine personnalisé). Lit les variables V2_SAUVEGARDE_* ; n'imprime aucune valeur.
+// vérifié, par l'API Cloudflare (lecture), que le bucket est PRIVÉ (accès r2.dev éteint, aucun domaine personnalisé) — et daté cette vérification dans le rapport d'installation : le marqueur prouve « initialisé »,
+// jamais « privé » (un point d'accès S3 refuse l'anonyme même pour un bucket public : aucune sonde ne le prouve). Lit les variables V2_SAUVEGARDE_* ; n'imprime aucune valeur.
 const { lireConfigSauvegardes } = require('./config');
 const { creerStockageR2 } = require('./stockage-r2');
 (async () => {

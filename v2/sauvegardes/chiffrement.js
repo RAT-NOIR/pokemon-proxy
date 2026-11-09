@@ -12,7 +12,9 @@ const MAGIE = Buffer.from('RMSAV1\0', 'latin1'), NONCE = 12, ETIQUETTE = 16, EN_
 /** La clé, 64 chiffres hexadécimaux = 32 octets. Écrit par ce qu'il AUTORISE. */
 function cleDepuisHex(hex) {
     if (typeof hex !== 'string' || !/^[0-9a-fA-F]{64}$/.test(hex.trim())) refuser('cle-invalide');
-    return Buffer.from(hex.trim(), 'hex');
+    const cle = Buffer.from(hex.trim(), 'hex');
+    if (cle.every(o => o === cle[0])) refuser('cle-invalide');       // un seul octet répété (00…00, ff…ff, a1a1…) n'est pas une clé tirée au hasard
+    return cle;
 }
 
 /** @param {AsyncIterable<Buffer>} source @returns {AsyncGenerator<Buffer>} */

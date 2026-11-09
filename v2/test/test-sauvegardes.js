@@ -50,8 +50,8 @@ const lever = async (f) => { try { await f(); return null; } catch (e) { return 
         H.v('   un autre contexte (aad) : refus — un objet ne se fait pas passer pour un autre', await refus('aad', chiffre, cle, Buffer.from('rmsav1|b|i|c0002.rmsav')), ['etiquette-refusee', false]);
         H.v('   un objet tronqué : refus', await refus('tronque', chiffre.subarray(0, chiffre.length - 40)), ['etiquette-refusee', false]);
         H.v('   un objet qui n\'a pas l\'en-tête : refus', await refus('magie', Buffer.concat([Buffer.from('XXXXXXX'), chiffre.subarray(7)])), ['format-inconnu', false]);
-        const codes = []; for (const k of ['ab', 'z'.repeat(64), '', undefined, 'A1'.repeat(32)]) codes.push(await lever(() => Chiffre.cleDepuisHex(k)));
-        H.v('   (codes) 4 refusées, la majuscule hexadécimale est acceptée', codes, ['cle-invalide', 'cle-invalide', 'cle-invalide', 'cle-invalide', null]);
+        const codes = []; for (const k of ['ab', 'z'.repeat(64), '', undefined, '00'.repeat(32), 'ff'.repeat(32), 'a1'.repeat(32), '0123456789ABCDEF'.repeat(4)]) codes.push(await lever(() => Chiffre.cleDepuisHex(k)));
+        H.v('   (codes) 4 refusées ; un seul octet répété (00…, ff…, a1a1…) refusé ; la majuscule hexadécimale variée est acceptée', codes, ['cle-invalide', 'cle-invalide', 'cle-invalide', 'cle-invalide', 'cle-invalide', 'cle-invalide', 'cle-invalide', null]);
         const b = await Chiffre.dechiffrerVersBuffer(source(chiffre), { cle, aad, max: 1e6 });
         H.vrai('   dechiffrerVersBuffer rend le clair', b.equals(clair));
         H.v('   dechiffrerVersBuffer refuse un clair plus grand que max', await lever(() => Chiffre.dechiffrerVersBuffer(source(chiffre), { cle, aad, max: 1000 })), 'trop-grand');
@@ -163,7 +163,7 @@ const lever = async (f) => { try { await f(); return null; } catch (e) { return 
         H.vrai('5. un envoi coupé au milieu : l\'export échoue', code !== null);
         const cles = [...f.objets.keys()];
         H.v('   aucun manifeste n\'est écrit pour la sauvegarde coupée (une seule sauvegarde complète)', cles.filter(k => k.endsWith('/manifeste.rmsav')).length, 1);
-        const derniere = await Plan.derniereSauvegarde({ stockage: st, base: nomSrc });
+        const derniere = await Plan.derniereSauvegarde({ stockage: st, cle, base: nomSrc, maintenant: new Date('2026-11-10T00:00:00Z') });
         H.v('   la précédente reste la dernière sauvegarde RÉUSSIE', derniere && derniere.id, avant.id);
         H.vrai('   aucun téléversement n\'est resté ouvert', f.televersements.size === 0);
         H.vrai('   (contrôle) rien n\'a été écrit avant la panne qui change la précédente', [...f.objets.entries()].filter(([k]) => k.includes(`/${avant.id}/`)).reduce((n, [, o]) => n + o.corps.length, 0) === octetsAvant);
@@ -234,7 +234,7 @@ const lever = async (f) => { try { await f(); return null; } catch (e) { return 
         const f = fauxS3(), st = Stk.creerStockageR2({ bucket: 'rm-prive-essai' }, { client: f.client, partOctets: 4096 });
         const poser = async (jours, { sansManifeste = false, mauvaiseCle = false, heures = 0 } = {}) => {
             const t = new Date(maintenant.getTime() - jours * 86400e3 - heures * 3600e3);
-            const dbMin = client.db(`rm_ret_${alea()}`); await dbMin.collection('k').insertOne({ _id: 1 });
+            const dbMin = client.db(`rm_ret_${alea()}`); await dbMin.collection('comptes').insertOne({ _id: 1 });
             const r = await Exp.exporterBase({ db: dbMin, stockage: st, cle: mauvaiseCle ? autreCle : cle, base, commit: 'x', maintenant: t });
             if (sansManifeste) await st.supprimer(`${PREFIXE}${base}/${r.id}/manifeste.rmsav`);
             // l'objet est « vieux » : sa date de modification est celle de la sauvegarde
@@ -258,12 +258,12 @@ const lever = async (f) => { try { await f(); return null; } catch (e) { return 
         // toutes vieilles : on garde les 3 dernières complètes, même vieilles
         const f2 = fauxS3(), st2 = Stk.creerStockageR2({ bucket: 'rm-prive-essai' }, { client: f2.client, partOctets: 4096 });
         const ids2 = [];
-        for (const j of [40, 50, 60, 70]) { const t = new Date(maintenant.getTime() - j * 86400e3); const d = client.db(`rm_ret_${alea()}`); await d.collection('k').insertOne({ _id: 1 }); const r = await Exp.exporterBase({ db: d, stockage: st2, cle, base, commit: 'x', maintenant: t }); for (const [k, o] of f2.objets) if (k.includes(`/${r.id}/`)) o.modifie = t; ids2.push(r.id); await d.dropDatabase(); }
+        for (const j of [40, 50, 60, 70]) { const t = new Date(maintenant.getTime() - j * 86400e3); const d = client.db(`rm_ret_${alea()}`); await d.collection('comptes').insertOne({ _id: 1 }); const r = await Exp.exporterBase({ db: d, stockage: st2, cle, base, commit: 'x', maintenant: t }); for (const [k, o] of f2.objets) if (k.includes(`/${r.id}/`)) o.modifie = t; ids2.push(r.id); await d.dropDatabase(); }
         await Ret.appliquerRetention({ stockage: st2, cle, base, maintenant });
         const reste2 = (id) => [...f2.objets.keys()].some(k => k.includes(`/${id}/`));
         H.v('   toutes plus vieilles que 30 jours : les 3 plus récentes restent quand même', ids2.map(reste2), [true, true, true, false]);
         const f3 = fauxS3(), st3 = Stk.creerStockageR2({ bucket: 'rm-prive-essai' }, { client: f3.client, partOctets: 4096 });
-        const d3 = client.db(`rm_ret_${alea()}`); await d3.collection('k').insertOne({ _id: 1 });
+        const d3 = client.db(`rm_ret_${alea()}`); await d3.collection('comptes').insertOne({ _id: 1 });
         const seule = await Exp.exporterBase({ db: d3, stockage: st3, cle, base, commit: 'x', maintenant: new Date(maintenant.getTime() - 90 * 86400e3) });
         for (const o of f3.objets.values()) o.modifie = new Date(maintenant.getTime() - 90 * 86400e3);
         await Ret.appliquerRetention({ stockage: st3, cle, base, maintenant }); await d3.dropDatabase();
@@ -271,7 +271,7 @@ const lever = async (f) => { try { await f(); return null; } catch (e) { return 
         // une sauvegarde dont un objet manque n'est pas vérifiable : elle ne compte pas parmi les 3
         const f4b = fauxS3(), st4b = Stk.creerStockageR2({ bucket: 'rm-prive-essai' }, { client: f4b.client, partOctets: 4096 });
         const idsB = [];
-        for (const j of [1, 2, 3, 4]) { const t = new Date(maintenant.getTime() - (j + 35) * 86400e3); const d = client.db(`rm_ret_${alea()}`); await d.collection('k').insertOne({ _id: 1 }); const r = await Exp.exporterBase({ db: d, stockage: st4b, cle, base, commit: 'x', maintenant: t }); for (const [k, o] of f4b.objets) if (k.includes(`/${r.id}/`)) o.modifie = t; idsB.push(r.id); await d.dropDatabase(); }
+        for (const j of [1, 2, 3, 4]) { const t = new Date(maintenant.getTime() - (j + 35) * 86400e3); const d = client.db(`rm_ret_${alea()}`); await d.collection('comptes').insertOne({ _id: 1 }); const r = await Exp.exporterBase({ db: d, stockage: st4b, cle, base, commit: 'x', maintenant: t }); for (const [k, o] of f4b.objets) if (k.includes(`/${r.id}/`)) o.modifie = t; idsB.push(r.id); await d.dropDatabase(); }
         const casse = [...f4b.objets.keys()].find(k => k.includes(`/${idsB[0]}/`) && !k.endsWith('manifeste.rmsav')); f4b.objets.delete(casse);
         const sB = await Ret.appliquerRetention({ stockage: st4b, cle, base, maintenant });
         const resteB = (id) => [...f4b.objets.keys()].some(k => k.includes(`/${id}/`));

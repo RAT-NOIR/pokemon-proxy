@@ -5,7 +5,8 @@
 const { PREFIXE } = require('./chemins');
 const { refuser } = require('./erreurs');
 
-const PART_OCTETS = 8 * 1024 * 1024;   // R2 : 5 Mio au moins par partie (sauf la dernière), toutes de la même taille
+const PART_OCTETS = 5 * 1024 * 1024;   // le MINIMUM de R2 (5 Mio par partie, sauf la dernière, toutes de la même taille) : mesuré, c'est ce qui coûte le moins de mémoire (tableau des leviers du rapport)
+const PAGES_MAX = 1000;
 const CLE_MARQUEUR = `${PREFIXE}marqueur-prive.json`;
 
 function exigerCle(cle) {
@@ -14,15 +15,19 @@ function exigerCle(cle) {
 }
 const absent = e => e && (e.name === 'NotFound' || e.name === 'NoSuchKey' || (e.$metadata && e.$metadata.httpStatusCode === 404));
 
-function creerClient(c) {
+function creerClient(c, extra = {}) {
     const { S3Client } = require('@aws-sdk/client-s3');
     // garderClientR2 : sous BANC_ISOLE=1 (un banc), toute écriture hors R2_BUCKET_BANC est refusée ; hors banc (l'essai, la production), c'est un passe-plat.
-    return require('../../collecte-cartes/garde-banc').garderClientR2(new S3Client({ region: 'auto', endpoint: c.endpoint, credentials: { accessKeyId: c.cleId, secretAccessKey: c.secret }, forcePathStyle: true }));
+    // MÉMOIRE (mesurée, rapport) : UN seul socket TLS réutilisé (l'agent par défaut en ouvre autant que de requêtes en vol et garde leurs tampons : −23 Mo de pic), et les sommes de contrôle du SDK à la demande seulement
+    // (recommandé par Cloudflare pour R2 ; validé contre le vrai bucket). L'envoi est séquentiel : un socket suffit.
+    const https = require('https');
+    return require('../../collecte-cartes/garde-banc').garderClientR2(new S3Client({ region: 'auto', endpoint: c.endpoint, credentials: { accessKeyId: c.cleId, secretAccessKey: c.secret }, forcePathStyle: true,
+        requestChecksumCalculation: 'WHEN_REQUIRED', responseChecksumValidation: 'WHEN_REQUIRED', requestHandler: { httpsAgent: new https.Agent({ keepAlive: true, maxSockets: 1 }) }, ...extra }));
 }
 
-function creerStockageR2(c, { client = null, partOctets = PART_OCTETS } = {}) {
+function creerStockageR2(c, { client = null, partOctets = PART_OCTETS, reutiliserTampon = true, optionsClient = {} } = {}) {
     let s3 = client;
-    const S3 = () => (s3 = s3 || creerClient(c));
+    const S3 = () => (s3 = s3 || creerClient(c, optionsClient));
     const K = () => require('@aws-sdk/client-s3');
     const ops = { A: 0, B: 0 };
     const envoyerCmd = async (Classe, input, classe) => { ops[classe]++; return S3().send(new (K()[Classe])({ Bucket: c.bucket, ...input })); };
@@ -33,8 +38,10 @@ function creerStockageR2(c, { client = null, partOctets = PART_OCTETS } = {}) {
         async envoyer(cle, source) {
             exigerCle(cle);
             let tampon = [], taille = 0, total = 0, idTeleversement = null, numero = 0; const parties = [];
+            // UN tampon de la taille d'une partie, réutilisé d'une partie à l'autre (l'envoi est séquentiel : la partie précédente est finie avant d'écrire la suivante) : pas de copie Buffer.concat par partie
+            const unique = reutiliserTampon ? Buffer.allocUnsafe(partOctets) : null;
             const vider = async (derniere) => {
-                const corps = Buffer.concat(tampon, taille); tampon = []; taille = 0;
+                const corps = unique ? unique.subarray(0, taille) : Buffer.concat(tampon, taille); tampon = []; taille = 0;
                 if (idTeleversement === null) {
                     if (derniere) { await envoyerCmd('PutObjectCommand', { Key: cle, Body: corps, ContentType: 'application/octet-stream' }, 'A'); return; }
                     idTeleversement = (await envoyerCmd('CreateMultipartUploadCommand', { Key: cle, ContentType: 'application/octet-stream' }, 'A')).UploadId;
@@ -48,7 +55,8 @@ function creerStockageR2(c, { client = null, partOctets = PART_OCTETS } = {}) {
                     let b = Buffer.from(m);
                     while (b.length) {
                         const place = partOctets - taille, part = b.subarray(0, place);
-                        tampon.push(part); taille += part.length; total += part.length; b = b.subarray(part.length);
+                        if (unique) part.copy(unique, taille); else tampon.push(part);
+                        taille += part.length; total += part.length; b = b.subarray(part.length);
                         if (taille >= partOctets) await vider(false);
                     }
                 }
@@ -75,16 +83,19 @@ function creerStockageR2(c, { client = null, partOctets = PART_OCTETS } = {}) {
         /** Tous les objets sous un préfixe (pagination comprise). @returns {Promise<{cle:string,octets:number,modifie:Date}[]>} */
         async lister(prefixe) {
             exigerCle(`${prefixe}x`);
-            const sortie = []; let jeton;
-            for (let page = 0; page < 1000; page++) {
+            // 🔑 une liste TRONQUÉE n'est jamais rendue comme complète : sans elle, « la dernière sauvegarde » ou « il en reste 3 » se décideraient sur une partie des objets
+            const sortie = []; let jeton, complete = false;
+            for (let page = 0; page < PAGES_MAX; page++) {
                 const r = await envoyerCmd('ListObjectsV2Command', { Prefix: prefixe, ...(jeton ? { ContinuationToken: jeton } : {}) }, 'A');
                 for (const o of r.Contents || []) sortie.push({ cle: o.Key, octets: Number(o.Size), modifie: o.LastModified });
-                if (!r.IsTruncated || !r.NextContinuationToken) break;
+                if (!r.IsTruncated) { complete = true; break; }
+                if (!r.NextContinuationToken) refuser('liste-tronquee');
                 jeton = r.NextContinuationToken;
             }
+            if (!complete) refuser('liste-tronquee');
             return sortie;
         },
-        /** La preuve POSITIVE d'un bucket préparé pour les sauvegardes : le marqueur posé par l'outil d'initialisation. Absent ou autre chose ⇒ refus. */
+        /** Le bucket a été INITIALISÉ pour les sauvegardes : le marqueur posé par l'outil d'initialisation. Absent ou autre chose ⇒ refus. ⚠️ Il prouve « initialisé », JAMAIS « privé » (voir config.js). */
         async verifierMarqueur() {
             let corps;
             try { corps = JSON.parse((await lireTout(await s.lire(CLE_MARQUEUR), 4096)).toString('utf8')); } catch (e) { if (e && e.code === 'objet-absent') refuser('marqueur-absent'); refuser('marqueur-incorrect'); }
