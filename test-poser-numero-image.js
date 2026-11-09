@@ -1,15 +1,22 @@
 // Banc de poser-numero-image.js : doubles en mémoire seulement, aucune connexion, aucun chemin du poste.
 const P = require('./poser-numero-image');
 let ok = 0, ko = 0;
-const t = (nom, f) => { try { f(); ok++; } catch (e) { ko++; console.log(`ECHEC ${nom} : ${e.message}`); } };
+const file = [];
+const t = (nom, f) => file.push([nom, f]);   // exécutés à la fin, en séquence (synchrones ou asynchrones)
 const eq = (a, b, m) => { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error(`${m || ''} ${JSON.stringify(a)} != ${JSON.stringify(b)}`); };
 
 const CLE = 'prv/Scarlet-Violet-Promos/sn-306527-ja.webp';
 const doc = (o = {}) => ({ _id: 'd1', cleR2: CLE, etat: 'ok', numero: null, set: 'Scarlet-Violet-Promos', preuveLue: { lu: { numero: '148', total: 'SV-P' } }, ...o });
-const carte = (o = {}) => ({ _id: 77, nomEn: 'X', images: [{ set: 'Scarlet-Violet-Promos', cleR2: CLE, numero: null }], impressions: [{ tirage: 'jp', numero: '148' }, { tirage: 'intl', numero: '12' }], ...o });
-const set = { _id: 'Scarlet-Violet-Promos', region: 'jp' };
+const carte = (o = {}) => ({ _id: 77, nomEn: 'X', images: [{ set: 'Scarlet-Violet-Promos', cleR2: CLE, numero: null }], impressions: [{ tirage: 'jp', expansion: 'SV Promos', numero: '148' }, { tirage: 'intl', expansion: 'SV Promos', numero: '12' }], ...o });
+const set = { _id: 'Scarlet-Violet-Promos', region: 'jp', bulba: { expansion: 'SV Promos' } };
 const monde = (o = {}) => ({ docs: [doc()], cartes: [carte()], set, ...o });
-const plan = (args = {}, m = monde()) => P.planifier({ cle: CLE, numero: '148', ...args }, m);
+// doubles des règles du site (lib/impressionDuSet.ts, lib/entreesDuSet.ts) : le banc n'importe rien, la vraie injection se fait dans la CLI
+const REGLES = {
+    tirageDuSet: s => s.tirage ?? s.region,
+    expansionsDuSet: s => { const e = s.bulba?.expansion; return typeof e === 'string' ? [e] : (Array.isArray(e) ? e : []); },
+    impressionDuSet: (imp, c) => imp.tirage === c.tirage && c.expansions.includes(imp.expansion),
+};
+const plan = (args = {}, m = monde(), regles = REGLES) => P.planifier({ cle: CLE, numero: '148', ...args }, m, regles);
 const refus = (r, motif) => { if (r.ok) throw new Error('devait refuser'); if (!r.refus.some(x => x.includes(motif))) throw new Error(`motif absent « ${motif} » dans ${JSON.stringify(r.refus)}`); if (r.operations.length) throw new Error('des opérations malgré le refus'); };
 
 t('nominal : deux opérations, rien d\'autre', () => {
@@ -26,7 +33,7 @@ t('nominal : deux opérations, rien d\'autre', () => {
     eq(b.update.$set['images.$.numero'], '148');
 });
 t('simulation sans attendu : planifie sans exiger', () => eq(plan().ok, true));
-t('cle de numero : 148 = 0148 côté impression', () => eq(plan({}, monde({ cartes: [carte({ impressions: [{ tirage: 'jp', numero: '0148' }] })] })).ok, true));
+t('cle de numero : 148 = 0148 côté impression', () => eq(plan({}, monde({ cartes: [carte({ impressions: [{ tirage: 'jp', expansion: 'SV Promos', numero: '0148' }] })] })).ok, true));
 t('refus : document absent', () => refus(plan({}, monde({ docs: [] })), 'document'));
 t('refus : documents non uniques', () => refus(plan({}, monde({ docs: [doc(), doc({ _id: 'd2' })] })), 'document'));
 t('refus : etat pas ok', () => refus(plan({}, monde({ docs: [doc({ etat: 'retire' })] })), 'etat'));
@@ -39,10 +46,12 @@ t('refus : aucune carte', () => refus(plan({}, monde({ cartes: [] })), 'carte'))
 t('refus : deux cartes', () => refus(plan({}, monde({ cartes: [carte(), carte({ _id: 78 })] })), 'carte'));
 t('refus : deux entrées à la clé', () => refus(plan({}, monde({ cartes: [carte({ images: [{ set: 's', cleR2: CLE, numero: null }, { set: 's', cleR2: CLE, numero: null }] })] })), 'entrée'));
 t('refus : entrée déjà numérotée', () => refus(plan({}, monde({ cartes: [carte({ images: [{ set: 's', cleR2: CLE, numero: '148' }] })] })), 'entrée'));
-t('refus : impression au bon numéro mais autre tirage', () => refus(plan({}, monde({ cartes: [carte({ impressions: [{ tirage: 'intl', numero: '148' }] })] })), 'impression'));
-t('refus : impression au tirage mais autre numéro', () => refus(plan({}, monde({ cartes: [carte({ impressions: [{ tirage: 'jp', numero: '149' }] })] })), 'impression'));
+t('refus : impression au bon numéro mais autre tirage', () => refus(plan({}, monde({ cartes: [carte({ impressions: [{ tirage: 'intl', expansion: 'SV Promos', numero: '148' }] })] })), 'impression'));
+t('refus : impression au tirage mais autre numéro', () => refus(plan({}, monde({ cartes: [carte({ impressions: [{ tirage: 'jp', expansion: 'SV Promos', numero: '149' }] })] })), 'impression'));
+t('refus : même tirage, même numéro, AUTRE expansion', () => refus(plan({}, monde({ cartes: [carte({ impressions: [{ tirage: 'jp', expansion: 'Autre Set', numero: '148' }] })] })), 'impression'));
+t('refus : règle du site non injectée (jamais de repli)', () => { let m = ''; try { P.planifier({ cle: CLE, numero: '148' }, monde(), {}); } catch (e) { m = e.message; } if (!/règle/.test(m)) throw new Error('non refusé'); });
 t('refus : set inconnu', () => refus(plan({}, monde({ set: null })), 'set'));
-t('tirage du set : tirage prime sur region', () => eq(plan({}, monde({ set: { _id: 's', region: 'intl', tirage: 'jp' } })).ok, true));
+t('tirage du set : tirage prime sur region', () => eq(plan({}, monde({ set: { _id: 's', region: 'intl', tirage: 'jp', bulba: { expansion: 'SV Promos' } } })).ok, true));
 t('refus : attendu différent', () => refus(plan({ attendu: 1 }), 'attendu'));
 t('refus : attendu absent en écriture', () => refus(plan({ attendu: undefined, ecrire: true }), 'attendu'));
 
@@ -59,14 +68,60 @@ t('hors lot refusé', () => { let m = ''; try { P.garderSousLot({}, 123); } catc
 t('hors lot : mauvais ppid refusé', () => { let m = ''; try { P.garderSousLot({ LOT_ADDITIF_PID: '5' }, 6); } catch (e) { m = e.message; } if (!m) throw new Error('non refusé'); });
 t('sous lot accepté', () => { P.garderSousLot({ LOT_ADDITIF_PID: '5' }, 5); });
 
+// faux cx en mémoire : find/findOne/updateOne, avec un plafond optionnel d'écritures qui réussissent (modifiedCount 0 ensuite)
+function fauxDb({ reussites = Infinity } = {}) {
+    const imgs = [doc()], cartes = [carte()], sets = [set]; let n = 0;
+    const col = {
+        images: { find: () => ({ toArray: async () => imgs.filter(d => d.cleR2 === CLE) }), updateOne: async (f, u) => { if (n++ >= reussites) return { modifiedCount: 0 }; const d = imgs.find(x => x._id === f._id && x.cleR2 === f.cleR2 && x.etat === f.etat && x.numero === f.numero); if (!d) return { modifiedCount: 0 }; Object.assign(d, u.$set); return { modifiedCount: 1 }; } },
+        cartes: { find: () => ({ toArray: async () => cartes.filter(c => c.images.some(i => i.cleR2 === CLE)) }), updateOne: async (f, u) => { if (n++ >= reussites) return { modifiedCount: 0 }; const c = cartes.find(x => x._id === f._id); const e = c && c.images.find(i => i.cleR2 === CLE && i.numero === null); if (!e) return { modifiedCount: 0 }; for (const [k, v] of Object.entries(u.$set)) e[k.replace('images.$.', '')] = v; return { modifiedCount: 1 }; } },
+        sets: { findOne: async f => sets.find(s => s._id === f._id) ?? null },
+    };
+    return { collection: nom => col[nom], _etat: { imgs, cartes } };
+}
 t('relecture concordante', () => {
-    const r = P.releve({ doc: doc({ numero: '148' }), cartes: [carte({ images: [{ cleR2: CLE, numero: '148' }] })] }, { cle: CLE, numero: '148' });
-    eq(r.ok, true);
+    eq(P.releve({ docs: [doc({ numero: '148' })], cartes: [carte({ images: [{ cleR2: CLE, numero: '148' }] })] }, { cle: CLE, numero: '148' }).ok, true);
 });
 t('relecture discordante', () => {
-    eq(P.releve({ doc: doc({ numero: '148' }), cartes: [carte()] }, { cle: CLE, numero: '148' }).ok, false);
-    eq(P.releve({ doc: doc(), cartes: [carte({ images: [{ cleR2: CLE, numero: '148' }] })] }, { cle: CLE, numero: '148' }).ok, false);
+    eq(P.releve({ docs: [doc({ numero: '148' })], cartes: [carte()] }, { cle: CLE, numero: '148' }).ok, false);
+    eq(P.releve({ docs: [doc()], cartes: [carte({ images: [{ cleR2: CLE, numero: '148' }] })] }, { cle: CLE, numero: '148' }).ok, false);
+    eq(P.releve({ docs: [], cartes: [] }, { cle: CLE, numero: '148' }).ok, false);
+});
+const A = { cle: CLE, numero: '148', ecrire: true, attendu: 2 };
+t('chaîne réelle lire -> planifier -> écrire -> relire : succès', async () => {
+    const db = fauxDb();
+    const r = await P.executer(db, A, REGLES);
+    eq([r.ok, r.code, r.modifiees], [true, 0, 2]);
+    eq(db._etat.imgs[0].numero, '148'); eq(db._etat.cartes[0].images[0].numero, '148');
+});
+t('chaîne réelle : lireMonde rend la forme que releve consomme', async () => {
+    const db = fauxDb(); await P.executer(db, A, REGLES);
+    eq(P.releve(await P.lireMonde(db, CLE), A).ok, true);
+});
+t('écriture partielle : la première ne modifie rien -> arrêt, rien d\'écrit', async () => {
+    const db = fauxDb({ reussites: 0 });
+    const r = await P.executer(db, A, REGLES);
+    eq([r.ok, r.code, r.modifiees], [false, 1, 0]);
+    if (!/Aucune écriture faite/.test(r.message)) throw new Error(r.message);
+    eq(db._etat.imgs[0].numero, null);
+});
+t('écriture partielle : la seconde ne modifie rien -> arrêt, message dit écrit/non écrit', async () => {
+    const db = fauxDb({ reussites: 1 });
+    const r = await P.executer(db, A, REGLES);
+    eq([r.ok, r.code, r.modifiees], [false, 1, 1]);
+    if (!/images.*écrit/.test(r.message) || !/cartes.*NON écrit/.test(r.message)) throw new Error(r.message);
+    eq(db._etat.imgs[0].numero, '148'); eq(db._etat.cartes[0].images[0].numero, null);
+});
+t('simulation : n\'écrit rien', async () => {
+    const db = fauxDb(); const r = await P.executer(db, { cle: CLE, numero: '148', ecrire: false }, REGLES);
+    eq([r.ok, r.code, r.modifiees], [true, 0, 0]); eq(db._etat.imgs[0].numero, null);
+});
+t('refus du plan : code 1, rien d\'écrit', async () => {
+    const db = fauxDb(); const r = await P.executer(db, { ...A, numero: '149' }, REGLES);
+    eq([r.ok, r.code], [false, 1]); eq(db._etat.imgs[0].numero, null);
 });
 
-console.log(`${ko ? 'ROUGE' : 'VERT'} : ${ok} passés, ${ko} en échec`);
-process.exit(ko ? 1 : 0);
+(async () => {
+    for (const [nom, f] of file) { try { await f(); ok++; } catch (e) { ko++; console.log(`ECHEC ${nom} : ${e.message}`); } }
+    console.log(`${ko ? 'ROUGE' : 'VERT'} : ${ok} passés, ${ko} en échec`);
+    process.exit(ko ? 1 : 0);
+})();

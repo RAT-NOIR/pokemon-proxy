@@ -23,7 +23,11 @@ function lireArguments(argv) {
 }
 
 /** Le cœur, pur : { cle, numero, attendu?, ecrire? } + { docs, cartes, set } lus -> { ok, refus[], operations[], ecritures }. */
-function planifier({ cle, numero, attendu, ecrire }, { docs, cartes, set }, { cleNumero } = require('./collecte-cartes/jointure')) {
+function planifier({ cle, numero, attendu, ecrire }, { docs, cartes, set }, regles) {
+    // règles du site INJECTÉES (lib/impressionDuSet.ts, lib/entreesDuSet.ts), jamais recopiées ni remplacées par un repli
+    const { impressionDuSet, expansionsDuSet, tirageDuSet } = regles || {};
+    for (const [k, f] of Object.entries({ impressionDuSet, expansionsDuSet, tirageDuSet })) if (typeof f !== 'function') throw new Error(`planifier : règle du site absente (${k}) — jamais de repli`);
+    const { cleNumero } = require('./collecte-cartes/jointure');
     const refus = [];
     const R = m => { refus.push(m); };
     let d = null, entree = null, carte = null;
@@ -46,11 +50,11 @@ function planifier({ cle, numero, attendu, ecrire }, { docs, cartes, set }, { cl
         if (entree) {
             if (!set) R(`set ${JSON.stringify(entree.set)} introuvable`);
             else {
-                const tirage = set.tirage ?? set.region;
+                const tirage = tirageDuSet(set), expansions = expansionsDuSet(set);
                 const cn = cleNumero(numero);
                 if (!tirage || !cn) R('tirage du set ou numéro inexploitable');
-                else if (!(carte.impressions || []).some(i => i.tirage === tirage && i.numero != null && cleNumero(i.numero) === cn))
-                    R(`impression : aucune au tirage « ${tirage} » portant le numéro ${numero} sur la carte`);
+                else if (!(carte.impressions || []).some(i => i && impressionDuSet(i, { tirage, expansions, deck: set.deck ?? null }) && i.numero != null && cleNumero(i.numero) === cn))
+                    R(`impression : aucune de la carte n'appartient au set (tirage « ${tirage} », expansions ${JSON.stringify(expansions)}) avec le numéro ${numero}`);
             }
         }
     }
@@ -73,13 +77,46 @@ function garderSousLot(env, ppid, commande = 'node lot-additif.js --quoi="…" -
 }
 
 /** Relecture après écriture : le document ET l'entrée portent le numéro posé. */
-function releve({ doc, cartes }, { cle, numero }) {
+function releve({ docs, cartes }, { cle, numero }) {
+    const doc = Array.isArray(docs) && docs.length === 1 ? docs[0] : null;
     const entrees = (cartes || []).flatMap(c => (c.images || []).filter(i => i.cleR2 === cle));
     const ok = !!doc && doc.numero === numero && entrees.length === 1 && entrees[0].numero === numero;
     return { ok, detail: `document ${JSON.stringify(doc?.numero ?? null)} · ${entrees.length} entrée(s) ${JSON.stringify(entrees.map(e => e.numero ?? null))}` };
 }
 
-module.exports = { lireArguments, planifier, garderSousLot, releve };
+/** Lecture : { docs, cartes, set } — la forme que `planifier` ET `releve` consomment. */
+async function lireMonde(db, cle) {
+    const docs = await db.collection('images').find({ cleR2: cle }).toArray();
+    const cartes = await db.collection('cartes').find({ 'images.cleR2': cle }, { projection: { nomEn: 1, images: 1, impressions: 1 } }).toArray();
+    const e = cartes.length === 1 ? cartes[0].images.filter(i => i.cleR2 === cle) : [];
+    const set = e.length === 1 ? await db.collection('sets').findOne({ _id: e[0].set }, { projection: { tirage: 1, region: 1, bulba: 1, deck: 1 } }) : null;
+    return { docs, cartes, set };
+}
+
+/** Simulation ou écriture, sur une base injectée. Rend { ok, code, message?, modifiees, plan, lignes[] } ; n'imprime rien. */
+async function executer(db, a, regles) {
+    const lignes = [];
+    const m = await lireMonde(db, a.cle);
+    const plan = planifier(a, m, regles);
+    lignes.push(`${a.cle} --numero=${a.numero} : ${m.docs.length} document(s) images, ${m.cartes.length} carte(s) · set ${m.set ? `${m.set._id} (tirage ${regles.tirageDuSet(m.set)})` : 'inconnu'}`);
+    if (!plan.ok) return { ok: false, code: 1, modifiees: 0, plan, lignes, message: `REFUS : ${plan.refus.join(' ; ')} — rien n'est écrit` };
+    lignes.push(`✓ ${plan.ecritures} écriture(s) planifiée(s) : numero ${JSON.stringify(a.numero)} sur le document images et sur l'entrée cartes.images (preuve ${JSON.stringify(plan.operations[0].update.$set.numeroPosePreuve)})`);
+    if (!a.ecrire) return { ok: true, code: 0, modifiees: 0, plan, lignes };
+    let modifiees = 0;
+    for (const [i, o] of plan.operations.entries()) {
+        const r = await db.collection(o.coll).updateOne(o.filter, o.update);
+        if (r.modifiedCount !== 1) {
+            const faites = plan.operations.slice(0, i).map(x => x.coll), restantes = plan.operations.slice(i).map(x => x.coll);
+            return { ok: false, code: 1, modifiees, plan, lignes, message: `🔴 ARRÊT : l'écriture sur « ${o.coll} » n'a rien modifié. ${faites.length ? `Écrit : ${faites.join(', ')}.` : 'Aucune écriture faite.'} NON écrit : ${restantes.join(', ')}. ${faites.length ? 'Restauration du lot requise.' : ''}`.trim() };
+        }
+        modifiees++;
+    }
+    const r = releve(await lireMonde(db, a.cle), a);
+    lignes.push(`${r.ok ? '✅' : '🔴'} ${modifiees}/${plan.ecritures} modifiée(s) · RELU : ${r.detail}`);
+    return { ok: r.ok, code: r.ok ? 0 : 1, modifiees, plan, lignes, message: r.ok ? undefined : '🔴 la relecture ne concorde pas' };
+}
+
+module.exports = { lireArguments, planifier, garderSousLot, releve, lireMonde, executer };
 
 if (require.main === module) {
     const a = lireArguments(process.argv.slice(2));
@@ -92,25 +129,17 @@ if (require.main === module) {
     const { ouvrirConnexions } = require('./collecte-cartes/garde');
     (async () => {
         const { cartes: cx, fermer } = await ouvrirConnexions({ production: false, buckets: [] });
-        const C = cx.db.collection('cartes'), I = cx.db.collection('images'), S = cx.db.collection('sets');
-        const lire = async () => {
-            const docs = await I.find({ cleR2: a.cle }).toArray();
-            const cartes = await C.find({ 'images.cleR2': a.cle }, { projection: { nomEn: 1, images: 1, impressions: 1 } }).toArray();
-            const e = cartes.length === 1 ? cartes[0].images.filter(i => i.cleR2 === a.cle) : [];
-            const set = e.length === 1 ? await S.findOne({ _id: e[0].set }, { projection: { tirage: 1, region: 1 } }) : null;
-            return { docs, cartes, set };
-        };
-        const m = await lire();
-        const plan = planifier(a, m);
-        console.log(`${a.cle} --numero=${a.numero} : ${m.docs.length} document(s) images, ${m.cartes.length} carte(s) · set ${m.set ? `${m.set._id} (tirage ${m.set.tirage ?? m.set.region})` : 'inconnu'}`);
-        if (!plan.ok) { for (const r of plan.refus) console.error(`❌ REFUS : ${r}`); console.error('rien n\'est écrit'); await fermer(); process.exit(1); }
-        console.log(`✓ ${plan.ecritures} écriture(s) planifiée(s) : numero ${JSON.stringify(a.numero)} sur le document images et sur l'entrée cartes.images (preuve ${JSON.stringify(plan.operations[0].update.$set.numeroPosePreuve)})`);
-        if (!a.ecrire) { console.log('(simulation seule — --ecrire --attendu=2 sous lot-additif.js)'); await fermer(); return; }
-        let modifiees = 0;
-        for (const o of plan.operations) modifiees += (await cx.db.collection(o.coll).updateOne(o.filter, o.update)).modifiedCount;
-        const r = releve(await lire(), a);
-        console.log(`${modifiees === plan.ecritures && r.ok ? '✅' : '🔴'} ${modifiees}/${plan.ecritures} modifiée(s) · RELU : ${r.detail}`);
-        if (modifiees !== plan.ecritures || !r.ok) process.exitCode = 1;
+        // les règles du site, importées comme le font joindre-sans-ligne.js et charger-regles-site.js (jamais recopiées)
+        const LIB_SITE = process.env.RAT_MARKET_SITE_LIB || 'C:/Users/Yung/Desktop/rat-market-site/lib';
+        const { pathToFileURL } = require('url');
+        const { impressionDuSet } = await import(pathToFileURL(`${LIB_SITE}/impressionDuSet.ts`).href);
+        const { expansionsDuSet, tirageDuSet } = await import(pathToFileURL(`${LIB_SITE}/entreesDuSet.ts`).href);
+        const regles = { impressionDuSet, expansionsDuSet, tirageDuSet };
+        const r = await executer(cx.db, a, regles);
+        for (const l of r.lignes) console.log(l);
+        if (r.message) console.error(r.message);
+        else if (!a.ecrire) console.log('(simulation seule — --ecrire --attendu=2 sous lot-additif.js)');
+        if (r.code) process.exitCode = r.code;
         await fermer();
     })().catch(e => { console.error(e); process.exit(1); });
 }
