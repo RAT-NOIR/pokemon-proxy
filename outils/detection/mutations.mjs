@@ -27,6 +27,14 @@ const MUT = [
   ['aire maximale 0,985 portee a 1', 'if (c.aire > 0.985) continue;', 'if (c.aire > 1.0) continue;'],
   ['dist : Math.hypot au lieu de la racine (le seul ecart voulu)', 'return Math.sqrt(dx * dx + dy * dy); };', 'return Math.hypot(dx, dy); };'],
   ['diagonale : Math.hypot au lieu de la racine', 'Math.sqrt(W * W + Ht * Ht);', 'Math.hypot(W, Ht);'],
+  ['seuil de pre-reduction 800 -> 1000', 'export const COTE_PRE = 800;', 'export const COTE_PRE = 1000;'],
+  ['dimensions de pre-reduction tronquees au lieu d\'arrondies', '(2 * c * COTE_PRE + g) / (2 * g)', '(2 * c * COTE_PRE) / (2 * g)'],
+  ['limite de pixels des photos 16 M -> 12 M (un iPhone est refuse)', 'PIXELS_MAX_PHOTO = 16000000', 'PIXELS_MAX_PHOTO = 12000000'],
+  ['cote maximal des photos 4608 -> 4096', 'COTE_MAX_PHOTO = 4608', 'COTE_MAX_PHOTO = 4096'],
+  ['pre-reduction jamais appliquee', 'options.pre !== false && Math.max(w, h) > COTE_PRE', 'false'],
+  ['pre-reduction : hauteur et largeur cibles echangees', 'redimRgb(rgb, w, h, d.W, d.H)', 'redimRgb(rgb, w, h, d.H, d.W)'],
+  ['plafond des JPEG progressifs des photos remis a 4 Mpx', 'pixelsMaxProgressif: options.pixelsMaxProgressif || PIXELS_MAX_PHOTO', 'pixelsMaxProgressif: options.pixelsMaxProgressif || 4000000'],
+  ['orientation EXIF non appliquee aux photos', "orientation: options.orientation || 'exif'", "orientation: options.orientation || 'aucune'"],
   ['bord bas du domaine retire (agrandissement admis)', 'return W <= w && H <= h && w <', 'return w < W * 100 && w <'],
 ];
 let vivantes = 0;

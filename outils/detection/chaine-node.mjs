@@ -45,9 +45,11 @@ async function main() {
   for (const id of ids) {
     const octets = new Uint8Array(fs.readFileSync(man[id]));
     const t1 = performance.now();
-    const r = D.detecter(cv, octets, { voie: opt.voie || 'auto' });
+    let r;
+    try { r = D.detecter(cv, octets, { voie: opt.voie || 'auto', pre: opt['sans-pre'] ? false : undefined }); }
+    catch (e) { res.photos[id] = { erreur: String(e && (e.code || e.name)), redressee: false, nCartes: 0, quad: null, dim640: null, voie: null, src: null, empreintes: { rgb640: null, quads: null, carte: null }, emb: null }; continue; }
     const ms = Math.round(performance.now() - t1);
-    const p = { redressee: r.redressee, nCartes: r.nCartes, quad: r.quad, dim640: r.dim640, voie: r.voie, src: [r.largeur, r.hauteur], empreintes: r.empreintes, ms, emb: null };
+    const p = { redressee: r.redressee, nCartes: r.nCartes, quad: r.quad, dim640: r.dim640, voie: r.voie, pre: r.prereduction, src: [r.largeur, r.hauteur], empreintes: r.empreintes, ms, emb: null };
     if (r.redressee && session) {
       const t = E.versTenseur(r.carte, D.L_RED, D.H_RED);
       const out = await session.run({ pixel_values: new ort.Tensor('float32', t, [1, 3, 224, 224]) });

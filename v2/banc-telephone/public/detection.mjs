@@ -16,10 +16,10 @@
 // FUSIONNEE dans l'ordre (0,0) (1,0) (0,1) (1,1), arrondi final au plus proche PAIR). `reduireCanvasHigh` reproduit EXACTEMENT cette arithmetique (Math.fround pour chaque operation flottante 32 bits,
 // fma32 exact pour la multiplication-addition fusionnee) : les octets sortent identiques a ceux de Chrome, et IDENTIQUES d'un moteur JavaScript a l'autre puisque chaque operation est un +, -, *, / IEEE.
 // Hors de ce domaine (facteur >= racine de 2, ou agrandissement), `reduire640` du decodeur (bilineaire de Pillow en entiers) prend le relais ET LE DIT (`voie: 'pillow'`).
-import { decoder, dimensions640, reduire640, ErreurDecodeur } from './decodeur.mjs';
+import { decoder, dimensions640, reduire640, redimRgb, ErreurDecodeur } from './decodeur.mjs';
 export { ErreurDecodeur, dimensions640 };
 
-export const VERSION_DETECTION = 'rm-detection-1';
+export const VERSION_DETECTION = 'rm-detection-2';   // 2 : la pre-reduction a 800 px des photos plus grandes (grandes photos de telephone)
 export const RATIO = 63 / 88, L_RED = 420, H_RED = 587;
 
 // ------------------------------------------------------------
@@ -107,6 +107,32 @@ export function sourceSynthetique(graine, w, h) {
     out[(y * w + x) * 3 + k] = Math.max(0, Math.min(255, Math.floor(base) + bruit));
   }
   return out;
+}
+
+/** Le grand cote vers lequel les photos plus grandes sont ramenees avant la reduction a 640 : 800 px, la taille des photos mesurees (facteur 1,25 ensuite). */
+export const COTE_PRE = 800;
+export const PIXELS_MAX_PHOTO = 16000000, COTE_MAX_PHOTO = 4608;
+/** Les options passees au decodeur pour une photo : bornes de photo de telephone (16 Mpx, 4 608 px) y compris pour un JPEG PROGRESSIF (le plafond du decodeur etait 4 Mpx : 92 des 386 vraies grandes photos du poste, des progressifs 3000 x 4000,
+ *  etaient refusees TROP_GRAND ; mesure : un progressif de 12 Mpx se decode en 650 ms pour ~100 Mo de tampons, 4 000 000 -> 16 000 000). */
+export function optionsDecodeur(options = {}) {
+  return { orientation: options.orientation || 'exif', orientationWebp: Boolean(options.orientationWebp), pixelsMax: options.pixelsMax || PIXELS_MAX_PHOTO, coteMax: options.coteMax || COTE_MAX_PHOTO, pixelsMaxProgressif: options.pixelsMaxProgressif || PIXELS_MAX_PHOTO };
+}
+/** Les dimensions apres pre-reduction, EN ENTIERS (arrondi au plus proche, demi vers le haut : floor((2*c*800 + g) / (2*g))) ; null si le grand cote est deja <= 800. */
+export function dimensionsPre(w, h) {
+  const g = Math.max(w, h);
+  if (g <= COTE_PRE) return null;
+  const arr = (c) => Math.max(1, Math.floor((2 * c * COTE_PRE + g) / (2 * g)));
+  return { W: arr(w), H: arr(h) };
+}
+/**
+ * La PRE-REDUCTION : Image.resize(BILINEAR) de Pillow (decodeur.mjs : redimRgb), arithmetique des pixels en ENTIERS (poids en virgule fixe 22 bits, passe horizontale puis verticale, toujours dans cet ordre),
+ * support elargi au facteur de reduction (donc un vrai filtre anti-repliement, pas un echantillonnage). Les coefficients se calculent en double avec +, -, *, /, trunc seulement (arrondi exact IEEE partout :
+ * aucune fonction transcendante, aucun Math.hypot). Ni canvas, ni flottant 32 bits, ni dependance au moteur. rgb w*h*3 -> { rgb, largeur, hauteur } ; null si le grand cote est deja <= 800.
+ */
+export function prereduire(rgb, w, h) {
+  const d = dimensionsPre(w, h);
+  if (!d) return null;
+  return { rgb: redimRgb(rgb, w, h, d.W, d.H), largeur: d.W, hauteur: d.H };
 }
 
 /** La reduction a 640 de la chaine : le canvas « high » emule s'il est dans son domaine, sinon Pillow (entiers). `voie` dit laquelle a servi. */
@@ -238,16 +264,28 @@ export function empreinteQuads(gardes) {
  * Rien n'est lu dans le navigateur ; une erreur du decodeur sort en ErreurDecodeur (code ferme).
  */
 export function detecter(cv, octets, options = {}) {
-  const dec = decoder(octets, { orientation: options.orientation || 'exif', orientationWebp: Boolean(options.orientationWebp) });
+  // Bornes : 16 Mpx et 4 608 px de cote par defaut. Le decodeur (et entete.js de l'extension) plafonne a 12 000 000 px : une photo d'iPhone 4032 x 3024 = 12 192 768 px serait refusee TROP_GRAND.
+  const t00 = performance.now();
+  const dec = decoder(octets, optionsDecodeur(options));
+  const t0 = performance.now();
+  // LA PRE-REDUCTION (grandes photos) : au-dela de 800 px de grand cote, un premier passage entier ramene la photo a 800 px, puis la chaine suit la voie deja prouvee (canvas-high, facteur 1,25).
+  // `options.pre === false` la coupe (mesures de comparaison seulement).
+  const t1 = t0;
+  let rgb = dec.rgb, w = dec.largeur, h = dec.hauteur, pre = null;
+  if (options.pre !== false && Math.max(w, h) > COTE_PRE) { pre = [w, h]; const p = prereduire(rgb, w, h); rgb = p.rgb; w = p.largeur; h = p.hauteur; }
+  const t2 = performance.now();
   // `options.reducteur` n'existe que pour les mutations des bancs (remplacer la reduction par un chemin qui depend du navigateur) ; la production ne le passe jamais.
-  const r = options.reducteur ? options.reducteur(dec.rgb, dec.largeur, dec.hauteur) : reduire(dec.rgb, dec.largeur, dec.hauteur, { voie: options.voie || 'auto' });
+  const r = options.reducteur ? options.reducteur(rgb, w, h) : reduire(rgb, w, h, { voie: options.voie || 'auto' });
+  const t3 = performance.now();
   const det = quadrilateres(cv, r.rgb, r.largeur, r.hauteur);
-  const sortie = { largeur: dec.largeur, hauteur: dec.hauteur, format: dec.format, dim640: [r.largeur, r.hauteur], voie: r.voie, nCartes: det.gardes.length, redressee: false, quad: null, paysage: null, carte: null, rgb640: r.rgb,
-    empreintes: { rgb640: sha256(r.rgb), quads: empreinteQuads(det.gardes), carte: null } };
-  if (!det.gardes.length) return sortie;
-  const cand = det.gardes[0];
-  sortie.redressee = true; sortie.quad = cand.quad.map((p) => [p.x, p.y]); sortie.paysage = cand.paysage;
-  sortie.carte = redresser(cv, r.rgb, r.largeur, r.hauteur, cand);
-  sortie.empreintes.carte = sha256(sortie.carte);
+  const sortie = { largeur: dec.largeur, hauteur: dec.hauteur, format: dec.format, orientationAppliquee: dec.orientationAppliquee, prereduction: pre, dim640: [r.largeur, r.hauteur], voie: r.voie, nCartes: det.gardes.length, redressee: false, quad: null, paysage: null, carte: null, rgb640: r.rgb,
+    empreintes: { rgb640: sha256(r.rgb), quads: empreinteQuads(det.gardes), carte: null }, ms: { decodage: 0, pre: Math.round(t2 - t1), reduction: Math.round(t3 - t2), detection: 0 } };
+  if (det.gardes.length) {
+    const cand = det.gardes[0];
+    sortie.redressee = true; sortie.quad = cand.quad.map((p) => [p.x, p.y]); sortie.paysage = cand.paysage;
+    sortie.carte = redresser(cv, r.rgb, r.largeur, r.hauteur, cand);
+    sortie.empreintes.carte = sha256(sortie.carte);
+  }
+  sortie.ms.decodage = Math.round(t0 - t00); sortie.ms.detection = Math.round(performance.now() - t3);
   return sortie;
 }

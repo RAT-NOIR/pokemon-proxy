@@ -121,7 +121,8 @@ const aleaGraine = (s) => () => { s = (s + 0x6d2b79f5) >>> 0; let t = s; t = Mat
                 vrai(`5. ${im.id} (${im.format} ${im.largeur}x${im.hauteur}) : 640, quadrilateres, carte == attendus`, bon);
                 if (bon) bons++;
             }
-            vrai('5. le lot a des cartes redressees ET passe par les deux voies de reduction', lot.images.filter((i) => i.attendu.redressee).length >= 8 && voies['canvas-high'] >= 4 && voies.pillow >= 2, JSON.stringify(voies));
+            vrai('5. le lot a des cartes redressees ET passe par les deux voies de reduction', lot.images.filter((i) => i.attendu.redressee).length >= 8 && voies['canvas-high'] >= 10 && voies.pillow === 1, JSON.stringify(voies));
+            vrai('5. les images de plus de 800 px (d04, d07, d09, d10) portent leur pre-reduction ; les autres non', lot.images.every((im) => (Math.max(im.largeur, im.hauteur) > 800) === Boolean(D.dimensionsPre(im.largeur, im.hauteur))));
             console.log(`   5. chaine complete == attendus : ${bons}/${lot.images.length} images ; voies ${JSON.stringify(voies)}`);
         }
     }
@@ -145,6 +146,46 @@ const aleaGraine = (s) => () => { s = (s + 0x6d2b79f5) >>> 0; let t = s; t = Mat
         vrai('6. a 3,1 % de la diagonale : les deux sont gardes', D.retenirCandidats([cand(0, 0.5), cand(0.031 * diag, 0.4)], W, H).length === 2);
         vrai('6. la diagonale est celle de l\'image (3,1 % de 500 est ecarte sur une image dix fois plus grande : seuil 150)', D.retenirCandidats([cand(0, 0.5), cand(0.031 * diag, 0.4)], 3000, 4000).length === 1);
         vrai('6. aire 0,986 ecartee, 0,984 gardee ; le plus grand d\'abord', (() => { const a = D.retenirCandidats([cand(0, 0.986)], W, H), b = D.retenirCandidats([cand(0, 0.4), cand(100, 0.984)], W, H); return a.length === 0 && b.length === 2 && b[0].aire === 0.984; })());
+    }
+    // ═══ 7. la PRE-REDUCTION des grandes photos (grand cote > 800 px -> 800 px, entiers) ═══
+    {
+        const fx = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures-detection', 'pre-pillow.json'), 'utf8'));
+        let bons = 0;
+        for (const c of fx.cas) {
+            const d = D.dimensionsPre(c.w, c.h);
+            vrai(`7. ${c.w}x${c.h} : dimensions ${c.W}x${c.H} (grand cote 800, arrondi entier)`, d && d.W === c.W && d.H === c.H && Math.max(d.W, d.H) === 800, JSON.stringify(d));
+            const src = D.sourceSynthetique(c.graine, c.w, c.h), r = D.prereduire(src, c.w, c.h);
+            const bon = r && r.largeur === c.W && r.hauteur === c.H && D.sha256(r.rgb) === c.sha256; if (bon) bons++;
+            vrai(`7. ${c.w}x${c.h} -> ${c.W}x${c.H} == Image.resize BILINEAR de Pillow au bit`, bon);
+        }
+        console.log(`   7. pre-reduction identique a ${fx.verite} : ${bons}/${fx.cas.length} cas (de 900x675 a 4080x3072)`);
+        vrai('7. grand cote <= 800 : aucune pre-reduction (800x600, 640x480, 800x800 -> aucune ; 801x600 -> reduite)', D.dimensionsPre(800, 600) === null && D.dimensionsPre(640, 480) === null && D.dimensionsPre(800, 800) === null && D.dimensionsPre(801, 600) !== null);
+        vrai('7. dimensions : demi vers le haut, jamais 0 (2000 x 1 -> 800 x 1 ; 801 x 600 -> 800 x 599)', JSON.stringify([D.dimensionsPre(2000, 1), D.dimensionsPre(801, 600)]) === JSON.stringify([{ W: 800, H: 1 }, { W: 800, H: 599 }]));
+        // la pre-reduction ramene sur la voie prouvee : apres elle, la reduction 640 est canvas-high (facteur 1,25), pour les formes usuelles de photos de telephone
+        const voiesApres = [[4032, 3024], [3024, 4032], [2268, 4032], [4080, 3072], [1280, 960], [1000, 750], [3000, 1000]].map(([w, h]) => { const p = D.prereduire(new Uint8Array(w * h * 3), w, h); return D.reduire(p.rgb, p.largeur, p.hauteur).voie; });
+        vrai('7. apres la pre-reduction, la voie de la reduction 640 est canvas-high (7 formes de photos de telephone)', voiesApres.every((v) => v === 'canvas-high'), voiesApres.join());
+        // les bornes du decodeur pour une photo : 16 Mpx, 4 608 px ; la limite par defaut du decodeur (12 Mpx) refuse un iPhone (4032 x 3024 = 12 192 768 px)
+        const DEC = await import(pathToFileURL(path.join(PUB, 'decodeur.mjs')).href);
+        const entete = (w, h) => Uint8Array.from([0xff, 0xd8, 0xff, 0xc0, 0, 17, 8, h >> 8, h & 255, w >> 8, w & 255, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1]);
+        const code = (f) => { try { f(); return 'ok'; } catch (e) { return e.code; } };
+        vrai('7. defaut du decodeur : 4032 x 3024 refuse TROP_GRAND ; avec les options de photo : accepte (en-tete)', code(() => DEC.verifierDimensions(entete(4032, 3024))) === 'TROP_GRAND' && code(() => DEC.verifierDimensions(entete(4032, 3024), D.optionsDecodeur())) === 'ok');
+        vrai('7. options de photo : 4608 px de cote accepte, 4609 refuse ; 16 Mpx accepte, 50 Mpx (8160 x 6120) refuse', code(() => DEC.verifierDimensions(entete(4608, 3456), D.optionsDecodeur())) === 'ok' && code(() => DEC.verifierDimensions(entete(4609, 1000), D.optionsDecodeur())) === 'TROP_GRAND' && code(() => DEC.verifierDimensions(entete(8160, 6120), D.optionsDecodeur())) === 'TROP_GRAND');
+        // un JPEG PROGRESSIF de plus de 4 Mpx (5,1 Mpx) : refuse par le plafond du decodeur, accepte avec les options de photo, et identique a Pillow au bit
+        {
+            const fp = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures-detection', 'prog-5mpx.json'), 'utf8')), o = new Uint8Array(fs.readFileSync(path.join(__dirname, 'fixtures-detection', 'prog-5mpx.jpg')));
+            vrai('7. JPEG progressif de 5,1 Mpx : refuse TROP_GRAND avec les options par defaut du decodeur (plafond progressif 4 Mpx)', code(() => DEC.decoder(o, { pixelsMax: 16000000 })) === 'TROP_GRAND');
+            let r = null; try { r = DEC.decoder(o, D.optionsDecodeur()); } catch (e) { r = e.code; }
+            vrai(`7. le meme progressif avec les options de photo : decode, ${fp.largeur}x${fp.hauteur}, identique a ${fp.verite} au bit`, r && r.largeur === fp.largeur && r.hauteur === fp.hauteur && D.sha256(r.rgb) === fp.sha256, String(r && r.code || r));
+        }
+        // EXIF orientation 6 : la chaine l'applique AVANT la pre-reduction (900x600 range -> 600x900 affiche -> pre-reduit a 533x800)
+        {
+            globalThis.Module = globalThis.Module || { wasmBinary: fs.readFileSync(path.join(PUB, 'opencv', 'opencv_js.wasm')) };
+            const cv2 = await require(path.join(PUB, 'opencv', 'opencv.js'));
+            const r = D.detecter(cv2, new Uint8Array(fs.readFileSync(path.join(__dirname, 'fixtures-detection', 'exif6-900x600.jpg'))));
+            vrai('7. EXIF 6 : appliquee (600 x 900), puis pre-reduction de 600x900 a 533x800, puis 640', r.orientationAppliquee === 6 && r.largeur === 600 && r.hauteur === 900 && JSON.stringify(r.prereduction) === '[600,900]' && JSON.stringify(r.dim640) === '[426,640]', JSON.stringify([r.orientationAppliquee, r.largeur, r.hauteur, r.prereduction, r.dim640]));
+        }
+        const heic = new Uint8Array(64); heic.set([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63], 0);
+        vrai('7. HEIC : refuse par un code ferme FORMAT, jamais lu de travers (trou ouvert : un iPhone peut livrer du HEIC)', code(() => DEC.decoder(heic, D.optionsDecodeur())) === 'FORMAT');
     }
     console.log(`\n${ok} réussis, ${ko} échoués`);
     process.exit(ko ? 1 : 0);
