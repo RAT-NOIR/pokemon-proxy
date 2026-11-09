@@ -63,6 +63,11 @@ const DECISIONS = {
     // lot jumelles-0311 (chasseur « fiches jumelles orphelines », 2026-11-03) : fiches du site (annexes « Yellow A Alternate » comprises, ex. Évoli SUM n°101a) SANS produit rattaché alors que le catalogue Cardmarket
     // a un produit non joint au même numéro et au même nom ; la carte déclare elle-même l'impression de ce numéro dans l'expansion du set. planifier() rejoue chaque preuve (refus nommé sinon).
     '2026-11-03-jumelles-0311': require('./collecte-cartes/decisions-jumelles-0311-2026-11-03.json'),
+    // décision 560010 (2026-11-09) : Nest Ball, Ultra Sun n°056. L'impression jp « Ultra Sun » de la carte 217135 est passée de 055 à 056 sous lot (deux sources : Serebii, Pokewiki) ; reste à relier le produit Cardmarket n°056.
+    '2026-11-09-560010': [
+        { idProduct: 560010, carteId: 217135, code: 'sm5s', idExpansion: 3911, slugSet: 'Ultra-Sun', voie: 'impression-numero', tirage: 'jp', expansionImpression: 'Ultra Sun', numeroFiche: '056', ajoutSet: false,
+            preuve: { sources: ['Cardmarket produit 560010 n°056 Nest Ball', 'serebii.net/card/ultrasun 56/66 Nest Ball', 'pokewiki.de/Ultra_Sun_(TCG) 056/066 Nestball'], references: ['https://serebii.net/card/ultrasun', 'https://pokewiki.de/Ultra_Sun_(TCG)'] } },
+    ],
     // lot nettoyage (2026-11-09) : trois V2 de stades de Storm Emeralda (m6), produits Cardmarket n°072/074/076 sans ligne. Deux sources lues par la porte le 2026-11-09 (Serebii et TCG Watchtower)
     // donnent la même paire de numéros par stade (71-72, 73-74, 75-76) ; le nom n'est pas un témoin ici (Lava Tube chez nous, Pyroduct / Lava Lake ailleurs) : prouver() peut refuser, le refus se rapporte, aucune garde assouplie.
     '2026-11-09-m6': [
