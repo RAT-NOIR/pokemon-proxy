@@ -13,11 +13,11 @@ const sharp = createRequire('C:\\Users\\Yung\\Desktop\\pokemon-proxy-api-v2\\pac
 const [fPop, dossier] = process.argv.slice(2);
 const P = JSON.parse(fs.readFileSync(fPop, 'utf8'));
 const liste = new Map();
-for (const k of ['population1_banc', 'population2_lotEbayLocal']) for (const p of P[k].liste) liste.set(p.sha256, p);
+for (const k of Object.keys(P).filter((x) => /^population/.test(x))) for (const p of P[k].liste) liste.set(p.sha256, p);
 fs.mkdirSync(path.join(dossier, 'b0'), { recursive: true });
-const man = {};
+const man = {}, erreurs = {};
 for (const [sha, p] of [...liste].sort()) {
-  const dec = DEC.decoder(new Uint8Array(fs.readFileSync(p.chemin)), D.optionsDecodeur({}));
+  let dec; try { dec = DEC.decoder(new Uint8Array(fs.readFileSync(p.chemin)), D.optionsDecodeur({})); } catch (e) { man[sha] = null; erreurs[sha] = String(e.code || e.name); delete man[sha]; continue; }   // TROP_GRAND etc. : A ne sait pas lire, donc pas de temoin
   const pre = D.prereduire(dec.rgb, dec.largeur, dec.hauteur);
   if (!pre) throw new Error('photo de 800 px ou moins : ' + sha);
   const f = path.join(dossier, 'b0', sha + '.png');
@@ -25,4 +25,5 @@ for (const [sha, p] of [...liste].sort()) {
   man[sha] = { b0: f, W: pre.largeur, H: pre.hauteur };
 }
 fs.writeFileSync(path.join(dossier, 'b0-manifeste.json'), JSON.stringify(man));
-console.log('b0', Object.keys(man).length);
+fs.writeFileSync(path.join(dossier, 'b0-erreurs.json'), JSON.stringify(erreurs));
+console.log('b0', Object.keys(man).length, 'sans temoin (decodage refuse)', Object.keys(erreurs).length, JSON.stringify(erreurs).slice(0, 200));

@@ -11,7 +11,7 @@ from PIL import Image, ImageOps
 pop, sortie = sys.argv[1], sys.argv[2]
 P = json.load(open(pop, encoding='utf8'))
 liste = {}
-for cle in ('population1_banc', 'population2_lotEbayLocal'):
+for cle in [k for k in P if k.startswith('population')]:
     for p in P[cle]['liste']: liste[p['sha256']] = p
 os.makedirs(os.path.join(sortie, 'b'), exist_ok=True); os.makedirs(os.path.join(sortie, 'bb'), exist_ok=True)
 man, n = {}, 0

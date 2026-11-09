@@ -22,15 +22,25 @@ const D = await import(pathToFileURL(path.join(PUB, 'detection.mjs')).href);
 const E = await import(pathToFileURL(path.join(PUB, 'empreinte.js')).href);
 const P = JSON.parse(fs.readFileSync(fPop, 'utf8'));
 const liste = new Map();
-for (const k of ['population1_banc', 'population2_lotEbayLocal']) for (const p of P[k].liste) liste.set(p.sha256, p);
+for (const k of Object.keys(P).filter((x) => /^population/.test(x))) for (const p of P[k].liste) liste.set(p.sha256, p);
 const manB = fs.existsSync(path.join(dossier, 'b-manifeste.json')) ? JSON.parse(fs.readFileSync(path.join(dossier, 'b-manifeste.json'), 'utf8')) : {};
 const manB0 = fs.existsSync(path.join(dossier, 'b0-manifeste.json')) ? JSON.parse(fs.readFileSync(path.join(dossier, 'b0-manifeste.json'), 'utf8')) : {};
 const fichierDe = (sha) => variante === 'A' ? liste.get(sha).chemin : variante === 'B' ? manB[sha].b : variante === 'BB' ? manB[sha].bb : variante === 'BP' ? manB[sha].bp : manB0[sha].b0;
 let shas = [...liste.keys()].sort();
+if (variante === 'B0') shas = shas.filter((s) => manB0[s]);          // un temoin n'existe que pour les photos que le decodeur de la chaine sait lire (population 3 : TROP_GRAND n'a pas de pixels de A)
 if (opt.serie) { const [i, n] = opt.serie.split('/').map(Number); shas = shas.filter((_, k) => k % n === i); }
 if (opt.limite) shas = shas.slice(0, Number(opt.limite));
 const sortie = path.join(dossier, `verdicts-${variante}${opt.serie ? '-' + opt.serie.split('/')[0] : ''}.jsonl`);
-const faits = new Set(fs.existsSync(sortie) ? fs.readFileSync(sortie, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l).sha256) : []);
+// --sonde : ne recalcule QUE les photos « muette » deja ecrites, n'ecrit aucun verdict, note les cles de scan manquantes (cles-manquantes-<variante>.json).
+// --refaire-muettes : retire du jsonl (copie .avant-repli) les photos « muette » et les recalcule (apres recuperation des scans, RM_SCANS_REPLI).
+if (opt['refaire-muettes'] && fs.existsSync(sortie)) {
+  const lignes = fs.readFileSync(sortie, 'utf8').split('\n').filter(Boolean);
+  const copie = sortie.replace(/\.jsonl$/, '.avant-repli.jsonl'); if (!fs.existsSync(copie)) fs.copyFileSync(sortie, copie);
+  fs.writeFileSync(sortie, lignes.filter((l) => JSON.parse(l).verdict.issue !== 'muette').map((l) => l + '\n').join(''));
+}
+const muettes = new Set(opt.sonde && fs.existsSync(sortie) ? fs.readFileSync(sortie, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((r) => r.verdict.issue === 'muette').map((r) => r.sha256) : []);
+if (opt.sonde) shas = shas.filter((s) => muettes.has(s));
+const faits = new Set(!opt.sonde && fs.existsSync(sortie) ? fs.readFileSync(sortie, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l).sha256) : []);
 
 // modele
 const octetsModele = fs.readFileSync(MODELE_ONNX);
@@ -72,8 +82,10 @@ for (const sha of shas) {
     } else rec.verdict = CMP.issueDe({ muette: 'non-redressee' });
   } catch (e) { rec.erreur = String((e && (e.code || e.name || e.message)) || e).slice(0, 80); rec.verdict = CMP.issueDe({ muette: 'erreur:' + rec.erreur }); }
   rec.ms = Math.round(performance.now() - t0);
+  if (opt.sonde) continue;
   fs.appendFileSync(sortie, JSON.stringify(rec) + '\n');
   if (++n % 25 === 0) console.log(`  ${n} faites (${Math.round(rec.ms)} ms la derniere), scans manquants ${manque.scans}`);
 }
+if (opt.sonde) fs.writeFileSync(path.join(dossier, `cles-manquantes-${variante}${opt.serie ? '-' + opt.serie.split('/')[0] : ''}.json`), JSON.stringify([...manque.cles].sort()));
 console.log(`FINI variante ${variante} : ${n} photos calculees ; scans manquants ${manque.scans}`);
 process.exit(0);

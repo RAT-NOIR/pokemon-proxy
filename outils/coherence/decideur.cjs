@@ -32,10 +32,16 @@ async function creerDecideur({ delaiMs = DELAI_MS } = {}) {
     const o = X.ouvrir(fs.readFileSync(INDEX), HMAC, { modeleAttendu: MODELE });
     const version = F.deserialiser(await F.decompresser(S.ouvrir(fs.readFileSync(ARCHIVE), HMAC)));
     etatVersion.installer(Object.isFrozen(version) ? version : Object.freeze(version));
-    const manque = { scans: 0 }, lus = new Set();
+    const manque = { scans: 0, cles: new Set() }, lus = new Set();
+    // les scans : le disque d'abord ; puis, SEULEMENT pour les cles absentes, la copie locale recuperee de NOTRE archive R2 en lecture seule (recuperer-scans.mjs) ; sinon la cle est comptee manquante
+    const REPLI = process.env.RM_SCANS_REPLI || null;
     const scan = async cle => {
-        const f = path.join(IMAGES, crypto.createHash('sha1').update(cle).digest('hex') + '.webp');
-        try { const b = fs.readFileSync(f); lus.add(cle); return b; } catch { manque.scans++; return null; }
+        const nom = crypto.createHash('sha1').update(cle).digest('hex') + '.webp';
+        for (const f of [path.join(IMAGES, nom), REPLI ? path.join(REPLI, nom) : null]) {
+            if (!f) continue;
+            try { const b = fs.readFileSync(f); lus.add(cle); return b; } catch { /* suivant */ }
+        }
+        manque.scans++; manque.cles.add(cle); return null;
     };
     const etat = { courante: () => ({ index: o.index, meta: { modele: MODELE } }) };
     const fournisseur = VE.creerFournisseurEmpreinte({ cfg: { modeleEmpreinte: MODELE }, etat, zones, scan, delaiMs, budget: 10, fileMax: 3 });
