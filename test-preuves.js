@@ -271,6 +271,7 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         refus(ee(), pe({ couplesDuSet: [...COUPLES, { nomEn: 'Grass Energy', numero: '2010' }] }), undefined, 'deux produits au même couple (type, année)');
         refus(ee(), pe({ couplesDuSet: undefined }), undefined, 'liste du set inconnue');
         refus(ee(), pe({ couplesDuSet: [] }), undefined, 'liste du set vide');
+        refus(ee(), pe({ couplesDuSet: [...COUPLES, { nomEn: null, numero: '2010' }] }), undefined, 'un nom inconnu dans la liste pourrait cacher un doublon');
         refus(ee(), pe({ couplesDuSet: [{ nomEn: 'Fire Energy', numero: '2010' }] }), undefined, 'le produit n\'est pas dans sa propre liste');
         refus(ee({ annee: 2010 }), pe({ numero: '1' }), undefined, 'numéro du produit qui n\'est pas une année');
         refus(ee({ annee: 1 }), pe({ numero: '1' }), undefined, 'idem, année lue 1');
