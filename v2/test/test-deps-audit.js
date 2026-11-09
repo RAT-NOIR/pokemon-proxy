@@ -243,6 +243,6 @@ const fermer = async res => { if (!res.c.destroyed) res.c.destroy(); await atten
     await new Promise(r => srv.close(r));
     await attendre(300);
     v('après la fermeture du serveur : aucune exception non capturée', nonCapturees, []);
-    console.log(`\n${ok} reussis, ${ko} echoues`);
+    console.log(`\n${ok} réussis, ${ko} échoués`);
     process.exit(ko ? 1 : 0);
 })().catch(e => { console.log('ERREUR DU BANC', e && e.stack); process.exit(1); });
