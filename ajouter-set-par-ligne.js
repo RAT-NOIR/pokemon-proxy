@@ -94,6 +94,13 @@ async function executer(db, a, juger) {
     return { ok: rl.ok, code: rl.ok ? 0 : 1, modifiees: 1, plan, lignes, message: rl.ok ? undefined : '🔴 la relecture ne concorde pas' };
 }
 
+/** L'expansion Cardmarket des lignes lues (la ligne de table n'en porte pas toujours) : une seule valeur, sinon LÈVE — jamais `undefined` passé à la règle. */
+function idExpansionDesLignes(lignes) {
+    const vals = [...new Set((lignes || []).map(l => l?.idExpansion))];
+    if (vals.length !== 1 || !Number.isInteger(vals[0])) throw new Error(`idExpansion des lignes : ${vals.length ? `valeurs ${JSON.stringify(vals)}` : 'aucune ligne'}, une seule valeur entière exigée`);
+    return vals[0];
+}
+
 /** Le verdict de la règle R de production pour (produit, carte) : contexte lu en base, règles du site importées — jamais copiées. */
 async function construireJuger({ cartesDb, prodDb, a }) {
     const R = require('./collecte-cartes/regle-r-fiches');
@@ -105,17 +112,18 @@ async function construireJuger({ cartesDb, prodDb, a }) {
     if (L.slugSet !== a.set) throw new Error(`le code ${a.code} désigne le set « ${L.slugSet} », pas « ${a.set} »`);
     const bases = await R.lireBases(cartesDb, lireMongo);
     const ctx = R.construireContexte(bases, await R.chargerSite());
-    const lecturesExp = await produitsDeLExpansion({ db: prodDb }, L.idExpansion);
+    const idExpansion = idExpansionDesLignes(await cartesDb.collection('cartes_produits').find({ carteId: a.carte, idProduct: { $in: a.produits } }).toArray());
+    const lecturesExp = await produitsDeLExpansion({ db: prodDb }, idExpansion);
     const numDe = new Map(lecturesExp.map(x => [x.idProduct, x.numero]));
     const parId = new Map(bases.cartes.map(c => [c._id, c]));
     return (idProduct) => {
         const p = lecturesExp.find(x => x.idProduct === idProduct);
-        if (!p) return { autorise: false, regle: null, cause: 'PRODUIT-ABSENT', raison: `produit ${idProduct} absent de l'expansion ${L.idExpansion}` };
+        if (!p) return { autorise: false, regle: null, cause: 'PRODUIT-ABSENT', raison: `produit ${idProduct} absent de l'expansion ${idExpansion}` };
         return R.jugerRegleR(ctx, { L, p, X: parId.get(a.carte), numDe });
     };
 }
 
-module.exports = { lireArguments, planifier, garderSousLot, releve, lireMonde, executer, construireJuger };
+module.exports = { lireArguments, planifier, garderSousLot, releve, lireMonde, executer, construireJuger, idExpansionDesLignes };
 
 if (require.main === module) {
     const a = lireArguments(process.argv.slice(2));

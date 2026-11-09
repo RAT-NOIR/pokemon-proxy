@@ -49,6 +49,11 @@ t('arguments : inconnu refusé', () => { if (!A.lireArguments(['--carte=1', '--s
 t('arguments : carte répétée refusée', () => { if (!A.lireArguments(['--carte=1', '--carte=2', '--set=s', '--code=c', '--produit=2', '--attendu=1']).erreur) throw new Error('accepté'); });
 t('arguments : liste de plus de 10 refusée', () => { if (!A.lireArguments(['--carte=1', '--set=s', '--code=c', '--produits=' + Array.from({ length: 11 }, (_, i) => i + 1).join(','), '--attendu=1']).erreur) throw new Error('accepté'); });
 
+t('idExpansion : lue sur les lignes, unique', () => eq(A.idExpansionDesLignes([ligne({ idExpansion: 4467 }), ligne({ idExpansion: 4467 })]), 4467));
+t('idExpansion : deux valeurs différentes refusées', () => { let m = ''; try { A.idExpansionDesLignes([ligne({ idExpansion: 1 }), ligne({ idExpansion: 2 })]); } catch (e) { m = e.message; } if (!/idExpansion des lignes/.test(m)) throw new Error('non refusé'); });
+t('idExpansion : absente refusée (jamais undefined)', () => { let m = ''; try { A.idExpansionDesLignes([ligne()]); } catch (e) { m = e.message; } if (!/idExpansion des lignes/.test(m)) throw new Error('non refusé'); });
+t('idExpansion : aucune ligne refusée', () => { let m = ''; try { A.idExpansionDesLignes([]); } catch (e) { m = e.message; } if (!/idExpansion des lignes/.test(m)) throw new Error('non refusé'); });
+
 t('hors lot refusé', () => { let m = ''; try { A.garderSousLot({}, 123); } catch (e) { m = e.message; } if (!/hors de lot-additif/.test(m)) throw new Error('non refusé'); });
 t('hors lot : mauvais ppid refusé', () => { let m = ''; try { A.garderSousLot({ LOT_ADDITIF_PID: '5' }, 6); } catch (e) { m = e.message; } if (!m) throw new Error('non refusé'); });
 t('sous lot accepté', () => { A.garderSousLot({ LOT_ADDITIF_PID: '5' }, 5); });
