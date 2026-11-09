@@ -67,7 +67,7 @@ function depuis(env, { maintenant = () => Date.now() } = {}) {
     const sha = mesure.actif ? crypto.createHash('sha256').update(secret).digest('hex') : null;
     const gardes = new Map();   // adresse (forme) -> { lien, type, expireA } : UN emplacement par adresse, le dernier lien ; les clés ne sortent jamais de `adressesLien` (carte bornée par la liste)
 
-    const liste =Object.freeze([...ADRESSES_EXEMPTEES, ...adressesDeclarees(env.V2_ESSAI_ADRESSES_MESURE).filter(a => !ADRESSES_EXEMPTEES.includes(a))]);
+    const liste = Object.freeze([...ADRESSES_EXEMPTEES, ...adressesDeclarees(env.V2_ESSAI_ADRESSES_MESURE).filter(a => !ADRESSES_EXEMPTEES.includes(a))]);
     const exemptee = s => { const f = forme(s); return f !== null && liste.includes(f); };
     const autorise = req => mesure.actif === true && secretEgal(sha, req.get(ENTETE)) && exemptee(adresseDuCorps(req));
     // Une requête dispensée du défi ne doit JAMAIS faire partir un courriel vers une adresse hors de la liste : le compte est retrouvé par `emailCle` (qui efface points et « +… » de Gmail), donc l'adresse

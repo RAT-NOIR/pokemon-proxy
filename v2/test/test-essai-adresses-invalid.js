@@ -169,5 +169,19 @@ const DEFI = [422, 'defi-anti-robot'];
         H.v('mille adresses `.invalid` hors liste : le pilote est atteint (aucun court-circuit), et la route reste muette pour elles', [memoire.envoyes.length, await lire('x7@rat-market.invalid')], [1000, 'natif']);
     }
 
+    // ---- 4. l'avertissement d'inactivité (non enveloppé par le module) : le VRAI pilote refuse `.invalid` ; la passe ne marque jamais ces comptes ----
+    {
+        const avant = etat();
+        let leve = null; try { await pilote.envoyerAvertissement('essai1@rat-market.invalid', { derniereConnexionLe: new Date(), suppressionLe: new Date() }); } catch (e) { leve = e.name; }
+        H.v('envoyerAvertissement vers une adresse `.invalid` : le vrai pilote lève BrevoAdresse, 0 appel réseau, 0 réservation de plafond', [leve, delta(avant).slice(1)], ['BrevoAdresse', [0, 0]]);
+        const I = require('../comptes/inactifs'), cfg = lireConfig(ENV), ancien = new Date(Date.now() - 10 * 365 * 86400e3);
+        const c = M.nouveauCompte({ email: 'inactif-test@rat-market.invalid', emailCle: 'inactif-test@rat-market.invalid', motDePasse: null, now: ancien });
+        c.verifie = true; c.verifieLe = ancien; c.derniereConnexionLe = ancien; await db.col('comptes').insertOne(c);
+        const s = await I.avertirInactifs({ cfg, courrier: pilote });
+        const relu = await db.col('comptes').findOne({ _id: c._id });
+        H.v('passe d\'avertissement sur un compte `.invalid` inactif : jamais concerné (compte de banc) — ni envoi, ni échec, ni marque, 0 réseau', [s.avertis, s.echecs, relu.avertissementSuppression === undefined, delta(avant).slice(1)], [0, 0, true, [0, 0]]);
+        await db.col('comptes').deleteOne({ _id: c._id });
+    }
+
     await H.fermerBac(); H.bilan();
 })().catch(e => { console.error(e); process.exit(1); });
