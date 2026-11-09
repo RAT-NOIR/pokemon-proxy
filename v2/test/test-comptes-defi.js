@@ -142,7 +142,7 @@ async function demarrerAvecCors(cfg) {
     {
         const SEC = 'secret-de-mesure-' + 'x'.repeat(20);   // 37 caractères
         // PARCOURS DU SITE : l'exemption est liée à l'adresse EXACTE du compte de test (et n'existe que sur l'essai : base rm_essai) ; tout le bloc se joue donc sur CETTE adresse, pour que chaque refus soit un vrai refus.
-        const ADR = 'ratmarket.contact+essai@gmail.com';
+        const ADR = 'essai-site@rat-market.invalid';
         { const cT = M.nouveauCompte({ email: ADR, emailCle: require('../comptes/email-cle').emailCle(ADR), motDePasse: await P.hacher(MDP) }); cT.verifie = true; await db.col('comptes').insertOne(cT); }
         const cas = async (env, entetes, route = '/api/compte/connexion', corps = { email: ADR, motDePasse: MDP }) => {
             A.registre.vider(); A.registre.fournir('courrier', courrier); A.registre.fournir('turnstile', turnstile);

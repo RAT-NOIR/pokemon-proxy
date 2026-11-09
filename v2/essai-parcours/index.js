@@ -5,14 +5,16 @@
 // IL N'EST JAMAIS CHARGÉ hors de l'essai : v2/config.js ne le `require` que si v2/garde-essai.js prouve l'essai (base rm_essai ET service Render de l'essai ET V2_CIBLE=essai). Sous tout autre environnement
 // (production comprise), ce fichier n'est pas exécuté (prouvé par require.cache dans test-essai-parcours.js), la route n'est pas montée (404 natif) et `cfg.mesure.autorise` n'existe pas.
 //
-// Il porte DEUX choses, et rien d'autre :
+// Il porte TROIS choses, et rien d'autre :
 //  1. l'exemption du seul DÉFI Turnstile (inscription, connexion, mot de passe oublié, renvoi de confirmation) pour la requête qui porte le secret (en-tête X-Rat-Market-Mesure, comparé en temps constant)
-//     ET l'adresse EXACTE du compte de test. Origine, limites par IP et par adresse, mot de passe restent ;
-//  2. la route d'administration POST /api/essai/lien-confirmation (même secret, même adresse) qui rend le dernier lien de confirmation du compte de test, UNE fois, pendant 15 minutes.
-//     Le lien n'est gardé qu'EN MÉMOIRE de ce processus (jamais en base, jamais journalisé), et seulement pour cette adresse : le chemin normal (jetons hachés dans liens_email) n'est pas touché.
+//     ET une adresse EXACTE de la liste fermée. Origine, limites par IP et par adresse, mot de passe restent ;
+//  2. le COURT-CIRCUIT du courrier : une adresse de la liste en `.invalid` (le compte du site et les comptes de parcours-test) ne reçoit JAMAIS de courriel, le pilote n'est pas appelé (ni plafond, ni réseau) : le lien de
+//     vérification ou de réinitialisation est retenu directement. Un rebond abîmerait la réputation d'envoi. Le refus de `.invalid` de courrier-brevo.js reste la seconde barrière ;
+//  3. la route d'administration POST /api/essai/lien-confirmation (même secret, adresse de la liste en `.invalid`, hors comptes de mesure) qui rend le dernier lien retenu de CETTE adresse, UNE fois, pendant 15 minutes.
+//     Un emplacement par adresse (carte bornée par la liste), gardé qu'EN MÉMOIRE de ce processus (jamais en base, jamais journalisé) : le chemin normal (jetons hachés dans liens_email) n'est pas touché.
 const crypto = require('crypto');
 
-const ADRESSE_TEST = 'ratmarket.contact+essai@gmail.com';
+const ADRESSE_TEST = 'essai-site@rat-market.invalid';
 const ENTETE = 'x-rat-market-mesure';
 const CHEMIN_LIEN = '/api/essai/lien-confirmation';
 const DUREE_LIEN_MS = 15 * 60e3;
@@ -20,9 +22,11 @@ const DUREE_LIEN_MS = 15 * 60e3;
 /** Forme comparée : la même normalisation de base que emailCle (NFKC, espaces, minuscules) mais SANS l'effacement des points ni des « + » de Gmail : l'adresse doit être EXACTEMENT celle du compte de test. */
 const forme = s => (typeof s === 'string' && s.length <= 254 ? s.normalize('NFKC').trim().toLowerCase() : null);
 const estAdresseTest = s => forme(s) === ADRESSE_TEST;
+// `.invalid` : le domaine réservé (RFC 2606) qui n'a jamais de boîte. Écrit par ce qu'il autorise : la forme ENTIÈRE se termine par « .invalid » (aucune autre lecture).
+const estInvalide = f => typeof f === 'string' && f.endsWith('.invalid');
 // LISTE FERMÉE des adresses que l'exemption du défi peut dispenser (arbitrage du coordinateur, 2026-11-08) : le compte de test du site et les DEUX comptes de mesure de l'essai (v2/admin/compte-essai.js :
 // ADRESSE_BANC ; installations/exemption-banc.js : ADRESSE_ORDINAIRE), pour que les outils de mesure (connexion-essai, parcours-test, juge en un clic) gardent l'exemption qu'ils avaient. Rien d'autre :
-// toute autre adresse passe le contrôle normal. La route du lien de confirmation ne vaut que pour l'adresse de test (les deux autres sont en `.invalid` : aucun courriel n'en part).
+// toute autre adresse passe le contrôle normal. La route du lien de confirmation vaut pour les adresses de la liste en `.invalid`, SAUF les deux comptes de mesure (aucun courriel n'en part, aucun lien n'est retenu).
 const ADRESSE_MESURE = 'banc-mesure@rat-market.invalid', ADRESSE_MESURE_ORDINAIRE = 'banc-ordinaire@rat-market.invalid';
 const ADRESSES_EXEMPTEES = Object.freeze([ADRESSE_TEST, ADRESSE_MESURE, ADRESSE_MESURE_ORDINAIRE]);
 const estAdresseExemptee = s => { const f = forme(s); return f !== null && ADRESSES_EXEMPTEES.includes(f); };
@@ -61,9 +65,9 @@ function depuis(env, { maintenant = () => Date.now() } = {}) {
     else if (secret.length < 32) mesure.raison = 'V2_SECRET_MESURE trop court (moins de 32 caractères)';
     else { mesure.actif = true; mesure.raison = 'essai'; }
     const sha = mesure.actif ? crypto.createHash('sha256').update(secret).digest('hex') : null;
-    let garde = null;   // { lien, expireA } : le dernier lien de confirmation du compte de test, un seul
+    const gardes = new Map();   // adresse (forme) -> { lien, type, expireA } : UN emplacement par adresse, le dernier lien ; les clés ne sortent jamais de `adressesLien` (carte bornée par la liste)
 
-    const liste = Object.freeze([...ADRESSES_EXEMPTEES, ...adressesDeclarees(env.V2_ESSAI_ADRESSES_MESURE).filter(a => !ADRESSES_EXEMPTEES.includes(a))]);
+    const liste =Object.freeze([...ADRESSES_EXEMPTEES, ...adressesDeclarees(env.V2_ESSAI_ADRESSES_MESURE).filter(a => !ADRESSES_EXEMPTEES.includes(a))]);
     const exemptee = s => { const f = forme(s); return f !== null && liste.includes(f); };
     const autorise = req => mesure.actif === true && secretEgal(sha, req.get(ENTETE)) && exemptee(adresseDuCorps(req));
     // Une requête dispensée du défi ne doit JAMAIS faire partir un courriel vers une adresse hors de la liste : le compte est retrouvé par `emailCle` (qui efface points et « +… » de Gmail), donc l'adresse
@@ -74,10 +78,14 @@ function depuis(env, { maintenant = () => Date.now() } = {}) {
         w.envoyerReinitialisation = (email, ...r) => (exemptee(email) ? c.envoyerReinitialisation(email, ...r) : Promise.resolve());
         return w;
     };
-    const autoriseLien = req => mesure.actif === true && secretEgal(sha, req.get(ENTETE)) && estAdresseTest(adresseDuCorps(req));   // la route du lien : l'adresse de test SEULE
-    const retenir = lien => { if (typeof lien === 'string' && lien) garde = { lien, expireA: maintenant() + DUREE_LIEN_MS }; };
-    const prendre = () => {   // usage unique : lu, il disparaît ; expiré, il disparaît aussi
-        const g = garde; garde = null;
+    // SANS COURRIER : les adresses de la liste en `.invalid`. Le pilote n'est jamais appelé pour elles (la comparaison est EXACTE sur l'adresse stockée du compte, jamais par motif).
+    const sansCourrier = s => { const f = forme(s); return f !== null && estInvalide(f) && liste.includes(f); };
+    // La route du lien et la mémoire des liens : les adresses sans courrier, hors comptes de mesure (banc-mesure@, banc-ordinaire@ : jamais de lien servi).
+    const adressesLien = Object.freeze(liste.filter(a => estInvalide(a) && a !== ADRESSE_MESURE && a !== ADRESSE_MESURE_ORDINAIRE));
+    const autoriseLien = req => { const f = forme(adresseDuCorps(req)); return mesure.actif === true && secretEgal(sha, req.get(ENTETE)) && f !== null && adressesLien.includes(f); };
+    const retenir = (email, lien, type) => { const f = forme(email); if (f !== null && adressesLien.includes(f) && typeof lien === 'string' && lien) gardes.set(f, { lien, type, expireA: maintenant() + DUREE_LIEN_MS }); };
+    const prendre = email => {   // usage unique : lu, il disparaît ; expiré, il disparaît aussi
+        const f = forme(email), g = gardes.get(f); gardes.delete(f);
         return g && maintenant() <= g.expireA ? g : null;
     };
 
@@ -88,17 +96,20 @@ function depuis(env, { maintenant = () => Date.now() } = {}) {
             if (!c.dejaSurveille) {
                 const w = Object.create(c);
                 w.dejaSurveille = true;
-                // le lien n'est retenu qu'APRÈS un envoi réussi, et seulement pour l'adresse STOCKÉE exactement égale à celle de test (un échec d'envoi, ou un compte de même clé écrit autrement, ne retient rien)
-                w.envoyerVerification = async (email, lien, options) => { const r = await c.envoyerVerification(email, lien, options); if (estAdresseTest(email)) retenir(lien); return r; };
+                // COURT-CIRCUIT : pour une adresse STOCKÉE de la liste en `.invalid`, le lien est retenu DIRECTEMENT et le pilote n'est jamais appelé (aucun courriel, aucun plafond, aucun réseau). Toute autre adresse :
+                // le pilote tel quel, et RIEN n'est retenu (un compte de même clé écrit autrement, une adresse réelle déclarée, n'a ni court-circuit ni lien).
+                w.envoyerVerification = async (email, lien, options) => { if (sansCourrier(email)) { retenir(email, lien, 'verification'); return undefined; } return c.envoyerVerification(email, lien, options); };
+                w.envoyerReinitialisation = async (email, lien, options) => { if (sansCourrier(email)) { retenir(email, lien, 'reinitialisation'); return undefined; } return c.envoyerReinitialisation(email, lien, options); };
                 registre.fournir('courrier', w);
             }
         } catch { /* pas de courrier : aucun lien ne sera retenu, la route répondra « introuvable » */ }
+        // (le gabarit de `restreindreCourrier` plus haut lit le pilote DÉJÀ enveloppé : une requête dispensée du défi vers une adresse de la liste en `.invalid` passe donc, elle aussi, par le court-circuit)
         router.post(CHEMIN_LIEN, (req, res, next) => {
             if (!autoriseLien(req)) return next();   // sans le secret, ou une autre adresse : la route n'existe pas (404 natif d'Express, octet pour octet)
-            const g = prendre();
+            const g = prendre(adresseDuCorps(req));
             res.setHeader('Cache-Control', 'no-store');
             if (!g) return res.status(404).json({ success: false, erreur: { code: 'INTROUVABLE', message: 'Aucun lien de confirmation en attente' } });
-            return res.status(200).json({ success: true, lien: g.lien, expire: new Date(g.expireA).toISOString() });
+            return res.status(200).json({ success: true, lien: g.lien, type: g.type, expire: new Date(g.expireA).toISOString() });
         });
     }
 
