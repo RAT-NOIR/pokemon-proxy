@@ -130,6 +130,13 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
         const nomsParSetRond = new Map();
         const slugsRonds = [...new Set([...lignesDe.values()].flat().map(l => l.slugSet).filter(s => PV.POSITIONS_RONDES && Object.hasOwn(PV.POSITIONS_RONDES, s)))];
         if (slugsRonds.length && lire.produitsDuSet) for (const l of await lire.produitsDuSet(slugsRonds)) (nomsParSetRond.get(l.slugSet) || nomsParSetRond.set(l.slugSet, []).get(l.slugSet)).push(etatDe.get(l.idProduct)?.name ?? null);
+        // (09/11) Énergies par année (ENERGIES_PAR_ANNEE_SETS) : les couples (nom, numéro) de TOUS les produits du set — numéro de numeros_cartes (l'année), nom de l'état ; un nom absent reste null -> la règle refuse
+        const couplesParSet = new Map();
+        const slugsEnergies = [...new Set([...lignesDe.values()].flat().map(l => l.slugSet).filter(s => PV.ENERGIES_PAR_ANNEE_SETS && PV.ENERGIES_PAR_ANNEE_SETS.includes(s)))];
+        if (slugsEnergies.length && lire.numerosDuSet) {   // le référentiel (numeros_cartes), pas cartes_produits : un produit du set sans carte jointe compte aussi
+            const refSet = await lire.numerosDuSet(slugsEnergies);
+            for (const s of slugsEnergies) couplesParSet.set(s, PV.couplesDuSetDepuis(refSet.filter(p => p.slugSet === s), id => etatDe.get(id)?.name));
+        }
         const servies = new Map();
         const carteIdsRemplacement = [...new Set(r.appariees.filter(a => a.entree.regle === PV.REGLE_MEME_DESSIN).flatMap(a => (lignesDe.get(a.entree.idProduct) ?? []).map(l => l.carteId)).filter(c => c != null))];
         if (carteIdsRemplacement.length) {
@@ -167,6 +174,7 @@ async function construirePlanAvec({ dossier, cache, lire, etat, lecteur, fichier
                 if (e.lu?.langue === 'ja') produit.tableJaCroisee = await tableCroisee();
             }
             if (nomsParSetRond.has(L.slugSet)) produit.nomsDuSet = nomsParSetRond.get(L.slugSet);
+            if (couplesParSet.has(L.slugSet)) produit.couplesDuSet = couplesParSet.get(L.slugSet);
             if (e.regle === PV.REGLE_MEME_DESSIN) { const s = servies.get(L.carteId); produit.imagesServies = s?.images ?? []; produit.documentsServis = s?.documents ?? new Map(); }
             // tour 4 (2) : pour une position (Battle Academy, Trainer Kit), la règle a besoin de TOUS les produits de ces sets et des impressions de la carte (lecture seule)
             if (PV.setAdmisPourPosition(L.slugSet)) {
@@ -275,6 +283,7 @@ function lireDepuisLaBase(db, prodDb) {
         codesSet: ids => lots(ids, lot => par(prodDb.collection('codes_set'), { idExpansion: { $in: lot } }, { _id: 0, idExpansion: 1, codeSet: 1 })),
         cartesDeNomEn: noms => lots(noms, lot => par(db.collection('cartes'), { nomEn: { $in: lot }, nomJa: { $nin: [null, ''] }, _id: { $gt: 0 } }, { nomEn: 1, nomJa: 1 })),
         cartesAvecNomJa: () => par(db.collection('cartes'), { nomJa: { $nin: [null, ''] }, _id: { $gt: 0 } }, { nomEn: 1, nomJa: 1 }),
+        numerosDuSet: slugs => par(prodDb.collection('numeros_cartes'), { slugSet: { $in: slugs } }, { _id: 0, idProduct: 1, slugSet: 1, numero: 1 }),
         produitsDuSet: slugs => par(db.collection('cartes_produits'), { slugSet: { $in: slugs } }, { _id: 0, idProduct: 1, slugSet: 1, numeroFiche: 1 }),
         // tour 4 (2) : tous les produits des sets à position, et les impressions des cartes (le numéro imprimé lu doit en être une)
         positions: () => par(db.collection('cartes_produits'), { slugSet: { $regex: '^Battle-Academy|Trainer-Kit' } }, { _id: 0, idProduct: 1, slugSet: 1, numeroFiche: 1 }),

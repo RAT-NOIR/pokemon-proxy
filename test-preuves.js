@@ -249,6 +249,45 @@ const produit = (o = {}) => ({ idProduct: 1001, idExpansion: 5000, tirage: 'intl
         assert.match(lue(e('112'), sans(S)).motifs.join(), /numero-different/, 'numérique faux : refusé comme avant');
         assert.match(lue(e(null), sans(S)).motifs.join(), /numero-different/);
     });
+    // ➕ 2026-11-09 : Énergies de base « Unnumbered Energies » — un produit par type ET par année ; la carte n'imprime aucun numéro, l'année du copyright (lu.annee, entier structuré) est le numéro du produit
+    await test('UE (09/11) : Unnumbered Energies : lu.annee = année du produit + nom concordant + couple (type, année) unique ; année fausse / absente / non entière, set hors liste, autre type, couple en double ou inconnu refusés', () => {
+        const SET = 'Unnumbered-Energies';
+        const COUPLES = [{ nomEn: 'Grass Energy', numero: '2010' }, { nomEn: 'Grass Energy', numero: '2011' }, { nomEn: 'Fire Energy', numero: '2010' }];
+        const pe = (o = {}) => produit({ slugSet: SET, numero: '2010', slug: 'Grass-Energy-V4-UEN', nomEn: 'Grass Energy', couplesDuSet: COUPLES, ...o });
+        const ee = (o = {}) => entree({ attendu: { ...entree().attendu, nom: 'Grass Energy', numero: '2010' }, lu: { ...entree().lu, nom: 'Grass Energy', numero: null, total: null, annee: 2010, marques: ['aucun numéro imprimé', '©2010 Pokémon/Nintendo'], ...o } });
+        assert.deepStrictEqual(lue(ee(), pe()), { ok: true, motifs: [], drapeaux: ['energie-par-annee:2010'] }, 'cas nominal');
+        assert.deepStrictEqual(PV.ENERGIES_PAR_ANNEE_SETS, ['Unnumbered-Energies']);
+        assert.ok(Object.isFrozen(PV.ENERGIES_PAR_ANNEE_SETS));
+        const refus = (e, p, re = /numero-ou-total-absent/, msg) => { const r = lue(e, p); assert.ok(!r.ok && re.test(r.motifs.join()), `${msg} : ${r.motifs}`); };
+        refus(ee({ annee: 2011 }), pe(), undefined, 'année lue ≠ année du produit');
+        refus(ee({ annee: null }), pe(), undefined, 'année absente');
+        refus(ee({ annee: undefined }), pe(), undefined, 'année non renseignée');
+        refus(ee({ annee: '2010' }), pe(), undefined, 'année en chaîne (champ structuré = entier)');
+        refus(ee({ annee: 2010.5 }), pe(), undefined, 'année non entière');
+        refus(ee({ marques: ['aucun numéro imprimé', '©2010 Pokémon/Nintendo'], annee: undefined }), pe(), undefined, 'jamais lue dans une marque en texte libre');
+        refus(ee(), pe({ slugSet: 'Autre-Set' }), undefined, 'set hors liste');
+        refus(ee({ total: '40' }), pe(), undefined, 'un total imprimé n\'est pas une Énergie sans numéro');
+        assert.match(lue(ee({ nom: 'Fire Energy' }), pe()).motifs.join(), /nom/, 'autre type que le produit');
+        refus(ee(), pe({ couplesDuSet: [...COUPLES, { nomEn: 'Grass Energy', numero: '2010' }] }), undefined, 'deux produits au même couple (type, année)');
+        refus(ee(), pe({ couplesDuSet: undefined }), undefined, 'liste du set inconnue');
+        refus(ee(), pe({ couplesDuSet: [] }), undefined, 'liste du set vide');
+        refus(ee(), pe({ couplesDuSet: [...COUPLES, { nomEn: null, numero: '2010' }] }), undefined, 'un nom inconnu dans la liste pourrait cacher un doublon');
+        for (const numero of [null, undefined, '', '  ']) refus(ee(), pe({ couplesDuSet: [...COUPLES, { nomEn: 'Fire Energy', numero }] }), undefined, `un numéro absent (${JSON.stringify(numero)}) dans la liste pourrait cacher un doublon`);
+        // la liste se construit sur TOUS les produits du référentiel du set, joints ou non (fonction extraite, sans base)
+        const ref = [{ idProduct: 1, numero: '2010' }, { idProduct: 2, numero: '2011' }, { idProduct: 3, numero: '2010' }];
+        const noms = new Map([[1, 'Grass Energy'], [2, 'Grass Energy'], [3, 'Fire Energy']]);
+        assert.deepStrictEqual(PV.couplesDuSetDepuis(ref, id => noms.get(id)), [{ idProduct: 1, nomEn: 'Grass Energy', numero: '2010' }, { idProduct: 2, nomEn: 'Grass Energy', numero: '2011' }, { idProduct: 3, nomEn: 'Fire Energy', numero: '2010' }]);
+        assert.strictEqual(lue(ee(), pe({ couplesDuSet: PV.couplesDuSetDepuis(ref, id => noms.get(id)) })).ok, true, 'liste complète : admis');
+        const avecNonJoint = [...ref, { idProduct: 4, numero: '2010' }];   // 4 : produit du set sans carte jointe, même type, même année
+        noms.set(4, 'Grass Energy [V9]');
+        refus(ee(), pe({ couplesDuSet: PV.couplesDuSetDepuis(avecNonJoint, id => noms.get(id)) }), undefined, 'un produit non joint du même type et de la même année refuse le produit joint');
+        noms.delete(4);
+        refus(ee(), pe({ couplesDuSet: PV.couplesDuSetDepuis(avecNonJoint, id => noms.get(id)) }), undefined, 'un produit non joint sans nom : la liste refuse');
+        assert.deepStrictEqual(PV.couplesDuSetDepuis([{ idProduct: 5, numero: '2010' }], () => '   '), [{ idProduct: 5, nomEn: null, numero: '2010' }], 'nom inutilisable -> null');
+        refus(ee(), pe({ couplesDuSet: [{ nomEn: 'Fire Energy', numero: '2010' }] }), undefined, 'le produit n\'est pas dans sa propre liste');
+        refus(ee({ annee: 2010 }), pe({ numero: '1' }), undefined, 'numéro du produit qui n\'est pas une année');
+        refus(ee({ annee: 1 }), pe({ numero: '1' }), undefined, 'idem, année lue 1');
+    });
     // ➕ 2026-11-09 : Master Strategy chinois (CSVM1C, CSVM2) — Cardmarket « A11 », la carte imprime « 011/033 » sans lettre ; la lettre du produit est prouvée par le TOTAL propre au deck + le slug « …CSVM1Ca011 »
     await test('MS (09/11) : Master Strategy zh-hans : numéro sans lettre + total du deck + slug code+lettre+chiffres ; mauvais total, mauvais deck, set hors liste, lettre ambiguë (CSVM1C a/b partagent 033) refusés', () => {
         const pm = (code, slugSet, numero, slug, o = {}) => produit({ tirage: 'zh-hans', codeSet: code, slugSet, numero, slug, ...o });

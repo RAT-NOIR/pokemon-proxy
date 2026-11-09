@@ -147,6 +147,30 @@ function masterStrategy(lu, produit, np) {
     if (!slug || !new RegExp(`(^|-)${echapper(code)}${lettre}0*${echapper(chiffres.replace(/^0+(?=\d)/, ''))}$`).test(slug)) return null;
     return { lettre, code };
 }
+/**
+ * ➕ 2026-11-09 — ÉNERGIES DE BASE « UNNUMBERED ENERGIES » : Cardmarket vend UN produit par type d'Énergie et par ANNÉE ; son `numero` est l'année (« 2010 »), la carte n'imprime aucun numéro et son copyright porte l'année.
+ * Liste FERMÉE de slugSet (modèle masterStrategy). Admis SEULEMENT si : slugSet dans la liste, numéro du produit = quatre chiffres (année), `lu.annee` (champ STRUCTURÉ, entier, jamais lu dans une marque en texte libre)
+ * égal à cette année, aucun numéro ni total lus (la carte n'en imprime pas), et le produit est l'UNIQUE de son couple (type, année) parmi `produit.couplesDuSet` ([{nomEn, numero}], lus en base ; absent, vide ou sans
+ * le produit lui-même = refus : « je ne sais pas » n'est jamais « tout va bien »). Le NOM lu, lui, se juge ensuite par motifDeNom comme pour tout produit. Tout le reste reste refusé.
+ * @returns {{annee: number}|null}
+ */
+const ENERGIES_PAR_ANNEE_SETS = Object.freeze(['Unnumbered-Energies']);
+function energieParAnnee(lu, produit, np) {
+    if (!ENERGIES_PAR_ANNEE_SETS.includes(produit?.slugSet)) return null;
+    if (!/^(19|20)\d\d$/.test(String(np ?? '').trim())) return null;
+    if (!Number.isInteger(lu?.annee) || lu.annee !== Number(String(np).trim())) return null;
+    if (texte(lu?.numero) || texte(lu?.total)) return null;
+    const liste = produit?.couplesDuSet;
+    if (!Array.isArray(liste) || liste.length === 0 || !texte(produit?.nomEn) || liste.some(c => !c || !texte(c.nomEn) || !texte(c.numero))) return null;   // un nom OU un numéro inconnu dans la liste pourrait cacher un doublon : on ne conclut pas
+    const mien = J.decomposerNomCardmarket(produit.nomEn).nom;
+    const memeCouple = liste.filter(c => String(c.numero ?? '').trim() === String(np).trim() && memeNomQueLeProduit(mien, c.nomEn));
+    return memeCouple.length === 1 ? { annee: lu.annee } : null;
+}
+/**
+ * La liste `couplesDuSet` se construit sur TOUS les produits du référentiel du set (numeros_cartes par slugSet), joints à une carte ou non. `nomDe(idProduct)` rend le nom Cardmarket du produit (catalogue / état A/B/C,
+ * la MÊME source que `produit.nomEn`) ; un nom absent ou vide devient null, et energieParAnnee refuse alors toute la liste. La comparaison du nom se fait ensuite par memeNomQueLeProduit (decomposerNomCardmarket + clesNom).
+ */
+const couplesDuSetDepuis = (produitsRef, nomDe) => produitsRef.map(p => { const n = nomDe(p.idProduct); return { idProduct: p.idProduct, nomEn: texte(n) ? n : null, numero: p.numero ?? null }; });
 /** Tour 4 (3) : le numéro en FIN de slug Cardmarket (« …-PPS8MEG-114 » -> « 114 »), frontière non alphanumérique avant ; null si le slug n'en porte pas (« …-CIN71 » : collé à des lettres, ce n'est pas un numéro). */
 const numeroFinDeSlug = slug => { const m = /(?:^|[^A-Za-z0-9])(\d+[A-Za-z]*)$/.exec(String(slug ?? '').trim()); return m ? m[1] : null; };
 // Tour 4 (5) : la variante nommée d'un produit sans numéro (« Blue Border » / « standard ») se compare à la finition LUE, par table fermée ; une autre valeur de `attendu.variante` (V1, V2…) n'entre pas ici.
@@ -742,7 +766,8 @@ function evaluerPreuveLue({ entree, produit, langueProduit, sansTotalAutorise = 
         const n = lu.numero == null ? '' : String(lu.numero).trim(), t = lu.total == null ? '' : String(lu.total).trim();
         // tour 2 (1) : une promo (« XY150a », « SM30a ») n'imprime aucun total — il n'est exigé que pour un numéro purement numérique (+ suffixe) ; un préfixe alphabétique se juge sans total
         const sansTotalTolere = sansTotalAutorise === true && t === '' && sansTotalAdmis(lu, produit, np);   // décision 5 : deux sources + liste fermée
-        if (n === '' || (t === '' && !PREFIXE_ALPHABETIQUE.test(n) && !sansTotalTolere)) motifs.push('numero-ou-total-absent');
+        if (n === '' && t === '' && energieParAnnee(lu, produit, np)) drapeaux.push(`energie-par-annee:${lu.annee}`);   // (09/11) année lue = année du produit, couple (type, année) unique : dit au coordinateur
+        else if (n === '' || (t === '' && !PREFIXE_ALPHABETIQUE.test(n) && !sansTotalTolere)) motifs.push('numero-ou-total-absent');
         else if (J.cleNumero(n) !== J.cleNumero(np) && !numeroSansPrefixeAdmis(n, np, produit?.slug) && !demiListe(lu, produit, np) && !masterStrategy(lu, produit, np)) motifs.push('numero-different');
         else if (J.cleNumero(n) !== J.cleNumero(np) && demiListe(lu, produit, np)) drapeaux.push(`demi-liste:${demiListe(lu, produit, np).lettre}`);   // (03/11) les trois témoins concordent : dit au coordinateur
         else if (J.cleNumero(n) !== J.cleNumero(np) && masterStrategy(lu, produit, np)) drapeaux.push(`master-strategy:${masterStrategy(lu, produit, np).lettre}`);   // (09/11) total du deck + slug concordent : dit au coordinateur
@@ -1058,5 +1083,5 @@ function trousDuManifeste({ trous, recus, famille }) {
     return { trous: gardes, ecartes };
 }
 
-module.exports = { cleAliasPour, TOTAUX_ZH_SANS_CODE, totalZhSansCode,POSITIONS_RONDES, CODES_IMPRIMES_ADMIS, CODES_SANS_TOTAL, sansTotalAdmis, SOURCE, LOT, SRC, LANGUE_PREUVE, EDITIONS_LOCALES, REGLES, REGLE_MEME_DESSIN, LANGUES_NON_LATINES, MOYENS_DE_LECTURE, MOYENS_DE_LANGUE, SEUIL_PLANCHER, SCORE_PLANCHER, VIDE_PLANCHER, lienAvecLEntree, evaluerRemplacementMemeDessin, langueDuProduit, formeEntree, lireManifeste, lireValidations, lireIllustrations, rapprocher, evaluerPreuveLue, evaluerDeuxSources, evaluerEntree,
+module.exports = { couplesDuSetDepuis, ENERGIES_PAR_ANNEE_SETS, energieParAnnee, cleAliasPour, TOTAUX_ZH_SANS_CODE, totalZhSansCode,POSITIONS_RONDES, CODES_IMPRIMES_ADMIS, CODES_SANS_TOTAL, sansTotalAdmis, SOURCE, LOT, SRC, LANGUE_PREUVE, EDITIONS_LOCALES, REGLES, REGLE_MEME_DESSIN, LANGUES_NON_LATINES, MOYENS_DE_LECTURE, MOYENS_DE_LANGUE, SEUIL_PLANCHER, SCORE_PLANCHER, VIDE_PLANCHER, lienAvecLEntree, evaluerRemplacementMemeDessin, langueDuProduit, formeEntree, lireManifeste, lireValidations, lireIllustrations, rapprocher, evaluerPreuveLue, evaluerDeuxSources, evaluerEntree,
     verifierCache, setAdmisPourPosition, preuvesDe, motifDeNom, motifDeNomTraduit, REGLES_SANS_POKEDEX, ILLUSTRATIONS_PLEINES_SANS_POKEDEX, NOMS_LATINS_IMPRIMES, NOMS_ID_IMPRIMES_IDENTIQUES, motifNomLuHorsLangue, motifNomLuIdentiqueProduit, REGLES_NOM_TRADUIT_DRESSEUR, construireTableJaCroisee, preuveParTableCroisee, porteUnTemoinTraduit, CHAMPS_TEMOIN_TRADUIT, LANGUES_A_NOM_TRADUIT, TAMPONS_ATTENDUS, tamponAttendu, cleFiche, grouperUnites, MOTIFS_DE_TROU, motifDeTrou, trousDuManifeste, sha256De, racineDe };
