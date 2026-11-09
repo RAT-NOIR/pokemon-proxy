@@ -1,6 +1,6 @@
 # RAPPORT — premier scan de la page de banc téléphone (`v2/banc-telephone/`)
 
-Branche `v2-premier-scan`, **rebasée sur `origin/api-v2` (`6f51105c`, avec la détection)**, rien de poussé (`git log origin/api-v2..HEAD` : la liste des commits). Ce rapport sépare ce qui est MESURÉ (Chrome de bureau) de ce qui reste à PROUVER (iPhone, Android). Tour 1 (RELECTURE-PS-1.md, -2.md) et tour 2 (RELECTURE-PS-3.md) appliqués : voir §9.
+Branche `v2-premier-scan`, **rebasée sur `origin/api-v2` (`be283baf`, avec la détection, les grandes photos et Pro)**, rien de poussé (`git log origin/api-v2..HEAD` : la liste des commits). Ce rapport sépare ce qui est MESURÉ (Chrome de bureau) de ce qui reste à PROUVER (iPhone, Android). Tour 1 (RELECTURE-PS-1.md, -2.md) et tour 2 (RELECTURE-PS-3.md) appliqués : voir §9.
 
 > **Rien dans ce rapport n'est une mesure d'iPhone.** Chrome headless 157 sur un PC Ryzen 7 (16 cœurs), CPU ralentie par `Emulation.setCPUThrottlingRate` (ne touche que le fil principal, pas les fils WASM), réseau simulé **par hôte** par le serveur local du pilote. **Aucune phrase « sous 5 s sur iPhone » n'est permise par ces chiffres.**
 
@@ -126,8 +126,10 @@ Constats vérifiés sur le code avant correction : B1 (vérificateur du moteur =
 - **Brotli sur Render** : le calcul au montage n'est testé que sous node ; le pic de CPU/mémoire de q9 sur une petite instance n'est pas lu ; Render peut aussi recompresser ou non en amont. Le débit réel API→iPhone du `.wasm` compressé n'est pas mesuré.
 - Temps de compilation du `.wasm` sur iPhone (≈ 17–80 ms sur PC, mesuré par un témoin autour de `WebAssembly.instantiate`).
 - La voie WebGPU n'a pas été rejouée dans Chrome (seul changement : la session WASM préparée est libérée avant, `libererSessionPreparee`).
-- Le verrou complet n'a pas été lancé (consigne). Suites rejouées vertes sur la base fusionnée : `test-banc-telephone` 131, `-cors` 44, `-ios` 62, `-tour1` 79, `-premier-scan` 98 (nouvelle), `test-decodeur` 1 447, `test-decodeur-page` 69, `test-detection` 73, `test-detection-depot` 14.
+- Le verrou complet n'a pas été lancé (consigne). Suites rejouées vertes sur la base fusionnée : `test-banc-telephone` 142, `-cors` 44, `-ios` 62, `-tour1` 79, `-premier-scan` 100 (nouvelle), `test-decodeur` 1 447, `test-decodeur-page` 69, `test-detection` 126, `test-detection-depot` 57.
 
-## 11. Fusion avec la base `6f51105c`
+## 11. Fusion avec la base `be283baf`
 
-Rebase fait. Conflits résolus : `stockage.js` (`preparation` ET `detection` conservés, leurs deux blocs de validation conservés), `test-banc-telephone.js` et `test-banc-telephone-tour1.js` (compte de routes **23** = page + 21 fichiers + dépôt). `page.html` et `routes.js` fusionnés seuls. Bilan des tests au format « N réussis, M échoués » inchangé.
+Rebase fait (deux fois : sur `6f51105c`, puis sur `be283baf`). Conflits de la dernière fusion, résolus : `stockage.js` (`preparation`, `detection` ET `grandesPhotos` conservés, leurs validations conservées) et `test-banc-telephone.js` (compte de routes). Compte de routes lu sur la liste, pas deviné : **24** = la page + 22 fichiers + le dépôt ; `test-banc-telephone-tour1.js` aligné sur 24. `page.html` et `routes.js` fusionnés seuls. Bilan des tests au format « N réussis, M échoués » inchangé ; le verdict `CONCORDANT` et la liste fermée de la base ne sont pas touchés (leurs tests passent).
+
+**Limite des 8 192 octets, contrôlée** (section 4 du banc) : dépôt grandes photos SEUL au plus long (6 photos, `rm` et `nav` aux champs maximaux) avec une préparation complète : **6 791 octets**, accepté. Dépôt WebGPU complet avec détection : 4 659 octets, accepté. **Dépôt absolument maximal (WebGPU complet + détection + six grandes photos) : 10 469 octets, refusé « trop-gros »** — ces blocs ne coexistent pas dans un vrai dépôt (la page des grandes photos et la mesure WebGPU sont des dépôts distincts), mais s'ils coexistaient un jour, la mesure serait perdue sans autre trace qu'un journal côté page.
