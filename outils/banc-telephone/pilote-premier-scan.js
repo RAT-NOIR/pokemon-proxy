@@ -25,7 +25,7 @@ const app = express(); app.use(require(path.join(racine, 'corps')).analyseur());
 // deux hôtes, deux débits ; Network.emulateNetworkConditions (--debit) ne sait donner qu'un débit unique, partagé.
 const limiter = (res, Mo) => {
     const octetsParS = Mo * 1048576, ow = res.write.bind(res), oe = res.end.bind(res); let chaine = Promise.resolve();
-    const envoyer = async c => { const b = Buffer.isBuffer(c) ? c : Buffer.from(c); for (let i = 0; i < b.length; i += 65536) { const s = b.subarray(i, i + 65536); ow(s); await new Promise(r => setTimeout(r, (s.length / octetsParS) * 1000)); } };
+    const envoyer = async c => { const b = Buffer.isBuffer(c) ? c : Buffer.from(c); const tranche = Math.max(65536, Math.round(octetsParS / 20)); for (let i = 0; i < b.length; i += tranche) { const s = b.subarray(i, i + tranche); ow(s); await new Promise(r => setTimeout(r, (s.length / octetsParS) * 1000)); } };
     res.write = (c, ...r) => { if (c) chaine = chaine.then(() => envoyer(c)); const cb = r.find(x => typeof x === 'function'); if (cb) cb(); return true; };
     res.end = (c, ...r) => { chaine = chaine.then(async () => { if (c && typeof c !== 'function') await envoyer(c); oe(); }); return res; };
 };
