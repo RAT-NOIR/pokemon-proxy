@@ -59,6 +59,18 @@ const clesDe = n => [cleNumero(n), numeroComparable(n)].filter(Boolean);
 const numerosSeRecouvrent = (a, b) => clesDe(a).some(k => clesDe(b).includes(k));
 
 /**
+ * LISTE FERMÉE (2026-11-09) : code d'origine du SLUG -> préfixe que la carte imprime devant le numéro des promos (SWSH195, XY177, SM68).
+ * Cardmarket écrit XYPR pour les XY Black Star Promos : le préfixe imprimé est XY. Tout autre code est absent : aucun préfixe n'y est toléré.
+ */
+const PREFIXES_PROMO = { SWSH: 'SWSH', SM: 'SM', XY: 'XY', XYPR: 'XY' };
+/** Pur. Vrai seulement si le numéro lu est « <préfixe><chiffres> », que le slug porte exactement le code de promo de ce préfixe, et que les chiffres sont ceux du slug. */
+function prefixePromoTolere(numeroLu, d) {
+    const m = /^([A-Za-z]+)(\d+[A-Za-z]?)$/.exec(String(numeroLu ?? '').trim());
+    if (!m || !d || !Object.prototype.hasOwnProperty.call(PREFIXES_PROMO, d.code)) return false;
+    return m[1].toUpperCase() === PREFIXES_PROMO[d.code] && cleNumero(m[2]) === cleNumero(d.num);
+}
+
+/**
  * Une lecture peut couvrir PLUSIEURS produits (`produits: [idProduct, …]`, avec ou sans `idProduct`) : une lecture par produit en sort, `produits` retiré.
  * Une entrée qui n'est pas un objet, ou sans aucun produit, passe telle quelle (elle sera refusée par jugerLecture).
  */
@@ -104,14 +116,15 @@ function jugerLecture({ lecture: x, set, carte, ligne, interdits, expsDuCode }) 
     const d = decoderOrigine(ligne.slug, set.code);
     if (!d) return refus('origine-non-decodee', `le slug « ${ligne.slug} » ne porte pas de code et de numéro d'origine sous « ${set.code} »`);
     // la concordance à TROIS : le numéro LU = le numéro du slug = le numéro de l'impression d'origine (dans l'EXPANSION du code du slug) de la carte, total compris
-    if (cleNumero(numero) !== cleNumero(d.num)) return refus('numero-lu-contredit-slug', `lu ${numero}, le slug « ${ligne.slug} » dit ${d.code} n°${d.num}`);
+    const prefixe = prefixePromoTolere(numero, d);   // « SWSH195 » sous un slug …SWSH-195 : le préfixe imprimé n'est pas une contradiction (liste fermée)
+    if (!prefixe && cleNumero(numero) !== cleNumero(d.num)) return refus('numero-lu-contredit-slug', `lu ${numero}, le slug « ${ligne.slug} » dit ${d.code} n°${d.num}`);
     const exps = expsDuCode?.get(d.code);
     if (!exps || !exps.size) return refus('code-origine-inconnu', `le code d'origine « ${d.code} » ne désigne aucune expansion connue : l'impression d'origine ne peut pas être identifiée`);
     const tirage = set.tirage ?? set.region;
     const origines = (carte.impressions || []).filter(i => i && i.tirage === tirage && exps.has(i.expansion) && !vide(i.numero)).map(i => {
         const [n, t] = String(i.numero).split('/');
         return { numero: n.trim(), total: i.total != null ? String(i.total).trim() : (t != null ? t.trim() : null), expansion: i.expansion };
-    }).filter(o => cleNumero(o.numero) === cleNumero(d.num));
+    }).filter(o => cleNumero(o.numero) === (prefixe ? cleNumero(numero) : cleNumero(d.num)));   // préfixe toléré : l'impression d'origine porte le numéro TEL QU'IMPRIMÉ (SM68)
     if (!origines.length) return refus('slug-sans-impression-d-origine', `le slug dit ${d.code} n°${d.num} : aucune impression de la carte ${x.carteId} dans ${[...exps].join(' / ')} ne porte ce numéro`);
     if (!origines.some(o => cleNumero(o.total ?? '') === cleNumero(total ?? ''))) return refus('total-discordant', `total lu ${total ?? 'aucun'}, les impressions d'origine au n°${d.num} disent ${origines.map(o => o.total ?? 'aucun').join(' / ')}`);
     if (!(carte.images || []).some(m => m && m.set === set._id && m.cleR2 === x.cleR2)) return refus('cle-r2-absente', `le scan « ${x.cleR2} » n'est pas dans les images de la carte ${x.carteId} pour ${set._id}`);
@@ -382,4 +395,4 @@ async function executer({ db, deps, lectures: brutes, attendu = null, ecrire = f
     return { code: 0, rapport };
 }
 
-module.exports = { SOURCE, FAMILLES, familleDe, exigerNom, developper, jugerLecture, numerosSeRecouvrent, analyserSet, ecrireSet, analyserArgs, racinesDuSite, executer };
+module.exports = { SOURCE, FAMILLES, PREFIXES_PROMO, prefixePromoTolere, familleDe, exigerNom, developper, jugerLecture, numerosSeRecouvrent, analyserSet, ecrireSet, analyserArgs, racinesDuSite, executer };
