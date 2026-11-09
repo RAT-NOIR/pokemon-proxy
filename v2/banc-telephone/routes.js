@@ -70,6 +70,16 @@ function representation(disque, enc, st) {
     promesse.catch(() => { if ((REPRESENTATIONS.get(cle) || {}).promesse === promesse) REPRESENTATIONS.delete(cle); });
     return promesse;
 }
+// le sha256 du fichier brut, calculé en flux UNE fois par (fichier, taille, date) ; promesse partagée par les demandes simultanées
+const SHAS = new Map();
+function shaDuFichier(disque, st) {
+    const vue = SHAS.get(disque);
+    if (vue && vue.taille === st.size && vue.date === st.mtimeMs) return vue.promesse;
+    const promesse = new Promise((ok, ko) => { const h = crypto.createHash('sha256'), flux = fs.createReadStream(disque); flux.on('data', c => h.update(c)); flux.on('error', ko); flux.on('end', () => ok(h.digest('hex'))); });
+    SHAS.set(disque, { taille: st.size, date: st.mtimeMs, promesse });
+    promesse.catch(() => { if ((SHAS.get(disque) || {}).promesse === promesse) SHAS.delete(disque); });
+    return promesse;
+}
 /** If-None-Match : l'étiquette courante figure-t-elle dans la liste (faible ou forte : « W/ » ignoré) ? */
 function revalide(entete, etag) {
     if (typeof entete !== 'string') return false;
@@ -103,7 +113,7 @@ function monter(router, cfg, deps = {}) {
     const maxDocuments = Number.isInteger(deps.documentsMaxBancTelephone) && deps.documentsMaxBancTelephone >= 1 ? deps.documentsMaxBancTelephone : S.DOCUMENTS_MAX;
     // le brotli du moteur (14 Mo) et du JavaScript d'ORT est calculé AU MONTAGE, en tâche de fond (pool de fils de libuv : la boucle d'événements n'est pas bloquée) : le premier visiteur ne paie pas ce calcul.
     // Le .wasm WebGPU (26 Mo, hors iOS) et le lot restent à la demande.
-    for (const f of PRECHAUFFAGE) { const disque = path.join(PUBLIC, f); PRECHAUFFAGES.push(fs.promises.stat(disque).then(st => representation(disque, 'br', st)).then(() => {}, () => {})); }
+    for (const f of PRECHAUFFAGE) { const disque = path.join(PUBLIC, f); PRECHAUFFAGES.push(fs.promises.stat(disque).then(st => Promise.all([representation(disque, 'br', st), shaDuFichier(disque, st)])).then(() => {}, () => {})); }
 
     router.get('/api/banc/telephone', (req, res) => {
         const isole = req.query && req.query.iso !== '0';                              // ?iso=0 : la page sans isolement (un seul fil sur Safari) pour comparer
@@ -126,6 +136,9 @@ function monter(router, cfg, deps = {}) {
                 // lot « premier scan » : les fichiers (le .wasm d'ORT fait 14 Mo, 26 Mo pour WebGPU) partent COMPRESSÉS quand le client le demande (brotli, puis gzip), et se REVALIDENT (ETag, 304) au lieu d'être
                 // retéléchargés ; « no-cache » : jamais un fichier périmé, le serveur reste le maître. Le contenu décompressé est le fichier du disque, octet pour octet.
                 res.setHeader('Cache-Control', 'no-cache'); res.vary('Accept-Encoding'); res.setHeader('X-Rm-Octets', String(st.size));   // la taille DÉCOMPRESSÉE : un client qui préalloue ne peut pas la déduire d'un Content-Length compressé
+                // le sha256 du fichier BRUT (jamais du corps compressé) : le client le range avec son cache et le rejoue à chaque lecture ; la même valeur sur le 304 et sur HEAD
+                let sha; try { sha = await shaDuFichier(disque, st); } catch { return res.status(500).end(); }
+                res.setHeader('X-Rm-Sha256', sha);
                 const enc = COMPRESSIBLE.test(t) ? choisirEncodage(req.headers['accept-encoding']) : 'identity';
                 if (enc === 'identity') {
                     const etag = `W/"${st.size.toString(16)}-${Math.round(st.mtimeMs).toString(16)}"`;

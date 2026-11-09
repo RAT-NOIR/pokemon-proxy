@@ -108,6 +108,38 @@ const egal = (a, b) => a && b && a.length === b.length && Buffer.compare(Buffer.
         H.v('1. la progression dit les octets REÇUS sur le total, sans pourcentage inventé', [vus.length > 0, vus[vus.length - 1][0], vus[vus.length - 1][1]], [true, 2 * 1048576 + 5, 2 * 1048576 + 5]);
     }
 
+    // ═══ 1 bis. (tour 1, B1) le sha256 du fichier brut, rangé avec l'entrée, rejoué à chaque lecture ; (M2) l'écriture du cache ne retarde plus la session ═══
+    {
+        const caches = faussesCaches(); const SHA = 'b'.repeat(64); let appels = 0; const vus = [];
+        const reseau = async () => { appels++; return reponse(MODELE, { 'x-rm-sha256': SHA, etag: '"e9"' }); };
+        const verifier = async (o, { sha } = {}) => { vus.push(sha); return sha === SHA; };
+        const r1 = await P.chargerOctets({ cle: CLE, reseau, caches, octetsAttendus: MODELE.length, verifier });
+        H.v('1b. le sha publié par le serveur (X-Rm-Sha256) est transmis au vérificateur à la lecture réseau, et rangé avec l\'entrée', [vus[0], caches.magasins.get(P.NOM_CACHE).get(CLE).entetes['x-rm-sha256'], r1.verifie], [SHA, SHA, true]);
+        const r2 = await P.chargerOctets({ cle: CLE, reseau, caches, octetsAttendus: MODELE.length, verifier });
+        H.v('1b. à la lecture du cache, le vérificateur reçoit le sha RANGÉ : il est rejoué à CHAQUE lecture', [r2.source, vus[1], r2.verifie, appels], ['cache', SHA, true, 1]);
+        caches.magasins.get(P.NOM_CACHE).get(CLE).entetes['x-rm-sha256'] = 'c'.repeat(64);
+        const r3 = await P.chargerOctets({ cle: CLE, reseau, caches, octetsAttendus: MODELE.length, verifier });
+        H.v('1b. un sha rangé qui n\'est plus celui du serveur (autre version) est refusé : « corrompu », réseau', [r3.source, r3.cache, appels], ['reseau', 'corrompu', 2]);
+        const revu = [];
+        await P.chargerOctets({ cle: CLE, reseau, caches, octetsAttendus: MODELE.length, verifier, revalider: async x => { revu.push(x); return 'valide'; } });
+        H.v('1b. revalider reçoit l\'étiquette ET le sha rangés', [revu[0].etag, revu[0].sha], ['"e9"', SHA]);
+        // M2 : sans attendre l'écriture : les octets sont rendus tout de suite, l'écriture se termine ensuite
+        const c2 = faussesCaches(); const phases = [];
+        const rA = await P.chargerOctets({ cle: CLE, reseau: async () => reponse(MODELE), caches: c2, octetsAttendus: MODELE.length, attendreEcriture: false, surPhase: (n, e) => phases.push(n + ':' + e) });
+        H.v('1b. attendreEcriture:false ⇒ « en-cours » rendu aussitôt, la promesse finEcriture dit « ok » ensuite', [rA.ecriture, await rA.finEcriture, c2.magasins.get(P.NOM_CACHE).has(CLE), egal(rA.octets, MODELE)], ['en-cours', 'ok', true, true]);
+        const c3 = faussesCaches(), ph3 = [];
+        await P.chargerOctets({ cle: CLE, reseau: async () => reponse(MODELE), caches: c3, octetsAttendus: MODELE.length, surPhase: (n, e) => ph3.push(n + ':' + e) });
+        H.v('1b. quand on attend l\'écriture, la phase « ecriture-cache » est DITE (début et fin)', [ph3.includes('ecriture-cache:debut'), ph3.includes('ecriture-cache:fin')], [true, true]);
+        const c4 = faussesCaches({ putLeve: true }); const rB = await P.chargerOctets({ cle: CLE, reseau: async () => reponse(MODELE), caches: c4, octetsAttendus: MODELE.length, attendreEcriture: false });
+        H.v('1b. écriture refusée sans attente ⇒ finEcriture « echec », octets quand même rendus', [await rB.finEcriture, egal(rB.octets, MODELE)], ['echec', true]);
+        // retirerEntrees : après un échec de session venue du cache
+        const c5 = faussesCaches(); await P.chargerOctets({ cle: CLE, reseau: async () => reponse(MODELE), caches: c5 }); await P.chargerOctets({ cle: '/autre', reseau: async () => reponse(MODELE), caches: c5 });
+        await P.retirerEntrees({ caches: c5, cles: [CLE, '/autre', '/inconnue'] });
+        H.v('1b. retirerEntrees retire les clés nommées du cache, sans lever pour une clé absente', [c5.magasins.get(P.NOM_CACHE).size], [0]);
+        let leve = false; try { await P.retirerEntrees({ caches: faussesCaches({ openLeve: true }), cles: [CLE] }); await P.retirerEntrees({ caches: undefined, cles: [CLE] }); } catch { leve = true; }
+        H.v('1b. retirerEntrees ne lève jamais (cache absent ou open qui lève)', leve, false);
+    }
+
     // ═══ 2. la préparation seule : la garde ═══
     H.v('2. rien de particulier ⇒ la page prépare seule', P.peutPreparerSeul({ marqueur: null, deviceMemory: undefined, recherche: '' }), { auto: true, raison: 'ok' });
     H.v('2. ?prep=0 ⇒ pas de préparation seule (on attend le clic)', P.peutPreparerSeul({ marqueur: null, deviceMemory: 8, recherche: '?prep=0' }), { auto: false, raison: 'demande' });
@@ -115,7 +147,17 @@ const egal = (a, b) => a && b && a.length === b.length && Buffer.compare(Buffer.
     H.v('2. appareil à moins de 2 Go déclarés ⇒ pas de préparation seule', P.peutPreparerSeul({ marqueur: 'ferme', deviceMemory: 1, recherche: '' }), { auto: false, raison: 'memoire-faible' });
     H.v('2. marqueur « pret » resté tel quel (onglet mort visible, avec la session chargée) ⇒ pas de préparation seule', P.peutPreparerSeul({ marqueur: 'pret', deviceMemory: 8, recherche: '' }), { auto: false, raison: 'interrompue' });
     H.v('2. marqueur « ferme » (page cachée ou quittée normalement) et mémoire inconnue (iOS ne la donne pas) ⇒ oui', P.peutPreparerSeul({ marqueur: 'ferme', deviceMemory: undefined, recherche: '' }).auto, true);
-    H.v('2. un marqueur illisible ou étranger ne bloque rien (une garde écrite par ce qu\'elle refuse précisément)', [P.peutPreparerSeul({ marqueur: 'x', deviceMemory: 4, recherche: '' }).auto, P.peutPreparerSeul({ marqueur: 12, deviceMemory: 4, recherche: '' }).auto], [true, true]);
+    // tour 1, B2 : la garde est écrite par ce qu'elle AUTORISE — marqueur absent ou « ferme », ?prep ≠ 0, pas d'économie de données, mémoire absente (Safari/iOS) ou ≥ 2 ; tout le reste bloque
+    const g = o => P.peutPreparerSeul({ marqueur: null, deviceMemory: undefined, recherche: '', saveData: false, ...o });
+    H.v('2. marqueur « echec » ⇒ pas de relance seule (un échec déterministe, ex. CORS de R2, ne recommence pas à chaque ouverture)', g({ marqueur: 'echec' }), { auto: false, raison: 'echec' });
+    H.v('2. marqueur inconnu (« x », un nombre, vide, un objet) ⇒ pas de préparation seule', [g({ marqueur: 'x' }), g({ marqueur: 12 }), g({ marqueur: '' }), g({ marqueur: {} })].map(r => [r.auto, r.raison]), Array(4).fill([false, 'inconnu']));
+    H.v('2. marqueur absent (null, undefined) ou « ferme » ⇒ oui', [g({ marqueur: null }).auto, g({ marqueur: undefined }).auto, g({ marqueur: 'ferme' }).auto], [true, true, true]);
+    H.v('2. mémoire de l\'appareil ABSENTE (Safari/iOS : décision de l\'éditeur, la préparation se mesure sur iPhone) ⇒ oui ; null aussi', [g({ deviceMemory: undefined }).auto, g({ deviceMemory: null }).auto], [true, true]);
+    H.v('2. mémoire présente et ≥ 2 ⇒ oui ; exactement 2 aussi', [g({ deviceMemory: 2 }).auto, g({ deviceMemory: 8 }).auto], [true, true]);
+    H.v('2. mémoire présente mais illisible (texte, NaN, négative) ⇒ pas de préparation seule', [g({ deviceMemory: '4' }).auto, g({ deviceMemory: NaN }).auto, g({ deviceMemory: -1 }).auto, g({ deviceMemory: 0.5 }).auto], [false, false, false, false]);
+    H.v('2. économie de données (navigator.connection.saveData) ⇒ pas de préparation seule', g({ saveData: true }), { auto: false, raison: 'data-economie' });
+    H.v('2. saveData autre que true (absent, « true » texte, 1) ⇒ ne bloque pas : seul le booléen true est le signal', [g({ saveData: undefined }).auto, g({ saveData: 'true' }).auto, g({ saveData: 1 }).auto], [true, true, true]);
+    H.v('2. toute la garde absente (arguments manquants) ⇒ la préparation attend le clic ou démarre seule sans lever', (() => { try { return typeof P.peutPreparerSeul({}).auto; } catch { return 'leve'; } })(), 'boolean');
     H.v('2. médiane et p95 (échantillons de scans)', [P.mediane([5, 1, 3]), P.mediane([4, 1, 3, 2]), P.p95([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), P.mediane([]), P.p95([])], [3, 2.5, 10, null, null]);
 
     // ═══ 3. les fichiers servis : compressés, revalidables, identiques une fois décompressés ═══
@@ -135,10 +177,13 @@ const egal = (a, b) => a && b && a.length === b.length && Buffer.compare(Buffer.
         H.v('3. le brotli décompressé est le fichier, octet pour octet', Buffer.compare(zlib.brotliDecompressSync(corps), fichier), 0);
         H.v('3. l\'isolement COOP/COEP et CORP sont posés sur la réponse compressée', [r.headers.get('cross-origin-embedder-policy'), r.headers.get('cross-origin-resource-policy')], ['require-corp', 'same-origin']);
         H.v('3. X-Rm-Octets dit la taille DÉCOMPRESSÉE (le client préalloue d\'après elle : fetch décompresse, Content-Length est celui du corps compressé)', r.headers.get('x-rm-octets'), String(fichier.length));
+        const shaBrut = require('crypto').createHash('sha256').update(fichier).digest('hex');
+        H.v('3. X-Rm-Sha256 = le sha256 du fichier BRUT (pas du corps compressé), sur la réponse compressée', r.headers.get('x-rm-sha256'), shaBrut);
         const etag = r.headers.get('etag');
         H.v('3. un ETag est posé, et le cache est « no-cache » (revalidation à chaque visite, jamais un fichier périmé)', [typeof etag === 'string' && etag.length > 4, /no-cache/.test(r.headers.get('cache-control') || '')], [true, true]);
         r = await get(wasm, { 'accept-encoding': 'br', 'if-none-match': etag });
         H.v('3. If-None-Match identique ⇒ 304 sans corps, isolement toujours posé', [r.status, (await r.arrayBuffer()).byteLength, r.headers.get('cross-origin-embedder-policy')], [304, 0, 'require-corp']);
+        H.v('3. le 304 porte aussi X-Rm-Sha256 et X-Rm-Octets (une revalidation HEAD/GET conditionnelle les lit)', [r.headers.get('x-rm-sha256'), r.headers.get('x-rm-octets')], [shaBrut, String(fichier.length)]);
         r = await get(wasm, { 'accept-encoding': 'gzip' }); corps = Buffer.from(await r.arrayBuffer());
         H.v('3. Accept-Encoding: gzip seul ⇒ gzip', [r.headers.get('content-encoding'), Buffer.compare(zlib.gunzipSync(corps), fichier)], ['gzip', 0]);
         r = await get(wasm, { 'accept-encoding': 'identity' }); corps = Buffer.from(await r.arrayBuffer());
@@ -170,6 +215,27 @@ const egal = (a, b) => a && b && a.length === b.length && Buffer.compare(Buffer.
         H.v('4. une durée null est permise (mesure absente ≠ zéro)', avec({ ...prep, attenteAvantScanMs: null }).ok, true);
         H.v('4. un objet n\'est pas une chaîne : forme refusée', avec('x').detail, 'champ:mesure.preparation');
         H.v('4. le document le plus chargé reste sous 8 Ko', Buffer.byteLength(JSON.stringify((() => { const d = base(); d.mesure.preparation = prep; return d; })())) < 2000, true);
+        // tour 1 : de quoi trancher la cause sur le prochain dépôt iPhone — octets transférés et encodage du .wasm, octets et débit du modèle, mémoire si le navigateur la donne
+        const plus = { wasmTransfertOctets: 2700000, wasmCorpsOctets: 2688054, wasmEncodage: 'br', modeleOctets: 118202501, modeleDebitMoS: 27.2, memoireJsPicMo: 183.5, memoireUaMo: 412 };
+        H.v('4. les champs de diagnostic (transferSize, encodedBodySize, encodage du .wasm, octets et débit du modèle, mémoire) sont acceptés', avec({ ...prep, ...plus }).ok, true);
+        H.v('4. encodage du .wasm hors liste refusé (br, gzip, identity, inconnu seulement)', avec({ ...prep, ...plus, wasmEncodage: 'zstd' }).detail, 'champ:mesure.preparation.wasmEncodage');
+        H.v('4. débit négatif ou octets hors bornes refusés', [avec({ ...prep, modeleDebitMoS: -1 }).detail, avec({ ...prep, wasmTransfertOctets: -5 }).detail, avec({ ...prep, memoireUaMo: 1e9 }).detail], ['champ:mesure.preparation.modeleDebitMoS', 'champ:mesure.preparation.wasmTransfertOctets', 'champ:mesure.preparation.memoireUaMo']);
+        H.v('4. ces champs peuvent être null (le navigateur ne donne ni transferSize ni mémoire : absent ≠ zéro)', avec({ ...prep, wasmTransfertOctets: null, wasmCorpsOctets: null, wasmEncodage: null, modeleDebitMoS: null, memoireJsPicMo: null, memoireUaMo: null }).ok, true);
+        // la limite de 8 192 octets, avec le dépôt COMPLET d'un passage WebGPU (entrée + diagnostic des pixels + orientation + préparation + détection quand la base la porte) et les champs au plus long
+        {
+            const s1 = { n: 99999999, max: 255, somme: 99999999999, nDiff: 99999999, moy: 254.999999, pctDiff: 99.999999 };
+            const d = base(); d.ua = 'U'.repeat(300); d.gpu = { vendor: 'v'.repeat(40), architecture: 'a'.repeat(40) }; d.reseau = { redirige: true, hoteFinal: 'h'.repeat(80), blocage: 'indetermine-isole' };
+            d.modeleOctets = 118202501; d.telechargementMs = 12345678.9; d.verifShaMs = 12345.6; d.shaVerifie = true; d.memoireAppareilGo = 8;
+            Object.assign(d.mesure, { moteurDemande: 'webgpu', webgpuDesactive: false, webgpuForce: true, optionsSession: 'o'.repeat(60), webgpuUtilise: true, gardeExtension: 'NON_EVALUEE', erreur: 'e'.repeat(200), jsHeapApresCreationMo: 99999.9, jsHeapFinMo: 99999.9, uaApresCreationMo: 99999, uaFinMo: 99999,
+                fils: 4, filsDemandes: 4, creationSessionMs: 9999999.123, premiereMs: 9999999.123, medianeMs: 9999999.123, p95Ms: 9999999.123, pretraitementMedianeMs: 12345.123, nEmpreintes: 30, nVecteursRefuses: 0, cosMin: 0.9999999, cosMoy: 0.9999999, cosMinModeleSeul: 0.9999999, nModeleSeul: 12, cosMinContreWasm: 0.9999999, ecartChaineModele: 0.0000001,
+                diagnosticPixels: { cause: 'indetermine', cartesDecodage: 2, cartesChaine: 12, decodage: s1, redimensionnement: s1, chaine: s1, bitmapSansConversion: s1, bitmapAvecConversion: s1, couleurCanvas: 'display-p3-xxxxxx'.slice(0, 20) },
+                entree: { chemin: 'mixte', source: 's'.repeat(20), cartesRm: 30, cartesRepli: 0, refus: { FORMAT: 100, TROP_GRAND: 100, DECODAGE: 100, NON_SUPPORTE: 100, 'entree-invalide': 100, memoire: 100, autre: 100 }, identiqueAuBit: true, rgbIdentiquesPil: 12, rgbMesureesPil: 12, cartesComparees: 30, rgbIdentiquesNavigateur: 30, tenseursIdentiquesNavigateur: 30, ecartMaxNavigateur: 255, cosMinNavigateur: 0.9999999, msRmMediane: 99999.9, msNavigateurMediane: 99999.9, cartes640: 3, ms640: 99999.9, empreinte640: 'f'.repeat(12) },
+                orientationNavigateur: { webp: 'indetermine', jpeg: 'indetermine' },
+                preparation: { ...prep, ...plus, telechargementModeleMs: 12345678.9, lectureCacheModeleMs: 12345678.9, verifShaMs: 12345678.9, chargementMoteurMs: 12345678.9, wasmMs: 12345678.9, wasmCompileMs: 12345678.9, creationSessionMs: 12345678.9, ouvertureAPretMs: 12345678.9, attenteAvantScanMs: 12345678.9, clicAPremierResultatMs: 12345678.9, premierScanMs: 12345678.9, scanSuivantMedianeMs: 12345678.9, scanSuivantP95Ms: 12345678.9, wasmOctets: 2000000000, nScans: 100 } });
+            if (S.MESURE.detection) d.mesure.detection = { version: 'v'.repeat(30), nImages: 100, nIdentiques: 100, nRgb640: 100, nQuads: 100, nCartes: 100, voieCanvas: 100, voiePillow: 100, ecarts: 'x'.repeat(200), empreinteLot: 'a'.repeat(64), msOpencv: 12345678.9, msMediane: 12345678.9, msTotal: 12345678.9, jsHeapMo: 99999.9, jsHeapApresMo: 99999.9, wasmHeapMo: 99999.9, erreur: 'e'.repeat(200) };
+            const taille = Buffer.byteLength(JSON.stringify(d)), v = S.valider(d);
+            H.v(`4. dépôt WebGPU COMPLET${S.MESURE.detection ? ' avec la détection' : ''}, tous champs au plus long (${taille} octets) : accepté, sous 8 192`, [v.ok, taille < S.OCTETS_MAX, v.detail || null], [true, true, null]);
+        }
     }
 
     // ═══ 5. ce que le code de la page doit contenir ═══
@@ -181,6 +247,9 @@ const egal = (a, b) => a && b && a.length === b.length && Buffer.compare(Buffer.
         H.v('5. la session préparée est RÉUTILISÉE par la mesure suivante et libérée avant WebGPU', [/preparerWasm\(/.test(app), /libererSessionPreparee\(/.test(app)], [true, true]);
         H.v('5. une fois la page quittée (pagehide), aucun événement de visibilité ne ré-écrit « pret » ; un retour du cache de navigation (pageshow) le fait', [/quittee\s*=\s*true/.test(app), /if \(quittee\) return/.test(app), /addEventListener\('pageshow'/.test(app)], [true, true, true]);
         H.v('5. le verdict est celui d\'avant : jugerMesure appelé avec les mêmes quatre champs', /jugerMesure\(\{ nEmpreintes: m\.nEmpreintes, nVecteursRefuses: refuses, cos, cosModeleSeul: cosPx, shaVerifie: E\.shaVerifie \}\)/.test(app), true);
+        H.v('5. (B1) la clé du moteur porte la version d\'ORT du bundle CHARGÉ, le sha256 du serveur est rejoué (X-Rm-Sha256), un échec de session venu du cache retire modèle ET moteur', [/ort\.env\.versions/.test(app), /x-rm-sha256/i.test(app), /retirerEntrees\(/.test(app), /source === 'cache'/.test(app)], [true, true, true, true]);
+        H.v('5. (B2) la garde reçoit saveData et deviceMemory', [/saveData/.test(app), /deviceMemory/.test(app)], [true, true]);
+        H.v('5. (M2) l\'écriture du cache n\'est plus attendue avant la création de la session (attendreEcriture: false, finEcriture)', [/attendreEcriture:\s*false/.test(app), /finEcriture/.test(app)], [true, true]);
         H.v('5. aucun navigator.storage.persist() affiché comme garanti : la page DIT si le stockage est persistant ou non', /stockagePersistant/.test(app), true);
     }
 
