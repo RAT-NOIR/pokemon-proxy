@@ -1,13 +1,14 @@
 // MESURE SUR GRANDES PHOTOS : chaine A (Rat-Market : pre-reduction entiere + canvas emule) contre chaine B (servie aujourd'hui : canvas du navigateur sur la photo entiere), dans Chrome ; et A node contre A Chrome (invariance).
 //   node comparer-grandes.mjs <chrome-grandes.json> [--node=<node.json>] [--verites=<verites.json>] [--meta=<meta.json>]
 // Imprime les DENOMINATEURS : photos, erreurs de decodage par code, redressees par chaine, deplacement des quadrilateres (en % de la diagonale 640), cosinus des vecteurs A/B, erreur a la verite de position si fournie.
-// « meme carte » = les quatre coins a moins de 3 % de la diagonale (le seuil de quasi-doublon de la detection). AUCUN verdict n'est rejoue ici : pas d'idProduct de verite, donc pas de « sur faux » mesurable.
+// « meme quadrilatere de rang 1 » = les quatre coins a moins de 3 % de la diagonale (le seuil de quasi-doublon de la detection) : JAMAIS une identite de carte. AUCUN verdict n'est rejoue ici : pas d'idProduct de verite, donc pas de « sur faux » mesurable.
 import fs from 'node:fs';
 const args = process.argv.slice(2), arg = (n) => { const a = args.find((x) => x.startsWith(`--${n}=`)); return a ? a.slice(n.length + 3) : null; };
 const C = JSON.parse(fs.readFileSync(args.find((a) => !a.startsWith('--')), 'utf8'));
 if (!C.photos) { console.error('sortie sans photos :', C.erreur); process.exit(2); }
 const N = arg('node') ? JSON.parse(fs.readFileSync(arg('node'), 'utf8')) : null, V = arg('verites') ? JSON.parse(fs.readFileSync(arg('verites'), 'utf8')) : null, M = arg('meta') ? JSON.parse(fs.readFileSync(arg('meta'), 'utf8')) : null;
-const ids = Object.keys(C.photos).sort();
+let ids = Object.keys(C.photos).sort();
+if (M && args.includes('--sans-licence-nulle')) ids = ids.filter((i) => M[i] && !/non declaree/.test(M[i].licence));   // la mesure PRINCIPALE : sans les photos sans licence declaree
 const cnt = (f) => ids.filter(f).length;
 const q = (v, p) => { const s = [...v].sort((a, b) => a - b); return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : null; };
 const f3 = (x) => (x === null || x === undefined ? '-' : x.toFixed(3));
@@ -23,8 +24,9 @@ if (M) { const par = {}; for (const i of ids) { const m = M[i]; if (!m) continue
 // A contre B
 const les2 = ids.filter((i) => C.photos[i].redressee && C.B[i].redressee);
 const d = les2.map((i) => depl(C.photos[i].quad, C.B[i].quad, C.photos[i].dim640)), cs = les2.filter((i) => C.photos[i].emb && C.B[i].emb).map((i) => cos(C.photos[i].emb, C.B[i].emb));
-const memeCarte = d.filter((x) => x < 0.03).length;
-console.log(`A contre B, ${les2.length} photos redressees par les deux : deplacement du quadrilatere (% de la diagonale) mediane ${f3(100 * q(d, 0.5))} p90 ${f3(100 * q(d, 0.9))} max ${f3(100 * Math.max(...d))} ; meme carte (< 3 %) ${memeCarte}/${les2.length} ; autre carte ${les2.length - memeCarte}`);
+const memeQuad = d.filter((x) => x < 0.03).length;
+console.log(`A contre B, ${les2.length} photos redressees par les deux : deplacement du quadrilatere de rang 1 (% de la diagonale) mediane ${f3(100 * q(d, 0.5))} p90 ${f3(100 * q(d, 0.9))} max ${f3(100 * Math.max(...d))} ; meme quadrilatere de rang 1 (< 3 %) ${memeQuad}/${les2.length} ; AUTRE quadrilatere de rang 1 (>= 3 %) ${les2.length - memeQuad} (ce n'est pas une identite de carte)`);
+console.log(`   dimensions 640 differentes d'un pixel entre A et B (double arrondi : dimensions de la pre-reduction puis 640) : ${ids.filter((i) => C.photos[i].dim640 && C.B[i].dim640 && (C.photos[i].dim640[0] !== C.B[i].dim640[0] || C.photos[i].dim640[1] !== C.B[i].dim640[1])).length} photos`);
 console.log(`   cosinus des vecteurs A/B (${cs.length} photos) : min ${f3(Math.min(...cs))} mediane ${f3(q(cs, 0.5))} ; < 0,99 : ${cs.filter((x) => x < 0.99).length} ; < 0,95 : ${cs.filter((x) => x < 0.95).length}`);
 const seulA = ids.filter((i) => C.photos[i].redressee && !C.B[i].redressee && !C.B[i].erreur), seulB = ids.filter((i) => !C.photos[i].redressee && !C.photos[i].erreur && C.B[i].redressee);
 console.log(`redressee par A seulement ${seulA.length} ; par B seulement ${seulB.length} ; par aucune ${cnt((i) => !C.photos[i].redressee && !C.B[i].redressee)}`);

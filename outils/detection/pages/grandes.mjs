@@ -3,7 +3,7 @@
 //   B = la chaine SERVIE aujourd'hui (createImageBitmap, reduction a 640 par le canvas imageSmoothingQuality='high' du navigateur sur la photo ENTIERE, puis la meme OpenCV et le meme redressement).
 // Chaque chaine rend quadrilateres, carte redressee, vecteur (modele p8000 servi). Resultat poste (/resultat). ?fils=4 ?limite=N ?sans-modele=1
 const Q = new URLSearchParams(location.search);
-const FILS = Number(Q.get('fils') || 4), LIMITE = Number(Q.get('limite') || 0), SANS_MODELE = Q.get('sans-modele') === '1';
+const FILS = Number(Q.get('fils') || 4), LIMITE = Number(Q.get('limite') || 0), SANS_MODELE = Q.get('sans-modele') === '1', A0 = Q.get('a0') === '1';
 const log = (m) => { document.getElementById('j').textContent = m; fetch('/log?m=' + encodeURIComponent(String(m).slice(0, 200))).catch(() => {}); };
 window.addEventListener('error', (e) => log('ERREUR-JS ' + e.message));
 const D = await import('/m/detection.mjs');
@@ -32,7 +32,7 @@ async function chaineB(cv, octets) {
   for (let i = 0; i < W * H; i++) { rgb[i * 3] = rgba[i * 4]; rgb[i * 3 + 1] = rgba[i * 4 + 1]; rgb[i * 3 + 2] = rgba[i * 4 + 2]; }
   const src = [bmp.width, bmp.height]; bmp.close();
   const det = D.quadrilateres(cv, rgb, W, H);
-  const r = { src, dim640: [W, H], nCartes: det.gardes.length, redressee: false, quad: null, empreintes: { rgb640: D.sha256(rgb), quads: D.empreinteQuads(det.gardes), carte: null }, emb: null };
+  const r = { src, dim640: [W, H], nCartes: det.gardes.length, cands: det.gardes.map((g) => ({ quad: g.quad.map((p) => [p.x, p.y]), aire: g.aire })), redressee: false, quad: null, empreintes: { rgb640: D.sha256(rgb), quads: D.empreinteQuads(det.gardes), carte: null }, emb: null };
   if (det.gardes.length) { const carte = D.redresser(cv, rgb, W, H, det.gardes[0]); r.redressee = true; r.quad = det.gardes[0].quad.map((p) => [p.x, p.y]); r.empreintes.carte = D.sha256(carte); r.emb = await vecteur(carte); }
   r.ms = Math.round(performance.now() - t0);
   return r;
@@ -56,9 +56,12 @@ async function chaineB(cv, octets) {
         const ta = performance.now();
         const r = D.detecter(cv, octets);
         const ms = Math.round(performance.now() - ta);
-        const p = { redressee: r.redressee, nCartes: r.nCartes, quad: r.quad, dim640: r.dim640, voie: r.voie, pre: r.prereduction, src: [r.largeur, r.hauteur], empreintes: r.empreintes, ms, emb: null };
+        const p = { redressee: r.redressee, nCartes: r.nCartes, quad: r.quad, cands: r.candidats, dim640: r.dim640, voie: r.voie, pre: r.prereduction, src: [r.largeur, r.hauteur], empreintes: r.empreintes, ms, emb: null };
         if (r.redressee) p.emb = await vecteur(r.carte);
         res.photos[id] = p;
+        if (A0) { // A SANS pre-reduction (sonde) : la reduction 640 se fait directement depuis la photo decodee (voie Pillow au-dela de racine de 2)
+          try { const r0 = D.detecter(cv, octets, { pre: false }); (res.A0 = res.A0 || {})[id] = { redressee: r0.redressee, nCartes: r0.nCartes, quad: r0.quad, cands: r0.candidats, dim640: r0.dim640, voie: r0.voie }; } catch (e) { (res.A0 = res.A0 || {})[id] = { erreur: String((e && (e.code || e.name)) || e) }; }
+        }
       } catch (e) { res.photos[id] = { erreur: String((e && (e.code || e.name)) || e), redressee: false, nCartes: 0, quad: null, dim640: null, voie: null, src: null, empreintes: { rgb640: null, quads: null, carte: null }, emb: null }; }
       try { res.B[id] = await chaineB(cv, octets); } catch (e) { res.B[id] = { erreur: String((e && (e.code || e.name)) || e), redressee: false, nCartes: 0, quad: null, empreintes: { rgb640: null, quads: null, carte: null }, emb: null }; }
     }
